@@ -3,6 +3,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FILE_READ_CAPABILITIES } from '../src/file-read-context.js';
 import {
   createInMemoryClientPair,
   importConnectorModule,
@@ -461,4 +462,94 @@ describe('edit-image file loading is open-then-validate (MED-1)', () => {
       }
     },
   );
+
+  it.skipIf(process.platform !== 'linux')('rejects a central three-rename directory swap through the descriptor path check', async () => {
+    const workspace = await makeTempDir('central-toctou-dirswap');
+    const outside = await makeTempDir('central-toctou-outside');
+    const dirPath = path.join(workspace, 'approved');
+    const attackDir = path.join(outside, 'outside');
+    const sourcePath = path.join(dirPath, 'source.png');
+    const outsidePath = path.join(attackDir, 'source.png');
+    const alias = path.join(workspace, 'alias.png');
+    const dirBackupPath = path.join(outside, 'approved-backup');
+    const stagedDirLinkPath = path.join(outside, 'staged-dir-link');
+    await fsp.mkdir(dirPath);
+    await fsp.mkdir(attackDir);
+    const bytes = Buffer.from(makeImageBase64(), 'base64');
+    const outsideBytes = Buffer.from(bytes);
+    outsideBytes.fill(2, 8);
+    await fsp.writeFile(sourcePath, bytes);
+    await fsp.writeFile(outsidePath, outsideBytes);
+    await fsp.symlink(sourcePath, alias);
+    await fsp.symlink(attackDir, stagedDirLinkPath);
+    const connector = await importConnectorModule({ MCP_WORKSPACE_PATH: workspace, MCP_ALLOWED_SYMLINK_ROOTS: '[]', OPENAI_API_KEY: 'synthetic-api-key' });
+    const uploaded: Buffer[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      if (!(init?.body instanceof FormData)) throw new Error('Expected multipart image upload');
+      const part = init.body.get('image[]');
+      if (!(part instanceof File)) throw new Error('Expected image file');
+      uploaded.push(Buffer.from(await part.arrayBuffer()));
+      return new Response(JSON.stringify({ data: [{ b64_json: IMAGE_BASE64 }] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const pair = await createInMemoryClientPair(connector.createServer(), FILE_READ_CAPABILITIES);
+    const metadata = { 'files/readMode': {
+      version: 1, mode: 'central', reads: [{ location: ['image_paths', 0], rawPath: alias, canonicalPath: sourcePath }],
+    } };
+    try {
+      const ordinary = await pair.client.callTool({ name: 'edit_image', arguments: { prompt: 'Acme control', image_paths: [alias] }, _meta: metadata });
+      expect(ordinary.isError).toBeFalsy();
+      expect(uploaded).toEqual([bytes]);
+      const control = await pair.client.callTool({ name: 'edit_image', arguments: { prompt: 'Acme outside control', image_paths: [outsidePath] }, _meta: { 'files/readMode': {
+        version: 1, mode: 'central', reads: [{ location: ['image_paths', 0], rawPath: outsidePath, canonicalPath: outsidePath }],
+      } } });
+      expect(control.isError).toBeFalsy();
+      expect(uploaded[1]).toEqual(outsideBytes);
+      fetchSpy.mockClear();
+      uploaded.length = 0;
+
+      let stage = 0;
+      const realStat = fs.promises.stat.bind(fs.promises);
+      vi.spyOn(fs.promises, 'stat').mockImplementation(async (target, options) => {
+        if (stage === 0 && String(target) === sourcePath) {
+          stage = 1;
+          await fsp.rename(dirPath, dirBackupPath);
+          await fsp.rename(stagedDirLinkPath, dirPath);
+        }
+        return realStat(target, options);
+      });
+      const realOpen = fs.promises.open.bind(fs.promises);
+      vi.spyOn(fs.promises, 'open').mockImplementation(async (target, flags, mode) => {
+        const handle = await realOpen(target, flags, mode);
+        if (stage === 1 && String(target) === sourcePath) {
+          stage = 2;
+          await fsp.rename(dirPath, stagedDirLinkPath);
+          await fsp.rename(dirBackupPath, dirPath);
+        }
+        return handle;
+      });
+      realpathSyncHooks.push({
+        targetPath: sourcePath,
+        fire: () => {
+          if (stage === 2) {
+            stage = 3;
+            fs.renameSync(dirPath, dirBackupPath);
+            fs.renameSync(stagedDirLinkPath, dirPath);
+          }
+        },
+      });
+      const result = await pair.client.callTool({ name: 'edit_image', arguments: { prompt: 'Acme recolor', image_paths: [alias], quality: 'medium' }, _meta: metadata });
+      expect(stage).toBe(3);
+      expect.soft(result.isError).toBe(true);
+      expect.soft(fetchSpy).not.toHaveBeenCalled();
+      expect.soft(uploaded).toEqual([]);
+      expect.soft(uploaded.some(data => data.equals(outsideBytes))).toBe(false);
+      expect.soft(result.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text', text: expect.stringContaining('WORKSPACE_FENCE_VIOLATION') })]));
+      expect.soft(JSON.stringify(result)).not.toContain(outsidePath);
+      expect(JSON.stringify(result)).not.toContain(outsideBytes.toString('base64'));
+    } finally {
+      await pair.close();
+    }
+  });
 });

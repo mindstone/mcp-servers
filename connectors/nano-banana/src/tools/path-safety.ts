@@ -1,3 +1,4 @@
+import type { FileReadContext } from '../file-read-context.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -265,6 +266,7 @@ export function readSandboxedWorkspaceFile(
   canonicalPath: string,
   root: string,
   maxBytes: number,
+  context?: FileReadContext,
 ): { ok: true; content: Buffer } | { ok: false; error: string; code?: string } {
   const isInsideRoot = (p: string): boolean =>
     p === root || p.startsWith(root + path.sep);
@@ -303,7 +305,10 @@ export function readSandboxedWorkspaceFile(
     } catch {
       return { ok: false, error: `Source image path changed during validation: ${canonicalPath}` };
     }
-    if (!isInsideRoot(recanonical)) {
+    if (context?.mode === 'central' && recanonical !== canonicalPath) {
+      return { ok: false, error: `Source image path was replaced during validation; refusing to read: ${canonicalPath}` };
+    }
+    if (context?.mode !== 'central' && !isInsideRoot(recanonical)) {
       return {
         ok: false,
         error: `Source image path was swapped to escape the workspace sandbox root (${root}) during validation.`,

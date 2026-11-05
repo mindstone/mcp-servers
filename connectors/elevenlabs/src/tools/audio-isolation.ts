@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -31,12 +33,14 @@ RELATED TOOLS:
 RETURNS: file_path and size_bytes for the isolated audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).
 
 COST: Credits based on audio duration.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['audio_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES }] } },
       inputSchema: z.object({
-        audio_path: z.string().min(1).describe('Absolute path to local audio inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
+        audio_path: z.string().min(1).describe('Absolute path to local audio. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new ElevenLabsError(
@@ -46,7 +50,7 @@ COST: Credits based on audio duration.`,
         );
       }
 
-      const fileInput = readSandboxedFile(args.audio_path);
+      const fileInput = readSandboxedFile(args.audio_path, reads, ['audio_path']);
 
       const formData = new FormData();
       formData.append('audio', sandboxedFileToBlob(fileInput), fileInput.fileName);

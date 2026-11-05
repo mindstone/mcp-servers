@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 /**
  * Local media file loading for Kling API uploads.
  *
@@ -16,6 +17,8 @@ const IMAGE_MAX_BYTES = 10 * 1_048_576; // Kling limit: image file ≤ 10MB
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac']);
 const AUDIO_MAX_BYTES = 5 * 1_048_576; // Kling limit: audio file ≤ 5MB
+const CHANGED_RESOLUTION =
+  'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.';
 
 /**
  * Read a previously validated canonical workspace path, defending against
@@ -34,6 +37,7 @@ export function readSandboxedWorkspaceFile(
   inputPath: string,
   kind: 'image' | 'audio',
   maxBytes: number,
+  context?: FileReadContext,
 ): string {
   const openFlags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
   let fd: number;
@@ -45,7 +49,7 @@ export function readSandboxedWorkspaceFile(
       throw new KlingError(
         `File became a symbolic link after validation, refusing to read it: ${inputPath}`,
         'PATH_OUTSIDE_WORKSPACE',
-        'The file was swapped for a symlink between validation and read. Retry with a regular file inside the workspace.',
+        context?.mode === 'central' ? CHANGED_RESOLUTION : 'The file was swapped for a symlink between validation and read. Retry with a regular file inside the workspace.',
       );
     }
     throw err;
@@ -64,7 +68,7 @@ export function readSandboxedWorkspaceFile(
     // Post-open re-verification: the path must still canonically resolve
     // inside the workspace AND name the same inode as the opened descriptor
     // (catches an ancestor-directory swap that redirected the open).
-    const root = getReadWorkspaceRoot();
+    const root = context?.mode === 'central' ? '' : getReadWorkspaceRoot();
     let recanonical: string;
     try {
       recanonical = fs.realpathSync(canonicalPath);
@@ -72,10 +76,13 @@ export function readSandboxedWorkspaceFile(
       throw new KlingError(
         `File path changed during validation, refusing to read it: ${inputPath}`,
         'PATH_OUTSIDE_WORKSPACE',
-        'The file or a parent directory was replaced between validation and read. Retry with a stable path inside the workspace.',
+        context?.mode === 'central' ? CHANGED_RESOLUTION : 'The file or a parent directory was replaced between validation and read. Retry with a stable path inside the workspace.',
       );
     }
-    if (recanonical !== root && !recanonical.startsWith(root + path.sep)) {
+    if (context?.mode === 'central' && recanonical !== canonicalPath) {
+      throw new KlingError(`File path changed during validation, refusing to read it: ${inputPath}`, 'PATH_OUTSIDE_WORKSPACE', CHANGED_RESOLUTION);
+    }
+    if (context?.mode !== 'central' && recanonical !== root && !recanonical.startsWith(root + path.sep)) {
       throw new KlingError(
         `File path was swapped to escape the workspace sandbox root (${root}) during validation: ${inputPath}`,
         'PATH_OUTSIDE_WORKSPACE',
@@ -87,7 +94,7 @@ export function readSandboxedWorkspaceFile(
       throw new KlingError(
         `File was replaced during validation, refusing to read it: ${inputPath}`,
         'PATH_OUTSIDE_WORKSPACE',
-        'The file was replaced between validation and read. Retry with a stable path inside the workspace.',
+        context?.mode === 'central' ? CHANGED_RESOLUTION : 'The file was replaced between validation and read. Retry with a stable path inside the workspace.',
       );
     }
 
@@ -110,8 +117,10 @@ function encodeLocalMedia(
   kind: 'image' | 'audio',
   allowedExtensions: Set<string>,
   maxBytes: number,
+  context?: FileReadContext,
 ): string {
-  const resolved = resolveWorkspaceFilePath(inputPath);
+  const allowedPath = centralReadPath(context, inputPath, [kind === 'image' ? 'image_path' : 'audio_path']);
+  const resolved = allowedPath === undefined ? resolveWorkspaceFilePath(inputPath) : { ok: true as const, path: allowedPath };
   if (!resolved.ok) {
     throw new KlingError(
       resolved.error,
@@ -129,21 +138,21 @@ function encodeLocalMedia(
     );
   }
 
-  return readSandboxedWorkspaceFile(resolved.path, inputPath, kind, maxBytes);
+  return readSandboxedWorkspaceFile(resolved.path, inputPath, kind, maxBytes, context);
 }
 
 /**
  * Read a local image file (workspace-fenced) and return raw Base64
  * (no `data:` prefix), ready for Kling's `image` request fields.
  */
-export function encodeLocalImage(inputPath: string): string {
-  return encodeLocalMedia(inputPath, 'image', IMAGE_EXTENSIONS, IMAGE_MAX_BYTES);
+export function encodeLocalImage(inputPath: string, context?: FileReadContext): string {
+  return encodeLocalMedia(inputPath, 'image', IMAGE_EXTENSIONS, IMAGE_MAX_BYTES, context);
 }
 
 /**
  * Read a local audio file (workspace-fenced) and return raw Base64,
  * ready for Kling's lip-sync `input.audio_file` field.
  */
-export function encodeLocalAudio(inputPath: string): string {
-  return encodeLocalMedia(inputPath, 'audio', AUDIO_EXTENSIONS, AUDIO_MAX_BYTES);
+export function encodeLocalAudio(inputPath: string, context?: FileReadContext): string {
+  return encodeLocalMedia(inputPath, 'audio', AUDIO_EXTENSIONS, AUDIO_MAX_BYTES, context);
 }

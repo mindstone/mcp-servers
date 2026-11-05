@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ConnectorError } from '../types.js';
@@ -5,6 +6,17 @@ import { resolveUploadPath } from '../path-safety.js';
 
 /** Generous ceiling for files uploaded to Browserbase (extensions, certificates, session files). */
 export const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
+const CHANGED_RESOLUTION =
+  'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.';
+
+function approvedUploadPath(canonicalPath: string, inputPath: string) {
+  try {
+    if (fs.realpathSync(canonicalPath) === canonicalPath) {
+      return { ok: true as const, path: canonicalPath, stat: fs.statSync(canonicalPath) };
+    }
+  } catch { /* reported below */ }
+  throw new ConnectorError(`file_path changed while it was being verified: ${inputPath}`, 'FILE_CHANGED_DURING_READ', CHANGED_RESOLUTION);
+}
 
 /**
  * Resolve and read a sandbox-approved upload file, returning a FormData-ready
@@ -22,8 +34,9 @@ export const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
  * is fstat'd AGAIN: a size or mtime move fails closed, and the byte bound is
  * re-enforced on the bytes actually read.
  */
-export async function readUploadFile(inputPath: string): Promise<{ name: string; data: Buffer }> {
-  const resolved = resolveUploadPath(inputPath);
+export async function readUploadFile(inputPath: string, context?: FileReadContext): Promise<{ name: string; data: Buffer }> {
+  const allowedPath = centralReadPath(context, inputPath, ['file_path']);
+  const resolved = allowedPath === undefined ? resolveUploadPath(inputPath) : approvedUploadPath(allowedPath, inputPath);
   if (!resolved.ok) {
     throw new ConnectorError(
       resolved.error,
@@ -40,7 +53,7 @@ export async function readUploadFile(inputPath: string): Promise<{ name: string;
       throw new ConnectorError(
         `file_path changed while it was being verified: ${inputPath}`,
         'FILE_CHANGED_DURING_READ',
-        'The file was replaced between the workspace-sandbox check and the read. Retry the upload; if it keeps failing, check for another process modifying the file.',
+        allowedPath === undefined ? 'The file was replaced between the workspace-sandbox check and the read. Retry the upload; if it keeps failing, check for another process modifying the file.' : CHANGED_RESOLUTION,
       );
     }
     if (!opened.isFile()) {
@@ -89,8 +102,8 @@ export async function readUploadFile(inputPath: string): Promise<{ name: string;
 }
 
 /** Build the single-`file`-field multipart body Browserbase upload endpoints expect. */
-export async function buildUploadFormData(inputPath: string): Promise<FormData> {
-  const file = await readUploadFile(inputPath);
+export async function buildUploadFormData(inputPath: string, context?: FileReadContext): Promise<FormData> {
+  const file = await readUploadFile(inputPath, context);
   const form = new FormData();
   form.append('file', new Blob([new Uint8Array(file.data)]), file.name);
   return form;

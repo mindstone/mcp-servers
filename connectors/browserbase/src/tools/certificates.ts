@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { browserbaseFetch, requireApiKey } from '../client.js';
@@ -5,7 +6,7 @@ import { withErrorHandling } from '../utils.js';
 import { buildUploadFormData } from './file-upload.js';
 
 const FILE_PATH_HINT =
-  'Local path to the CA certificate file (PEM/DER). The path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset) — paths outside the workspace sandbox are rejected before any disk read.';
+  'Local path to the CA certificate file (PEM/DER). When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset).';
 
 export function registerCertificateTools(server: McpServer): void {
   server.registerTool(
@@ -16,7 +17,7 @@ export function registerCertificateTools(server: McpServer): void {
 WHEN TO USE:
 - You route sessions through your own intercepting proxy and the browser must trust its CA — reference the returned certificate id via create_session proxy_settings.ca_certificates
 
-SECURITY: file_path is sandboxed — the path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
+SECURITY: When connected to a host that authorizes file reads, its path permission decision applies to file_path. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
 
 ERROR RECOVERY:
 - 401: API key is missing or invalid → configure_browserbase_api_key
@@ -29,6 +30,7 @@ RELATED TOOLS:
 - create_session: Reference certificate IDs in proxy_settings
 
 RETURNS: id, projectId, createdAt, updatedAt.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: {
         file_path: z.string().min(1).describe(FILE_PATH_HINT),
       },
@@ -39,9 +41,10 @@ RETURNS: id, projectId, createdAt, updatedAt.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       requireApiKey();
-      const form = await buildUploadFormData(args.file_path);
+      const form = await buildUploadFormData(args.file_path, reads);
       const result = await browserbaseFetch<Record<string, unknown>>(
         '/certificates',
         { method: 'POST', body: form },

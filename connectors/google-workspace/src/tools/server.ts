@@ -1,3 +1,4 @@
+import { FILE_READ_CAPABILITIES, fileReadContext } from '../file-read-context.js';
 import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -355,6 +356,7 @@ export class GSuiteServer {
       },
       {
         capabilities: {
+          ...FILE_READ_CAPABILITIES,
           tools: {
             list: true,
             call: true
@@ -385,6 +387,7 @@ export class GSuiteServer {
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,
+          _meta: tool._meta,
           annotations: tool.annotations
         }));
       }
@@ -394,6 +397,7 @@ export class GSuiteServer {
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,
+          _meta: tool._meta,
           annotations: tool.annotations
         })),
         _meta: {
@@ -427,6 +431,7 @@ export class GSuiteServer {
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       try {
+        const reads = fileReadContext(this.server.getClientCapabilities(), { _meta: request.params._meta });
         const rawArgs = request.params.arguments;
         const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)
           ? normalizeArgs(rawArgs as Record<string, unknown>)
@@ -471,7 +476,7 @@ export class GSuiteServer {
             break;
           case 'send_workspace_email':
             assertSendEmailArgs(args);
-            result = await handleSendWorkspaceEmail(args as SendEmailArgs);
+            result = await handleSendWorkspaceEmail(args as SendEmailArgs, reads);
             break;
           case 'get_workspace_gmail_settings':
             assertBaseToolArguments(args);
@@ -519,11 +524,11 @@ export class GSuiteServer {
             break;
           case 'create_workspace_draft':
             assertBaseToolArguments(args);
-            result = await handleCreateWorkspaceDraft(args);
+            result = await handleCreateWorkspaceDraft(args, reads);
             break;
           case 'update_workspace_draft':
             assertBaseToolArguments(args);
-            result = await handleUpdateWorkspaceDraft(args);
+            result = await handleUpdateWorkspaceDraft(args, reads);
             break;
           case 'delete_workspace_draft':
             assertBaseToolArguments(args);
@@ -537,7 +542,7 @@ export class GSuiteServer {
           // Draft Management (deprecated)
           case 'manage_workspace_draft':
             assertManageDraftParams(args);
-            result = await handleManageWorkspaceDraft(args as ManageDraftParams);
+            result = await handleManageWorkspaceDraft(args as ManageDraftParams, reads);
             break;
 
           // Individual Attachment Operations

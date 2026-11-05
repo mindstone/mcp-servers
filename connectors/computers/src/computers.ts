@@ -1,3 +1,4 @@
+import type { FileReadContext } from './file-read-context.js';
 /**
  * What the assistant does on a computer, built once over every provider's exec, upload and download:
  * finding computers by name, setup, commands as jobs (so Stop really ends them), the browser,
@@ -291,11 +292,11 @@ export class Computers {
     return false;
   }
 
-  async copyIn(located: Located, libraryPath: string | undefined, content: string | undefined, destination: string, replace: boolean): Promise<{ computer: string; path: string; bytes: number }> {
+  async copyIn(located: Located, libraryPath: string | undefined, content: string | undefined, destination: string, replace: boolean, context?: FileReadContext): Promise<{ computer: string; path: string; bytes: number }> {
     if ((libraryPath === undefined) === (content === undefined))
       throw new ConnectorError('Give either library_path or content, not both or neither.', 'BAD_ARGUMENTS', 'Use library_path to copy a Library file, or content to write text into a new file.');
     const target = this.absolute(located, destination);
-    const data = content !== undefined ? Buffer.from(content, 'utf8') : await readFile((await libraryFileToRead(libraryPath!)).absolute);
+    const data = content !== undefined ? Buffer.from(content, 'utf8') : await readFile((await libraryFileToRead(libraryPath!, undefined, context)).absolute);
     await located.provider.upload(located.computer, target, data, replace ? 'replace' : 'new');
     if (located.provider.user !== 'root') await this.root(located, `chown ${located.provider.user}: ${shellQuote(target)}`);
     return { computer: located.computer.name, path: target, bytes: data.length };

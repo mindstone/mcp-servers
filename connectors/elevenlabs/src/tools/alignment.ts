@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -28,13 +30,15 @@ RELATED TOOLS:
 RETURNS: words[] with enveloped aligned text and start/end times, plus loss score. Input transcript text is caller-supplied and not echoed raw.
 
 COST: Credits based on audio duration.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES }] } },
       inputSchema: z.object({
-        file_path: z.string().min(1).describe('Absolute path to local audio inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
+        file_path: z.string().min(1).describe('Absolute path to local audio. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
         text: z.string().min(1).describe('Transcript text to align against the audio.'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new ElevenLabsError(
@@ -44,7 +48,7 @@ COST: Credits based on audio duration.`,
         );
       }
 
-      const fileInput = readSandboxedFile(args.file_path);
+      const fileInput = readSandboxedFile(args.file_path, reads, ['file_path']);
 
       const formData = new FormData();
       formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);

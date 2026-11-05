@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
 ## [0.4.2] - 2026-11-02
 
 ### Changed

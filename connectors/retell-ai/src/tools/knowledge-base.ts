@@ -1,3 +1,4 @@
+import { centralReadPath, fileReadContext, type FileReadContext } from '../file-read-context.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
@@ -11,6 +12,17 @@ import { sanitizeKnowledgeBase, sanitizeList } from '../sanitize.js';
 /** Retell limits knowledge-base uploads to 25 files, 50MB each. */
 const MAX_KB_FILES = 25;
 const MAX_KB_FILE_BYTES = 50 * 1024 * 1024;
+const CHANGED_RESOLUTION =
+  'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.';
+
+function approvedUploadPath(canonicalPath: string, inputPath: string) {
+  try {
+    if (fs.realpathSync(canonicalPath) === canonicalPath) {
+      return { ok: true as const, path: canonicalPath, stat: fs.statSync(canonicalPath) };
+    }
+  } catch { /* reported below */ }
+  throw new ConnectorError(`file_path changed while it was being verified: ${inputPath}`, 'FILE_CHANGED_DURING_READ', CHANGED_RESOLUTION);
+}
 
 const knowledgeBaseTextSchema = z.object({
   title: z.string().min(1).describe('Title of the text source (e.g. "Refund policy").'),
@@ -23,7 +35,7 @@ const knowledgeBaseSourcesSchema = {
   knowledge_base_urls: z.array(z.string().url()).max(25).optional()
     .describe('Public URLs to scrape into the knowledge base (e.g. "https://example.com/faq").'),
   file_paths: z.array(z.string()).max(MAX_KB_FILES).optional()
-    .describe(`Local files to upload (PDF, TXT, MD, etc.). Every path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset) — paths outside the workspace sandbox are rejected before any disk read. Max ${MAX_KB_FILES} files, 50MB each.`),
+    .describe(`Local files to upload (PDF, TXT, MD, etc.). When connected to a host that authorizes file reads, its path permission decision applies to each path. Standalone clients require every path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset). Max ${MAX_KB_FILES} files, 50MB each.`),
 };
 
 /**
@@ -42,10 +54,11 @@ const knowledgeBaseSourcesSchema = {
  * is fstat'd AGAIN: a size or mtime move fails closed, and the byte bound is
  * re-enforced on the bytes actually read.
  */
-async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: string; data: Buffer }>> {
+async function readUploadFiles(filePaths: string[], context?: FileReadContext): Promise<Array<{ name: string; data: Buffer }>> {
   const files: Array<{ name: string; data: Buffer }> = [];
-  for (const inputPath of filePaths) {
-    const resolved = resolveUploadPath(inputPath);
+  for (const [index, inputPath] of filePaths.entries()) {
+    const allowedPath = centralReadPath(context, inputPath, ['file_paths', index]);
+    const resolved = allowedPath === undefined ? resolveUploadPath(inputPath) : approvedUploadPath(allowedPath, inputPath);
     if (!resolved.ok) {
       throw new ConnectorError(
         resolved.error,
@@ -62,7 +75,7 @@ async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: strin
         throw new ConnectorError(
           `file_path changed while it was being verified: ${inputPath}`,
           'FILE_CHANGED_DURING_READ',
-          'The file was replaced between the workspace-sandbox check and the read. Retry the upload; if it keeps failing, check for another process modifying the file.',
+          allowedPath === undefined ? 'The file was replaced between the workspace-sandbox check and the read. Retry the upload; if it keeps failing, check for another process modifying the file.' : CHANGED_RESOLUTION,
         );
       }
       if (!opened.isFile()) {
@@ -115,13 +128,14 @@ async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: strin
 async function appendSourcesToForm(
   form: FormData,
   args: { knowledge_base_texts?: unknown; knowledge_base_urls?: unknown; file_paths?: string[] },
+  context?: FileReadContext,
 ): Promise<void> {
   // Mirror the Retell SDK's multipart encoding: non-file arrays are appended
   // as a single JSON-string field; files are appended one part per file.
   if (args.knowledge_base_texts) form.append('knowledge_base_texts', JSON.stringify(args.knowledge_base_texts));
   if (args.knowledge_base_urls) form.append('knowledge_base_urls', JSON.stringify(args.knowledge_base_urls));
   if (args.file_paths && args.file_paths.length > 0) {
-    for (const file of await readUploadFiles(args.file_paths)) {
+    for (const file of await readUploadFiles(args.file_paths, context)) {
       form.append('knowledge_base_files', new Blob([new Uint8Array(file.data)]), file.name);
     }
   }
@@ -233,10 +247,10 @@ WORKFLOW:
 SOURCES (at least one recommended; a name-only knowledge base is allowed):
 - knowledge_base_texts: inline title+text pairs
 - knowledge_base_urls: public URLs Retell scrapes (set enable_auto_refresh to re-scrape every 12 hours)
-- file_paths: local files uploaded from the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset). Max 25 files, 50MB each.
+- file_paths: local files to upload. When connected to a host that authorizes file reads, its path permission decision applies to each path. Standalone clients require files inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset). Max 25 files, 50MB each.
 
 COMMON MISTAKES:
-- Passing a file path outside MCP_WORKSPACE_PATH; it is rejected by the workspace sandbox before any disk read
+- Standalone clients: passing a file path outside MCP_WORKSPACE_PATH (or the system temp directory when unset); it is rejected by the workspace sandbox before any disk read
 - Expecting immediate availability; processing takes time — poll get_knowledge_base for status "complete"
 
 ERROR RECOVERY:
@@ -248,6 +262,7 @@ RELATED TOOLS:
 - add_knowledge_base_sources: Add more sources later
 
 RETURNS: knowledge_base_id, knowledge_base_name, status (starts "in_progress").`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_paths', '*'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: {
         knowledge_base_name: z.string().min(1).max(40).describe('Name for the knowledge base (max 40 characters, e.g. "Support FAQ").'),
         enable_auto_refresh: z.boolean().optional().describe('Re-scrape the knowledge_base_urls every 12 hours. Default: false.'),
@@ -260,12 +275,13 @@ RETURNS: knowledge_base_id, knowledge_base_name, status (starts "in_progress").`
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       requireApiKey();
       const form = new FormData();
       form.append('knowledge_base_name', args.knowledge_base_name);
       if (args.enable_auto_refresh !== undefined) form.append('enable_auto_refresh', String(args.enable_auto_refresh));
-      await appendSourcesToForm(form, args);
+      await appendSourcesToForm(form, args, reads);
 
       const result = await retellFetch<Record<string, unknown>>(
         '/create-knowledge-base',
@@ -301,6 +317,7 @@ RELATED TOOLS:
 - create_knowledge_base: Create a separate knowledge base instead
 
 RETURNS: knowledge_base_id, knowledge_base_name, status, updated sources.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_paths', '*'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: {
         knowledge_base_id: z.string().describe('The knowledge base to add sources to. Use list_knowledge_bases if unknown.'),
         ...knowledgeBaseSourcesSchema,
@@ -312,7 +329,8 @@ RETURNS: knowledge_base_id, knowledge_base_name, status, updated sources.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       if (!args.knowledge_base_texts?.length && !args.knowledge_base_urls?.length && !args.file_paths?.length) {
         throw new ConnectorError(
           'At least one source is required: knowledge_base_texts, knowledge_base_urls, or file_paths.',
@@ -322,7 +340,7 @@ RETURNS: knowledge_base_id, knowledge_base_name, status, updated sources.`,
       }
       requireApiKey();
       const form = new FormData();
-      await appendSourcesToForm(form, args);
+      await appendSourcesToForm(form, args, reads);
 
       const result = await retellFetch<Record<string, unknown>>(
         `/add-knowledge-base-sources/${encodeURIComponent(args.knowledge_base_id)}`,

@@ -1,3 +1,4 @@
+import { centralReadPath, fileReadContext, type FileReadContext } from '../file-read-context.js';
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -18,7 +19,7 @@ import {
   type ImageConfig,
 } from '../types.js';
 import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath, writeContainedFileExclusive } from './path-safety.js';
-import { fetchRemoteImage, isRemoteImageUrl, MAX_REMOTE_IMAGE_BYTES, validateRemoteImageUrlWithDns } from './remote-image.js';
+import { fetchRemoteImage, isRemoteImageUrl, REMOTE_IMAGE_PREFIXES, MAX_REMOTE_IMAGE_BYTES, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -119,8 +120,9 @@ async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResul
  * instead of reading an out-of-sandbox target.
  * ----------------------------------------------------------------
  */
-function loadLocalSourceImage(rawSource: string): LoadSourceResult {
-  const sourceResolution = resolveSourcePath(rawSource);
+function loadLocalSourceImage(rawSource: string, context: FileReadContext, location: (string | number)[]): LoadSourceResult {
+  const allowedPath = centralReadPath(context, rawSource, location);
+  const sourceResolution = allowedPath === undefined ? resolveSourcePath(rawSource) : { ok: true as const, path: allowedPath };
   if (!sourceResolution.ok) {
     return { ok: false, errorText: JSON.stringify({ ok: false, error: sourceResolution.error }) };
   }
@@ -137,7 +139,7 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
     // The same per-image byte cap applies to local reads as to remote
     // fetches (MAX_REMOTE_IMAGE_BYTES) — enforced from the fstat size
     // before any bytes are loaded into memory.
-    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot(), MAX_REMOTE_IMAGE_BYTES);
+    const readResult = readSandboxedWorkspaceFile(sourcePath, context.mode === 'central' ? '' : getSourceWorkspaceRoot(), MAX_REMOTE_IMAGE_BYTES, context);
     if (!readResult.ok) {
       return {
         ok: false,
@@ -163,15 +165,16 @@ export function registerEditTools(server: McpServer): void {
       description:
         `Edit one or more existing images using Google Gemini's image editing capabilities.\n\n` +
         `Use this when the user wants to modify, edit, or transform an existing image using AI, or combine elements from several images into one.\n\n` +
-        `Provide up to ${MAX_REFERENCE_IMAGES} source images — workspace file paths or https:// URLs — and edit instructions. The edited image will appear inline in the conversation.\n\n` +
+        `Provide up to ${MAX_REFERENCE_IMAGES} source images — local file paths or https:// URLs — and edit instructions. When connected to a host that authorizes file reads, its path permission decision applies to local files. Standalone clients require local files inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). The edited image will appear inline in the conversation.\n\n` +
         `Examples of edit prompts:\n` +
         `- "Remove the background and make it transparent"\n` +
         `- "Change the color of the car to red"\n` +
         `- "Add a sunset sky in the background"\n` +
         `- "Make this photo look like a watercolor painting"\n` +
         `- "Combine these images: put the product from the first image on the table from the second"`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['source_image_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_IMAGE_PREFIXES }, { selector: ['source_image_paths', '*'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_IMAGE_PREFIXES }] } },
       inputSchema: z.object({
-        source_image_path: z.string().min(1).optional().describe('Image to edit: a workspace file path (supports ~ for home directory) or an https:// URL. Single-image shorthand for source_image_paths — provide one or the other (or both).'),
+        source_image_path: z.string().min(1).optional().describe('Image to edit: a local file path (supports ~ for home directory) or an https:// URL. When connected to a host that authorizes file reads, its path permission decision applies to local files; standalone clients require local files inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). Single-image shorthand for source_image_paths — provide one or the other (or both).'),
         source_image_paths: z.array(z.string().min(1)).min(1).max(MAX_REFERENCE_IMAGES).optional().describe(`Up to ${MAX_REFERENCE_IMAGES} reference images to edit or combine (multi-image composition/fusion). Each entry follows the same rules as source_image_path.`),
         prompt: z.string().min(1).describe('Instructions for how to edit the image(s)'),
         model: z.enum(ACCEPTED_MODELS).optional().describe(MODEL_DESCRIPTION),
@@ -181,7 +184,8 @@ export function registerEditTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    async (input): Promise<CallToolResult> => {
+    async (input, extra): Promise<CallToolResult> => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       if (!hasApiKey()) {
         return {
           content: [{
@@ -210,19 +214,19 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      const rawSources = [
-        ...(input.source_image_path ? [input.source_image_path] : []),
-        ...(input.source_image_paths ?? []),
+      const sources: { rawSource: string; location: (string | number)[] }[] = [
+        ...(input.source_image_path ? [{ rawSource: input.source_image_path, location: ['source_image_path'] }] : []),
+        ...(input.source_image_paths ?? []).map((rawSource, index) => ({ rawSource, location: ['source_image_paths', index] })),
       ];
-      if (rawSources.length === 0) {
+      if (sources.length === 0) {
         return {
           content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'No source image provided. Pass source_image_path or source_image_paths.' }) }],
           isError: true,
         };
       }
-      if (rawSources.length > MAX_REFERENCE_IMAGES) {
+      if (sources.length > MAX_REFERENCE_IMAGES) {
         return {
-          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Too many source images: ${rawSources.length} provided; the Gemini image models accept at most ${MAX_REFERENCE_IMAGES} reference images per request.` }) }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Too many source images: ${sources.length} provided; the Gemini image models accept at most ${MAX_REFERENCE_IMAGES} reference images per request.` }) }],
           isError: true,
         };
       }
@@ -231,7 +235,7 @@ export function registerEditTools(server: McpServer): void {
       // disk read: the whole input must fail closed before any I/O happens,
       // so a mixed list like [validRemoteUrl, "http://invalid"] is rejected
       // without fetching the first entry.
-      for (const rawSource of rawSources) {
+      for (const { rawSource, location } of sources) {
         if (isRemoteImageUrl(rawSource)) {
           try {
             await validateRemoteImageUrlWithDns(rawSource);
@@ -245,7 +249,8 @@ export function registerEditTools(server: McpServer): void {
             throw error;
           }
         } else {
-          const localCheck = resolveSourcePath(rawSource);
+          const allowedPath = centralReadPath(reads, rawSource, location);
+          const localCheck = allowedPath === undefined ? resolveSourcePath(rawSource) : { ok: true as const, path: allowedPath };
           if (!localCheck.ok) {
             return {
               content: [{ type: 'text', text: JSON.stringify({ ok: false, error: localCheck.error }) }],
@@ -264,10 +269,10 @@ export function registerEditTools(server: McpServer): void {
 
       const loadedSources: LoadedSourceImage[] = [];
       let combinedSourceBytes = 0;
-      for (const rawSource of rawSources) {
+      for (const { rawSource, location } of sources) {
         const loadResult = isRemoteImageUrl(rawSource)
           ? await loadRemoteSourceImage(rawSource)
-          : loadLocalSourceImage(rawSource);
+          : loadLocalSourceImage(rawSource, reads, location);
         if (!loadResult.ok) {
           return {
             content: [{ type: 'text', text: loadResult.errorText }],

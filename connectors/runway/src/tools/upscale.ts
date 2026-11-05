@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput } from '../client.js';
@@ -14,6 +15,7 @@ export function registerUpscaleTools(server: McpServer): void {
         'Input video must be 30 seconds or shorter. ' +
         'COST: billed per output frame — roughly 210 credits for 10s @ 30fps at 720p/1k, 270 at 2k, 360 at 4k. ' +
         'WORKFLOW: Returns task_id → poll with check_runway_task or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['video'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         video: z.string().describe('Video to upscale (max 30s). HTTPS URL, Runway URI, or local file path.'),
         resolution: z.enum(['720p', '1k', '2k', '4k']).optional().describe('Target output resolution. Default: 2k.'),
@@ -25,8 +27,9 @@ export function registerUpscaleTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
-      const videoUri = await resolveMediaInput(args.video, 'video');
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
+      const videoUri = await resolveMediaInput(args.video, 'video', reads, ['video']);
       const resolution = args.resolution || '2k';
 
       const body: Record<string, unknown> = { model: 'magnific_video_upscaler_creative', videoUri };

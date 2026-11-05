@@ -1,3 +1,4 @@
+import { centralReadPath, fileReadContext } from '../file-read-context.js';
 import * as fs from 'fs';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,6 +16,13 @@ import {
   RenderPreferenceSchema,
   UploadedVideoAttrSchema,
 } from './projects.js';
+
+function approvedUploadSource(canonicalPath: string, input: string): string {
+  let current: string | undefined;
+  try { current = fs.realpathSync(canonicalPath); } catch { /* reported below */ }
+  if (current !== canonicalPath) throw new OpusError(`File changed after it was approved; refusing to read it: ${input}`, 'VALIDATION_ERROR', 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.');
+  return canonicalPath;
+}
 
 interface UploadLinkResponse {
   url: string;
@@ -357,13 +365,14 @@ export function registerUploadTools(server: McpServer): void {
         'Pass `file_path` as an absolute filesystem path. Optional `brandTemplateId`, `curationPref`, `renderPref`, `importPref`, `uploadedVideoAttr`, and `conclusionActions` are forwarded to `opus_create_project`. ' +
         'This tool is NOT idempotent: every invocation uploads the file and creates a NEW, potentially billable project — do not call it twice for the same source video. ' +
         `Per-chunk upload timeout is OPUS_UPLOAD_TIMEOUT_MS (default ${Math.round(getUploadTimeoutMs() / 1000)}s).`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         file_path: z
           .string()
           .min(1)
           .describe(
             'Absolute path to a local video file (MP4 recommended, up to 10GB). ' +
-              'The file MUST live inside the workspace sandbox: MCP_WORKSPACE_PATH when set, otherwise the system temp directory. Paths outside the sandbox are refused.',
+              'When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the file inside the workspace sandbox: MCP_WORKSPACE_PATH when set, otherwise the system temp directory. Paths outside that standalone sandbox are refused.',
           ),
         brandTemplateId: z.string().optional(),
         curationPref: CurationPreferenceSchema.optional(),
@@ -376,12 +385,14 @@ export function registerUploadTools(server: McpServer): void {
       // clipping project on the Opus account.
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       requireApiKey();
       // Invariant #5 — confine reads to MCP_WORKSPACE_PATH / os.tmpdir().
       // Throws a structured OpusError (PATH_OUTSIDE_WORKSPACE) on any path
       // outside the sandbox, including symlink escapes, before any byte is read.
-      const filePath = resolveUploadSourcePath(args.file_path);
+      const canonicalPath = centralReadPath(reads, args.file_path, ['file_path']);
+      const filePath = canonicalPath === undefined ? resolveUploadSourcePath(args.file_path) : approvedUploadSource(canonicalPath, args.file_path);
       const result = await performUpload({
         filePath,
         brandTemplateId: args.brandTemplateId,

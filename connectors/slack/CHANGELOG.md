@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
 ### Fixed
 
 - Preserve unsaved rotated credentials, retry persistence, recognize replaced or deleted connections, and retain both roles' concurrent refresh results.

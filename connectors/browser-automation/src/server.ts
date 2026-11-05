@@ -1,3 +1,4 @@
+import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { KEEP_ALIVE_CAPABILITY, SERVER_NAME, SERVER_VERSION } from './types.js';
 import {
@@ -19,7 +20,7 @@ export function createServer(): McpServer {
       // host that idle-stops servers (super-mcp) to keep this one running
       // until the host itself stops. It still stops it cleanly then, which is
       // when closeBrowserOnStop closes the browser.
-      capabilities: { experimental: { [KEEP_ALIVE_CAPABILITY]: {} } },
+      capabilities: { experimental: { ...FILE_READ_CAPABILITIES.experimental, [KEEP_ALIVE_CAPABILITY]: {} } },
     },
   );
 

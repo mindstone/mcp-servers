@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput, costEstimate, addContentModeration } from '../client.js';
@@ -13,6 +14,7 @@ export function registerVideoTools(server: McpServer): void {
         'Animate a still image into a video. Supports first-frame (and optionally last-frame) keyframe control. ' +
         'MODELS: gen4.5 (flagship), gen4_turbo (fast/cheap), veo3.1 (best quality + audio), veo3.1_fast. ' +
         'WORKFLOW: Returns task_id → poll with check_runway_task or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['prompt_image'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }, { selector: ['last_frame_image'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         prompt_image: z.string().describe('First frame image. HTTPS URL, Runway URI, or local file path.'),
         last_frame_image: z.string().optional().describe('Optional last frame image for transition.'),
@@ -27,7 +29,8 @@ export function registerVideoTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const model = args.model || 'gen4_turbo';
       const isRunwayModel = ['gen4.5', 'gen4_turbo'].includes(model);
       const ratio = args.ratio || '1280:720';
@@ -35,10 +38,10 @@ export function registerVideoTools(server: McpServer): void {
       const audio = args.audio;
       const seed = args.seed;
 
-      const firstImage = await resolveMediaInput(args.prompt_image, 'image');
+      const firstImage = await resolveMediaInput(args.prompt_image, 'image', reads, ['prompt_image']);
       let promptImage: unknown;
       if (args.last_frame_image) {
-        const lastImage = await resolveMediaInput(args.last_frame_image, 'image');
+        const lastImage = await resolveMediaInput(args.last_frame_image, 'image', reads, ['last_frame_image']);
         promptImage = [
           { uri: firstImage, position: 'first' },
           { uri: lastImage, position: 'last' },
@@ -117,6 +120,7 @@ export function registerVideoTools(server: McpServer): void {
         'Re-style or transform an existing video using Aleph 2.0. ' +
         'MODEL: aleph2 (only option). 28 credits/sec (56 credit minimum). Input video must be 30 seconds or shorter. ' +
         'WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['video'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }, { selector: ['reference_image'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         video: z.string().describe('Source video (max 30s). HTTPS URL, Runway URI, or local file path.'),
         prompt_text: z.string().describe('Describe the transformation.'),
@@ -126,8 +130,9 @@ export function registerVideoTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
-      const videoUri = await resolveMediaInput(args.video, 'video');
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
+      const videoUri = await resolveMediaInput(args.video, 'video', reads, ['video']);
       const seed = args.seed;
 
       const body: Record<string, unknown> = { model: 'aleph2', videoUri, promptText: args.prompt_text };
@@ -135,7 +140,7 @@ export function registerVideoTools(server: McpServer): void {
       if (args.reference_image) {
         // aleph2 replaces gen4_aleph's `references` with timed keyframe images;
         // a single reference maps to a keyframe at the start of the video.
-        body.keyframes = [{ uri: await resolveMediaInput(args.reference_image, 'image'), seconds: 0 }];
+        body.keyframes = [{ uri: await resolveMediaInput(args.reference_image, 'image', reads, ['reference_image']), seconds: 0 }];
       }
       addContentModeration(body, args.content_moderation);
 
@@ -156,6 +161,7 @@ export function registerVideoTools(server: McpServer): void {
         'Animate a character with facial expressions and body movements from a reference performance video (Act-Two). ' +
         'MODEL: act_two. 5 credits/sec. Output duration matches reference video length. ' +
         'WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['character'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }, { selector: ['reference_video'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         character: z.string().describe('Character to animate. HTTPS URL or local file path.'),
         reference_video: z.string().describe('Performance video (3-30s). HTTPS URL or local file.'),
@@ -168,11 +174,12 @@ export function registerVideoTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const charType = args.character_type || 'image';
       const charCategory = charType === 'video' ? 'video' : 'image';
-      const characterUri = await resolveMediaInput(args.character, charCategory as 'image' | 'video');
-      const referenceUri = await resolveMediaInput(args.reference_video, 'video');
+      const characterUri = await resolveMediaInput(args.character, charCategory as 'image' | 'video', reads, ['character']);
+      const referenceUri = await resolveMediaInput(args.reference_video, 'video', reads, ['reference_video']);
       const seed = args.seed;
 
       const body: Record<string, unknown> = {

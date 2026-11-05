@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
@@ -133,9 +134,10 @@ export function registerVideoTools(server: McpServer): void {
         '4. Repeat step 3 until status is "succeed" (typically 2-5 minutes)\n\n' +
         'IMAGE REQUIREMENTS:\n' +
         '- image_url: publicly accessible https:// URL, OR\n' +
-        '- image_path: local file inside MCP_WORKSPACE_PATH (or the system temp directory). ' +
+        '- image_path: local file. When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory). ' +
         'Formats: .jpg / .jpeg / .png, max 10MB. The file is Base64-encoded and sent directly — no hosting service needed.\n' +
         '- High resolution works best',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['image_path'], base: 'connectorCwd', expandTilde: true, when: [{ relativeTo: 'root', selector: ['image_url'], test: 'falsy' }] }] } },
       inputSchema: z.object({
         image_url: z
           .string()
@@ -146,7 +148,7 @@ export function registerVideoTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            'Absolute path to a local image file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
+            'Absolute path to a local image file. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
           ),
         prompt: z
           .string()
@@ -172,7 +174,8 @@ export function registerVideoTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       // Exactly one of image_url / image_path must be provided.
       if (args.image_url && args.image_path) {
         return JSON.stringify({
@@ -212,7 +215,7 @@ export function registerVideoTools(server: McpServer): void {
         // Local file: workspace-fenced read, Base64-encoded into the request.
         // KlingError (sandbox/type/size refusals) propagates to the standard
         // structured error handling.
-        image = encodeLocalImage(args.image_path!);
+        image = encodeLocalImage(args.image_path!, reads);
       }
 
       const model = args.model || 'kling-v2-6';

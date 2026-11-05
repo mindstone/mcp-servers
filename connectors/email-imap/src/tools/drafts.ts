@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 /**
  * Draft management tools — list, update, and delete drafts in the account's
  * Drafts mailbox. `email_save_draft` (send.ts) handles creation; reading a
@@ -132,13 +133,15 @@ export function registerDraftTools(server: McpServer): void {
         'then removes the old draft only after the new one is saved. Provide the full new ' +
         'content — fields not supplied are dropped from the replacement. This mutates the ' +
         'remote account: hosts MUST require explicit user confirmation before each invocation.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         uid: z.number().int().positive().describe('UID of the draft to replace (from email_list_drafts)'),
         ...draftFieldsSchema,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const config = ensureInitialized();
 
       const { uid, ...fields } = args;
@@ -146,7 +149,7 @@ export function registerDraftTools(server: McpServer): void {
 
       // Append the replacement FIRST so a failed append never strands the
       // user with the old draft already deleted.
-      const draft = await appendDraftMessage(config.email, fields);
+      const draft = await appendDraftMessage(config.email, fields, reads);
 
       const lock = await getMailboxLock(draft.mailbox);
       try {

@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -388,6 +389,7 @@ COMMON MISTAKES:
 RELATED TOOLS:
 - get_document_status: Check when document is ready (status = 'document.draft')
 - send_document: Send the processed document for e-signature`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         file_path: z.string().min(1).describe('Absolute path to the PDF, DOCX, or RTF file to upload'),
         name: z.string().optional().describe('Document name in PandaDoc (defaults to filename)'),
@@ -403,7 +405,8 @@ RELATED TOOLS:
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       if (!isConfigured()) return noApiKeyError();
 
       // ----------------------------------------------------------------
@@ -419,7 +422,7 @@ RELATED TOOLS:
       // re-resolution bound to the opened inode, and a descriptor-bounded
       // read. See src/tools/path-safety.ts.
       // ----------------------------------------------------------------
-      const readResult = await readUploadFile(args.file_path, MAX_FILE_SIZE);
+      const readResult = await readUploadFile(args.file_path, MAX_FILE_SIZE, undefined, reads);
       if (!readResult.ok) {
         const resolutions: Record<string, string> = {
           'outside-workspace':

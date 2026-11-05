@@ -1,3 +1,4 @@
+import { FILE_READ_CAPABILITIES, fileReadContext } from '../file-read-context.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -162,6 +163,7 @@ export class HubSpotServer {
       },
       {
         capabilities: {
+          ...FILE_READ_CAPABILITIES,
           tools: {}
         }
       }
@@ -246,13 +248,15 @@ export class HubSpotServer {
             properties: tool.inputSchema.properties as Record<string, object>,
             required: tool.inputSchema.required
           },
+          ...(tool._meta ? { _meta: tool._meta } : {}),
           ...(tool.annotations ? { annotations: tool.annotations } : {}),
         }))
       };
     });
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       try {
+        const reads = fileReadContext(this.server.getClientCapabilities(), extra);
         const args = request.params.arguments || {};
         let toolName = request.params.name;
 
@@ -654,7 +658,7 @@ export class HubSpotServer {
 
           // Files
           case 'upload_hubspot_file':
-            result = await handleUploadFile(args as unknown as UploadFileArgs);
+            result = await handleUploadFile(args as unknown as UploadFileArgs, reads);
             break;
           case 'import_hubspot_file_from_url':
             result = await handleImportFileFromUrl(args as unknown as ImportFileFromUrlArgs);
@@ -666,7 +670,7 @@ export class HubSpotServer {
             result = await handleDeleteFile(args as unknown as DeleteFileArgs);
             break;
           case 'attach_file_to_record':
-            result = await handleAttachFileToRecord(args as unknown as AttachFileToRecordArgs);
+            result = await handleAttachFileToRecord(args as unknown as AttachFileToRecordArgs, reads);
             break;
 
           default:

@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
@@ -22,7 +23,8 @@ export function registerLipSyncTools(server: McpServer): void {
         '   - "text2video": Kling speaks your text — requires text (max 120 chars) + voice_id\n' +
         '   - "audio2video": sync to your own audio — requires audio_url (HTTPS) or audio_path (local file)\n' +
         '3. Call this tool → returns task_id, then poll with check_kling_task(task_id, task_type="lip-sync")\n\n' +
-        'AUDIO (audio2video): .mp3/.wav/.m4a/.aac, max 5MB. audio_path must be inside MCP_WORKSPACE_PATH (or the system temp directory).',
+        'AUDIO (audio2video): .mp3/.wav/.m4a/.aac, max 5MB. When connected to a host that authorizes file reads, its path permission decision applies to audio_path. Standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory).',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['audio_path'], base: 'connectorCwd', expandTilde: true, when: [{ relativeTo: 'root', selector: ['audio_url'], test: 'falsy' }, { relativeTo: 'root', selector: ['mode'], test: 'equals', value: 'audio2video' }] }] } },
       inputSchema: z.object({
         video_id: z
           .string()
@@ -72,7 +74,7 @@ export function registerLipSyncTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            'Absolute path to a local audio file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .mp3/.wav/.m4a/.aac, max 5MB.',
+            'Absolute path to a local audio file. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .mp3/.wav/.m4a/.aac, max 5MB.',
           ),
         callback_url: z
           .string()
@@ -84,7 +86,8 @@ export function registerLipSyncTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       // Exactly one of video_id / video_url.
       if (args.video_id && args.video_url) {
         return JSON.stringify({
@@ -155,7 +158,7 @@ export function registerLipSyncTools(server: McpServer): void {
         } else {
           // Local file: workspace-fenced read, Base64-encoded into the request.
           input.audio_type = 'file';
-          input.audio_file = encodeLocalAudio(args.audio_path!);
+          input.audio_file = encodeLocalAudio(args.audio_path!, reads);
         }
       }
 

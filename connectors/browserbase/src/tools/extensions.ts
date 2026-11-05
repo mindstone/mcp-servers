@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { browserbaseFetch, requireApiKey } from '../client.js';
@@ -6,7 +7,7 @@ import { buildUploadFormData } from './file-upload.js';
 import { sanitizeExtension } from '../sanitize.js';
 
 const FILE_PATH_HINT =
-  'Local path to the zipped Chrome extension (.zip). The path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset) — paths outside the workspace sandbox are rejected before any disk read.';
+  'Local path to the zipped Chrome extension (.zip). When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset).';
 
 export function registerExtensionTools(server: McpServer): void {
   server.registerTool(
@@ -22,7 +23,7 @@ WORKFLOW:
 2. upload_extension → get the extension id
 3. create_session with extension_id (or browser_settings.extension_id)
 
-SECURITY: file_path is sandboxed — the path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
+SECURITY: When connected to a host that authorizes file reads, its path permission decision applies to file_path. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
 
 NOTE: There is no list_extensions endpoint — record the returned id.
 
@@ -37,6 +38,7 @@ RELATED TOOLS:
 - create_session: Load the extension in a session
 
 RETURNS: id, fileName, projectId, createdAt, updatedAt.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: {
         file_path: z.string().min(1).describe(FILE_PATH_HINT),
       },
@@ -47,9 +49,10 @@ RETURNS: id, fileName, projectId, createdAt, updatedAt.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       requireApiKey();
-      const form = await buildUploadFormData(args.file_path);
+      const form = await buildUploadFormData(args.file_path, reads);
       const result = await browserbaseFetch<Record<string, unknown>>(
         '/extensions',
         { method: 'POST', body: form },
