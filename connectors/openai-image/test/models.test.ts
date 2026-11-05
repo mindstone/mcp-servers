@@ -19,17 +19,28 @@ describe('model list', () => {
     expect(isSupportedModel('gpt-image-1')).toBe(false);
   });
 
+  it('recognizes both gpt-image-2.6 variants', () => {
+    expect(SUPPORTED_MODELS).toContain('gpt-image-2.6-sunburst');
+    expect(SUPPORTED_MODELS).toContain('gpt-image-2.6-flare');
+    expect(isSupportedModel('gpt-image-2.6-sunburst')).toBe(true);
+    expect(isSupportedModel('gpt-image-2.6-flare')).toBe(true);
+  });
+
   it('treats only gpt-image-2 and its snapshots as refusing transparency', () => {
     expect(modelKnownToRejectTransparency('gpt-image-2')).toBe(true);
     expect(modelKnownToRejectTransparency('gpt-image-2-2026-04-21')).toBe(true);
     expect(modelKnownToRejectTransparency('gpt-image-2.5-sunburst')).toBe(false);
     expect(modelKnownToRejectTransparency('gpt-image-2.5-flare-2026-09-08')).toBe(false);
+    expect(modelKnownToRejectTransparency('gpt-image-2.6-sunburst')).toBe(false);
+    expect(modelKnownToRejectTransparency('gpt-image-2.6-flare')).toBe(false);
     expect(modelKnownToRejectTransparency('gpt-image-1.5')).toBe(false);
   });
 
   it('sends moderation to the whole gpt-image-2 family, 2.5 included', () => {
     expect(modelSupportsModeration('gpt-image-2')).toBe(true);
     expect(modelSupportsModeration('gpt-image-2.5-flare')).toBe(true);
+    expect(modelSupportsModeration('gpt-image-2.6-sunburst')).toBe(true);
+    expect(modelSupportsModeration('gpt-image-2.6-flare')).toBe(true);
     expect(modelSupportsModeration('gpt-image-1.5')).toBe(false);
   });
 });
