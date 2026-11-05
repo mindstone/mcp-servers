@@ -554,7 +554,7 @@ jobs:
     needs: [detect, publish-npm]
     if: needs.detect.outputs.has_registry_changes == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write  # Required for github-oidc auth on MCP registry
@@ -578,6 +578,7 @@ jobs:
           echo "Found server.json"
 
       - name: Install mcp-publisher (pinned + checksum)
+        timeout-minutes: 2
         env:
           # Pin to a specific mcp-publisher release. To bump:
           #   1. Pick a release from https://github.com/modelcontextprotocol/registry/releases
@@ -611,10 +612,8 @@ jobs:
           rm -f "${tarball}"
           mcp-publisher --version
 
-      # The registry checks that the npm version exists, and npm can take a few
-      # minutes to serve a version it has just accepted. Publishing straight
-      # after the npm job raced that and failed with a 404 (quickbooks 0.4.3,
-      # run 38478865300), so wait until npm serves the version first.
+      # Metadata and tarballs propagate independently after npm accepts a publish.
+      # Gate registry publication on both, within one request-and-sleep deadline.
       - name: Wait for npm to serve the new version
         run: |
           set -euo pipefail
@@ -624,15 +623,33 @@ jobs:
           fi
           name="$(jq -r '.name' package.json)"
           version="$(jq -r '.version' package.json)"
-          for attempt in $(seq 1 30); do
-            if [ "$(npm view "${name}@${version}" version --prefer-online 2>/dev/null || true)" = "${version}" ]; then
-              echo "npm serves ${name}@${version} (attempt ${attempt})"
-              exit 0
+          deadline=$(( $(awk '{print int($1)}' /proc/uptime) + 600 ))
+          remaining_budget() {
+            remaining=$(( deadline - $(awk '{print int($1)}' /proc/uptime) ))
+            [ "${remaining}" -gt 0 ] || return 1
+            request_timeout=$(( remaining < 30 ? remaining : 30 ))
+          }
+          while remaining_budget; do
+            metadata="$(timeout -s KILL "${request_timeout}s" npm view "${name}@${version}" \
+              --json --prefer-online --fetch-retries=0 \
+              --fetch-timeout="$(( request_timeout * 1000 ))" 2>/dev/null || true)"
+            tarball="$(jq -er --arg name "${name}" --arg version "${version}" \
+              'select(.name == $name and .version == $version) | .dist.tarball | select(type == "string") | select(startswith("https://"))' \
+              <<< "${metadata}" 2>/dev/null || true)"
+            if [ -n "${tarball}" ] && remaining_budget; then
+              if status="$(curl --fail --silent --show-error --max-time "${request_timeout}" \
+                --output /dev/null --write-out '%{http_code}' "${tarball}" 2>/dev/null)" \
+                && [ "${status}" = "200" ] && remaining_budget; then
+                echo "npm serves exact metadata and tarball for ${name}@${version}"
+                exit 0
+              fi
             fi
-            echo "npm does not serve ${name}@${version} yet (attempt ${attempt}/30); waiting 10s"
-            sleep 10
+            remaining_budget || break
+            delay=$(( remaining < 10 ? remaining : 10 ))
+            echo "npm metadata or tarball for ${name}@${version} is not ready; waiting ${delay}s (${remaining}s left)"
+            sleep "${delay}"
           done
-          echo "::error::npm still does not serve ${name}@${version} after 5 minutes; not publishing to the MCP registry. Re-run this job once it does."
+          echo "::error::npm metadata and tarball for ${name}@${version} were not ready within 10 minutes; not publishing to the MCP registry. Re-run this job once both are served."
           exit 1
 
       - name: Publish to MCP registry (github-oidc)

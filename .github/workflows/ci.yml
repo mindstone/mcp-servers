@@ -296,6 +296,22 @@ jobs:
       - name: Check connector READMEs match install-links generator output
         run: node scripts/gen-install-links.mjs --check
 
+  release-readiness-test:
+    name: Release readiness regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Verify npm metadata and tarball readiness gate
+        run: node --test scripts/release-readiness.test.mjs
+
   release-hygiene-selftest:
     name: Release-hygiene gate self-test
     runs-on: ubuntu-latest
