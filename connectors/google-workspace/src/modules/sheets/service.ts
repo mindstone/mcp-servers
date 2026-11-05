@@ -1,6 +1,6 @@
 import { google, sheets_v4 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, isPassthroughGoogleError } from '../../utils/apiError.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import {
   AnchorMode,
@@ -780,7 +780,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -856,7 +856,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
         return {
           success: false,
@@ -945,7 +945,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
         return {
           success: false,
@@ -1084,7 +1084,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       return { formulaCells };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       const kind = this.classifyFormulaPreReadError(error);
       const rewrittenError = rewriteSheetsApiError(error, {
         tool,
@@ -1341,7 +1341,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1421,7 +1421,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1516,7 +1516,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1556,7 +1556,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1621,7 +1621,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1668,7 +1668,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -1713,7 +1713,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -2058,7 +2058,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
         return {
           success: false,
@@ -2194,7 +2194,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
         return {
           success: false,
@@ -2308,7 +2308,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -2368,7 +2368,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -2508,7 +2508,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -2524,7 +2524,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
  */
 function toSheetTabFailure<T>(error: unknown): SheetTabOperationResult<T> {
   // An expired/revoked grant must keep its reconnect signal.
-  if (isAuthHandoffError(error)) throw error;
+  if (isPassthroughGoogleError(error)) throw error;
   if (error instanceof SheetsInputError) throw error;
   return { success: false, error: describeApiErrorUntrusted(error, 'google-workspace:sheets:api-error') };
 }

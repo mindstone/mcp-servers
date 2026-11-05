@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- When Google refuses a read because of its per-minute limit, wait and retry that one request (up to about a minute and a half, honouring `Retry-After`) instead of failing the whole tool call; requests that succeeded are not repeated. When retrying stops, the error says so (`recoveryExhausted: true`) and gives rate-limit advice rather than "reconnect the account".
+- Page tokens and IDs in JSON results are returned exactly as Google sent them. Before, they were wrapped as untrusted content, so passing one into the next call (for example to fetch the next page) failed. Text from outside is still wrapped.
+
 ## [0.5.3] - 2026-11-03
 
 ### Changed

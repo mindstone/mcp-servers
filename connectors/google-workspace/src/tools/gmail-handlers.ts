@@ -13,7 +13,7 @@ import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 import logger from '../utils/logger.js';
 
 // Singleton instances
@@ -659,7 +659,10 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
       
       // Return formatted text by default, JSON only when explicitly requested
       if (returnJson) {
-        return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:search');
+        return wrapUntrustedJsonControls(result, 'google-workspace:gmail:search', [
+          'nextPageToken', 'emails.*.id', 'emails.*.threadId', 'emails.*.attachments.*.id',
+          'threads.{}.messages.*',
+        ]);
       }
       return formatEmailsAsText(result);
     } catch (error) {
@@ -797,13 +800,13 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
         // Snippet field is preserved so callers can still see what was elided.
         if (includeBody && !includeFullBodies && result.messages.length > DEFAULT_FULL_BODY_TAIL) {
           const tailStart = result.messages.length - DEFAULT_FULL_BODY_TAIL;
-          return wrapUntrustedJsonStrings({
+          return wrapUntrustedJsonControls({
             ...result,
             bodies_abbreviated: tailStart,
             messages: result.messages.map((m, i) => i < tailStart ? { ...m, body: undefined } : m),
-          }, `google-workspace:gmail:thread/${threadId}`);
+          }, `google-workspace:gmail:thread/${threadId}`, ['threadId', 'messages.*.id', 'messages.*.attachments.*.id']);
         }
-        return wrapUntrustedJsonStrings(result, `google-workspace:gmail:thread/${threadId}`);
+        return wrapUntrustedJsonControls(result, `google-workspace:gmail:thread/${threadId}`, ['threadId', 'messages.*.id', 'messages.*.attachments.*.id']);
       }
       return formatThreadAsText(result, offset, includeFullBodies);
     } catch (error) {

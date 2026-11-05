@@ -1,3 +1,4 @@
+import { isGoogleRecoveryExhausted } from '../../utils/google-retry.js';
 import { google } from "googleapis";
 import {
   BaseGoogleService,
@@ -143,6 +144,7 @@ export class ChatService extends BaseGoogleService<ChatApiClient> {
    * GoogleServiceError keeps its code/details, anything else becomes an unknown error.
    */
   private toChatError(error: unknown, fallbackMessage: string): ChatError {
+    if (isGoogleRecoveryExhausted(error)) throw error;
     // Handle known GoogleServiceError specifically
     if (error instanceof GoogleServiceError) {
       // Assuming GoogleServiceError inherits message and data from McpError

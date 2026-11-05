@@ -1,5 +1,6 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { wrapUntrustedContent } from './untrusted-content.js';
+import { isGoogleRecoveryExhausted, preserveGoogleRetryDecision } from './google-retry.js';
 
 /**
  * Extracts the HTTP status from a googleapis (GaxiosError-shaped) failure,
@@ -84,6 +85,11 @@ export function isAuthHandoffError(error: unknown): boolean {
   return typeof code === 'string' && AUTH_HANDOFF_CODES.has(code);
 }
 
+/** Keep structured recovery decisions out of lossy string-only error results. */
+export function isPassthroughGoogleError(error: unknown): boolean {
+  return isAuthHandoffError(error) || isGoogleRecoveryExhausted(error);
+}
+
 /**
  * Normalizes any thrown value into an error suitable for a tool handler's outer
  * catch. An McpError (e.g. an InvalidParams validation failure raised earlier
@@ -103,5 +109,5 @@ export function toMcpError(error: unknown, fallbackContext: string): Error {
   const detail = hasErrorDetails(error) && error.details
     ? `${error.message}: ${error.details}`
     : describeApiError(error);
-  return new McpError(ErrorCode.InternalError, `${fallbackContext}: ${detail}`);
+  return preserveGoogleRetryDecision(new McpError(ErrorCode.InternalError, `${fallbackContext}: ${detail}`), error);
 }

@@ -3,7 +3,7 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager } from '../../modules/accounts/index.js';
 import { AccountError } from '../../modules/accounts/types.js';
 import { findMissingScopes, getServiceNamesForScopes } from '../../utils/scope-hierarchy.js';
-import { isAuthHandoffError } from '../../utils/apiError.js';
+import { isPassthroughGoogleError } from '../../utils/apiError.js';
 
 /**
  * Base error class for Google services
@@ -132,7 +132,7 @@ export abstract class BaseGoogleService<TClient> {
    * used to hit on a first-request auth failure.
    */
   protected handleError(error: unknown, context: string): Error {
-    if (isAuthHandoffError(error) && error instanceof Error) {
+    if (isPassthroughGoogleError(error) && error instanceof Error) {
       return error;
     }
     if (error instanceof GoogleServiceError) {

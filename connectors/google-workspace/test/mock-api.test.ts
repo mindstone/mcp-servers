@@ -398,6 +398,7 @@ describe('Google Workspace mock API happy paths', () => {
       return_json: true,
     });
     expect(JSON.stringify(search)).toContain('msg-1');
+    expect(search).toMatchObject({ nextPageToken: 'page-2', emails: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-msg-1' })] });
 
     const send = await handlers.handleSendWorkspaceEmail({
       to: ['recipient@example.com'],
@@ -468,6 +469,7 @@ describe('Google Workspace mock API happy paths', () => {
 
     const files = await handlers.handleListDriveFiles({ options: { pageSize: 1 }, return_json: true });
     expect(JSON.stringify(files)).toContain('drive-file-1');
+    expect(files).toMatchObject({ data: { nextPageToken: 'drive-page-2', files: [expect.objectContaining({ id: 'drive-file-1' })] } });
 
     const upload = await handlers.handleUploadDriveFile({
       options: { name: 'mock-upload.txt', content: 'hello', mimeType: 'text/plain' },
@@ -481,6 +483,7 @@ describe('Google Workspace mock API happy paths', () => {
 
     const doc = await handlers.handleReadDocument({ document_id: 'doc-1', return_json: true });
     expect(JSON.stringify(doc)).toContain('Mock Document');
+    expect(doc).toMatchObject({ documentId: 'doc-1', title: expect.stringContaining('<untrusted-content') });
 
     const replace = await handlers.handleFindAndReplace({
       document_id: 'doc-1',
@@ -501,6 +504,7 @@ describe('Google Workspace mock API happy paths', () => {
       anchor_mode: 'never',
     });
     expect(JSON.stringify(sheet)).toContain('Mock Spreadsheet');
+    expect(sheet).toMatchObject({ spreadsheetId: 'sheet-1' });
 
     const update = await handlers.handleUpdateValues({
       spreadsheet_id: 'sheet-1',
@@ -518,6 +522,7 @@ describe('Google Workspace mock API happy paths', () => {
 
     const presentation = await handlers.handleReadPresentation({ presentation_id: VALID_SLIDES_ID, return_json: true });
     expect(JSON.stringify(presentation)).toContain('Mock Presentation');
+    expect(presentation).toMatchObject({ presentationId: VALID_SLIDES_ID });
 
     const batch = await handlers.handleBatchUpdatePresentation({
       presentation_id: VALID_SLIDES_ID,
@@ -532,6 +537,7 @@ describe('Google Workspace mock API happy paths', () => {
 
     const contacts = await handlers.handleGetContacts({ person_fields: 'names,emailAddresses', page_size: 5 });
     expect(JSON.stringify(contacts)).toContain('Mock Contact');
+    expect(contacts).toMatchObject({ connections: [expect.objectContaining({ resourceName: 'people/contact-1' })] });
 
     const tasks = await handlers.handleListTasks({ task_list_id: '@default', max_results: 5 });
     expect(JSON.stringify(tasks)).toContain('Mock Task');
@@ -1226,7 +1232,8 @@ describe('Docs tabs', () => {
     expect(json.tabs[0].parentTabId).toBeNull();
     expect(json.tabs[2].nestingLevel).toBe(2);
     expect(json.tabs[0].childCount).toBe(2);
-    expect(JSON.stringify(json)).toContain('<untrusted-content source=\\"google-workspace:docs:tabs/nested-doc\\">t.a1x');
+    expect(json).toMatchObject({ documentId: 'nested-doc', tabs: expect.arrayContaining([expect.objectContaining({ tabId: 't.a1x' })]) });
+    expect(JSON.stringify(json)).toContain('<untrusted-content source=\\"google-workspace:docs:tabs/nested-doc\\">Notes');
   });
 });
 

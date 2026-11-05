@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import logger from './logger.js';
+import { createGoogleRetryConfig } from './google-retry.js';
 
 export const DEFAULT_GOOGLE_WORKSPACE_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_GOOGLE_WORKSPACE_REQUEST_TIMEOUT_MS = 5 * 60_000;
@@ -25,5 +26,6 @@ export function composeAbortSignal(caller?: AbortSignal): AbortSignal {
 export function applyDefaultGoogleRequestOptions(): void {
   google.options({
     timeout: resolveRequestTimeoutMs(),
+    retryConfig: createGoogleRetryConfig(),
   });
 }
