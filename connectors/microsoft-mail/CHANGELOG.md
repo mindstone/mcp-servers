@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-03
+
+### Changed
+
+- Cards keep their send state in every copy and after a restart; a blocked send says why without a Retry that can't work.
+
+### Fixed
+
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
+
 ### Added
 
 - The inline compose form (`compose_email`) gains a "Save draft" button
@@ -13,6 +27,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   the existing `create_draft` tool instead of sending it. The saved-draft
   confirmation is terminal (no Reopen) so the form can't silently diverge from
   or duplicate the mailbox draft.
+
+### Changed
+
+- The compose form's wording no longer names a particular host app: the
+  lost-reply notices now start "No confirmation came back in time…" and the
+  unconfirmed-sender notice reads "Couldn't confirm which email account to
+  send from. Cancel, then ask your assistant to recreate this draft."
 
 ## [0.3.0] - 2026-08-06
 

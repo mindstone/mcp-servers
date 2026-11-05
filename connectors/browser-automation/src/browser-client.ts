@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
-import path from 'node:path';
 import { ConnectorError, DEFAULT_TIMEOUT_MS, SESSION_NAME } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -16,14 +16,35 @@ export interface ExecOptions {
   headed?: boolean;
 }
 
-let resolvedBinary: string | null = null;
+const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 
-function resolveAgentBrowser(): string {
-  if (resolvedBinary) return resolvedBinary;
-  // Default to the binary name — execFile will search PATH.
-  // If not found (ENOENT), the caller falls back to npx.
-  resolvedBinary = 'agent-browser';
-  return resolvedBinary;
+// Whether this process has run an agent-browser command, so it may have started
+// (or picked up) the background agent-browser daemon. See closeBrowserOnStop.
+let ranBrowserCommand = false;
+// Set once the host is stopping this server: no new browser commands start.
+let stopping = false;
+// Browser commands still running, so a stop can close again after a launch
+// that finishes after the first close.
+const commandsInFlight = new Set<Promise<ExecResult>>();
+
+// A host gives a stopping server only a short grace before killing it;
+// `agent-browser close` normally takes well under a second.
+const STOP_CLOSE_TIMEOUT_MS = 5_000;
+
+let bundledEntry: string | null = null;
+
+/**
+ * Path to the JS entry of the agent-browser package this connector depends
+ * on. Run with `process.execPath` rather than through an npm `.cmd` shim or
+ * npx: on Windows, execFile cannot start a shim without a shell, and npx
+ * reaches the CLI through cmd.exe, which cuts arguments at the first newline.
+ * Throws MODULE_NOT_FOUND when the dependency is missing.
+ */
+function resolveBundledEntry(): string {
+  if (!bundledEntry) {
+    bundledEntry = createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js');
+  }
+  return bundledEntry;
 }
 
 function buildEnv(): Record<string, string> {
@@ -32,6 +53,17 @@ function buildEnv(): Record<string, string> {
   // Always use session persistence
   if (!env.AGENT_BROWSER_SESSION_NAME) {
     env.AGENT_BROWSER_SESSION_NAME = SESSION_NAME;
+  }
+
+  // A session name turns on the CLI's periodic autosave (every 30s by
+  // default, agent-browser >= 0.31.2). Each save opens a temporary tab, which
+  // brings a visible browser window in front of the user's other apps.
+  // Save-on-close still persists the session, so periodic saves stay off
+  // unless the host sets an interval. A host value, including an empty
+  // string, passes through untouched; the CLI treats empty or non-numeric
+  // values as its 30s default. The daemon reads this only when it starts.
+  if (env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS === undefined) {
+    env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = '0';
   }
 
   return env;
@@ -59,19 +91,6 @@ function resolveHeaded(optionHeaded: boolean | undefined, env: Record<string, st
   if (raw === 'false' || raw === '0') return false;
   return true;
 }
-
-/**
- * Pinned version of agent-browser used by the npx fallback.
- *
- * Why pinned: keeps fallback behavior reproducible. Bump when verified against
- * a newer release. Do not use `latest` — npx caches by spec, and an unpinned
- * spec produces flaky behavior across machines.
- *
- * 0.33.2 verified 2026-08-05 against the connector's full command surface
- * (open, snapshot -i, screenshot, pdf, get url/title/text, tab, click/fill/
- * type/press/scroll/select/hover, eval, back/forward, wait, close).
- */
-const NPX_FALLBACK_VERSION = '0.33.2';
 
 /**
  * Build the ConnectorError message for a failed CLI invocation.
@@ -111,15 +130,35 @@ function cliFailureMessage(
  * on the CLI — passing one would be a CLI error — so headless is the absence
  * of `--headed`.
  *
- * Falls back to `npx -y agent-browser@<NPX_FALLBACK_VERSION>` if the binary is
- * not on PATH. Uses execFile (no shell) to prevent command injection.
+ * Runs an `agent-browser` executable from PATH when there is one; otherwise
+ * runs the connector's own agent-browser dependency with this Node. Both use
+ * execFile with no shell, so no argument is ever interpreted by a shell.
  */
-export async function execAgentBrowser(
+export function execAgentBrowser(
+  args: string[],
+  options?: ExecOptions,
+): Promise<ExecResult> {
+  if (stopping) {
+    return Promise.reject(new ConnectorError(
+      'The browser is closing because the app is stopping this connector',
+      'STOPPING',
+      'Try again once the app is running again.',
+    ));
+  }
+  const command = runAgentBrowser(args, options);
+  commandsInFlight.add(command);
+  const forget = () => commandsInFlight.delete(command);
+  command.then(forget, forget);
+  return command;
+}
+
+async function runAgentBrowser(
   args: string[],
   options?: ExecOptions,
 ): Promise<ExecResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const env = buildEnv();
+  ranBrowserCommand = true;
 
   // Inject --headed AFTER the command (positional index 1). The CLI parses
   // the first positional as the command name, so flags must follow it.
@@ -128,83 +167,88 @@ export async function execAgentBrowser(
     args = [args[0], '--headed', ...args.slice(1)];
   }
 
-  const binary = resolveAgentBrowser();
-
-  try {
+  const run = async (file: string, fileArgs: string[]): Promise<ExecResult> => {
     // execFile is safe against command injection (no shell interpretation)
-    const result = await execFileAsync(binary, args, {
+    const result = await execFileAsync(file, fileArgs, {
       env,
       timeout: timeoutMs,
-      maxBuffer: 10 * 1024 * 1024, // 10MB for large snapshots
+      maxBuffer: MAX_BUFFER,
+      // GUI hosts should not open a console window for each CLI call on Windows.
+      windowsHide: true,
     });
     return { stdout: result.stdout, stderr: result.stderr ?? '' };
+  };
+
+  try {
+    return await run('agent-browser', args);
   } catch (error: unknown) {
-    const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-
-    // Binary not found on PATH — try npx fallback (pulls a pinned version
-    // from the npm cache / registry).
-    if (err.code === 'ENOENT') {
-      try {
-        const npxResult = await execFileAsync(
-          'npx',
-          ['-y', `agent-browser@${NPX_FALLBACK_VERSION}`, ...args],
-          {
-            env,
-            timeout: timeoutMs + 15_000, // extra time for npx install
-            maxBuffer: 10 * 1024 * 1024,
-          },
-        );
-        return { stdout: npxResult.stdout, stderr: npxResult.stderr ?? '' };
-      } catch (npxError: unknown) {
-        const npxErr = npxError as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-
-        // Distinguish: npx itself missing (true binary-not-found) vs
-        // agent-browser ran but returned non-zero (CLI error surfaced via npx).
-        if (npxErr.code === 'ENOENT') {
-          throw new ConnectorError(
-            `agent-browser binary not found on PATH and npx is also unavailable: ${npxErr.message ?? String(npxErr)}`,
-            'BINARY_NOT_FOUND',
-            'Install agent-browser: npm install -g agent-browser\n' +
-            'Or ensure npx is available on PATH.',
-          );
-        }
-
-        // npx ran but the underlying CLI exited non-zero — propagate as CLI_ERROR
-        // with the (enveloped) stderr for diagnosis.
-        throw new ConnectorError(
-          cliFailureMessage(args[0], npxErr.stderr, npxErr.stdout),
-          'CLI_ERROR',
-          'The agent-browser CLI command failed (via npx fallback). ' +
-          'Check the error details above. ' +
-          'For best performance, install agent-browser globally: npm install -g agent-browser',
-        );
-      }
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw classifyFailure(error, args[0], timeoutMs);
     }
+  }
 
-    // Timeout — name only the subcommand: the full argument vector may carry
-    // sensitive values (URLs with userinfo, selectors, filenames, typed
-    // values, evaluation scripts) and must not be echoed to the model.
-    if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || (err as { killed?: boolean }).killed) {
-      throw new ConnectorError(
-        `Command timed out after ${timeoutMs}ms: agent-browser ${args[0]}`,
-        'TIMEOUT',
-        'The browser operation took too long. Try a simpler action or increase the timeout.',
-      );
-    }
-
-    // Other errors — include the (enveloped) stderr for diagnostics
-    throw new ConnectorError(
-      cliFailureMessage(args[0], err.stderr, err.stdout),
-      'CLI_ERROR',
-      'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
-    );
+  // Not on PATH: run the bundled copy.
+  try {
+    return await run(process.execPath, [resolveBundledEntry(), ...args]);
+  } catch (error: unknown) {
+    throw classifyFailure(error, args[0], timeoutMs);
   }
 }
 
+function classifyFailure(error: unknown, command: string, timeoutMs: number): ConnectorError {
+  const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string; killed?: boolean };
+
+  // Timeout — name only the subcommand: the full argument vector may carry
+  // sensitive values (URLs with userinfo, selectors, filenames, typed
+  // values, evaluation scripts) and must not be echoed to the model.
+  if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || err.killed) {
+    return new ConnectorError(
+      `Command timed out after ${timeoutMs}ms: agent-browser ${command}`,
+      'TIMEOUT',
+      'The browser operation took too long. Try a simpler action or increase the timeout.',
+    );
+  }
+
+  // Neither a PATH executable nor the bundled dependency could be started.
+  if (err.code === 'MODULE_NOT_FOUND' || err.code === 'ENOENT') {
+    return new ConnectorError(
+      'agent-browser is not on PATH and the copy bundled with this connector could not be found',
+      'BINARY_NOT_FOUND',
+      "This connector's installation is incomplete. Reinstall the connector.",
+    );
+  }
+
+  // Other errors — include the (enveloped) stderr for diagnostics
+  return new ConnectorError(
+    cliFailureMessage(command, err.stderr, err.stdout),
+    'CLI_ERROR',
+    'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
+  );
+}
+
 /**
- * Reset the resolved binary cache.
- * Primarily used for testing to reset state between test runs.
+ * Close the browser and its agent-browser daemon when this server stops.
+ *
+ * The daemon detaches from this process and, for a visible browser, never
+ * stops by itself, so without this it outlives the host and a later run reuses
+ * it with stale settings. Closing saves the session, so sign-ins persist. Does
+ * nothing if this process never ran a browser command, so a server started only
+ * to list its tools never touches a browser it did not use. Once called, new
+ * browser commands are refused.
  */
-export function resetBinaryCache(): void {
-  resolvedBinary = null;
+export async function closeBrowserOnStop(): Promise<void> {
+  stopping = true;
+  if (!ranBrowserCommand) return;
+  const running = [...commandsInFlight];
+  try {
+    await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  } finally {
+    // A command that was still running (say, opening a page) may have started
+    // the browser again after that close, or the close failed while it ran:
+    // close once more when it has finished.
+    if (running.length > 0) {
+      await Promise.allSettled(running);
+      await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+    }
+  }
 }

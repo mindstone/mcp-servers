@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQLLike, validateFields, isValidQueryFieldName, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQLLike, validateFields, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 
 export function registerUserTools(server: McpServer): void {
@@ -21,7 +21,7 @@ export function registerUserTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
         const defaultFields = ['Id', 'Name', 'Email', 'Username', 'IsActive', 'UserRoleId', 'Profile.Name'];
-        const fields = validateFields(args.fields || [], defaultFields, isValidQueryFieldName);
+        const fields = validateFields(args.fields || [], defaultFields);
         let query = `SELECT ${fields.join(', ')} FROM User`;
         const conditions: string[] = [];
         if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQLLike(args.name_contains)}%'`);

@@ -101,7 +101,7 @@ describe('Security audit — Salesforce MCP server', () => {
   it('all tool parameters use snake_case', () => {
     const srcFiles = getAllFiles(SRC_DIR);
     const toolFiles = srcFiles.filter((f) => f.includes('/tools/'));
-    const camelCaseParamPattern = /z\.object\(\{([^}]+)\}/g;
+    const camelCaseParamPattern = /inputSchema:\s*z\.object\(\{([^}]+)\}/g;
 
     for (const file of toolFiles) {
       const content = fs.readFileSync(file, 'utf-8');
@@ -183,13 +183,14 @@ function captureSoqlQueries(): { queries: string[] } {
 }
 
 describe('M3.2 — SOQL escaping (VAL-SALESFORCE-010..014)', () => {
-  it('VAL-SALESFORCE-010 — escapeSOQL escapes \\\\, \', %, _', async () => {
+  it('VAL-SALESFORCE-010 — escapeSOQL escapes backslashes and apostrophes, preserving wildcards', async () => {
     const { escapeSOQL } = await import('../src/utils.js');
-    expect(escapeSOQL("foo'bar")).toBe("foo''bar");
+    expect(escapeSOQL("foo'bar")).toBe("foo\\'bar");
     expect(escapeSOQL('a\\b')).toBe('a\\\\b');
-    expect(escapeSOQL('a%b')).toBe('a\\%b');
-    expect(escapeSOQL('a_b')).toBe('a\\_b');
-    expect(escapeSOQL('100% pure_value')).toBe('100\\% pure\\_value');
+    expect(escapeSOQL('a%b')).toBe('a%b');
+    expect(escapeSOQL('a_b')).toBe('a_b');
+    expect(escapeSOQL('100% pure_value')).toBe('100% pure_value');
+    expect(escapeSOQL("a\\b'c")).toBe("a\\\\b\\'c");
   });
 
   it('VAL-SALESFORCE-011 — escapeSOQLLike helper exists and escapes wildcards', async () => {
@@ -197,7 +198,7 @@ describe('M3.2 — SOQL escaping (VAL-SALESFORCE-010..014)', () => {
     expect(typeof (utils as Record<string, unknown>).escapeSOQLLike).toBe('function');
     expect((utils as { escapeSOQLLike: (s: string) => string }).escapeSOQLLike('a%b')).toBe('a\\%b');
     expect((utils as { escapeSOQLLike: (s: string) => string }).escapeSOQLLike('a_b')).toBe('a\\_b');
-    expect((utils as { escapeSOQLLike: (s: string) => string }).escapeSOQLLike("a'b")).toBe("a''b");
+    expect((utils as { escapeSOQLLike: (s: string) => string }).escapeSOQLLike("a'b")).toBe("a\\'b");
     expect((utils as { escapeSOQLLike: (s: string) => string }).escapeSOQLLike('a\\b')).toBe('a\\\\b');
   });
 
@@ -252,6 +253,16 @@ describe('M3.2 — Captured SOQL escaping (VAL-SALESFORCE-013..016)', () => {
     expect(soql, `expected one SOQL query against Contact, got: ${queries.join(' | ')}`).toBeDefined();
     // Wildcard % around the literal escaped % token: '%50\%%'
     expect(soql).toContain("LIKE '%50\\%%'");
+  });
+
+  it('an apostrophe in name_contains is backslash-escaped in the query sent', async () => {
+    const { queries } = captureSoqlQueries();
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_accounts', { name_contains: "O'Brien" });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(queries.find((q) => q.includes('FROM Account'))).toContain("Name LIKE '%O\\'Brien%'");
   });
 
   it('VAL-SALESFORCE-014 — literal _ in name_contains is escaped at LIKE site', async () => {

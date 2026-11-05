@@ -9,7 +9,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 
 ## Status
 
-- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
 - **Auth:** OAuth (host-orchestrated) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [22](./src/tools.ts) (messages, folders, drafts, attachments, threads, settings)
 - **Surface:** cloud-api
@@ -195,6 +195,14 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | `set_email_flag` | Flag an email for follow-up, complete it, or clear the flag. |
 | `get_automatic_replies` | Read the out-of-office configuration (requires `MailboxSettings.Read`). |
 | `set_automatic_replies` | Turn out-of-office replies on/off or schedule them (requires `MailboxSettings.ReadWrite`). |
+
+### Compose send status
+
+In hosts that remember send status, sending an email closes its other compose copies. Reloaded cards show "Email sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its posted contents in a read-only sent view, including when confirmation follows a lost reply. After an error or block reply, a later sent status from another copy shows only the sent bar, without this copy's contents. While a send is in progress, other copies show “Sending…” with Send, Retry, Cancel and Save draft (where available) disabled. Replies to this copy’s own requests keep those controls locked until the other send ends. If the send ends without a confirmed outcome, those copies return to editing and keep any earlier uncertainty. A copy waiting for its own Send reply keeps its sending view. Sent views stay read-only, and uncertainty remains until a send is confirmed. After an error or missing confirmation, check whether the email was sent before using Retry; the notice stays visible while editing and returns on Reopen. Collapsing the card does not resolve that uncertainty. Policy-block explanations stay visible while editing with Send disabled. Cancel says "Nothing sent" only when no send may have gone through, including a `not-dispatched` failure before the request left the device.
+
+When sending is blocked by your settings, your organization or security policy, the card hides Retry and keeps Cancel. If the server is stopped, Retry remains available.
+
+Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting hosts. Draft saves do not declare a send outcome; Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
 
 ### Graph permissions
 

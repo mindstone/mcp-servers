@@ -6,7 +6,7 @@
  * Requires WordApi 1.4+ for comment support.
  */
 
-import { executeWordCommand, type CommandResult } from '../officeExecutor.js';
+import { executeWordCommand, fail, type CommandResult } from '../officeExecutor.js';
 
 export type WordCommandHandler = (params: Record<string, unknown>) => Promise<CommandResult>;
 
@@ -135,7 +135,6 @@ async function getSelection(_params: Record<string, unknown>): Promise<CommandRe
 // ---------------------------------------------------------------------------
 
 interface MarkdownLine {
-  text: string;
   headingLevel: number;
   segments: Array<{ text: string; bold: boolean; italic: boolean }>;
 }
@@ -183,12 +182,15 @@ function parseMarkdownLine(line: string): MarkdownLine {
     const chunk = nextStar === -1 ? remaining : remaining.slice(0, nextStar);
     if (chunk.length > 0) {
       segments.push({ text: chunk, bold: false, italic: false });
+    } else {
+      segments.push({ text: '*', bold: false, italic: false });
+      remaining = remaining.slice(1);
+      continue;
     }
     remaining = nextStar === -1 ? '' : remaining.slice(chunk.length);
   }
 
-  const plainText = segments.map((s) => s.text).join('');
-  return { text: plainText, headingLevel, segments };
+  return { headingLevel, segments };
 }
 
 const HEADING_STYLES: Record<number, string> = {
@@ -200,43 +202,33 @@ const HEADING_STYLES: Record<number, string> = {
   6: 'Heading 6',
 };
 
-/**
- * Insert a paragraph with markdown formatting.
- * Inserts text, applies heading style, then applies bold/italic to segments.
- */
-async function insertMarkdownParagraph(
-  context: Word.RequestContext,
+interface DeferredInsertFormatting {
+  styles: Array<{ range: Word.Range; style: string }>;
+  runs: Array<{ range: Word.Range; segment: MarkdownLine['segments'][number] }>;
+}
+
+/** Defer styles and marks until all text and paragraph breaks have been inserted. */
+function insertMarkdownParagraph(
   parsed: MarkdownLine,
-  target: Word.Body,
-  insertLocation: Word.InsertLocation.start | Word.InsertLocation.end,
-  explicitStyle?: string,
-): Promise<void> {
-  const paragraph = target.insertParagraph(parsed.text, insertLocation);
-
-  // Apply heading or explicit style
+  target: Word.Paragraph | Word.Range,
+  explicitStyle: string | undefined,
+  formatting: DeferredInsertFormatting,
+): Word.Range {
   const style = explicitStyle ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined);
+  let cursor: Word.Range | undefined;
+  const runs: Array<{ range: Word.Range; segment: MarkdownLine['segments'][number] }> = [];
+  for (const segment of parsed.segments) {
+    const range: Word.Range = cursor
+      ? cursor.insertText(segment.text, Word.InsertLocation.after)
+      : target.insertText(segment.text, Word.InsertLocation.end);
+    runs.push({ range, segment });
+    cursor = range;
+  }
+  formatting.runs.push(...runs);
   if (style) {
-    paragraph.style = style;
+    formatting.styles.push({ range: runs[0]?.range ?? target.getRange(), style });
   }
-
-  // Apply inline bold/italic formatting via search within the paragraph range
-  const hasFormatting = parsed.segments.some((s) => s.bold || s.italic);
-  if (hasFormatting) {
-    await context.sync();
-
-    for (const segment of parsed.segments) {
-      if (!segment.bold && !segment.italic) continue;
-
-      const results = paragraph.search(segment.text, { matchCase: true });
-      results.load('items');
-      await context.sync();
-
-      for (const range of results.items) {
-        if (segment.bold) range.font.bold = true;
-        if (segment.italic) range.font.italic = true;
-      }
-    }
-  }
+  return cursor ?? target.getRange();
 }
 
 /**
@@ -263,40 +255,39 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
   return executeWordCommand(async (context) => {
     const lines = (text as string).split('\n').filter((line) => line.length > 0);
     const parsedLines = lines.map(parseMarkdownLine);
+    const formatting: DeferredInsertFormatting = { styles: [], runs: [] };
 
     switch (location) {
       case 'end':
         for (const parsed of parsedLines) {
-          await insertMarkdownParagraph(context, parsed, context.document.body, Word.InsertLocation.end, style);
+          insertMarkdownParagraph(parsed, context.document.body.insertParagraph('', Word.InsertLocation.end), style, formatting);
         }
         break;
 
       case 'start':
         // Insert in reverse order at start to maintain original order
         for (let i = parsedLines.length - 1; i >= 0; i--) {
-          await insertMarkdownParagraph(context, parsedLines[i]!, context.document.body, Word.InsertLocation.start, style);
+          insertMarkdownParagraph(parsedLines[i]!, context.document.body.insertParagraph('', Word.InsertLocation.start), style, formatting);
         }
         break;
 
       case 'afterParagraph': {
         const idx = params['paragraphIndex'];
         if (typeof idx !== 'number') {
-          throw new Error('The "paragraphIndex" parameter is required for location "afterParagraph".');
+          fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "afterParagraph".');
         }
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
         await context.sync();
 
-        if (idx >= paragraphs.items.length) {
-          throw new Error(`Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+          fail('INVALID_ARGUMENT', `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
         }
 
         let insertAfter = paragraphs.items[idx]!.getRange('After');
         for (const parsed of parsedLines) {
-          const newParagraph = insertAfter.insertParagraph(parsed.text, Word.InsertLocation.after);
-          if (style ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined)) {
-            newParagraph.style = style ?? HEADING_STYLES[parsed.headingLevel]!;
-          }
+          const newParagraph = insertAfter.insertParagraph('', Word.InsertLocation.after);
+          insertMarkdownParagraph(parsed, newParagraph, style, formatting);
           insertAfter = newParagraph.getRange('After');
         }
         break;
@@ -305,50 +296,47 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
       case 'beforeParagraph': {
         const idx = params['paragraphIndex'];
         if (typeof idx !== 'number') {
-          throw new Error('The "paragraphIndex" parameter is required for location "beforeParagraph".');
+          fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "beforeParagraph".');
         }
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
         await context.sync();
 
-        if (idx >= paragraphs.items.length) {
-          throw new Error(`Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+          fail('INVALID_ARGUMENT', `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
         }
 
         const insertBefore = paragraphs.items[idx]!;
         for (const parsed of parsedLines) {
-          const newParagraph = insertBefore.insertParagraph(parsed.text, Word.InsertLocation.before);
-          if (style ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined)) {
-            newParagraph.style = style ?? HEADING_STYLES[parsed.headingLevel]!;
-          }
+          const newParagraph = insertBefore.insertParagraph('', Word.InsertLocation.before);
+          insertMarkdownParagraph(parsed, newParagraph, style, formatting);
         }
         break;
       }
 
       case 'replaceSelection': {
         const selection = context.document.getSelection();
-        // For replace, join all lines and insert as single text block
-        const fullText = parsedLines.map((p) => p.text).join('\n');
-        selection.insertText(fullText, Word.InsertLocation.replace);
-        if (style) {
-          const selParagraphs = selection.paragraphs;
-          selParagraphs.load('items');
-          await context.sync();
-          for (const p of selParagraphs.items) {
-            p.style = style;
-          }
+        let cursor = selection.insertText('', Word.InsertLocation.replace);
+        for (const [index, parsed] of parsedLines.entries()) {
+          if (index > 0) cursor = cursor.insertText('\n', Word.InsertLocation.after);
+          cursor = insertMarkdownParagraph(parsed, cursor, style, formatting);
         }
         break;
       }
 
       default:
-        throw new Error(
+        fail('INVALID_ARGUMENT',
           `Unsupported insert location: "${location}". Use "end", "start", "afterParagraph", "beforeParagraph", or "replaceSelection".`,
         );
     }
 
+    for (const { range, style: paragraphStyle } of formatting.styles) range.paragraphs.getFirst().style = paragraphStyle;
+    for (const { range, segment } of formatting.runs) {
+      if (segment.bold) range.font.bold = true;
+      if (segment.italic) range.font.italic = true;
+    }
     await context.sync();
-    return { success: true };
+    return { success: true, paragraphsInserted: parsedLines.length, location, paragraphIndex: params['paragraphIndex'] };
   });
 }
 
@@ -385,7 +373,7 @@ async function addComment(params: Record<string, unknown>): Promise<CommandResul
 
       const parentComment = comments.items.find((c) => c.id === replyToCommentId);
       if (!parentComment) {
-        throw new Error(`Comment with ID "${replyToCommentId}" not found.`);
+        fail('ITEM_NOT_FOUND', `Comment with ID "${replyToCommentId}" not found.`);
       }
 
       const reply = parentComment.reply(text as string);
@@ -403,19 +391,22 @@ async function addComment(params: Record<string, unknown>): Promise<CommandResul
     switch (targetType) {
       case 'selection':
         range = context.document.getSelection();
+        range.load('text');
+        await context.sync();
+        if (!range.text) fail('NO_SELECTION', 'Select the text to change first.');
         break;
 
       case 'paragraph': {
         const idx = target?.paragraphIndex;
         if (typeof idx !== 'number') {
-          throw new Error('The "paragraphIndex" field is required for target type "paragraph".');
+          fail('INVALID_ARGUMENT', 'The "paragraphIndex" field is required for target type "paragraph".');
         }
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
         await context.sync();
 
-        if (idx >= paragraphs.items.length) {
-          throw new Error(`Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+          fail('INVALID_ARGUMENT', `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
         }
         range = paragraphs.items[idx]!.getRange('Whole');
         break;
@@ -424,21 +415,21 @@ async function addComment(params: Record<string, unknown>): Promise<CommandResul
       case 'searchText': {
         const searchText = target?.searchText;
         if (typeof searchText !== 'string' || searchText.length === 0) {
-          throw new Error('The "searchText" field is required for target type "searchText".');
+          fail('INVALID_ARGUMENT', 'The "searchText" field is required for target type "searchText".');
         }
         const results = context.document.body.search(searchText, {});
         results.load('items');
         await context.sync();
 
         if (results.items.length === 0) {
-          throw new Error(`No matches found for "${searchText}".`);
+          fail('ITEM_NOT_FOUND', `No matches found for "${searchText}".`);
         }
         range = results.items[0]!;
         break;
       }
 
       default:
-        throw new Error(`Unsupported target type: "${targetType}". Use "selection", "paragraph", or "searchText".`);
+        fail('INVALID_ARGUMENT', `Unsupported target type: "${targetType}". Use "selection", "paragraph", or "searchText".`);
     }
 
     const comment = range.insertComment(text as string);
@@ -482,10 +473,7 @@ async function getProperties(_params: Record<string, unknown>): Promise<CommandR
     customProperties.load(['key', 'value', 'type']);
     await context.sync();
 
-    const customProps: Record<string, unknown> = {};
-    for (const prop of customProperties.items) {
-      customProps[prop.key] = prop.value;
-    }
+    const customProps = customProperties.items.map((prop) => ({ name: prop.key, value: prop.value }));
 
     return {
       title: properties.title,
@@ -678,7 +666,7 @@ async function replaceText(params: Record<string, unknown>): Promise<CommandResu
     const totalMatches = results.items.length;
 
     if (totalMatches === 0) {
-      return { replacementsCount: 0, message: 'No matches found.' };
+      fail('ITEM_NOT_FOUND', `No matches found for "${searchText}".`);
     }
 
     const count = replaceAll ? totalMatches : 1;
@@ -725,17 +713,23 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
     switch (target.type) {
       case 'selection':
         range = context.document.getSelection();
+        range.load('text');
+        await context.sync();
+        if (!range.text) fail('NO_SELECTION', 'Select the text to change first.');
         break;
 
       case 'paragraphRange': {
-        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const startIdx = target.startParagraph;
+        if (typeof startIdx !== 'number') {
+          fail('INVALID_ARGUMENT', 'The "startParagraph" field is required for target type "paragraphRange".');
+        }
         const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
         await context.sync();
 
-        if (startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
-          throw new Error(
+        if (!Number.isInteger(startIdx) || !Number.isInteger(endIdx) || startIdx < 0 || endIdx < startIdx || startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
+          fail('INVALID_ARGUMENT',
             `Paragraph index out of range. Document has ${paragraphs.items.length} paragraphs.`,
           );
         }
@@ -748,21 +742,27 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
 
       case 'searchText': {
         if (typeof target.searchText !== 'string' || target.searchText.length === 0) {
-          throw new Error('The "searchText" field is required for target type "searchText".');
+          fail('INVALID_ARGUMENT', 'The "searchText" field is required for target type "searchText".');
         }
         const results = context.document.body.search(target.searchText, {});
         results.load('items');
         await context.sync();
 
         if (results.items.length === 0) {
-          throw new Error(`No matches found for "${target.searchText}".`);
+          fail('ITEM_NOT_FOUND', `No matches found for "${target.searchText}".`);
         }
         range = results.items[0]!;
         break;
       }
 
       default:
-        throw new Error(`Unsupported target type: "${target.type}".`);
+        fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}".`);
+    }
+
+    const alignedParagraphs = typeof formatting['alignment'] === 'string' ? range.paragraphs : undefined;
+    if (alignedParagraphs) {
+      alignedParagraphs.load('items');
+      await context.sync();
     }
 
     // Apply font formatting
@@ -792,14 +792,12 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
       };
       const align = alignmentMap[formatting['alignment']];
       if (align !== undefined) {
-        // Alignment applies to the paragraph, not the range font
-        const paragraph = range.paragraphs.getFirst();
-        paragraph.alignment = align;
+        for (const paragraph of alignedParagraphs!.items) paragraph.alignment = align;
       }
     }
 
     await context.sync();
-    return { success: true };
+    return { success: true, target, formatting };
   });
 }
 
@@ -848,14 +846,17 @@ async function insertTable(params: Record<string, unknown>): Promise<CommandResu
 
     let table: Word.Table;
 
-    if (location === 'afterParagraph' && typeof params['paragraphIndex'] === 'number') {
+    if (location === 'afterParagraph') {
+      if (typeof params['paragraphIndex'] !== 'number') {
+        fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "afterParagraph".');
+      }
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load('items');
       await context.sync();
 
       const idx = params['paragraphIndex'] as number;
-      if (idx >= paragraphs.items.length) {
-        throw new Error(
+      if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+        fail('INVALID_ARGUMENT',
           `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`,
         );
       }
@@ -941,17 +942,17 @@ async function insertImage(params: Record<string, unknown>): Promise<CommandResu
     if (location === 'replaceSelection') {
       const selection = context.document.getSelection();
       image = selection.insertInlinePictureFromBase64(base64Data, Word.InsertLocation.replace);
-    } else if (
-      location === 'afterParagraph' &&
-      typeof params['paragraphIndex'] === 'number'
-    ) {
+    } else if (location === 'afterParagraph') {
+      if (typeof params['paragraphIndex'] !== 'number') {
+        fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "afterParagraph".');
+      }
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load('items');
       await context.sync();
 
       const idx = params['paragraphIndex'] as number;
-      if (idx >= paragraphs.items.length) {
-        throw new Error(
+      if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+        fail('INVALID_ARGUMENT',
           `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`,
         );
       }
@@ -973,7 +974,7 @@ async function insertImage(params: Record<string, unknown>): Promise<CommandResu
     if (typeof params['height'] === 'number') image.height = params['height'];
 
     await context.sync();
-    return { success: true };
+    return { success: true, location, paragraphIndex: params['paragraphIndex'] };
   });
 }
 
@@ -1017,8 +1018,8 @@ async function insertBreak(params: Record<string, unknown>): Promise<CommandResu
 
     if (typeof params['paragraphIndex'] === 'number') {
       const idx = params['paragraphIndex'] as number;
-      if (idx >= paragraphs.items.length) {
-        throw new Error(
+      if (!Number.isInteger(idx) || idx < 0 || idx >= paragraphs.items.length) {
+        fail('INVALID_ARGUMENT',
           `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`,
         );
       }
@@ -1031,7 +1032,7 @@ async function insertBreak(params: Record<string, unknown>): Promise<CommandResu
     targetParagraph.insertBreak(wordBreakType, Word.InsertLocation.after);
     await context.sync();
 
-    return { success: true };
+    return { success: true, type: breakType, paragraphIndex: params['paragraphIndex'] ?? paragraphs.items.length - 1 };
   });
 }
 
@@ -1071,7 +1072,7 @@ async function setHeaderFooter(params: Record<string, unknown>): Promise<Command
     await context.sync();
 
     if (sections.items.length === 0) {
-      throw new Error('Document has no sections.');
+      fail('ITEM_NOT_FOUND', 'Document has no sections.');
     }
 
     // Process field code placeholders
@@ -1115,7 +1116,7 @@ async function setHeaderFooter(params: Record<string, unknown>): Promise<Command
     }
 
     await context.sync();
-    return { success: true };
+    return { success: true, type, sectionsUpdated: sections.items.length };
   });
 }
 
@@ -1195,7 +1196,7 @@ async function resolveComment(params: Record<string, unknown>): Promise<CommandR
 
     const targetComment = comments.items.find((c) => c.id === commentId);
     if (!targetComment) {
-      throw new Error(`Comment with ID "${commentId}" not found.`);
+      fail('ITEM_NOT_FOUND', `Comment with ID "${commentId}" not found.`);
     }
 
     if (action === 'resolve') {
@@ -1306,16 +1307,22 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
         break;
 
       case 'specific': {
-        const ids = new Set(target.changeIds ?? []);
+        if (!Array.isArray(target.changeIds) || target.changeIds.length === 0) {
+          fail('INVALID_ARGUMENT', 'The "changeIds" field is required for target type "specific".');
+        }
+        const ids = new Set(target.changeIds);
         changesToProcess = trackedChanges.items.filter((change, index) =>
           ids.has(getTrackedChangeIdentifier(change, index)),
         );
+        const availableIds = new Set(trackedChanges.items.map(getTrackedChangeIdentifier));
+        const unmatchedIds = [...ids].filter(id => !availableIds.has(id));
+        if (unmatchedIds.length > 0) fail('ITEM_NOT_FOUND', `Tracked change IDs not found: ${unmatchedIds.join(', ')}.`);
         break;
       }
 
       case 'byAuthor': {
         if (typeof target.author !== 'string') {
-          throw new Error('The "author" field is required for target type "byAuthor".');
+          fail('INVALID_ARGUMENT', 'The "author" field is required for target type "byAuthor".');
         }
         const authorLower = target.author.toLowerCase();
         changesToProcess = trackedChanges.items.filter(
@@ -1325,7 +1332,7 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
       }
 
       default:
-        throw new Error(
+        fail('INVALID_ARGUMENT',
           `Unsupported target type: "${target.type}". Use "specific", "all", or "byAuthor".`,
         );
     }
@@ -1368,10 +1375,10 @@ async function readTable(params: Record<string, unknown>): Promise<CommandResult
     await context.sync();
 
     if (tables.items.length === 0) {
-      throw new Error('The document contains no tables.');
+      fail('ITEM_NOT_FOUND', 'The document contains no tables.');
     }
     if (tableIndex >= tables.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
       );
     }
@@ -1443,10 +1450,10 @@ async function updateTableCell(params: Record<string, unknown>): Promise<Command
     await context.sync();
 
     if (tables.items.length === 0) {
-      throw new Error('The document contains no tables.');
+      fail('ITEM_NOT_FOUND', 'The document contains no tables.');
     }
     if (tableIndex >= tables.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
       );
     }
@@ -1457,7 +1464,7 @@ async function updateTableCell(params: Record<string, unknown>): Promise<Command
 
     const columnCount = table.values[0]?.length ?? 0;
     if (rowIndex >= table.rowCount || columnIndex >= columnCount) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Cell (${rowIndex}, ${columnIndex}) out of range. Table ${tableIndex} has ${table.rowCount} row(s) and ${columnCount} column(s) (0-based).`,
       );
     }
@@ -1507,25 +1514,29 @@ async function applyStyle(params: Record<string, unknown>): Promise<CommandResul
     switch (target.type) {
       case 'selection': {
         const selection = context.document.getSelection();
+        selection.load('text');
         const paragraphs = selection.paragraphs;
         paragraphs.load('items');
         await context.sync();
-        if (paragraphs.items.length === 0) {
-          throw new Error('The current selection contains no paragraphs to style.');
+        if (!selection.text || paragraphs.items.length === 0) {
+          fail('NO_SELECTION', 'The current selection contains no paragraphs to style. Select the intended text first.');
         }
         paragraphsToStyle = [...paragraphs.items];
         break;
       }
 
       case 'paragraphRange': {
-        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const startIdx = target.startParagraph;
+        if (typeof startIdx !== 'number') {
+          fail('INVALID_ARGUMENT', 'The "startParagraph" field is required for target type "paragraphRange".');
+        }
         const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
         await context.sync();
 
-        if (startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
-          throw new Error(
+        if (!Number.isInteger(startIdx) || !Number.isInteger(endIdx) || startIdx < 0 || endIdx < startIdx || startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
+          fail('INVALID_ARGUMENT',
             `Paragraph index out of range. Document has ${paragraphs.items.length} paragraphs.`,
           );
         }
@@ -1535,7 +1546,7 @@ async function applyStyle(params: Record<string, unknown>): Promise<CommandResul
 
       case 'searchText': {
         if (typeof target.searchText !== 'string' || target.searchText.length === 0) {
-          throw new Error('The "searchText" field is required for target type "searchText".');
+          fail('INVALID_ARGUMENT', 'The "searchText" field is required for target type "searchText".');
         }
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load(['text']);
@@ -1543,13 +1554,13 @@ async function applyStyle(params: Record<string, unknown>): Promise<CommandResul
 
         paragraphsToStyle = paragraphs.items.filter((p) => p.text.includes(target.searchText!));
         if (paragraphsToStyle.length === 0) {
-          throw new Error(`No paragraphs contain "${target.searchText}".`);
+          fail('ITEM_NOT_FOUND', `No paragraphs contain "${target.searchText}".`);
         }
         break;
       }
 
       default:
-        throw new Error(`Unsupported target type: "${target.type}".`);
+        fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}".`);
     }
 
     for (const paragraph of paragraphsToStyle) {

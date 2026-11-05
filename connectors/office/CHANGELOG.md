@@ -11,6 +11,31 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Successful edits and their tool descriptions share undo guidance for the local Office app and platform, including native undo exceptions and PowerPoint for Mac reversal limits. PowerPoint text, notes and shape-format edits return the previous values.
+- Every Office tool, including setup, status and validation failures, now returns JSON with `ok`, `app`, `action`, and either `data` or an error with a stable code, message, fix and retry guidance. External text remains inside untrusted-content envelopes.
+- Unsupported results returned inside an Office command now report failure; missing Office APIs advise updating Office. Timeout guidance asks callers to read the current state before repeating an edit.
+- Word `get_properties` returns custom properties as an array of `{ name, value }` entries so all document-authored names are enclosed in untrusted-content envelopes.
+
+### Fixed
+
+- Word markdown inserts retain paragraph-style formatting, apply inline bold and italic without clearing style formatting or carrying marks into adjacent parts, and style each line at every insertion location in one writing batch. Stray asterisks no longer stall insertion. PowerPoint adds and moves a slide in one batch, with a second batch only for placeholder text; unavailable slide movement fails before creation. Excel adds and positions a worksheet after another sheet in one writing batch.
+- Excel condition filters translate named operators and reject unknown ones before writing. Sorting rejects unknown headers and resolves multi-letter columns relative to the range; unsupported shape types fail before creation.
+- Formatted PowerPoint shapes check API support before creation. Speaker-notes and layout failures retain coded errors; notes reads skip only the no-text-frame `InvalidArgument` from loading a shape's text. Word alignment covers every targeted paragraph, and pairing and partial-slide recovery guidance identify the next step.
+- Setup and status validation failures use the same `app: "all"` value as their other results.
+- Exceptions thrown by tool handlers report `INTERNAL_ERROR` unless they are invalid-argument errors. An installation-disabled Office connection reports non-retryable `CONNECTION_DISABLED` with guidance to contact whoever manages the installation.
+- Excel JSON row keys derived from spreadsheet headers and non-identifier keys anywhere in Office result data are enclosed in untrusted-content envelopes, with closing tags escaped. Columns and Word custom properties named `__proto__` retain their values.
+- Office actions report missing targets, empty selections and unsupported requested options as coded failures. Relative insertions, paragraph ranges and specific tracked-change targets reject missing target fields before writing. Specific tracked-change targets also list unmatched IDs as `ITEM_NOT_FOUND` before accepting or rejecting anything. PowerPoint text alignment and Excel range filter criteria are applied; unknown filter columns fail before writing.
+- A slide created before a later step fails returns `PARTIAL` with its id and inspect-or-delete recovery. Word edit results describe what changed.
+
+### Security
+
+- `ws` now requires 8.22.0 or later (a memory-exhaustion fix in the WebSocket parser the sidecar uses) and `@modelcontextprotocol/sdk` 1.32.2 or later; locked transitive dependencies are updated to releases with security fixes.
+- `office-addin-dev-certs` moves to 3.0.1, which no longer bundles Application Insights and its Azure and OpenTelemetry dependencies; the certificate location, names and the API the sidecar uses are unchanged.
+- Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.
+- On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
+
 ## [0.3.0] - 2026-08-08
 
 ### Changed

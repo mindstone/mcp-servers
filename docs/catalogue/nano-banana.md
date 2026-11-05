@@ -13,7 +13,7 @@ Nano Banana MCP server — Google Gemini image generation and editing via Model 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.4.1 |
+| Version | 0.5.0 |
 | Auth | API key (`GEMINI_API_KEY`) |
 | Tools | 3 (image-generation, image-editing) |
 | Surface | cloud API |

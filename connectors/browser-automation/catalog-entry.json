@@ -1,7 +1,7 @@
 {
   "id": "bundled-browser-automation",
-  "name": "Browser Automation",
-  "description": "Browser automation with persistent sessions. Navigate, click, fill forms, take screenshots, extract data using accessibility snapshots. Auto-detects Chrome/Brave. Use ONLY when explicitly asked or when no API/MCP exists for the target site. 'Take a screenshot of my LinkedIn profile' or 'Fill out this web form'.",
+  "name": "Rebel's Browser",
+  "description": "A separate browser Rebel runs on this computer, for sites no other connector covers: open pages, fill forms, collect information and take screenshots. Keeps its own sign-ins between uses. Formerly Browser Automation. 'Take a screenshot of my LinkedIn profile' or 'Fill out this web form'.",
   "category": "productivity",
   "icon": "globe",
   "maturity": "stable",

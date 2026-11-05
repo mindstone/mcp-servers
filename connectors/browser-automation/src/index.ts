@@ -4,13 +4,16 @@
  *
  * Provides headless browser automation via the agent-browser CLI.
  * Uses accessibility snapshots (@ref pointers) instead of fragile CSS selectors.
- * Sessions persist automatically between invocations.
+ * Sessions persist automatically between invocations. When the host stops this
+ * server, it closes the browser (see src/stop.ts).
  *
  * Requirements:
- * - agent-browser CLI binary on PATH, or npx available for fallback
+ * - agent-browser executable on PATH, or the bundled dependency run with this Node
  *
  * Environment variables:
  * - AGENT_BROWSER_SESSION_NAME: Session name for persistence (default: "mcp")
+ * - AGENT_BROWSER_AUTOSAVE_INTERVAL_MS: Periodic session autosave interval in ms (default: "0", off;
+ *   the session is still saved on close). Read when the agent-browser daemon starts.
  * - MCP_DISABLE_GRACEFUL_FS=1: Disable the graceful-fs EMFILE mitigation patch
  */
 
@@ -19,11 +22,13 @@
 import './installGracefulFs.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
+import { closeBrowserWhenHostStops } from './stop.js';
 
 async function main() {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  closeBrowserWhenHostStops();
   console.error('Browser Automation MCP server running on stdio');
 }
 

@@ -1,0 +1,1138 @@
+{
+  "documentId": "copy-doc",
+  "title": "Acme weekly sync",
+  "revisionId": "rev-copy-1",
+  "tabs": [
+    {
+      "tabProperties": {
+        "tabId": "t.live",
+        "title": "Live notes",
+        "index": 0,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 12,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 12,
+                    "textRun": {
+                      "content": "10/13/2031\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "HEADING_1",
+                  "headingId": "h.fictional1",
+                  "alignment": "CENTER"
+                }
+              }
+            },
+            {
+              "startIndex": 12,
+              "endIndex": 33,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 12,
+                    "endIndex": 19,
+                    "textRun": {
+                      "content": "Owner: ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 19,
+                    "endIndex": 23,
+                    "textRun": {
+                      "content": "Jane",
+                      "textStyle": {
+                        "bold": true
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 23,
+                    "endIndex": 28,
+                    "textRun": {
+                      "content": " see ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 28,
+                    "endIndex": 32,
+                    "textRun": {
+                      "content": "plan",
+                      "textStyle": {
+                        "link": {
+                          "url": "https://example.com/plan"
+                        },
+                        "underline": true
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 32,
+                    "endIndex": 33,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 33,
+              "endIndex": 44,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 33,
+                    "endIndex": 44,
+                    "textRun": {
+                      "content": "First item\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  },
+                  "spaceAbove": {
+                    "magnitude": 4,
+                    "unit": "PT"
+                  },
+                  "spaceBelow": {
+                    "magnitude": 2,
+                    "unit": "PT"
+                  }
+                },
+                "bullet": {
+                  "listId": "kix.bullets1"
+                }
+              }
+            },
+            {
+              "startIndex": 44,
+              "endIndex": 56,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 44,
+                    "endIndex": 56,
+                    "textRun": {
+                      "content": "Nested item\n",
+                      "textStyle": {
+                        "italic": true
+                      }
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT",
+                  "indentStart": {
+                    "magnitude": 72,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 54,
+                    "unit": "PT"
+                  },
+                  "spaceAbove": {
+                    "magnitude": 4,
+                    "unit": "PT"
+                  },
+                  "spaceBelow": {
+                    "magnitude": 2,
+                    "unit": "PT"
+                  }
+                },
+                "bullet": {
+                  "listId": "kix.bullets1",
+                  "nestingLevel": 1
+                }
+              }
+            },
+            {
+              "startIndex": 56,
+              "endIndex": 65,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 56,
+                    "endIndex": 65,
+                    "textRun": {
+                      "content": "Step one\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                "bullet": {
+                  "listId": "kix.numbers1"
+                }
+              }
+            },
+            {
+              "startIndex": 65,
+              "endIndex": 82,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 65,
+                    "endIndex": 77,
+                    "textRun": {
+                      "content": "Step two 🎉 ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 77,
+                    "endIndex": 81,
+                    "textRun": {
+                      "content": "done",
+                      "textStyle": {
+                        "bold": true
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 81,
+                    "endIndex": 82,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                "bullet": {
+                  "listId": "kix.numbers1"
+                }
+              }
+            },
+            {
+              "startIndex": 82,
+              "endIndex": 95,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 82,
+                    "endIndex": 95,
+                    "textRun": {
+                      "content": "Before table\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 95,
+              "endIndex": 117,
+              "table": {
+                "rows": 2,
+                "columns": 2,
+                "tableRows": [
+                  {
+                    "startIndex": 96,
+                    "endIndex": 110,
+                    "tableCells": [
+                      {
+                        "startIndex": 97,
+                        "endIndex": 103,
+                        "content": [
+                          {
+                            "startIndex": 98,
+                            "endIndex": 103,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 98,
+                                  "endIndex": 103,
+                                  "textRun": {
+                                    "content": "Name\n",
+                                    "textStyle": {}
+                                  }
+                                }
+                              ],
+                              "paragraphStyle": {
+                                "namedStyleType": "NORMAL_TEXT"
+                              }
+                            }
+                          }
+                        ],
+                        "tableCellStyle": {
+                          "rowSpan": 1,
+                          "columnSpan": 1,
+                          "backgroundColor": {
+                            "color": {
+                              "rgbColor": {
+                                "red": 0.9,
+                                "green": 0.9,
+                                "blue": 0.9
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "startIndex": 103,
+                        "endIndex": 110,
+                        "content": [
+                          {
+                            "startIndex": 104,
+                            "endIndex": 110,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 104,
+                                  "endIndex": 110,
+                                  "textRun": {
+                                    "content": "Spend\n",
+                                    "textStyle": {}
+                                  }
+                                }
+                              ],
+                              "paragraphStyle": {
+                                "namedStyleType": "NORMAL_TEXT"
+                              }
+                            }
+                          }
+                        ],
+                        "tableCellStyle": {
+                          "rowSpan": 1,
+                          "columnSpan": 1
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "startIndex": 110,
+                    "endIndex": 117,
+                    "tableCells": [
+                      {
+                        "startIndex": 111,
+                        "endIndex": 114,
+                        "content": [
+                          {
+                            "startIndex": 112,
+                            "endIndex": 114,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 112,
+                                  "endIndex": 113,
+                                  "person": {
+                                    "personProperties": {
+                                      "name": "Jane Example",
+                                      "email": "jane@example.com"
+                                    },
+                                    "textStyle": {}
+                                  }
+                                },
+                                {
+                                  "startIndex": 113,
+                                  "endIndex": 114,
+                                  "textRun": {
+                                    "content": "\n",
+                                    "textStyle": {}
+                                  }
+                                }
+                              ],
+                              "paragraphStyle": {
+                                "namedStyleType": "NORMAL_TEXT"
+                              }
+                            }
+                          }
+                        ],
+                        "tableCellStyle": {
+                          "rowSpan": 1,
+                          "columnSpan": 1
+                        }
+                      },
+                      {
+                        "startIndex": 114,
+                        "endIndex": 117,
+                        "content": [
+                          {
+                            "startIndex": 115,
+                            "endIndex": 117,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 115,
+                                  "endIndex": 116,
+                                  "richLink": {
+                                    "richLinkProperties": {
+                                      "uri": "https://docs.google.com/spreadsheets/d/AcmeFictionalSheet00000000000/edit",
+                                      "title": "Budget sheet"
+                                    },
+                                    "textStyle": {}
+                                  }
+                                },
+                                {
+                                  "startIndex": 116,
+                                  "endIndex": 117,
+                                  "textRun": {
+                                    "content": "\n",
+                                    "textStyle": {}
+                                  }
+                                }
+                              ],
+                              "paragraphStyle": {
+                                "namedStyleType": "NORMAL_TEXT"
+                              }
+                            }
+                          }
+                        ],
+                        "tableCellStyle": {
+                          "rowSpan": 1,
+                          "columnSpan": 1
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "tableStyle": {
+                  "tableColumnProperties": [
+                    {
+                      "widthType": "FIXED_WIDTH",
+                      "width": {
+                        "magnitude": 100,
+                        "unit": "PT"
+                      }
+                    },
+                    {
+                      "widthType": "EVENLY_DISTRIBUTED"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "startIndex": 117,
+              "endIndex": 137,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 117,
+                    "endIndex": 124,
+                    "textRun": {
+                      "content": "Links: ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 124,
+                    "endIndex": 125,
+                    "richLink": {
+                      "richLinkProperties": {
+                        "uri": "https://docs.google.com/document/d/AcmeFictionalDoc000000000000/edit",
+                        "title": "Acme plan"
+                      },
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 125,
+                    "endIndex": 130,
+                    "textRun": {
+                      "content": " and ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 130,
+                    "endIndex": 131,
+                    "richLink": {
+                      "richLinkProperties": {
+                        "uri": "https://docs.google.com/spreadsheets/d/AcmeFictionalSheet00000000000/edit",
+                        "title": "Budget sheet"
+                      },
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 131,
+                    "endIndex": 135,
+                    "textRun": {
+                      "content": " on ",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 135,
+                    "endIndex": 136,
+                    "dateElement": {
+                      "dateElementProperties": {
+                        "displayText": "Oct 20, 2031",
+                        "timestamp": "2031-10-20T00:00:00Z"
+                      },
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 136,
+                    "endIndex": 137,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 137,
+              "endIndex": 139,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 137,
+                    "endIndex": 138,
+                    "pageBreak": {
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 138,
+                    "endIndex": 139,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 139,
+              "endIndex": 141,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 139,
+                    "endIndex": 140,
+                    "inlineObjectElement": {
+                      "inlineObjectId": "kix.image1",
+                      "textStyle": {}
+                    }
+                  },
+                  {
+                    "startIndex": 140,
+                    "endIndex": 141,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 141,
+              "endIndex": 150,
+              "tableOfContents": {
+                "content": [
+                  {
+                    "startIndex": 141,
+                    "endIndex": 150,
+                    "paragraph": {
+                      "elements": [
+                        {
+                          "startIndex": 141,
+                          "endIndex": 150,
+                          "textRun": {
+                            "content": "Contents\n",
+                            "textStyle": {}
+                          }
+                        }
+                      ],
+                      "paragraphStyle": {
+                        "namedStyleType": "NORMAL_TEXT"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "startIndex": 150,
+              "endIndex": 154,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 150,
+                    "endIndex": 154,
+                    "textRun": {
+                      "content": "End\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            }
+          ]
+        },
+        "documentStyle": {
+          "marginTop": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginBottom": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginLeft": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginRight": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "pageSize": {
+            "width": {
+              "magnitude": 612,
+              "unit": "PT"
+            },
+            "height": {
+              "magnitude": 792,
+              "unit": "PT"
+            }
+          },
+          "useCustomHeaderFooterMargins": true
+        },
+        "namedStyles": {
+          "styles": [
+            {
+              "namedStyleType": "NORMAL_TEXT",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 11,
+                  "unit": "PT"
+                }
+              },
+              "paragraphStyle": {
+                "namedStyleType": "NORMAL_TEXT",
+                "alignment": "START",
+                "lineSpacing": 115,
+                "direction": "LEFT_TO_RIGHT",
+                "spacingMode": "COLLAPSE_LISTS"
+              }
+            },
+            {
+              "namedStyleType": "HEADING_1",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 20,
+                  "unit": "PT"
+                },
+                "bold": true
+              },
+              "paragraphStyle": {
+                "namedStyleType": "HEADING_1",
+                "spaceAbove": {
+                  "magnitude": 20,
+                  "unit": "PT"
+                },
+                "spaceBelow": {
+                  "magnitude": 6,
+                  "unit": "PT"
+                }
+              }
+            }
+          ]
+        },
+        "lists": {
+          "kix.bullets1": {
+            "listProperties": {
+              "nestingLevels": [
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                }
+              ]
+            }
+          },
+          "kix.numbers1": {
+            "listProperties": {
+              "nestingLevels": [
+                {
+                  "glyphType": "DECIMAL",
+                  "glyphFormat": "%0."
+                },
+                {
+                  "glyphType": "ALPHA"
+                },
+                {
+                  "glyphType": "ROMAN"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "tabProperties": {
+        "tabId": "t.tmpl",
+        "title": "Template",
+        "index": 1,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 10,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 10,
+                    "textRun": {
+                      "content": "#/#/2031\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "HEADING_1",
+                  "headingId": "h.fictional2"
+                }
+              }
+            },
+            {
+              "startIndex": 10,
+              "endIndex": 24,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 10,
+                    "endIndex": 24,
+                    "textRun": {
+                      "content": "Out of office\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            },
+            {
+              "startIndex": 24,
+              "endIndex": 25,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 24,
+                    "endIndex": 25,
+                    "textRun": {
+                      "content": "\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                "bullet": {
+                  "listId": "kix.tmplbullets"
+                }
+              }
+            },
+            {
+              "startIndex": 25,
+              "endIndex": 31,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 25,
+                    "endIndex": 31,
+                    "textRun": {
+                      "content": "Notes\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            }
+          ]
+        },
+        "documentStyle": {
+          "marginTop": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginBottom": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginLeft": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "marginRight": {
+            "magnitude": 72,
+            "unit": "PT"
+          },
+          "pageSize": {
+            "width": {
+              "magnitude": 612,
+              "unit": "PT"
+            },
+            "height": {
+              "magnitude": 792,
+              "unit": "PT"
+            }
+          },
+          "useCustomHeaderFooterMargins": true
+        },
+        "namedStyles": {
+          "styles": [
+            {
+              "namedStyleType": "NORMAL_TEXT",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 11,
+                  "unit": "PT"
+                }
+              },
+              "paragraphStyle": {
+                "namedStyleType": "NORMAL_TEXT",
+                "alignment": "START",
+                "lineSpacing": 115,
+                "direction": "LEFT_TO_RIGHT",
+                "spacingMode": "COLLAPSE_LISTS"
+              }
+            },
+            {
+              "namedStyleType": "HEADING_1",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 20,
+                  "unit": "PT"
+                },
+                "bold": true
+              },
+              "paragraphStyle": {
+                "namedStyleType": "HEADING_1",
+                "spaceAbove": {
+                  "magnitude": 20,
+                  "unit": "PT"
+                },
+                "spaceBelow": {
+                  "magnitude": 6,
+                  "unit": "PT"
+                }
+              }
+            }
+          ]
+        },
+        "lists": {
+          "kix.tmplbullets": {
+            "listProperties": {
+              "nestingLevels": [
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "●",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "tabProperties": {
+        "tabId": "t.old",
+        "title": "Old archive",
+        "index": 2,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 10,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 10,
+                    "textRun": {
+                      "content": "Old item\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                },
+                "bullet": {
+                  "listId": "kix.old1"
+                }
+              }
+            },
+            {
+              "startIndex": 10,
+              "endIndex": 19,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 10,
+                    "endIndex": 19,
+                    "textRun": {
+                      "content": "Old text\n",
+                      "textStyle": {}
+                    }
+                  }
+                ],
+                "paragraphStyle": {
+                  "namedStyleType": "NORMAL_TEXT"
+                }
+              }
+            }
+          ]
+        },
+        "documentStyle": {
+          "marginTop": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "namedStyles": {
+          "styles": [
+            {
+              "namedStyleType": "NORMAL_TEXT",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 11,
+                  "unit": "PT"
+                }
+              },
+              "paragraphStyle": {
+                "namedStyleType": "NORMAL_TEXT",
+                "alignment": "START",
+                "lineSpacing": 115,
+                "direction": "LEFT_TO_RIGHT",
+                "spacingMode": "COLLAPSE_LISTS"
+              }
+            },
+            {
+              "namedStyleType": "HEADING_1",
+              "textStyle": {
+                "fontSize": {
+                  "magnitude": 16,
+                  "unit": "PT"
+                },
+                "bold": true
+              },
+              "paragraphStyle": {
+                "namedStyleType": "HEADING_1",
+                "spaceAbove": {
+                  "magnitude": 20,
+                  "unit": "PT"
+                },
+                "spaceBelow": {
+                  "magnitude": 6,
+                  "unit": "PT"
+                }
+              }
+            }
+          ]
+        },
+        "lists": {
+          "kix.old1": {
+            "listProperties": {
+              "nestingLevels": [
+                {
+                  "glyphSymbol": "○",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "○",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                },
+                {
+                  "glyphSymbol": "○",
+                  "indentStart": {
+                    "magnitude": 36,
+                    "unit": "PT"
+                  },
+                  "indentFirstLine": {
+                    "magnitude": 18,
+                    "unit": "PT"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

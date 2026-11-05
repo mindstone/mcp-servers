@@ -11,7 +11,10 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const { __test: hooks } = await import('../src/index.js');
 
 const serverModule = (await import('../src/index.js')) as unknown as {
   __test: {
@@ -66,6 +69,14 @@ describe('pre-network input validation', () => {
     return { isError: result.isError === true, text };
   };
 
+  it('uses app all on setup validation errors', async () => {
+    const result = await callTool('rebel_office_setup', { action: 'bogus' });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.text)).toMatchObject({
+      ok: false, app: 'all', action: 'setup', error: { code: 'INVALID_ARGUMENT' },
+    });
+  });
+
   it.each([
     [
       'apply_style: searchText target without searchText',
@@ -101,6 +112,10 @@ describe('pre-network input validation', () => {
     const result = await callTool(name as string, args as Record<string, unknown>);
     expect(result.isError).toBe(true);
     expect(result.text).toContain('Input validation error');
+    const parsed = JSON.parse(result.text);
+    expect(parsed).toMatchObject({ ok: false, app: (name as string).split('_')[2],
+      action: (name as string).split('_').slice(3).join('_'),
+      error: { code: 'INVALID_ARGUMENT', retryable: false, fix: expect.any(String) } });
   });
 
   it.each([
@@ -140,4 +155,86 @@ describe('pre-network input validation', () => {
     expect(result.isError).toBe(true);
     expect(result.text).not.toContain('Input validation error');
   });
+});
+
+
+it.each(['rebel_office_setup', 'rebel_office_status', 'unknown_tool'])(
+  '%s returns the result shape on failure', async (name) => {
+    const response = await client.callTool({ name, arguments: {} });
+    expect(response.isError).toBe(true);
+    if (name === 'rebel_office_status') expect((response.content as Array<{ text: string }>)[0]!.text).not.toContain('rebel_office_setup');
+    expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+      ok: false, app: name === 'unknown_tool' ? 'office' : 'all', action: name === 'unknown_tool' ? 'unknown' : name.slice('rebel_office_'.length),
+      error: { code: name === 'unknown_tool' ? 'INVALID_ARGUMENT' : name === 'rebel_office_status' ? 'SIDECAR_ERROR' : 'SIDECAR_NOT_RUNNING' },
+    });
+  },
+);
+
+describe('handler failures', () => {
+  it.each([
+    [new TypeError('Unexpected handler bug'), 'INTERNAL_ERROR'],
+    ['Unexpected thrown string', 'INTERNAL_ERROR'],
+    [new McpError(ErrorCode.InternalError, 'Internal handler error'), 'INTERNAL_ERROR'],
+    [new McpError(ErrorCode.InvalidParams, 'Invalid handler argument'), 'INVALID_ARGUMENT'],
+  ])('classifies %s as %s', async (error, code) => {
+    const tool = hooks.registeredTools.get('rebel_office_word_read_document');
+    const original = tool.handler;
+    tool.handler = () => { throw error; };
+    try {
+      const response = await client.callTool({ name: 'rebel_office_word_read_document', arguments: {} });
+      expect(response.isError).toBe(true);
+      expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+        ok: false, app: 'word', action: 'read_document', error: { code },
+      });
+    } finally {
+      tool.handler = original;
+    }
+  });
+
+  it('classifies a disabled tool as INVALID_ARGUMENT', async () => {
+    const tool = hooks.registeredTools.get('rebel_office_word_read_document');
+    tool.disable();
+    try {
+      const response = await client.callTool({ name: 'rebel_office_word_read_document', arguments: {} });
+      expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text).error.code).toBe('INVALID_ARGUMENT');
+    } finally {
+      tool.enable();
+    }
+  });
+
+  it.each(['MCP_OFFICE_SIDECAR_DISABLE', 'REBEL_DISABLE_OFFICE_SIDECAR'])(
+    'reports setup disabled by %s without suggesting Settings', async (envName) => {
+      vi.stubEnv(envName, '1');
+      try {
+        const response = await client.callTool({ name: 'rebel_office_setup', arguments: {} });
+        const result = JSON.parse((response.content as Array<{ text: string }>)[0]!.text);
+        expect(response.isError).toBe(true);
+        expect(result).toMatchObject({ ok: false, app: 'all', action: 'setup', error: {
+          code: 'CONNECTION_DISABLED', retryable: false,
+          message: expect.stringContaining('turned off for this Rebel installation'),
+          fix: expect.stringContaining('manages this Rebel installation'),
+        } });
+        expect(result.error.fix).not.toContain('Settings');
+        expect(JSON.stringify(result)).not.toContain(envName);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+});
+
+it('derives all 60 app identities from their actual sidecar action', async () => {
+  const tools = [...hooks.registeredTools].filter(([name]) => /^rebel_office_(word|excel|powerpoint)_/.test(name));
+  expect(tools).toHaveLength(60);
+  for (const [name, tool] of tools) {
+    const dispatch = tool.handler.toString().match(/sidecarRequest\(['"](word|excel|powerpoint)['"],\s*['"]([^'"]+)['"]/);
+    expect(dispatch, name).not.toBeNull();
+    expect(name).toBe(`rebel_office_${dispatch![1]}_${dispatch![2]}`);
+  }
+});
+
+it('keeps the public tool names and input schemas unchanged', async () => {
+  const { createHash } = await import('node:crypto');
+  const surface = [...hooks.registeredTools].map(([name, tool]) => ({ name, inputSchema: tool.inputSchema }));
+  expect(createHash('sha256').update(JSON.stringify(surface)).digest('hex')).toMatchInlineSnapshot(`"7e1b1008aa7f7ce03adbbcd53ccc6289ef9684887f7db4d1005224b7ac0044bc"`);
 });

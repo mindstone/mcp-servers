@@ -1,9 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeSOQL, sanitizeRecords, formatVendorErrors } from '../utils.js';
-import { withConnection } from '../client.js';
+import { withConnection, isSessionExpiredError } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
+
+const MAX_NOTE_LINKS = 150;
 
 export function registerNoteTools(server: McpServer): void {
   server.registerTool(
@@ -22,9 +24,21 @@ export function registerNoteTools(server: McpServer): void {
         const fields = ['Id', 'Title', 'TextPreview', 'CreatedDate', 'LastModifiedDate', 'OwnerId'];
         if (args.include_body) fields.push('Content');
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
+        // Salesforce refuses ContentDocumentLink as a semi-join inner select, so
+        // read the links first. The cap keeps the IN list inside SOQL's WHERE
+        // clause length limit.
+        const links = z.object({
+          records: z.array(z.object({ ContentDocumentId: z.string() })),
+        }).parse(await conn.query(
+          `SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = '${escapeSOQL(args.parent_id)}' LIMIT ${MAX_NOTE_LINKS}`,
+        ));
+        if (links.records.length === 0) {
+          return JSON.stringify({ ok: true, records: [], totalSize: 0 });
+        }
+        const noteIds = links.records.map((link) => `'${escapeSOQL(link.ContentDocumentId)}'`);
         const query =
           `SELECT ${fields.join(', ')} FROM ContentNote` +
-          ` WHERE Id IN (SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = '${escapeSOQL(args.parent_id)}')` +
+          ` WHERE Id IN (${noteIds.join(', ')})` +
           ` ORDER BY CreatedDate DESC LIMIT ${limit}`;
         const result = await conn.query(query);
         // ContentNote.Content is base64-encoded UTF-8; decode it for the model.
@@ -43,7 +57,7 @@ export function registerNoteTools(server: McpServer): void {
           }
           return rest;
         });
-        return JSON.stringify({ ok: true, records: sanitizeRecords(records, 'salesforce:get_notes:records'), totalSize: result.totalSize });
+        return JSON.stringify({ ok: true, records: sanitizeRecords(records, 'salesforce:get_notes:records'), totalSize: result.totalSize, ...(links.records.length === MAX_NOTE_LINKS ? { truncated: true } : {}) });
       });
     }),
   );
@@ -84,10 +98,7 @@ export function registerNoteTools(server: McpServer): void {
           } catch (error) {
             // Session expiry is handled by withConnection — don't misreport it
             // as a link failure.
-            if (
-              error instanceof Error &&
-              (error.message.includes('INVALID_SESSION_ID') || error.message.includes('Session expired'))
-            ) {
+            if (isSessionExpiredError(error)) {
               throw error;
             }
             linkError = error;

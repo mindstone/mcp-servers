@@ -18,7 +18,7 @@ import {
  * here so the host can dispatch the Slack OAuth flow rather than surfacing a
  * passive `{ ok: false }` the user can't act on.
  */
-const AUTH_REQUIRED_CODES: ReadonlyArray<string> = [
+export const AUTH_REQUIRED_CODES: ReadonlyArray<string> = [
   TOKEN_EXPIRED_REFRESH_DISABLED,
   REFRESH_AUTH_REJECTED,
   REFRESH_NO_CLIENT_CREDENTIALS,
@@ -90,6 +90,14 @@ function sanitizeExtraDeep(value: unknown, depth = 0): unknown {
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
+type TokenRole = 'bot' | 'user';
+const errorTokenRoles = new WeakMap<object, TokenRole>();
+
+/** Keep the original error intact, including structured acquisition failures. */
+export function setSlackErrorTokenRole(error: unknown, role: TokenRole): void {
+  if (error && typeof error === 'object') errorTokenRoles.set(error, role);
+}
+
 /**
  * Wraps a tool handler with standard error handling. Handlers return JSON
  * strings; this turns thrown `ConnectorError`s and unexpected errors into
@@ -98,12 +106,16 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  */
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
+  options?: { tokenRole?: TokenRole; authRefusalResolution?: string },
 ): ToolHandler<T> {
   return async (args, extra) => {
     try {
       const result = await fn(args, extra);
       return { content: [{ type: 'text', text: result }] };
     } catch (error) {
+      const tokenRole = (error && typeof error === 'object' ? errorTokenRoles.get(error) : undefined)
+        ?? options?.tokenRole;
+      const role = tokenRole ? { token_role: tokenRole } : {};
       // Codes that mean "host must re-run OAuth" → auth_required shape so
       // the host's AuthOrchestrator (Stage 0 `AuthRequiredResponseSchema`)
       // dispatches reauth automatically. Includes:
@@ -113,7 +125,17 @@ export function withErrorHandling<T>(
       //   - NO_TOKEN (never authenticated; same UX as reauth)
       if (error instanceof ConnectorError && AUTH_REQUIRED_CODES.includes(error.code)) {
         return {
-          content: [{ type: 'text', text: JSON.stringify(buildAuthRequiredResponse()) }],
+          content: [{ type: 'text', text: JSON.stringify({
+            ...buildAuthRequiredResponse(),
+            ...role,
+            ...(options?.authRefusalResolution && error.code === REFRESH_AUTH_REJECTED
+              ? {
+                  error: options.authRefusalResolution,
+                  action_required: options.authRefusalResolution,
+                  next_step: 'authenticate_slack_workspace',
+                }
+              : {}),
+          }) }],
           isError: true,
         };
       }
@@ -144,6 +166,7 @@ export function withErrorHandling<T>(
                       .includes(k),
                   ),
                 ),
+                ...role,
               }),
             },
           ],
@@ -154,6 +177,9 @@ export function withErrorHandling<T>(
       // Slack WebAPI errors — extract structured fields where possible
       const slackError = extractSlackErrorCode(error);
       if (slackError) {
+        const resolution = options?.authRefusalResolution &&
+          (isTokenExpiredError(error) || isMissingScopeError(error))
+          ? options.authRefusalResolution : slackError.resolution;
         return {
           content: [
             {
@@ -162,9 +188,10 @@ export function withErrorHandling<T>(
                 ok: false,
                 error: `Slack API error: ${slackError.code}`,
                 code: slackError.code,
-                resolution: slackError.resolution,
-                action_required: slackError.resolution,
+                resolution,
+                action_required: resolution,
                 next_step: slackError.next_step,
+                ...role,
               }),
             },
           ],
@@ -181,6 +208,7 @@ export function withErrorHandling<T>(
             text: JSON.stringify({
               ok: false,
               error: errorMessage,
+              ...role,
               action_required: 'Retry the operation. If it continues to fail, run list_slack_workspaces to verify the connection.',
               next_step: 'list_slack_workspaces',
             }),
@@ -429,9 +457,9 @@ function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
     case 'token_revoked':
     case 'account_inactive':
       return {
-        code: 'invalid_auth',
+        code: slackCode,
         resolution:
-          'Slack tokens have expired or been revoked. Reconnect Slack to refresh credentials.',
+          'Slack refused the authorization used for this action. Other Slack actions may still work. Reconnecting Slack may restore access.',
         next_step: 'authenticate_slack_workspace',
       };
     case 'channel_not_found':

@@ -1,6 +1,8 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDocsService } from '../modules/docs/index.js';
+import { getDriveService } from '../modules/drive/index.js';
+import { idFromUri } from '../modules/docs/tabCopy.js';
 import { extractDocumentIdFromUrl } from '../modules/docs/formatters.js';
 import {
   ReadDocumentOptions,
@@ -12,7 +14,12 @@ import {
   BatchUpdateDocumentOptions,
   DocumentResponse,
   DocsBatchUpdateResponse,
-  TabInfo,
+  TabListResponse,
+  TabWriteResponse,
+  TabDeleteResponse,
+  InsertTextPosition,
+  InsertTextResponse,
+  TabCopyResponse,
 } from '../modules/docs/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -32,6 +39,10 @@ interface ReadDocumentArgs {
   maxChars?: number;
   return_json?: boolean;
   returnJson?: boolean;
+  tab_id?: string;
+  tabId?: string;
+  all_tabs?: boolean;
+  allTabs?: boolean;
 }
 
 interface CreateDocumentArgs {
@@ -45,6 +56,8 @@ interface AppendDocumentArgs {
   document_id?: string;
   documentId?: string;
   text: string;
+  tab_id?: string;
+  tabId?: string;
 }
 
 interface ReplaceDocumentArgs {
@@ -52,6 +65,8 @@ interface ReplaceDocumentArgs {
   document_id?: string;
   documentId?: string;
   content: string;
+  tab_id?: string;
+  tabId?: string;
 }
 
 interface FindReplaceArgs {
@@ -64,6 +79,8 @@ interface FindReplaceArgs {
   replaceText?: string;
   match_case?: boolean;
   matchCase?: boolean;
+  tab_id?: string;
+  tabId?: string;
 }
 
 interface ExtractIdArgs {
@@ -76,6 +93,8 @@ interface ListTabsArgs {
   documentId?: string;
   include_word_count?: boolean;
   includeWordCount?: boolean;
+  return_json?: boolean;
+  returnJson?: boolean;
 }
 
 interface BatchUpdateDocumentArgs {
@@ -93,15 +112,94 @@ interface BatchUpdateDocumentArgs {
   returnJson?: boolean;
 }
 
+interface AddDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  title: string;
+  parent_tab_id?: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface UpdateDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+  title?: string;
+  parent_tab_id?: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface DeleteDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+  delete_sub_tabs?: boolean;
+  deleteSubTabs?: boolean;
+}
+
+interface InsertDocumentTextArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+  anchor_text?: string;
+  anchorText?: string;
+  position?: string;
+  text: string;
+  match_case?: boolean;
+  matchCase?: boolean;
+  expect_empty_paragraph?: boolean;
+  expectEmptyParagraph?: boolean;
+}
+
+interface CopyDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  source_tab_id?: string;
+  sourceTabId?: string;
+  target_tab_id?: string;
+  targetTabId?: string;
+  overwrite_existing?: boolean;
+  overwriteExisting?: boolean;
+  new_tab_title?: string;
+  newTabTitle?: string;
+  new_tab_parent_id?: string;
+  newTabParentId?: string;
+  new_tab_position?: number;
+  newTabPosition?: number;
+}
+
 /**
  * Format DocumentResponse as human-readable text
  */
-function formatDocumentResponseAsText(doc: DocumentResponse): string {
+export function formatDocumentResponseAsText(doc: DocumentResponse): string {
   const lines: string[] = [];
   lines.push(`Document: ${doc.title}`);
   lines.push(`URL: ${doc.documentUrl}`);
   lines.push(`ID: ${doc.documentId}`);
-  
+
+  if (doc.requestedTab) {
+    const subTabs = doc.requestedTab.childCount ?? 0;
+    const subTabNote = subTabs > 0
+      ? ` (${subTabs} sub-tab${subTabs !== 1 ? 's' : ''}, not included — read them by tab_id)`
+      : '';
+    lines.push(`Tab: ${doc.requestedTab.path} [tabId: ${doc.requestedTab.tabId}]${subTabNote}`);
+  } else if (doc.shownTab && doc.tabCount !== undefined && doc.tabCount > 1) {
+    lines.push(
+      `Tabs: ${doc.tabCount} — showing the first tab "${doc.shownTab.title}" [tabId: ${doc.shownTab.tabId}]. ` +
+        'Pass tab_id (or all_tabs: true) to read others; list_workspace_document_tabs shows the tree.'
+    );
+  }
+
   if (doc.truncated) {
     lines.push('Status: TRUNCATED (content exceeded limit)');
   }
@@ -115,26 +213,50 @@ function formatDocumentResponseAsText(doc: DocumentResponse): string {
 }
 
 /**
- * Format TabInfo array as human-readable text
+ * Format a document's tab tree as human-readable text: one line per tab,
+ * indented by nesting level and numbered by path (1., 1.1., 1.1.1.).
  */
-function formatTabsAsText(tabs: TabInfo[]): string {
+export function formatTabsAsText(result: TabListResponse): string {
+  const tabs = result.tabs;
   if (!tabs || tabs.length === 0) {
     return 'No tabs found.';
   }
 
+  const topLevel = tabs.filter((tab) => tab.nestingLevel === 0).length;
   const lines: string[] = [];
-  lines.push(`Tabs: ${tabs.length} tab${tabs.length !== 1 ? 's' : ''}\n`);
+  lines.push(`Tabs: ${tabs.length} (${topLevel} top-level)\n`);
 
+  const numbers = new Map<string, string>();
   for (const tab of tabs) {
-    let line = `${tab.index + 1}. ${tab.title}`;
+    const parentNumber = tab.parentTabId !== null ? numbers.get(tab.parentTabId) ?? '' : '';
+    const number = `${parentNumber}${tab.index + 1}.`;
+    numbers.set(tab.tabId, number);
+
+    let line = `${'   '.repeat(tab.nestingLevel)}${number} ${tab.title} [tabId: ${tab.tabId}]`;
+    if (tab.childCount > 0) {
+      line += ` (${tab.childCount} sub-tab${tab.childCount !== 1 ? 's' : ''})`;
+    }
     if (tab.wordCount !== undefined) {
       line += ` (${tab.wordCount} words)`;
     }
-    line += ` [tabId: ${tab.tabId}]`;
     lines.push(line);
   }
 
-  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:docs:tabs');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tabs/${result.documentId}`);
+}
+
+/**
+ * `Document: <title>` line for edit results, with the Google-authored title enveloped.
+ */
+function formatEnvelopedDocumentLine(doc: DocumentResponse, documentId: string): string {
+  return `Document: ${wrapUntrustedContent(doc.title ?? '', `google-workspace:docs:document/${documentId}`)}`;
+}
+
+/**
+ * ` (tab <id>)` suffix for the first line of a tab-scoped edit result (id only).
+ */
+function tabSuffix(doc: DocumentResponse): string {
+  return doc.requestedTab ? ` (tab ${doc.requestedTab.tabId})` : '';
 }
 
 /**
@@ -146,6 +268,12 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
   const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
   const maxChars = readAliasedNumber(rawArgs, 'max_chars', 'maxChars');
   const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const allTabs = readAliasedBoolean(rawArgs, 'all_tabs', 'allTabs');
+
+  if (tabId !== undefined && allTabs === true) {
+    throw new McpError(ErrorCode.InvalidParams, 'Pass either tab_id or all_tabs, not both.');
+  }
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
@@ -156,6 +284,8 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
     const options: ReadDocumentOptions = {
       maxChars,
       returnJson,
+      ...(tabId !== undefined ? { tabId } : {}),
+      ...(allTabs === true ? { allTabs } : {}),
     };
     
     const result = await docsService.getDocument(email, documentId as string, options);
@@ -207,7 +337,9 @@ export async function handleCreateDocument(args: CreateDocumentArgs): Promise<Mc
  */
 export async function handleAppendDocument(args: AppendDocumentArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
-  const documentId = readAliasedString(args as unknown as Record<string, unknown>, 'document_id', 'documentId');
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
@@ -218,6 +350,7 @@ export async function handleAppendDocument(args: AppendDocumentArgs): Promise<Mc
     const options: AppendDocumentOptions = {
       documentId: documentId as string,
       text: args.text,
+      ...(tabId !== undefined ? { tabId } : {}),
     };
     
     const result = await docsService.appendToDocument(email, options);
@@ -227,7 +360,7 @@ export async function handleAppendDocument(args: AppendDocumentArgs): Promise<Mc
     }
     
     const docResponse = result.data as DocumentResponse;
-    return `Text appended successfully!\n\nDocument: ${docResponse.title}\nURL: ${docResponse.documentUrl}`;
+    return `Text appended successfully!${tabSuffix(docResponse)}\n\n${formatEnvelopedDocumentLine(docResponse, documentId as string)}\nURL: ${docResponse.documentUrl}`;
   });
 }
 
@@ -236,7 +369,9 @@ export async function handleAppendDocument(args: AppendDocumentArgs): Promise<Mc
  */
 export async function handleReplaceDocument(args: ReplaceDocumentArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
-  const documentId = readAliasedString(args as unknown as Record<string, unknown>, 'document_id', 'documentId');
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
@@ -247,6 +382,7 @@ export async function handleReplaceDocument(args: ReplaceDocumentArgs): Promise<
     const options: ReplaceDocumentOptions = {
       documentId: documentId as string,
       content: args.content,
+      ...(tabId !== undefined ? { tabId } : {}),
     };
     
     const result = await docsService.replaceDocument(email, options);
@@ -256,7 +392,7 @@ export async function handleReplaceDocument(args: ReplaceDocumentArgs): Promise<
     }
     
     const docResponse = result.data as DocumentResponse;
-    return `Document content replaced successfully!\n\nDocument: ${docResponse.title}\nURL: ${docResponse.documentUrl}`;
+    return `Document content replaced successfully!${tabSuffix(docResponse)}\n\n${formatEnvelopedDocumentLine(docResponse, documentId as string)}\nURL: ${docResponse.documentUrl}`;
   });
 }
 
@@ -270,6 +406,7 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
   const findText = readAliasedString(rawArgs, 'find_text', 'findText');
   const replaceText = readAliasedString(rawArgs, 'replace_text', 'replaceText');
   const matchCase = readAliasedBoolean(rawArgs, 'match_case', 'matchCase');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
@@ -282,6 +419,7 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
       findText: findText as string,
       replaceText: replaceText as string,
       matchCase,
+      ...(tabId !== undefined ? { tabId } : {}),
     };
     
     const result = await docsService.findAndReplace(email, options);
@@ -292,12 +430,19 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
     
     const occurrences = result.occurrencesChanged ?? 0;
     const docResponse = result.data as DocumentResponse;
+    const documentLine = formatEnvelopedDocumentLine(docResponse, documentId as string);
+    // Without tab_id the replace covers every tab; say so on multi-tab documents.
+    const scopeNote = tabId === undefined && (docResponse.tabCount ?? 0) > 1
+      ? `\nSearched all ${docResponse.tabCount} tabs. Pass tab_id to limit a replace to one tab.`
+      : '';
     
     if (occurrences === 0) {
-      return `No occurrences of "${findText}" found in the document.\n\nDocument: ${docResponse.title}\nURL: ${docResponse.documentUrl}`;
+      // A tab-scoped miss names the tab searched, not the whole document.
+      const searched = docResponse.requestedTab ? `tab ${docResponse.requestedTab.tabId}` : 'the document';
+      return `No occurrences of "${findText}" found in ${searched}.\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;
     }
     
-    return `Find and replace completed!\n\nReplaced ${occurrences} occurrence${occurrences !== 1 ? 's' : ''} of "${findText}" with "${replaceText}"\n\nDocument: ${docResponse.title}\nURL: ${docResponse.documentUrl}`;
+    return `Find and replace completed!${tabSuffix(docResponse)}\n\nReplaced ${occurrences} occurrence${occurrences !== 1 ? 's' : ''} of "${findText}" with "${replaceText}"\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;
   });
 }
 
@@ -325,6 +470,7 @@ export async function handleListDocumentTabs(args: ListTabsArgs): Promise<McpToo
   const rawArgs = args as unknown as Record<string, unknown>;
   const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
   const includeWordCount = readAliasedBoolean(rawArgs, 'include_word_count', 'includeWordCount');
+  const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson');
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
@@ -343,8 +489,19 @@ export async function handleListDocumentTabs(args: ListTabsArgs): Promise<McpToo
       throw new McpError(ErrorCode.InternalError, result.error || 'Failed to list document tabs');
     }
     
-    const tabs = result.data as TabInfo[];
-    return formatTabsAsText(tabs);
+    const tabList = result.data as TabListResponse;
+    if (returnJson) {
+      return wrapUntrustedJsonStrings(
+        {
+          documentId: tabList.documentId,
+          title: tabList.title,
+          tabCount: tabList.tabs.length,
+          tabs: tabList.tabs,
+        },
+        `google-workspace:docs:tabs/${tabList.documentId}`
+      );
+    }
+    return formatTabsAsText(tabList);
   });
 }
 
@@ -406,5 +563,372 @@ export async function handleBatchUpdateDocument(args: BatchUpdateDocumentArgs): 
     }
     
     return lines.join('\n');
+  });
+}
+
+/**
+ * `under "<parent path>"` / `at the top level` for a tab's placement.
+ */
+function placementPhrase(parent: TabWriteResponse['parent']): string {
+  return parent ? `under "${parent.path}"` : 'at the top level';
+}
+
+/**
+ * A WARNING line naming any difference between where the caller asked the tab
+ * to go and where the document reports it after the write (no silent mismatch).
+ */
+function placementMismatch(data: TabWriteResponse): string | undefined {
+  const notes: string[] = [];
+  const actualParent = data.parent?.tabId ?? null;
+  if (actualParent !== data.requestedParentTabId) {
+    const wanted = data.requestedParentTabId !== null
+      ? `under tab ${data.requestedParentTabId}`
+      : 'at the top level';
+    notes.push(`it was meant to go ${wanted}, but the document shows it ${placementPhrase(data.parent)}`);
+  }
+  if (data.tab.index !== data.requestedPosition) {
+    notes.push(`the requested position was ${data.requestedPosition}, but the document reports position ${data.tab.index}`);
+  }
+  return notes.length > 0 ? `WARNING: ${notes.join('; ')}. Check the tab list before going on.` : undefined;
+}
+
+/**
+ * Result of add_workspace_document_tab (titles enveloped).
+ */
+export function formatTabAddedAsText(data: TabWriteResponse): string {
+  const where = data.parent
+    ? `under "${data.parent.path}" at position ${data.tab.index}`
+    : `at the top level, position ${data.tab.index}`;
+  const lines = [`Tab added: "${data.tab.title}" [tabId: ${data.tab.tabId}] ${where} (0 = first).`];
+  const mismatch = placementMismatch(data);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+/**
+ * Result of update_workspace_document_tab (titles enveloped).
+ */
+export function formatTabUpdatedAsText(data: TabWriteResponse): string {
+  if (!data.changed) {
+    return wrapUntrustedContent(
+      `No change: tab "${data.tab.path}" [tabId: ${data.tab.tabId}] already has that title, parent and position.`,
+      `google-workspace:docs:tabs/${data.documentId}`
+    );
+  }
+  const lines = [
+    `Tab updated: "${data.tab.title}" [tabId: ${data.tab.tabId}] — now ${placementPhrase(data.parent)}, position ${data.tab.index} (0 = first).`,
+  ];
+  const mismatch = placementMismatch(data);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+/**
+ * Result of delete_workspace_document_tab: the tab and every sub-tab deleted with it.
+ */
+export function formatTabDeletedAsText(data: TabDeleteResponse): string {
+  const head = `Deleted tab "${data.deleted.path}" [tabId: ${data.deleted.tabId}]`;
+  const count = data.descendants.length;
+  const text = count === 0
+    ? `${head}. It had no sub-tabs.`
+    : [
+        `${head} and ${count} sub-tab${count !== 1 ? 's' : ''}:`,
+        ...data.descendants.map((tab) => `- "${tab.path}" [tabId: ${tab.tabId}]`),
+      ].join('\n');
+  return wrapUntrustedContent(text, `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+const INSERT_POSITION_PHRASES: Record<InsertTextPosition, string> = {
+  after: 'after the anchor',
+  before: 'before the anchor',
+  next_paragraph_start: 'at the start of the paragraph after the anchor',
+};
+
+/**
+ * Result of insert_workspace_document_text (tab title enveloped).
+ */
+export function formatInsertTextAsText(data: InsertTextResponse): string {
+  const target = data.targetParagraph;
+  const text =
+    `Inserted ${data.insertedChars} characters (${data.newParagraphs} new paragraph${data.newParagraphs !== 1 ? 's' : ''}) ` +
+    `${INSERT_POSITION_PHRASES[data.position]} in tab "${data.tab.path}" [tabId: ${data.tab.tabId}]. ` +
+    `The paragraph there was ${target.wasEmpty ? 'empty' : 'not empty'}, ${target.bulleted ? 'bulleted' : 'not bulleted'}, style ${target.namedStyleType}.` +
+    (data.removedChars > 0
+      ? ` ${data.removedChars} control or private-use character${data.removedChars !== 1 ? 's' : ''} that Google Docs can't store ${data.removedChars !== 1 ? 'were' : 'was'} left out.`
+      : '');
+  return wrapUntrustedContent(text, `google-workspace:docs:document/${data.documentId}`);
+}
+
+/**
+ * `position` as a number, or undefined (the type guard has already checked it).
+ */
+function readPosition(rawArgs: Record<string, unknown>): number | undefined {
+  return typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
+}
+
+/**
+ * Add a tab to a Google Docs document
+ */
+export async function handleAddDocumentTab(args: AddDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const parentTabId = readAliasedString(rawArgs, 'parent_tab_id', 'parentTabId');
+  const position = readPosition(rawArgs);
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().addTab(email, {
+      documentId: documentId as string,
+      title: args.title,
+      ...(parentTabId !== undefined ? { parentTabId } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to add document tab');
+    }
+    return formatTabAddedAsText(result.data as TabWriteResponse);
+  });
+}
+
+/**
+ * Rename and/or move a tab in a Google Docs document
+ */
+export async function handleUpdateDocumentTab(args: UpdateDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const parentTabId = readAliasedString(rawArgs, 'parent_tab_id', 'parentTabId');
+  const position = readPosition(rawArgs);
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().updateTab(email, {
+      documentId: documentId as string,
+      tabId: tabId as string,
+      ...(args.title !== undefined ? { title: args.title } : {}),
+      ...(parentTabId !== undefined ? { parentTabId } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to update document tab');
+    }
+    return formatTabUpdatedAsText(result.data as TabWriteResponse);
+  });
+}
+
+/**
+ * Delete a tab (and all its sub-tabs) from a Google Docs document
+ */
+export async function handleDeleteDocumentTab(args: DeleteDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const deleteSubTabs = readAliasedBoolean(rawArgs, 'delete_sub_tabs', 'deleteSubTabs');
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().deleteTab(email, {
+      documentId: documentId as string,
+      tabId: tabId as string,
+      ...(deleteSubTabs === true ? { deleteSubTabs } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to delete document tab');
+    }
+    return formatTabDeletedAsText(result.data as TabDeleteResponse);
+  });
+}
+
+/**
+ * Insert plain text into one tab next to a unique anchor
+ */
+export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const anchorText = readAliasedString(rawArgs, 'anchor_text', 'anchorText');
+  const matchCase = readAliasedBoolean(rawArgs, 'match_case', 'matchCase');
+  const expectEmptyParagraph = readAliasedBoolean(rawArgs, 'expect_empty_paragraph', 'expectEmptyParagraph');
+  const position = (typeof rawArgs.position === 'string' ? rawArgs.position : 'after') as InsertTextPosition;
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().insertText(email, {
+      documentId: documentId as string,
+      ...(tabId !== undefined ? { tabId } : {}),
+      anchorText: anchorText as string,
+      position,
+      text: args.text,
+      matchCase: matchCase ?? true,
+      // Unset → the service's default (on for next_paragraph_start); an explicit false is kept.
+      ...(expectEmptyParagraph !== undefined ? { expectEmptyParagraph } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to insert text');
+    }
+    return formatInsertTextAsText(result.data as InsertTextResponse);
+  });
+}
+
+/** Plain-language names for element kinds a copy can't reproduce. */
+const NOT_COPIED_LABELS: Record<string, string> = {
+  inlineObjectElement: 'images',
+  positionedObject: 'floating images',
+  footnoteReference: 'footnotes',
+  equation: 'equations',
+  horizontalRule: 'horizontal lines',
+  columnBreak: 'column breaks',
+  autoText: 'page numbers and other auto text',
+  tableOfContents: 'tables of contents',
+  person: 'people chips without a name or email',
+  dateElement: 'date chips without display text',
+  richLink: 'smart chips without a link',
+};
+
+/** Chip-fallback titles listed by name in a copy result; the rest are counted. */
+const MAX_FALLBACK_TITLES = 10;
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n !== 1 ? 's' : ''}`;
+}
+
+/**
+ * Result of copy_workspace_document_tab: what was copied, the verification
+ * outcome, what fell back or was left out, and the cost. Titles, paths and
+ * chip titles are document content, so the whole result is enveloped.
+ */
+export function formatTabCopyAsText(data: TabCopyResponse): string {
+  const lines: string[] = [];
+  const into = data.mode === 'new' ? 'new' : 'existing (cleared first)';
+  lines.push(
+    `Copied tab "${data.source.path}" [${data.source.tabId}] into ${into} tab "${data.target.path}" [${data.target.tabId}].`
+  );
+
+  const v = data.verification;
+  if (v.passed) {
+    let line =
+      `Verification: passed — ${plural(v.checkedParagraphs, 'paragraph')}, ${plural(v.tables, 'table')}, ${plural(v.lists, 'list')} checked: ` +
+      'text, heading types, paragraph formatting, bullets, list grouping and table shapes match the source ' +
+      '(bold/links and table cell styles are not checked).';
+    if (v.placeholders > 0) {
+      line += ` ${v.placeholders} placeholder(s) stand in for elements that could not be copied (see Not copied).`;
+    }
+    lines.push(line);
+  } else {
+    const places = v.mismatches.map((mismatch) =>
+      mismatch.tableIndex !== undefined
+        ? `table ${mismatch.tableIndex + 1} ${mismatch.kind}`
+        : mismatch.paragraphIndex !== undefined
+          ? `paragraph ${mismatch.paragraphIndex + 1} ${mismatch.kind}`
+          : mismatch.kind
+    );
+    // Verification keeps only the first few mismatches; say so when there are more.
+    const where = places.length === 0
+      ? 'first: unknown'
+      : `${places.length < v.mismatchCount ? 'first: ' : ''}${places.join(', ')}`;
+    const kept =
+      data.mode === 'new'
+        ? ` The new tab "${data.target.path}" [${data.target.tabId}] was kept so it can be checked. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title.`
+        : ` Tab "${data.target.path}" [${data.target.tabId}] was kept as copied so it can be checked; its earlier content can be restored from the document's version history.`;
+    lines.push(
+      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (${where}).${kept} Do not delete or reset the source until the copy is confirmed.`
+    );
+  }
+
+  const fallbacks = data.chipFallbacks.length;
+  if (data.chipsCopied > 0 || fallbacks > 0) {
+    let line = `${plural(data.chipsCopied, 'smart chip')} copied`;
+    if (fallbacks > 0) {
+      const shown = data.chipFallbacks.slice(0, MAX_FALLBACK_TITLES).map((chip) => `"${chip.title}"`).join(', ');
+      const more = fallbacks > MAX_FALLBACK_TITLES ? `, and ${fallbacks - MAX_FALLBACK_TITLES} more` : '';
+      line += `; ${fallbacks} replaced by titled links because you can't open these files: ${shown}${more}`;
+    }
+    lines.push(`${line}.`);
+  }
+  const { people, dates } = data.convertedToText;
+  if (people > 0 || dates > 0) {
+    lines.push(`${people} people and ${dates} dates copied as text.`);
+  }
+  if (data.namedStylesCopied > 0) {
+    lines.push(`Named styles copied: ${data.namedStylesCopied}.`);
+  }
+
+  const notCopied = ['headers and footers', 'sub-tabs'];
+  for (const [kind, count] of Object.entries(data.notCopied)) {
+    notCopied.push(`${NOT_COPIED_LABELS[kind] ?? kind} (${count})`);
+  }
+  const lost = Object.keys(data.notCopied).length > 0
+    ? ' Check these can be lost before deleting or resetting the source.'
+    : '';
+  lines.push(`Not copied: ${notCopied.join(', ')}.${lost}`);
+  if (data.notes.length > 0) {
+    lines.push(`Notes: ${data.notes.join('; ')}.`);
+  }
+  lines.push(`Requests: ${data.requests} in ${data.rounds} rounds; took ${(data.durationMs / 1000).toFixed(1)}s.`);
+
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tab-copy/${data.documentId}`);
+}
+
+/**
+ * Copy one tab's content into a new tab or into an existing tab (cleared first)
+ */
+export async function handleCopyDocumentTab(args: CopyDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const sourceTabId = readAliasedString(rawArgs, 'source_tab_id', 'sourceTabId');
+  const targetTabId = readAliasedString(rawArgs, 'target_tab_id', 'targetTabId');
+  const overwriteExisting = readAliasedBoolean(rawArgs, 'overwrite_existing', 'overwriteExisting');
+  const newTabTitle = readAliasedString(rawArgs, 'new_tab_title', 'newTabTitle');
+  const newTabParentId = readAliasedString(rawArgs, 'new_tab_parent_id', 'newTabParentId');
+  const newTabPosition = readAliasedNumber(rawArgs, 'new_tab_position', 'newTabPosition');
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const driveService = await getDriveService();
+    // Same account as the copy; a link that isn't a Drive file can't be checked, so it becomes a titled link.
+    const checkChip = (uri: string): Promise<boolean> => {
+      const fileId = idFromUri(uri);
+      return fileId ? driveService.checkFileAccess(email, fileId) : Promise.resolve(false);
+    };
+
+    const result = await getDocsService().copyTab(
+      email,
+      {
+        documentId: documentId as string,
+        sourceTabId: sourceTabId as string,
+        ...(targetTabId !== undefined ? { targetTabId } : {}),
+        ...(overwriteExisting !== undefined ? { overwriteExisting } : {}),
+        ...(newTabTitle !== undefined ? { newTabTitle } : {}),
+        ...(newTabParentId !== undefined ? { newTabParentId } : {}),
+        ...(newTabPosition !== undefined ? { newTabPosition } : {}),
+      },
+      checkChip
+    );
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab');
+    }
+    const data = result.data as TabCopyResponse;
+    const text = formatTabCopyAsText(data);
+    if (!data.verification.passed) {
+      // An error result keeps the full report while telling the host and model the copy is not good.
+      const response: McpToolResponse = { content: [{ type: 'text', text }], isError: true, _meta: {} };
+      return response;
+    }
+    return text;
   });
 }

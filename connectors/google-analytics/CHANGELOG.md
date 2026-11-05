@@ -11,6 +11,18 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Admin write tools, off by default and enabled with `GA4_ALLOW_WRITES=true`: create, update, and archive or delete key events, custom dimensions, custom metrics, audiences, channel groups, event create rules, data streams, Measurement Protocol secrets, and Google Ads, Firebase, and BigQuery links; update property settings, enhanced measurement, and data retention; create and delete properties; acknowledge user-data collection.
+- Read tools for enhanced measurement settings, event create rules, and Measurement Protocol secrets.
+- `ga_run_funnel_report` (Data API v1alpha `runFunnelReport`), with event-name step shortcuts, breakdowns, next actions, and trended funnels.
+- Annotations, attribution settings, calculated metrics, and event edit rules: list/get plus opt-in create, update, and delete; read tools for Google Signals and account data sharing settings.
+- Removal, acknowledgement, and data-retention tools require `confirm: true`; update tools build the update mask from the fields passed and reject empty updates.
+
+### Changed
+
+- The connector requests the `analytics.edit` scope, and setup hints show it, only when writes are enabled.
+
 ## [0.2.1] - 2026-08-10
 
 ### Changed

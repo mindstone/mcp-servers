@@ -27,7 +27,8 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -602,7 +603,25 @@ process.on('exit', () => {
 // Sidecar HTTP bridge helper
 // ---------------------------------------------------------------------------
 
-const sidecarRequest = async (app, action, params = {}) => {
+const sidecarRequest = async (app, action, params = {}) =>
+  stampResultContext(await requestSidecar(app, action, params), app, action);
+
+const decodeSidecarResponse = async (response, app) => {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return stampUntrustedSource({ success: false, code: 'SIDECAR_ERROR',
+      error: await response.text() || `Office sidecar returned an invalid response (HTTP ${response.status}).` }, app);
+  }
+  return stampUntrustedSource(response.ok ? payload : {
+    success: false,
+    code: payload?.code || 'SIDECAR_ERROR',
+    error: typeof payload?.error === 'string' ? payload.error : `Office sidecar request failed (HTTP ${response.status}).`,
+  }, app);
+};
+
+const requestSidecar = async (app, action, params) => {
   // Lazy-start the sidecar on first use
   try {
     await ensureSidecar();
@@ -610,7 +629,7 @@ const sidecarRequest = async (app, action, params = {}) => {
     return {
       success: false,
       error: `Failed to start Office sidecar: ${err.message}`,
-      code: 'SIDECAR_NOT_RUNNING',
+      code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING',
     };
   }
 
@@ -654,27 +673,7 @@ const sidecarRequest = async (app, action, params = {}) => {
       response = await makeRequest(state.token);
     }
 
-    if (!response.ok) {
-      // The error body is authored by the sidecar (or an add-in relayed through
-      // it) — external, attacker-influenced text. Stamp it so `toMcpResult`
-      // wraps it in the untrusted-content envelope instead of emitting it
-      // verbatim (AGENTS.md security invariant #6).
-      let detail;
-      try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string') detail = payload.error;
-      } catch {
-        const body = await response.text();
-        if (body) detail = body;
-      }
-      return stampUntrustedSource({
-        success: false,
-        error: detail || `Office sidecar request failed (HTTP ${response.status}).`,
-        code: 'SIDECAR_ERROR',
-      }, app);
-    }
-
-    return stampUntrustedSource(await response.json(), app);
+    return await decodeSidecarResponse(response, app);
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
@@ -692,56 +691,134 @@ const sidecarRequest = async (app, action, params = {}) => {
   }
 };
 
-/**
- * Wrap a sidecar response into MCP tool result format.
- * Success → text content. Error → text content with isError flag.
- *
- * AGENTS.md security invariant #6: document/spreadsheet/slide content returned
- * by the add-in is authored inside Office files — attacker-influenced whenever
- * the file came from somewhere else. `sidecarRequest` stamps each add-in
- * payload with its source app; here every string in the payload (and any
- * add-in-relayed error message) is wrapped in the canonical
- * `<untrusted-content>` envelope before it reaches the model. Locally
- * generated errors (sidecar unreachable, etc.) carry no stamp and pass
- * through unwrapped.
- */
+// Local metadata cannot be supplied or overwritten by the sidecar payload.
 const UNTRUSTED_SOURCE = Symbol('officeUntrustedSource');
-
-const untrustedSourceForApp = (app) => `microsoft-office-${app}`;
-
-/**
- * Stamp a sidecar JSON payload with its source app. The stamp is a
- * non-enumerable Symbol-keyed property, so it never appears in
- * JSON.stringify output or in `wrapUntrustedJsonStrings`' object walk.
- */
-const stampUntrustedSource = (payload, app) => {
+const RESULT_CONTEXT = Symbol('officeResultContext');
+const stampResultContext = (payload, app, action) => {
   if (payload && typeof payload === 'object') {
-    Object.defineProperty(payload, UNTRUSTED_SOURCE, {
-      value: untrustedSourceForApp(app),
-      enumerable: false,
-      configurable: true,
-    });
+    Object.defineProperty(payload, RESULT_CONTEXT, { value: { app, action }, configurable: true });
   }
   return payload;
 };
+const stampUntrustedSource = (payload, app, action = 'unknown') => {
+  payload = payload && typeof payload === 'object' ? payload : {
+    success: false, code: 'SIDECAR_ERROR',
+    error: typeof payload === 'string' ? payload : 'Invalid Office sidecar response.',
+  };
+  Object.defineProperty(payload, UNTRUSTED_SOURCE, {
+    value: `microsoft-office-${app}`, configurable: true,
+  });
+  return stampResultContext(payload, app, action);
+};
+
+const readTools = {
+  word: 'rebel_office_word_read_document',
+  excel: 'rebel_office_excel_get_worksheets and rebel_office_excel_read_range',
+  powerpoint: 'rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content',
+  office: 'rebel_office_status',
+};
+const lookFirst = (app) => `Read the current state with ${readTools[app] || readTools.office}, correct the target or arguments, then try again.`;
+const ERROR_CATALOG = {
+  PARTIAL: { retryable: false, fix: 'Inspect the created slide: find its id in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex for rebel_office_powerpoint_get_slide_content or rebel_office_powerpoint_delete_slide. Complete the missing work or delete the slide before retrying.' },
+  INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
+  ITEM_NOT_FOUND: { retryable: false, fix: lookFirst },
+  NO_SELECTION: { retryable: false, fix: 'Ask the user to select the intended text in Office, or use an explicit target.' },
+  READ_ONLY: { retryable: false, fix: 'Ask the user to enable editing or save an editable copy before trying again.' },
+  NO_DOCUMENT: { retryable: false, fix: 'Ask the user to open or create the file in the requested Office app.' },
+  UNSUPPORTED_OPERATION: { retryable: false, fix: 'Ask the user to update Office to the latest version, or choose a supported operation.' },
+  INVALID_OPERATION: { retryable: false, fix: lookFirst },
+  GENERAL_EXCEPTION: { retryable: true, fix: lookFirst },
+  APP_NOT_CONNECTED: { retryable: true, fix: 'Ask the user to open the requested Office app and click Rebel until the panel says Connected, then try again.' },
+  ADDIN_DISCONNECTED: { retryable: true, fix: 'Ask the user to reopen the file and the Rebel panel; read the current state before repeating an edit.' },
+  COMMAND_TIMEOUT: { retryable: true, fix: 'Read the current state before repeating an edit; it may already have completed. Then try a smaller range or fewer items.' },
+  CONNECTION_DISABLED: { retryable: false, fix: 'Ask whoever manages this Rebel installation to re-enable the Office connection before trying again.' },
+  SIDECAR_NOT_RUNNING: { retryable: true, fix: 'Enable Microsoft Office in Settings → Connectors, then run rebel_office_setup and try again.' },
+  SIDECAR_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
+  UNAUTHORIZED: { retryable: false, fix: 'Restart the Microsoft Office connector in Settings to restore its connection credentials.' },
+  INVALID_REQUEST: { retryable: false, fix: lookFirst },
+  INTERNAL_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
+  UNKNOWN_ERROR: { retryable: false, fix: "Tell the user what Office said; don't repeat the same call." },
+};
+
+const nativeUndo = 'The user can undo this with Ctrl+Z (Cmd+Z on Mac).';
+const macPowerpointUndo = "PowerPoint for Mac can't reliably undo add-in edits with Cmd+Z. ";
+const readBeforeReversing = ' Read the current slide or shape with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content (or rebel_office_powerpoint_get_speaker_notes for notes) first; ask the user before reversing if it has changed since the edit.';
+const reuseReturnedText = ' When reusing returned text (including names and formatting values), use the text inside the untrusted-content envelope, not the envelope markup.';
+const deleteAddedShape = 'To reverse this, use rebel_office_powerpoint_delete_shape with target.type="shapeId", target.shapeId=data.shapeId and the original slideIndex.' + reuseReturnedText;
+const UNDO_WORDING = {
+  word: { default: nativeUndo },
+  excel: {
+    default: nativeUndo,
+    delete_worksheet: "Excel can't undo this, and it clears Excel's undo history. Confirm with the user first.",
+  },
+  powerpoint: {
+    default: nativeUndo,
+    add_slide: 'Without title, subtitle or body, the user can undo this with Ctrl+Z. With title, subtitle or body, use Ctrl+Z twice (text, then slide), or rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.' + reuseReturnedText,
+    darwin: {
+      default: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      add_text_box: deleteAddedShape,
+      add_shape: deleteAddedShape,
+      add_image: deleteAddedShape,
+      add_slide: 'To reverse this, use rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.' + reuseReturnedText,
+      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty; the original text\'s mixed formatting is not restored. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      set_speaker_notes: 'To reverse this, use rebel_office_powerpoint_set_speaker_notes with slideIndex=data.slideNumber and notes=data.previousNotes, if non-empty. Previously blank notes cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), no line, or previous lineWidth, width or height of zero cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      reorder_slides: 'To reverse this, use rebel_office_powerpoint_reorder_slides with data.from and data.to swapped: fromIndex=data.to, toIndex=data.from.' + reuseReturnedText,
+      delete_shape: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      delete_slide: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      apply_layout: 'This cannot be undone exactly with these tools; confirm with the user first.',
+    },
+  },
+};
+const undoForTool = (name, annotations) => {
+  if (annotations?.readOnlyHint !== false) return undefined;
+  const match = name.match(/^rebel_office_(word|excel|powerpoint)_(.+)$/);
+  if (!match) return undefined;
+  const [, app, action] = match;
+  const wording = UNDO_WORDING[app];
+  if (app === 'powerpoint' && process.platform === 'darwin') {
+    return macPowerpointUndo + (Object.hasOwn(wording.darwin, action) ? wording.darwin[action] : wording.darwin.default) + readBeforeReversing;
+  }
+  return Object.hasOwn(wording, action) ? wording[action] : wording.default;
+};
 
 const toMcpResult = (result) => {
-  const source =
-    result && typeof result === 'object' && typeof result[UNTRUSTED_SOURCE] === 'string'
-      ? result[UNTRUSTED_SOURCE]
-      : null;
-  if (result.success === false) {
-    const message = result.error || 'Unknown error';
-    return {
-      content: [{ type: 'text', text: source ? wrapUntrusted(message, source) : message }],
-      isError: true,
-    };
-  }
-  // Return the data payload as formatted JSON text
-  const data = result.data !== undefined ? result.data : result;
-  return {
-    content: [{ type: 'text', text: JSON.stringify(source ? wrapUntrustedJsonStrings(data, source) : data, null, 2) }],
+  const source = result?.[UNTRUSTED_SOURCE];
+  const { app = 'office', action = 'unknown' } = result?.[RESULT_CONTEXT] || {};
+  const wrap = (value) => source ? wrapUntrustedJsonStrings(value, source) : value;
+  // Non-identifier keys can contain document-authored instructions, just like string values.
+  const guardDataKeys = (value) => {
+    if (!source) return value;
+    if (Array.isArray(value)) return value.map(guardDataKeys);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : wrap(key), guardDataKeys(item),
+      ]));
+    }
+    return value;
   };
+  let body;
+  const failed = !result || typeof result !== 'object' || result.success === false;
+  if (failed) {
+    const code = typeof result?.code === 'string' && Object.hasOwn(ERROR_CATALOG, result.code) ? result.code : 'UNKNOWN_ERROR';
+    const { retryable, fix } = ERROR_CATALOG[code];
+    body = { ok: false, app, action, error: {
+      code, message: wrap(typeof result?.error === 'string' ? result.error : 'Unknown error'),
+      fix: typeof fix === 'function' ? fix(app) : fix, retryable,
+    } };
+  } else {
+    let data = result.data !== undefined ? result.data : result;
+    // Excel JSON rows use spreadsheet-authored headers as keys; structural keys stay local.
+    if (source && app === 'excel' && ['read_range', 'read_table'].includes(action) && Array.isArray(data?.rows)) {
+      data = { ...data, rows: data.rows.map(row => row && typeof row === 'object' && !Array.isArray(row)
+        ? Object.fromEntries(Object.entries(row).map(([key, value]) => [wrap(key), value]))
+        : row) };
+    }
+    const name = `rebel_office_${app}_${action}`;
+    const undo = undoForTool(name, registeredTools.get(name)?.annotations);
+    body = { ok: true, app, action, data: wrap(guardDataKeys(data)), ...(undo ? { undo } : {}) };
+  }
+  return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], ...(failed ? { isError: true } : {}) };
 };
 
 // ---------------------------------------------------------------------------
@@ -836,15 +913,12 @@ const EMPTY_OBJECT_SCHEMA = {
 const jsonSchemaValidator = new AjvJsonSchemaValidator();
 const registeredTools = new Map();
 
-const createToolError = (errorMessage) => ({
-  content: [
-    {
-      type: 'text',
-      text: errorMessage,
-    },
-  ],
-  isError: true,
-});
+const createToolError = (error, name) => {
+  const parts = registeredTools.has(name) ? name.slice('rebel_office_'.length).split('_') : ['unknown'];
+  const app = ['word', 'excel', 'powerpoint'].includes(parts[0]) ? parts.shift() : ['setup', 'status'].includes(parts[0]) ? 'all' : 'office';
+  const code = error instanceof McpError && error.code === ErrorCode.InvalidParams ? 'INVALID_ARGUMENT' : 'INTERNAL_ERROR';
+  return toMcpResult(stampResultContext({ success: false, code, error: error instanceof Error ? error.message : String(error) }, app, parts.join('_')));
+};
 
 /**
  * Register a tool into the local registry that backs the ListTools/CallTool
@@ -857,9 +931,10 @@ const registerTool = (name, config, handler) => {
     throw new Error(`Tool ${name} is already registered`);
   }
 
+  const undo = undoForTool(name, config.annotations);
   const tool = {
     title: config.title,
-    description: config.description,
+    description: config.description + (undo ? '\n\n' + undo : ''),
     inputSchema: config.inputSchema || EMPTY_OBJECT_SCHEMA,
     outputSchema: config.outputSchema,
     annotations: config.annotations,
@@ -928,15 +1003,12 @@ server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
 
     return await Promise.resolve(tool.handler(validation.data, extra));
   } catch (error) {
-    if (error instanceof McpError && error.code === ErrorCode.UrlElicitationRequired) {
-      throw error;
-    }
-    return createToolError(error instanceof Error ? error.message : String(error));
+    return createToolError(error, request.params.name);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Setup helpers — sideload manifest into Office wef folders
+// Setup helpers — install or remove the Office add-in
 // ---------------------------------------------------------------------------
 
 /**
@@ -950,19 +1022,11 @@ const MAC_WEF_PATHS = {
 };
 
 /**
- * Windows shared folder path for sideloaded manifests.
- * This is the per-user WEF folder (no admin needed).
- */
-const WIN_WEF_PATH = process.env.LOCALAPPDATA
-  ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Office', '16.0', 'Wef')
-  : null;
-
-/**
- * Copy the manifest to all Office wef folders for the current platform.
- * Creates the wef directories if they don't exist.
+ * Copy the manifests into macOS wef folders or register the Windows manifest.
+ * Creates the macOS wef directories if they don't exist.
  * Returns an array of {app, path, status} results.
  */
-const installManifest = (manifestDir) => {
+const installManifest = async (manifestDir) => {
   const results = [];
 
   if (process.platform === 'darwin') {
@@ -980,16 +1044,8 @@ const installManifest = (manifestDir) => {
         results.push({ app, path: wefDir, status: 'failed', error: err.message });
       }
     }
-  } else if (process.platform === 'win32' && WIN_WEF_PATH) {
-    // Windows uses a single shared WEF folder — copy the default manifest
-    const source = path.join(manifestDir, 'manifest.xml');
-    try {
-      fs.mkdirSync(WIN_WEF_PATH, { recursive: true });
-      fs.copyFileSync(source, path.join(WIN_WEF_PATH, 'manifest.xml'));
-      results.push({ app: 'all', path: WIN_WEF_PATH, status: 'installed' });
-    } catch (err) {
-      results.push({ app: 'all', path: WIN_WEF_PATH, status: 'failed', error: err.message });
-    }
+  } else if (process.platform === 'win32') {
+    results.push(await registerWindowsAddin(path.join(manifestDir, 'manifest.xml')));
   } else {
     results.push({ app: 'all', path: 'unknown', status: 'skipped', error: `Unsupported platform: ${process.platform}` });
   }
@@ -1000,9 +1056,9 @@ const installManifest = (manifestDir) => {
 // No certificate trust needed — sidecar uses plain HTTP on localhost.
 
 /**
- * Remove the manifest from all Office wef folders (uninstall).
+ * Remove the macOS manifests or the Windows registry value (uninstall).
  */
-const uninstallManifest = () => {
+const uninstallManifest = async () => {
   const results = [];
   const manifestName = 'manifest.xml';
 
@@ -1020,17 +1076,11 @@ const uninstallManifest = () => {
         results.push({ app, status: 'failed', error: err.message });
       }
     }
-  } else if (process.platform === 'win32' && WIN_WEF_PATH) {
-    const target = path.join(WIN_WEF_PATH, manifestName);
-    try {
-      if (fs.existsSync(target)) {
-        fs.unlinkSync(target);
-        results.push({ app: 'all', status: 'removed' });
-      } else {
-        results.push({ app: 'all', status: 'not_installed' });
-      }
-    } catch (err) {
-      results.push({ app: 'all', status: 'failed', error: err.message });
+  } else if (process.platform === 'win32') {
+    if (!stateDir) {
+      results.push({ app: 'all', status: 'failed', error: "The Office sidecar state directory isn't configured." });
+    } else {
+      results.push(await unregisterWindowsAddin(path.join(stateDir, manifestName)));
     }
   }
 
@@ -1041,6 +1091,8 @@ const uninstallManifest = () => {
 // Tool definitions
 // ---------------------------------------------------------------------------
 
+const windowsUninstallGuidance = 'On Windows, the add-in stays removed only while the Office connection is turned off in Rebel, because the connector registers it again whenever it starts.';
+
 // 0a. rebel_office_setup — (Re-)install or uninstall the Office add-in
 registerTool(TOOL_NAMES.setup, {
   title: 'Install or repair Office add-in',
@@ -1050,8 +1102,9 @@ registerTool(TOOL_NAMES.setup, {
     'the sidecar, which installs the add-in manifest automatically. Use this tool only to:\n' +
     '  • Force a re-install after deleting manifests manually\n' +
     '  • Uninstall the add-in (action="uninstall")\n\n' +
+    windowsUninstallGuidance + '\n\n' +
     'After install, open (or restart) Word, Excel, or PowerPoint. The Rebel button will appear ' +
-    'in the Home ribbon, under the "Add ons" menu; click it to open the panel and see "Connected".',
+    'on the Home tab; on first use in Windows, choose Add-ins → Developer Add-ins → Rebel. Click Rebel to open the panel and see "Connected".',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -1068,47 +1121,39 @@ registerTool(TOOL_NAMES.setup, {
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 }, async (input) => {
+  const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'setup'));
   if (input.action === 'uninstall') {
-    const results = uninstallManifest();
+    const results = await uninstallManifest();
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
-    return {
-      content: [{ type: 'text', text: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.` }],
-    };
+    return respond(results.some(r => r.status === 'failed')
+      ? { success: false, code: 'SIDECAR_ERROR', error: summary }
+      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.${process.platform === 'win32' ? ` ${windowsUninstallGuidance}` : ''}` } });
   }
 
   // Lazy-start the sidecar so we have a manifest + state file to work with
   try {
     await ensureSidecar();
   } catch (err) {
-    return {
-      content: [{ type: 'text', text: `Failed to start Office sidecar: ${err.message}` }],
-      isError: true,
-    };
+    return respond({ success: false, code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING', error: `Failed to start Office sidecar: ${err.message}` });
   }
 
   const state = loadSidecarState();
   if (!state) {
-    return {
-      content: [{ type: 'text', text: "The Office sidecar started but state file not found. Try again." }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: "The Office sidecar started but state file not found. Try again." });
   }
 
   // Install
   const steps = [];
 
-  // Step 1: Install manifest to wef folders
+  // Step 1: Install the Office add-in manifest
   // manifestPath points to e.g. .../rebeloffice/manifest.xml — derive the directory
   const manifestDir = state.manifestPath ? path.dirname(state.manifestPath) : null;
   if (!manifestDir || !fs.existsSync(manifestDir)) {
-    return {
-      content: [{ type: 'text', text: 'Manifest directory not found. The sidecar may need to be restarted. Try disabling and re-enabling the Microsoft Office connector in Settings.' }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: 'Manifest directory not found. The sidecar may need to be restarted. Try disabling and re-enabling the Microsoft Office connector in Settings.' });
   }
 
-  const manifestResults = installManifest(manifestDir);
-  const allInstalled = manifestResults.every(r => r.status === 'installed');
+  const manifestResults = await installManifest(manifestDir);
+  const allInstalled = manifestResults.every(r => r.status === 'installed' || r.status === 'unchanged');
   steps.push({
     step: 'Install manifest',
     status: allInstalled ? 'done' : 'partial',
@@ -1119,9 +1164,6 @@ registerTool(TOOL_NAMES.setup, {
   const lines = ['Office add-in installation:'];
   for (const step of steps) {
     lines.push(`\n${step.step}: ${step.status}`);
-    if (step.status === 'manual_needed' && step.details.manual) {
-      lines.push(`  → ${step.details.manual}`);
-    }
     if (Array.isArray(step.details)) {
       for (const d of step.details) {
         lines.push(`  ${d.app}: ${d.status}${d.error ? ` — ${d.error}` : ''}`);
@@ -1132,13 +1174,13 @@ registerTool(TOOL_NAMES.setup, {
   lines.push('\nNext steps:');
   lines.push('1. Open (or restart) the Microsoft 365 desktop app for Word, Excel, or PowerPoint');
   lines.push('   (the web/browser versions of Office are not supported)');
-  lines.push('2. Find the "Rebel" button in the Home ribbon, under the "Add ons" menu');
+  lines.push('2. Click Rebel on the Home tab (first use on Windows: Add-ins → Developer Add-ins → Rebel)');
   lines.push('3. Click it to open the connection panel');
   lines.push('4. Once it shows "Connected", you\'re ready to go!');
 
-  return {
-    content: [{ type: 'text', text: lines.join('\n') }],
-  };
+  return respond(allInstalled
+    ? { success: true, data: { steps, summary: lines.join('\n') } }
+    : { success: false, code: 'SIDECAR_ERROR', error: lines.join('\n') });
 });
 
 // 0b. rebel_office_status — Check connection status
@@ -1155,42 +1197,23 @@ registerTool(TOOL_NAMES.status, {
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
+  const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'status'));
   const state = loadSidecarState();
   if (!state) {
-    return {
-      content: [{ type: 'text', text: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors, then run rebel_office_setup to install the add-in." }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors; the add-in installs automatically." });
   }
-
   try {
-    const url = `https://127.0.0.1:${state.port}/health`;
-    // Loopback-scoped helper — see comment above `loopbackHttpsRequest`.
-    const response = await loopbackHttpsRequest(url);
-    const health = await response.json();
-
-    const connected = health.connected || {};
-    const apps = ['word', 'excel', 'powerpoint'];
-    const lines = ['Office connection status:'];
-    for (const app of apps) {
-      const status = connected[app] ? 'Connected' : 'Not connected';
-      lines.push(`  ${app.charAt(0).toUpperCase() + app.slice(1)}: ${status}`);
-    }
-
-    const anyConnected = apps.some(a => connected[a]);
-    if (!anyConnected) {
-      lines.push('\nNo Office apps are connected. Make sure you have:');
-      lines.push('1. Run rebel_office_setup to install the add-in');
-      lines.push('2. Opened Word, Excel, or PowerPoint');
-      lines.push('3. Clicked the "Rebel" button in the Home ribbon (under the "Add ons" menu)');
-    }
-
-    return { content: [{ type: 'text', text: lines.join('\n') }] };
+    const response = await loopbackHttpsRequest(`https://127.0.0.1:${state.port}/health`);
+    const health = await decodeSidecarResponse(response, 'office');
+    if (health.success === false) return respond(health);
+    const apps = Object.fromEntries(['word', 'excel', 'powerpoint'].map(app => [app, health.connected?.[app] === true ? 'connected' : 'not_connected']));
+    return respond({ success: true, data: { sidecar: 'running', apps,
+      ...(Object.values(apps).every(status => status === 'not_connected') ? {
+        fix: 'Open Word, Excel or PowerPoint and click Rebel on the Home tab (first use on Windows: Add-ins → Developer Add-ins → Rebel).',
+      } : {}),
+    } });
   } catch (err) {
-    return {
-      content: [{ type: 'text', text: `Cannot reach Office sidecar: ${err.message}. Try restarting the connector in Settings.` }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: `Cannot reach Office sidecar: ${err.message}. Try restarting the connector in Settings.` });
   }
 });
 
@@ -3029,7 +3052,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
   description:
     'Sort a range or table by one or more columns. Supports ascending/descending order and ' +
     'multi-level sorting. When sorting a table, use column names; when sorting a range, use ' +
-    'column letters or indices.\n\n' +
+    'worksheet column letters (for example, "AA") and exclude the header row from the range.\n\n' +
     'Related tools: Use `rebel_office_excel_filter_table` to filter without reordering data.',
   inputSchema: {
     "type": "object",
@@ -3053,7 +3076,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
           "properties": {
             "column": {
               "type": "string",
-              "description": "Column letter (e.g., \"B\") or header name for tables."
+              "description": "Worksheet column letter within the range (e.g., \"B\", \"AA\") or header name for tables."
             },
             "ascending": {
               "type": "boolean",
@@ -3110,7 +3133,7 @@ registerTool(TOOL_NAMES.excelFilterTable, {
           "properties": {
             "column": {
               "type": "string",
-              "description": "Column header name or letter."
+              "description": "Column header name."
             },
             "criteria": {
               "type": "object",
@@ -3132,7 +3155,7 @@ registerTool(TOOL_NAMES.excelFilterTable, {
                 },
                 "operator": {
                   "type": "string",
-                  "description": "For condition type: \"greaterThan\", \"lessThan\", \"equals\", etc."
+                  "description": "For condition type: greaterThan, greaterThanOrEqual, lessThan, lessThanOrEqual, equals, notEqual; or >, >=, <, <=, =, <>."
                 },
                 "value": {
                   "anyOf": [
@@ -3238,8 +3261,7 @@ registerTool(TOOL_NAMES.excelInsertRowsColumns, {
 registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   title: 'Delete rows or columns',
   description:
-    'Delete rows or columns from a worksheet. **This permanently removes the data in those ' +
-    'rows/columns — cannot be undone.** Remaining data shifts to fill the gap.',
+    'Delete rows or columns from a worksheet. Remaining data shifts to fill the gap.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -3743,8 +3765,7 @@ registerTool(TOOL_NAMES.pptAddSlide, {
 registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
-    'Delete a slide from the presentation by index. **This permanently removes the slide and all ' +
-    'its content — cannot be undone.** Returns confirmation.',
+    'Delete a slide and its content from the presentation by index. Returns confirmation.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -3988,7 +4009,7 @@ registerTool(TOOL_NAMES.pptAddImage, {
 registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
-    'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, callouts, ' +
+    'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, ' +
     'and more. Shapes can contain text and have fill colors and line styles.',
   inputSchema: {
     "type": "object",
@@ -4001,7 +4022,7 @@ registerTool(TOOL_NAMES.pptAddShape, {
       "shapeType": {
         "type": "string",
         "minLength": 1,
-        "description": "Shape type (e.g., \"rectangle\", \"ellipse\", \"roundedRectangle\", \"triangle\", \"rightArrow\", \"star5\", \"callout1\")."
+        "description": "Shape type: rectangle, ellipse, roundedRectangle, triangle, rightArrow, star5, diamond, hexagon, pentagon, octagon, heart, cloud, lightningBolt."
       },
       "position": {
         "type": "object",
@@ -4281,7 +4302,7 @@ registerTool(TOOL_NAMES.pptDeleteShape, {
   description:
     'Delete a shape from a slide, identified by shape ID or by placeholder/name match.\n\n' +
     'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first. ' +
-    'This cannot be undone from the API — delete with care.',
+    'Returns confirmation of deletion.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -4509,6 +4530,7 @@ export const __test = {
   stampUntrustedSource,
   sidecarRequest,
   server,
+  registeredTools,
   packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;

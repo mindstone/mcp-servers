@@ -1,0 +1,26 @@
+{
+  "id": "bundled-computers",
+  "name": "Computers",
+  "description": "Linux computers with a web browser, on your own Fly.io, E2B or Google Cloud account. Rebel can create them, run commands and scripts, install software, copy files to and from your Library, use websites in the computer's own browser, and save scripts as tools to reuse. Computers keep their files and sign-ins, stop by themselves when idle, and are billed by your cloud provider. 'Set up a computer and turn this spreadsheet into charts every Monday'.",
+  "category": "development",
+  "icon": "server",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true,
+  "tools": [
+    { "name": "computer_check_setup", "description": "Check the connected cloud accounts work" },
+    { "name": "computer_list", "description": "List your computers and their state" },
+    { "name": "computer_create", "description": "Create (buy) a computer and set it up with a browser" },
+    { "name": "computer_setup", "description": "Repair or update a computer's setup" },
+    { "name": "computer_run", "description": "Run a command on a computer" },
+    { "name": "computer_job", "description": "Wait for, read or cancel a running command" },
+    { "name": "computer_browser", "description": "Use the computer's own web browser" },
+    { "name": "computer_copy_in", "description": "Put a Library file, or text, on a computer" },
+    { "name": "computer_copy_out", "description": "Copy a file from a computer into the Library" },
+    { "name": "computer_save_tool", "description": "Save a script on a computer as a reusable tool" },
+    { "name": "computer_tools", "description": "List the tools saved on a computer" },
+    { "name": "computer_use_tool", "description": "Run a saved tool" },
+    { "name": "computer_stop", "description": "Stop a computer (keeps everything)" },
+    { "name": "computer_remove", "description": "Delete a computer and everything on it" }
+  ]
+}

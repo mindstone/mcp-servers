@@ -11,8 +11,36 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-02
+
+### Changed
+
+- Ask to reconnect when Salesforce refuses the saved sign-in, retry a failed sign-in save, keep vendor error codes, send date and null filters unquoted. No live-org QA.
+
 ### Fixed
 
+- Ask to reconnect when Salesforce refuses an expired or revoked refresh token, and reload the saved sign-in on the next call.
+- Preserve validation and vendor error codes when their messages contain the token-save failure phrase.
+- Retry a failed save of a renewed sign-in before the next request, without blocking the request if saving still fails.
+- Send date, datetime and JSON null filter values unquoted in `salesforce_get_records`.
+- Explain in the tool description that `LIKE` matches literally, ignoring case, and `%` and `_` are not wildcards.
+- Correction to 0.2.4: a failed save of a renewed sign-in is reported as `TOKEN_SAVE_FAILED` and the request does not run; it was not only logged.
+
+## [0.2.4] - 2026-11-01
+
+### Changed
+
+- Fix raw aggregate queries, apostrophe escaping, get_notes and failed sign-in saves; keep rotated refresh tokens. No live-org QA.
+
+### Fixed
+
+- Keep ungrouped aggregate queries valid: omit generated LIMIT clauses, preserve a caller's COUNT() limit, and remove limits Salesforce rejects on other aggregates. Keep FOR VIEW and FOR REFERENCE after LIMIT and OFFSET.
+- Escape SOQL and SOSL apostrophes with backslashes. `%` and `_` are escaped only in LIKE.
+- Accept relationship field paths such as Owner.Name in reads and filters while rejecting malformed paths and dotted write keys.
+- Recognize expired sessions from Salesforce's error code, including while attaching a note, and add recovery hints for invalid fields, invalid objects and malformed queries.
+- Read linked notes with two queries instead of an unsupported ContentDocumentLink semi-join. Skip the second query when no links exist and report truncation when the 150-link lookup cap is reached.
+
+- Report a failed save of a renewed sign-in as `TOKEN_SAVE_FAILED` instead of carrying on silently. The request does not run, and a retry works.
 - Keep a rotated refresh token. With refresh-token rotation turned on for the org, each refresh returns a new refresh token and retires the old one; the connector kept presenting and saving the old one, so the next refresh failed and the user had to reconnect. The refresh handler now takes up the new token in the live connection and in the saved token file, and a failed save is logged rather than left as an unhandled rejection.
 
 ## [0.2.3] - 2026-09-29

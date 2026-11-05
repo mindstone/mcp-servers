@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { mswServer } from './helpers/setup.js';
 
 describe('Auth — loadAccounts and account resolution', () => {
   let tempDir: string;
@@ -79,6 +81,61 @@ describe('Auth — loadAccounts and account resolution', () => {
     const config = auth.getAccountsConfig();
     // OAuth account should be added to accounts list
     expect(config.accounts.some(a => a.subdomain === 'oauthcorp')).toBe(true);
+  });
+
+  it('should let a token file win over an API-token entry for the same subdomain only', async () => {
+    fs.writeFileSync(path.join(tempDir, 'accounts.json'), JSON.stringify({
+      accounts: [
+        { subdomain: 'acme', email: 'agent@acme.example.com', apiToken: 'tok-acme' },
+        { subdomain: 'other', email: 'agent@other.example.com', apiToken: 'tok-other' },
+      ],
+      defaultSubdomain: 'acme',
+    }));
+    const credDir = path.join(tempDir, 'credentials');
+    fs.mkdirSync(credDir, { recursive: true });
+    fs.writeFileSync(path.join(credDir, 'acme.token.json'), JSON.stringify({
+      access_token: 'oauth-access',
+      refresh_token: 'oauth-refresh',
+      expires_in: 7200,
+      expires_at: Date.now() + 7200_000,
+      token_type: 'bearer',
+      subdomain: 'acme',
+      email: 'agent@acme.example.com',
+    }));
+
+    const auth = await import('../src/auth.js');
+    const acme = await auth.getAccount('acme');
+    const other = await auth.getAccount('other');
+    expect(acme?.authType).toBe('oauth');
+    expect(acme?.accessToken).toBe('oauth-access');
+    expect(other?.authType).toBe('api-token');
+    expect(other?.apiToken).toBe('tok-other');
+  });
+
+  it('should send the same Basic header for an API-token account', async () => {
+    fs.writeFileSync(path.join(tempDir, 'accounts.json'), JSON.stringify({
+      accounts: [{ subdomain: 'basiccorp', email: 'agent@basiccorp.example.com', apiToken: 'tok-basic' }],
+      defaultSubdomain: 'basiccorp',
+    }));
+    const expected = `Basic ${Buffer.from('agent@basiccorp.example.com/token:tok-basic').toString('base64')}`;
+    const seen: Array<string | null> = [];
+    mswServer.use(
+      http.get('https://basiccorp.zendesk.com/api/v2/tickets/1.json', ({ request }) => {
+        const header = request.headers.get('authorization');
+        seen.push(header);
+        if (header !== expected) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        return HttpResponse.json({ ticket: { id: 1, subject: 'Basic' } });
+      }),
+    );
+
+    const auth = await import('../src/auth.js');
+    const { zendeskFetch } = await import('../src/client.js');
+    const account = await auth.getAccount('basiccorp');
+    const result = await zendeskFetch<{ ticket: { id: number } }>(account!, '/tickets/1.json');
+    expect(result.ticket.id).toBe(1);
+    expect(seen).toEqual([expected]);
   });
 
   it('should resolve getAccount with explicit subdomain', async () => {

@@ -7,6 +7,8 @@ import {
   getAccount,
   getAccountsConfig,
   getTokenStatus,
+  formatExpiry,
+  hasUnsavedRenewal,
   removeAccount,
   CONFIG_PATH,
 } from '../auth.js';
@@ -21,11 +23,11 @@ export function registerAccountTools(server: McpServer): void {
       description: `List connected Zendesk accounts with authentication status.
 
 Returns all authenticated Zendesk subdomains with their associated email addresses, auth type, and status.
-Auth types: "api-token" (recommended) or "oauth".
-Status can be: "active", "needs-refresh", or "expired". API token accounts are always "active".
+Auth types: "oauth" (sign-in) or "api-token".
+Status can be: "active", "needs-refresh", "expired", or "reconnect-required". API token accounts are always "active".
 
 Use this to see which accounts are available before calling other Zendesk tools.
-To connect a new account, use authenticate_zendesk_account or configure credentials via environment variables.`,
+To connect an account, sign in through your app's Zendesk connector settings.`,
       inputSchema: {},
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -38,17 +40,23 @@ To connect a new account, use authenticate_zendesk_account or configure credenti
         authType: string;
         status: string;
         expiresAt?: string;
+        warning?: string;
       }> = [];
 
       for (const acc of config.accounts) {
         const account = await getAccount(acc.subdomain);
         if (account) {
+          const expiresAt = account.authType === 'oauth' ? formatExpiry(account.expiresAt) : undefined;
+          const unsaved = account.authType === 'oauth' && hasUnsavedRenewal(account.subdomain);
           accountsList.push({
             subdomain: account.subdomain,
             email: account.email || 'unknown',
             authType: account.authType,
             status: getTokenStatus(account),
-            ...(account.authType === 'oauth' ? { expiresAt: new Date(account.expiresAt).toISOString() } : {}),
+            ...(expiresAt ? { expiresAt } : {}),
+            ...(unsaved ? {
+              warning: "This sign-in was renewed but couldn't be saved, so it lasts only until the connector restarts. If Zendesk then asks you to sign in again, reconnect it from your app's connector settings.",
+            } : {}),
           });
         }
       }
@@ -57,7 +65,7 @@ To connect a new account, use authenticate_zendesk_account or configure credenti
         return JSON.stringify({
           ok: true,
           accounts: [],
-          message: 'No Zendesk accounts connected. Use authenticate_zendesk_account or configure credentials via environment variables.',
+          message: "No Zendesk accounts connected. To connect one, sign in through your app's Zendesk connector settings.",
         });
       }
 

@@ -11,6 +11,44 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-03
+
+### Changed
+
+- Close the browser when the host stops the server, and describe the connector by what it does for people.
+
+### Fixed
+
+- The browser and its `agent-browser` background process no longer keep running after the host app quits. A later run no longer picks up that old browser with stale settings, which could keep bringing the window in front of other apps. The server now closes the browser when the host stops it, saving the session first.
+
+### Added
+
+- The server declares the experimental capability `super-mcp/keep-alive`, so a host that stops idle servers keeps it (and its open browser) running until the host itself stops.
+
+## [0.2.4] - 2026-10-28
+
+### Changed
+
+- Fix Windows: start the bundled agent-browser CLI with the server's own Node, so tools work on a fresh install and multi-line text arrives whole.
+
+### Fixed
+
+- On Windows the server could not start its browser CLI, so every tool failed; it now starts, and text with several lines arrives whole.
+
+### Changed
+
+- `agent-browser` (0.33.2) is now a dependency, run with the server's own Node when none is on PATH; `npx` is no longer used at run time.
+
+## [0.2.3] - 2026-10-26
+
+### Changed
+
+- Turn off the periodic session autosave by default, so a visible browser window stops jumping in front of other apps every 30 seconds.
+
+### Fixed
+
+- The connector now turns off `agent-browser`'s periodic session autosave by default (`AGENT_BROWSER_AUTOSAVE_INTERVAL_MS=0`; requires `agent-browser` 0.31.2 or later), because each periodic save could bring a visible browser window in front of other apps every 30 seconds. The session is still saved when the browser closes. Takes effect when a new, compatible `agent-browser` daemon starts under the updated connector; an already-running daemon keeps its previous autosave setting until it exits. Set the variable to restore periodic saves.
+
 ## [0.2.2] - 2026-08-10
 
 ### Changed

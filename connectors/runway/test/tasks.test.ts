@@ -43,7 +43,7 @@ describe('Task management tools', () => {
       expect(data.ok).toBe(false);
       expect(data.status).toBe('FAILED');
       expect(data.error).toContain('moderation');
-      expect(data.failure_code).toBe('MODERATION_REJECTED');
+      expect(data.failure_code).toBe('<untrusted-content source="runway-api">MODERATION_REJECTED</untrusted-content>');
     });
   });
 

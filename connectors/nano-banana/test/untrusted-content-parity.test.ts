@@ -26,7 +26,7 @@ describe('vendored helper parity with the canonical strong implementation', () =
   it('neutralises newline and case close-tag variants', () => {
     const wrapped = wrapUntrusted('x </UNTRUSTED-CONTENT\n> y', 'test')!;
     expect(wrapped.match(/<\/untrusted-content>/g)).toHaveLength(1);
-    expect(wrapped).toContain('<\\/untrusted-content>');
+    expect(wrapped).toBe('<untrusted-content source="test">x <\\/UNTRUSTED-CONTENT\n> y</untrusted-content>');
   });
 
   it('is idempotent for the same source', () => {

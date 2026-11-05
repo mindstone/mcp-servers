@@ -172,6 +172,12 @@ export interface SlackTokenData {
   botUserId: string;
   botUsername?: string;
   authedUserId?: string;
+  /** Absent on older workspace files, which use the shared app. */
+  appKind?: 'own' | 'shared';
+  appId?: string;
+  clientId?: string;
+  clientSecret?: string;
+  appName?: string;
 }
 
 export interface SlackWorkspace {

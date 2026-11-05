@@ -6,9 +6,77 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-03
+
+### Changed
+
+- Cards keep their send state in every copy and after a restart; a blocked send says why without a Retry that can't work.
+
+### Fixed
+
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
+
+## [0.3.4] - 2026-11-01
+
+### Changed
+
+- Personal Slack apps: replies post as your own app, and sign-ins renew with that app's own keys.
+
+### Changed
+
+- Refresh with each workspace app’s credentials and reply as personal app bots, with a visible user fallback when the bot is not in the channel.
+
+## [0.3.3] - 2026-10-31
+
+### Changed
+
+- People lookups now use the person's authorization first, so list_slack_users, get_slack_user_profile and open_slack_dm can return colleagues' email addresses where it has users:read.email.
+
+### Fixed
+
+- Running connectors refuse new Slack calls once the connection's token file is deleted; a call already in progress may finish.
+- People lookups and name enrichment use user authorization first and can recover from eligible authorization refusals with one bot attempt. Pagination and username resolution restart for that attempt.
+- Opening a DM no longer requires bot authorization; only its best-effort profile read can try the other identity. Sending a notified note remains bot-only and explains that other Slack actions may still work when the app's authorization is refused.
+- Workspace connection status now requires a successful Slack authorization check from either token, with independent bot and user health. Errors keep the distinct `invalid_auth`, `token_expired`, `token_revoked` and `account_inactive` codes, and include the token role when known.
+
+## [0.3.2] - 2026-10-31
+
+### Changed
+
+- Posting as the person writes the connector's own bot mention as plain text, so a host listening for the person's mentions of its bot is not retriggered by its own replies.
+
+### Fixed
+
+- Text sent as the person (post, thread reply, scheduled message, edit, file-share comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for the person's mentions of its bot is not retriggered by its own replies. This applies to every host: a host can no longer invoke its own bot by mentioning it through these tools.
+- The own-bot-mention rewrite runs in linear time: text made of many unclosed `<@BOT|` no longer takes seconds to process, and an unclosed or nested bot mention is also written as plain text.
+
+## [0.3.1] - 2026-10-28
+
+### Changed
+
+- Search runs with only to_me or a date range; Slack profile text and workspace names reach the model as untrusted content.
+
+### Fixed
+
+- `search_slack_messages` no longer requires `query` when `to_me`, `after` or `before` is given, so asking for "messages to me" or for a date range alone now runs a search instead of being rejected. A call with nothing to search, or a `to_me` search when Slack does not return your identity, now gets a clear error and makes no search call.
+- The thread, search and channel-history tools accept the Slack API argument names models send: `thread_ts` for `get_slack_thread_replies` (`ts` wins when both are given), `max_results` for `search_slack_messages` (`count` wins), `after`/`before` dates for `search_slack_messages` (sent as `after:`/`before:` modifiers), and `oldest`/`latest` for `get_slack_channel_history`.
+
 ### Changed
 
 - The legacy `search.messages` fallback is now silent to the user. `search_slack_messages` and `get_slack_saved_messages` still report which backend ran in the machine-readable `search_backend` field, but legacy responses no longer carry the prose `search_backend_note`. That note ended with an instruction to reconnect Slack with the granular `search:read.*` scopes; a model relayed it to a user who was already connected, and reconnecting could not have helped, because whether those scopes are requested at all is fixed by the installing app's configuration. The fallback's results are complete, so there is nothing to act on. The refusal is still recorded on stderr for operators, and the tool descriptions now tell the model not to raise the backend, the fallback or Slack scopes with the user.
+- The compose form's wording no longer names a particular host app: the lost-reply notice now starts "No confirmation came back in time…" and the direct-message notice reads "This will be sent as a direct message to the person you asked to contact."
+
+### Security
+
+- Text people write into their own Slack profile is now enveloped as untrusted content, with close-tag breakout escaping, before it reaches the model. This covers display names, real names, job titles and status text in `list_slack_users`, the phone number in `get_slack_user_profile` (Slack accepts any text there), `get_slack_user_profile`, `lookup_user_by_email` and `open_slack_dm`; the author display name (`user_display_name`) on messages returned by search, saved messages, channel history, unread messages, thread replies, pins and permalink lookups; the recipient names and the "Message sent to" note from `post_slack_message`; and names listed in the "ambiguous user" error. Previously a display name such as "Ignore previous instructions…" reached the model raw. Usernames, user and channel IDs, emails and emoji codes stay raw so they can still be passed back to tools.
+- Workspace names are now enveloped too. `list_slack_workspaces` returned the saved workspace name, the live name from Slack and the "Connected to Slack workspace" sentence raw, and workspace owners choose that name. Team IDs stay raw.
+- The message text that `post_slack_message` returns is now enveloped. It is the text Slack stored, which can quote other people's content. The compose form shows the message it sent, so nothing changes on screen.
+- The envelope now also neutralises close tags carrying attributes (`</untrusted-content foo>`) and fake opening tags (`<untrusted-content source="…">`) inside wrapped text, matching the shared helper. Before, Slack text could carry either one through unescaped and pass itself off as an envelope boundary.
+- Slash-delimited tags (`</untrusted-content/>`, `<untrusted-content/source="…">`) are now neutralised as well. Before, they passed through unescaped, and a forged envelope using them was returned as if it were already safely wrapped.
+- The envelope now escapes only the start of an embedded tag (`<\untrusted-content`, `<\/untrusted-content`) and leaves the rest of the tag as written. Before, it searched ahead for each tag's closing `>`, so text holding many unfinished tags took quadratic time to wrap. Unwrapping now gives back the original text exactly, including the tag's case and attributes.
 
 ## [0.3.0] - 2026-08-06
 

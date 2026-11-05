@@ -20,6 +20,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
+import { describeErrorForLog } from './utils.js';
 
 async function main() {
   const server = createServer();
@@ -29,6 +30,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error(`Fatal error (${describeErrorForLog(error)})`);
   process.exit(1);
 });

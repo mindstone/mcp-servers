@@ -212,7 +212,29 @@ export class SlackTokenProvider {
     return tokens?.authedUserId;
   }
 
+  async getBotIdentity(): Promise<{ botUserId?: string; botUsername?: string }> {
+    const tokens = await this.loadTokens();
+    return { botUserId: tokens?.botUserId, botUsername: tokens?.botUsername };
+  }
+
+  async getAppIdentity(): Promise<{ appKind: 'own' | 'shared'; appName?: string; botUsername?: string }> {
+    const tokens = await this.loadTokens();
+    return { appKind: tokens?.appKind ?? 'shared', appName: tokens?.appName, botUsername: tokens?.botUsername };
+  }
+
+  private clearCacheIfTokenFileRemoved(): void {
+    if (!this.cachedTokens) return;
+    try {
+      fs.statSync(this.getTokenPath());
+    } catch (err) {
+      // Only confirmed removal retires the cache; failed saves can leave
+      // valid rotated tokens in memory that are newer than the file.
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') this.cachedTokens = null;
+    }
+  }
+
   async getBotToken(): Promise<string> {
+    this.clearCacheIfTokenFileRemoved();
     let tokens = this.cachedTokens ?? (await this.loadTokens());
     if (!tokens?.botToken) {
       throw new ConnectorError(
@@ -252,7 +274,7 @@ export class SlackTokenProvider {
     logRefreshEvent('refresh_attempt', { teamId: this.teamId, tokenType: 'bot' });
     this.botRefreshPromise = (async () => {
       try {
-        const result = await this.refreshToken(refreshToken, 'bot');
+        const result = await this.refreshToken(refreshToken, 'bot', diskTokens ?? tokens!);
         const updated: SlackTokenData = {
           ...(diskTokens ?? tokens!),
           botToken: result.accessToken,
@@ -333,6 +355,7 @@ export class SlackTokenProvider {
    * that strictly require the user token.
    */
   async getUserToken(): Promise<string | null> {
+    this.clearCacheIfTokenFileRemoved();
     let tokens = this.cachedTokens ?? (await this.loadTokens());
     if (!tokens?.userToken) return null;
 
@@ -362,7 +385,7 @@ export class SlackTokenProvider {
     logRefreshEvent('refresh_attempt', { teamId: this.teamId, tokenType: 'user' });
     this.userRefreshPromise = (async () => {
       try {
-        const result = await this.refreshToken(refreshToken, 'user');
+        const result = await this.refreshToken(refreshToken, 'user', diskTokens ?? tokens!);
         const updated: SlackTokenData = {
           ...(diskTokens ?? tokens!),
           userToken: result.accessToken,
@@ -423,13 +446,17 @@ export class SlackTokenProvider {
   private async refreshToken(
     refreshToken: string,
     tokenType: 'bot' | 'user',
+    tokens: SlackTokenData,
   ): Promise<{ accessToken: string; refreshToken: string; expiresAt: number }> {
     // A rotating token needs refreshing but the host did not wire OAuth client
     // credentials. We cannot complete the refresh, so fail loud with a
     // re-auth-directing error rather than sending an empty client_id/secret to
     // Slack (which returns an opaque invalid_client). Non-rotating tokens never
     // reach this method (getBotToken/getUserToken return before refresh).
-    if (!this.clientId || !this.clientSecret) {
+    const credentials = tokens.clientId && tokens.clientSecret
+      ? { clientId: tokens.clientId, clientSecret: tokens.clientSecret }
+      : tokens.appKind === 'own' ? null : { clientId: this.clientId, clientSecret: this.clientSecret };
+    if (!credentials?.clientId || !credentials.clientSecret) {
       throw new ConnectorError(
         'Slack token needs refreshing but no OAuth client credentials are configured on this surface.',
         REFRESH_NO_CLIENT_CREDENTIALS,
@@ -438,8 +465,8 @@ export class SlackTokenProvider {
     }
 
     const params = new URLSearchParams({
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     });

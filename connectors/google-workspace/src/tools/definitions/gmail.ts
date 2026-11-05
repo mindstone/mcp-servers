@@ -398,7 +398,7 @@ Each result shows its id (message id) and thread_id. Use get_workspace_email_thr
     category: 'Gmail/Messages',
     description: `Open an inline editable email compose form before sending.
 
-Use this when the user wants an editable review form in Rebel before sending. The form lets the user edit To, CC, BCC, Subject, and Body, then explicitly click Send.
+Use this when the user wants an editable review form before sending. The form lets the user edit To, CC, BCC, Subject, and Body, then explicitly click Send.
 
 Do NOT use this when the user asks to save/create a Gmail draft, save to drafts, or save the already-drafted email without opening another review UI. Use create_workspace_draft for that.
 

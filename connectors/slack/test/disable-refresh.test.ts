@@ -93,8 +93,8 @@ describe('SLACK_DISABLE_REFRESH=1 — fail-closed with auth_required', () => {
       },
     });
 
-    // get_slack_user_profile uses bot client → expired → should emit auth_required
-    const result = await client.callTool('get_slack_user_profile', { user: 'U123' });
+    // Notified notes require bot authorization even when user authorization works.
+    const result = await client.callTool('send_myself_a_note', { text: 'A reminder' });
     const j = result.json as Record<string, unknown>;
     expect(j.status).toBe('auth_required');
     expect(j.user_action).toMatchObject({

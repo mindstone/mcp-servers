@@ -42,6 +42,10 @@ describe('escapeSOSL', () => {
     expect(escapeSOSL('a\\{b')).toBe('a\\\\\\{b');
   });
 
+  it('escapes apostrophes along with backslashes', () => {
+    expect(escapeSOSL("a\\b'c")).toBe("a\\\\b\\'c");
+  });
+
   it('passes plain terms through unchanged', () => {
     expect(escapeSOSL('Acme Corp')).toBe('Acme Corp');
   });

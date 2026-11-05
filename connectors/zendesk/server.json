@@ -30,13 +30,13 @@
         },
         {
           "name": "ZENDESK_CLIENT_ID",
-          "description": "Optional OAuth client ID for legacy token refresh flows",
+          "description": "OAuth client ID for token files that don't carry their own client_id",
           "isRequired": false,
           "format": "string"
         },
         {
           "name": "ZENDESK_CLIENT_SECRET",
-          "description": "Optional OAuth client secret for legacy token refresh flows",
+          "description": "Only for confidential OAuth clients; public (PKCE) clients need none",
           "isRequired": false,
           "isSecret": true,
           "format": "string"

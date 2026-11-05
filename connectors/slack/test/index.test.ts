@@ -353,7 +353,7 @@ describe('Slack MCP — DM recipient verification', () => {
     });
     const j = result.json as Record<string, unknown>;
     expect(j.ok).toBe(true);
-    expect(j.text).toBe('normalize me');
+    expect(j.text).toBe('<untrusted-content source="slack:post-message">normalize me</untrusted-content>');
     // FOX-2595: the response must expose the posted text once. Historically it
     // duplicated `text` into a `message` string, which collides with the
     // enriched-message-object semantics `message` carries on read tools.

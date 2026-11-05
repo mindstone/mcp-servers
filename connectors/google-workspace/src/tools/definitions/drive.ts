@@ -26,11 +26,14 @@ export const driveTools: ToolMetadata[] = [
     5. Get JSON output:
        { "email": "user@example.com", "return_json": true }
 
+    6. Most recently modified first:
+       { "email": "user@example.com", "options": { "orderBy": "modifiedTime desc", "pageSize": 10 } }
+
     Parameters (all inside "options"):
     - folderId: List contents of specific folder
     - query: Drive API query string
     - pageSize: Number of files to return
-    - orderBy: Sort order fields
+    - orderBy: Sort order, e.g. "modifiedTime desc" or ["folder", "name"] (Drive API orderBy keys)
     - driveId: Limit results to one shared drive (corpora is forced to 'drive')
     - corpora: 'user' (default), 'drive', or 'allDrives' (My Drive + every shared drive)`,
     aliases: ['list_files', 'get_files', 'show_files'],
@@ -58,9 +61,11 @@ export const driveTools: ToolMetadata[] = [
               description: 'Maximum number of files to return'
             },
             orderBy: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Sort order fields'
+              oneOf: [
+                { type: 'string' },
+                { type: 'array', items: { type: 'string' } }
+              ],
+              description: 'Sort order, e.g. "modifiedTime desc" or ["folder", "name"] (Drive API orderBy keys)'
             },
             fields: {
               type: 'array',

@@ -25,6 +25,8 @@ name: Release
 # over with Trusted Publishing (first-adds are exempt from the trailer gate).
 # Version DOWNGRADES (reverts) are skipped with a log line, never published
 # and never failed — reverting a refused bump must not wedge main.
+# Packages with `"private": true` are skipped with a log line and never
+# published (npm refuses to publish them).
 #
 # Source of truth for the design: docs/plans/260525_oss_release_automation.md
 # (in mindstone-rebel-1); release runbook: docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md
@@ -42,9 +44,15 @@ on:
 permissions:
   contents: read
 
+# One release run at a time, and every push keeps its run: without
+# `queue: max`, GitHub keeps only one pending run per group and a newer push
+# replaces it, so a burst of release commits pushed one after another would
+# skip the releases in the replaced runs (each run detects only its own
+# pushed range). `queue: max` holds up to 100 pending runs, in order.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   detect:
@@ -180,6 +188,14 @@ jobs:
               new_version=$(jq -r '.version // ""' "${pkg}")
               old_version=$(git show "${BASE}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
               package_name=$(jq -r '.name // ""' "${pkg}")
+
+              # Private packages are build-time only and npm refuses to publish
+              # them, so the bump and unpublished-version checks (and their
+              # Release-Gate trailer requirement) do not apply.
+              if [ "$(jq -r '.private // false' "${pkg}")" = "true" ]; then
+                echo "Skipping private package ${name} (${family}); npm never publishes it."
+                continue
+              fi
 
               if [ -z "${old_version}" ]; then
                 echo "Skipping first-add package ${name}@${new_version} (${family}); bootstrap publishes are manual."
@@ -334,7 +350,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Verify package.json identity

@@ -1,0 +1,436 @@
+{
+  "documentId": "nested-doc",
+  "title": "Acme weekly sync",
+  "revisionId": "rev-nested-1",
+  "tabs": [
+    {
+      "tabProperties": {
+        "tabId": "t.0",
+        "title": "Team sync",
+        "index": 0,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 14,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 14,
+                    "textRun": {
+                      "content": "Weekly notes\n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "startIndex": 14,
+              "endIndex": 26,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 14,
+                    "endIndex": 26,
+                    "textRun": {
+                      "content": "Owner: Jane\n"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "childTabs": [
+        {
+          "tabProperties": {
+            "tabId": "t.a1",
+            "title": "Archive 2031-10-06",
+            "index": 0,
+            "nestingLevel": 1,
+            "parentTabId": "t.0"
+          },
+          "documentTab": {
+            "body": {
+              "content": [
+                {
+                  "startIndex": 0,
+                  "endIndex": 1,
+                  "sectionBreak": {
+                    "sectionStyle": {}
+                  }
+                },
+                {
+                  "startIndex": 1,
+                  "endIndex": 23,
+                  "paragraph": {
+                    "elements": [
+                      {
+                        "startIndex": 1,
+                        "endIndex": 23,
+                        "textRun": {
+                          "content": "Archive of 2031-10-06\n"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "childTabs": [
+            {
+              "tabProperties": {
+                "tabId": "t.a1x",
+                "title": "Notes",
+                "index": 0,
+                "nestingLevel": 2,
+                "parentTabId": "t.a1"
+              },
+              "documentTab": {
+                "body": {
+                  "content": [
+                    {
+                      "startIndex": 0,
+                      "endIndex": 1,
+                      "sectionBreak": {
+                        "sectionStyle": {}
+                      }
+                    },
+                    {
+                      "startIndex": 1,
+                      "endIndex": 13,
+                      "paragraph": {
+                        "elements": [
+                          {
+                            "startIndex": 1,
+                            "endIndex": 13,
+                            "textRun": {
+                              "content": "Nested note\n"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "tabProperties": {
+            "tabId": "t.a2",
+            "title": "Archive 2031-09-29",
+            "index": 1,
+            "nestingLevel": 1,
+            "parentTabId": "t.0"
+          },
+          "documentTab": {
+            "body": {
+              "content": [
+                {
+                  "startIndex": 0,
+                  "endIndex": 1,
+                  "sectionBreak": {
+                    "sectionStyle": {}
+                  }
+                },
+                {
+                  "startIndex": 1,
+                  "endIndex": 15,
+                  "paragraph": {
+                    "elements": [
+                      {
+                        "startIndex": 1,
+                        "endIndex": 15,
+                        "textRun": {
+                          "content": "Older archive\n"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tabProperties": {
+        "tabId": "t.b",
+        "title": "Template",
+        "index": 1,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 10,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 10,
+                    "textRun": {
+                      "content": "Template\n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "startIndex": 10,
+              "endIndex": 19,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 10,
+                    "endIndex": 19,
+                    "textRun": {
+                      "content": "{{date}}\n"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tabProperties": {
+        "tabId": "t.c",
+        "title": "Campaign notes",
+        "index": 2,
+        "nestingLevel": 0
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "startIndex": 0,
+              "endIndex": 1,
+              "sectionBreak": {
+                "sectionStyle": {}
+              }
+            },
+            {
+              "startIndex": 1,
+              "endIndex": 19,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 1,
+                    "endIndex": 5,
+                    "textRun": {
+                      "content": "See "
+                    }
+                  },
+                  {
+                    "startIndex": 5,
+                    "endIndex": 6,
+                    "richLink": {
+                      "richLinkId": "rl-1",
+                      "richLinkProperties": {
+                        "title": "Q3 plan",
+                        "uri": "https://docs.google.com/document/d/example-linked-doc/edit",
+                        "mimeType": "application/vnd.google-apps.document"
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 6,
+                    "endIndex": 12,
+                    "textRun": {
+                      "content": " with "
+                    }
+                  },
+                  {
+                    "startIndex": 12,
+                    "endIndex": 13,
+                    "person": {
+                      "personId": "p-1",
+                      "personProperties": {
+                        "name": "Jane Example",
+                        "email": "jane@example.com"
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 13,
+                    "endIndex": 17,
+                    "textRun": {
+                      "content": " on "
+                    }
+                  },
+                  {
+                    "startIndex": 17,
+                    "endIndex": 18,
+                    "dateElement": {
+                      "dateId": "d-1",
+                      "dateElementProperties": {
+                        "displayText": "Oct 13, 2031",
+                        "timestamp": "2031-10-13T00:00:00Z"
+                      }
+                    }
+                  },
+                  {
+                    "startIndex": 18,
+                    "endIndex": 19,
+                    "textRun": {
+                      "content": "\n"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "startIndex": 19,
+              "endIndex": 53,
+              "table": {
+                "rows": 2,
+                "columns": 2,
+                "tableRows": [
+                  {
+                    "startIndex": 20,
+                    "endIndex": 38,
+                    "tableCells": [
+                      {
+                        "startIndex": 21,
+                        "endIndex": 31,
+                        "content": [
+                          {
+                            "startIndex": 22,
+                            "endIndex": 31,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 22,
+                                  "endIndex": 31,
+                                  "textRun": {
+                                    "content": "Platform\n"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "startIndex": 31,
+                        "endIndex": 38,
+                        "content": [
+                          {
+                            "startIndex": 32,
+                            "endIndex": 38,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 32,
+                                  "endIndex": 38,
+                                  "textRun": {
+                                    "content": "Spend\n"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "startIndex": 38,
+                    "endIndex": 52,
+                    "tableCells": [
+                      {
+                        "startIndex": 39,
+                        "endIndex": 47,
+                        "content": [
+                          {
+                            "startIndex": 40,
+                            "endIndex": 47,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 40,
+                                  "endIndex": 47,
+                                  "textRun": {
+                                    "content": "Search\n"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "startIndex": 47,
+                        "endIndex": 52,
+                        "content": [
+                          {
+                            "startIndex": 48,
+                            "endIndex": 52,
+                            "paragraph": {
+                              "elements": [
+                                {
+                                  "startIndex": 48,
+                                  "endIndex": 52,
+                                  "textRun": {
+                                    "content": "120\n"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "startIndex": 53,
+              "endIndex": 57,
+              "paragraph": {
+                "elements": [
+                  {
+                    "startIndex": 53,
+                    "endIndex": 57,
+                    "textRun": {
+                      "content": "End\n"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
