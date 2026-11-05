@@ -105,6 +105,114 @@ describe('people read recovery', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it.each(reads)('%s retries persistence acquisition once on the same user before its API callback', async (tool, args, method) => {
+    mswServer.use(mock(method, () => success(method)), ...createSlackHandlers());
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    const { ConnectorError } = await import('../src/types.js');
+    const provider = getTokenProvider()!;
+    const getUser = vi.spyOn(provider, 'getUserToken')
+      .mockRejectedValueOnce(new ConnectorError('Save failed', 'TOKEN_PERSIST_FAILED', 'Retry'));
+    const getBot = vi.spyOn(provider, 'getBotToken');
+    expect((await client!.callTool(tool, args)).json).toMatchObject({ ok: true });
+    expect(getUser).toHaveBeenCalledTimes(2);
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls.map(c => c.role)).toEqual(['user']);
+  });
+
+  it.each(['null', 'NO_TOKEN', 'REFRESH_AUTH_REJECTED', 'TOKEN_PERSIST_FAILED'] as const)('persistence recovery %s terminates on the user route', async recovery => {
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    const { ConnectorError } = await import('../src/types.js');
+    const getUser = vi.spyOn(getTokenProvider()!, 'getUserToken')
+      .mockRejectedValueOnce(new ConnectorError('Save failed', 'TOKEN_PERSIST_FAILED', 'Retry'));
+    if (recovery === 'null') getUser.mockResolvedValueOnce(null);
+    else getUser.mockRejectedValueOnce(new ConnectorError('Recovery failed', recovery, 'Recovery guidance'));
+    const getBot = vi.spyOn(getTokenProvider()!, 'getBotToken');
+    const result = await client!.callTool('get_slack_user_profile', { user: 'U123' });
+    expect(result.json).toMatchObject(recovery === 'TOKEN_PERSIST_FAILED'
+      ? { code: recovery, token_role: 'user' }
+      : { status: 'auth_required', setupToolName: 'authenticate_slack_workspace', token_role: 'user' });
+    expect(getUser).toHaveBeenCalledTimes(2);
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('missing user DM authorization returns auth_required without a bot attempt', async () => {
+    await start({ userToken: '' });
+    const { getTokenProvider } = await import('../src/client.js');
+    const getBot = vi.spyOn(getTokenProvider()!, 'getBotToken');
+    expect((await client!.callTool('open_slack_dm', { user: 'U123' })).json).toMatchObject({
+      status: 'auth_required', setupToolName: 'authenticate_slack_workspace', token_role: 'user',
+    });
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['unavailable', 'unavailable'], ['refused', 'unavailable'], ['unavailable', 'refused'],
+    ['missing', 'unavailable'], ['unavailable', 'not_configured'],
+  ])('workspace probes %s/%s advise retry without reconnect', async (bot, user) => {
+    await start({ ...(bot === 'missing' ? { botToken: '' } : {}), ...(user === 'not_configured' ? { userToken: '' } : {}) });
+    const { getTokenProvider } = await import('../src/client.js');
+    const { ConnectorError } = await import('../src/types.js');
+    for (const [role, status] of [['bot', bot], ['user', user]] as const) {
+      const get = vi.spyOn(getTokenProvider()!, role === 'bot' ? 'getBotToken' : 'getUserToken');
+      get.mockRejectedValue(new ConnectorError('Example probe failure', status === 'refused' ? 'REFRESH_AUTH_REJECTED' : status === 'unavailable' ? 'REFRESH_TRANSIENT' : 'NO_TOKEN', 'Original recovery'));
+    }
+    const result = await client!.callTool('list_slack_workspaces', {});
+    expect(result.json).toMatchObject({ connected: false, tokenHealth: { botToken: bot, userToken: user }, next_step: 'retry_after_delay' });
+    expect((result.json as { action_required: string }).action_required).toMatch(/retry|status/i);
+  });
+
+  it.each(['TOKEN_PERSIST_FAILED', 'REFRESH_TRANSIENT', 'REFRESH_RATE_LIMITED', 'REFRESH_AUTH_REJECTED', 'TOKEN_EXPIRED_REFRESH_DISABLED'])('download preserves credential acquisition %s without metadata or identity replay', async code => {
+    mswServer.use(mock('files.info', () => ({ ok: true, file: { id: 'F123', size: 1, url_private_download: 'https://files.slack.com/example' } })), ...createSlackHandlers());
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    const { ConnectorError } = await import('../src/types.js');
+    const getUser = vi.spyOn(getTokenProvider()!, 'getUserToken')
+      .mockResolvedValueOnce('xoxp-mock')
+      .mockRejectedValueOnce(new ConnectorError('Example credential failure', code, 'Original recovery', { retry_after_seconds: 9 }));
+    const getBot = vi.spyOn(getTokenProvider()!, 'getBotToken');
+    const result = await client!.callTool('download_slack_file', { file_id: 'F123' });
+    expect(result.json).toMatchObject(['REFRESH_AUTH_REJECTED', 'TOKEN_EXPIRED_REFRESH_DISABLED'].includes(code)
+      ? { status: 'auth_required', setupToolName: 'authenticate_slack_workspace' }
+      : { code, retry_after_seconds: 9, resolution: 'Original recovery' });
+    expect(getUser).toHaveBeenCalledTimes(2);
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls.map(c => [c.method, c.role])).toEqual([['files.info', 'user']]);
+  });
+
+  it('download does not switch to bot when the metadata user credential disappears', async () => {
+    mswServer.use(mock('files.info', () => ({ ok: true, file: { id: 'F123', size: 1, url_private_download: 'https://files.slack.com/example' } })), ...createSlackHandlers());
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    vi.spyOn(getTokenProvider()!, 'getUserToken').mockResolvedValueOnce('xoxp-mock').mockResolvedValueOnce(null);
+    const getBot = vi.spyOn(getTokenProvider()!, 'getBotToken');
+    expect((await client!.callTool('download_slack_file', { file_id: 'F123' })).json).toMatchObject({ ok: false });
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls.map(c => [c.method, c.role])).toEqual([['files.info', 'user']]);
+  });
+
+  it('download keeps bot metadata and download authorization when a user becomes available later', async () => {
+    const downloads: string[] = [];
+    mswServer.use(
+      mock('files.info', () => ({ ok: true, file: { id: 'F123', size: 1, mimetype: 'text/plain', url_private_download: 'https://files.slack.com/example' } })),
+      http.get('https://files.slack.com/example', ({ request }) => {
+        downloads.push(request.headers.get('authorization') === 'Bearer xoxb-mock' ? 'bot' : 'user');
+        return HttpResponse.text('Example');
+      }),
+      ...createSlackHandlers(),
+    );
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    const getUser = vi.spyOn(getTokenProvider()!, 'getUserToken').mockResolvedValueOnce(null).mockResolvedValue('xoxp-mock');
+    expect((await client!.callTool('download_slack_file', { file_id: 'F123' })).json).toMatchObject({ ok: true });
+    expect(getUser).toHaveBeenCalledTimes(1);
+    expect(calls.map(c => [c.method, c.role])).toEqual([['files.info', 'bot']]);
+    expect(downloads).toEqual(['bot']);
+  });
+
   it.each([
     [429, 'ratelimited'],
     [500, 'internal_error'],

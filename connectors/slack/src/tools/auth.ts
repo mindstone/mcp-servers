@@ -22,7 +22,7 @@ export function registerAuthTools(server: McpServer): void {
       description: `Connect a Slack workspace to enable all Slack operations.
 
 ACTION REQUIRED: Call this tool when:
-1. list_slack_workspaces shows no workspace connected
+1. list_slack_workspaces directs you to authenticate_slack_workspace
 2. User asks to connect, set up, or configure Slack
 3. Any Slack tool returns "not connected" error
 
@@ -55,8 +55,8 @@ Returns:
 - workspaces: array of connected workspaces with team names
 - tokenHealth: bot/user token status (valid|refused|unavailable|missing|not_configured)
 
-CRITICAL: If response shows connected=false, call authenticate_slack_workspace
-to start the connection flow. The host will guide the user through OAuth.`,
+If connected=false, follow next_step: unavailable probes need a retry/status
+check; missing or refused authorization may need authenticate_slack_workspace.`,
       inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,
@@ -126,6 +126,7 @@ to start the connection flow. The host will guide the user through OAuth.`,
       const botTokenStatus = bot.status === 'missing' && tokenData?.botToken ? 'unavailable' : bot.status;
       const userTokenStatus = user.status === 'not_configured' && tokenData?.userToken ? 'unavailable' : user.status;
 
+      const unavailable = botTokenStatus === 'unavailable' || userTokenStatus === 'unavailable';
       const refreshEnabled = !!(tokenData?.botRefreshToken || tokenData?.userRefreshToken);
       const botNearExpiry =
         botTokenStatus === 'valid' && tokenData?.botExpiresAt
@@ -160,8 +161,10 @@ to start the connection flow. The host will guide the user through OAuth.`,
           ? {}
           : {
               action_required:
-                'Call authenticate_slack_workspace to refresh credentials.',
-              next_step: 'authenticate_slack_workspace',
+                unavailable
+                  ? 'Retry the connection status check shortly. Slack authorization could not be checked.'
+                  : 'Call authenticate_slack_workspace to refresh credentials.',
+              next_step: unavailable ? 'retry_after_delay' : 'authenticate_slack_workspace',
             }),
       });
     }),

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve unsaved rotated credentials, retry persistence, recognize replaced or deleted connections, and retain both roles' concurrent refresh results.
+- Read the token file on every token request and report corrupt JSON; use healthy cached credentials on permission or disk read errors without saving or refreshing.
+- Retry people-read persistence acquisition once as the same user; restore missing-user DM authentication guidance and retry guidance for unavailable workspace probes.
+- Preserve download credential errors without switching roles; clarify authorization roles and error-code normalization.
+
 ## [0.3.5] - 2026-11-03
 
 ### Changed

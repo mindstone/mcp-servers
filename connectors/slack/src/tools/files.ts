@@ -8,7 +8,7 @@ import {
   parseSlackFileId,
   withErrorHandling,
 } from '../utils.js';
-import { getSlackReaderClient, getSlackUserClient, getTokenProvider } from '../client.js';
+import { getSlackClient, getSlackUserClient, getTokenProvider } from '../client.js';
 import { resolveChannelId, withOwnBotMentionsAsPlainText } from '../helpers.js';
 import { readUploadSourceFile } from '../upload-path-safety.js';
 import { notConnectedJson } from './auth.js';
@@ -52,7 +52,8 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       },
     },
     withErrorHandling(async (args) => {
-      const reader = await getSlackReaderClient();
+      const userClient = await getSlackUserClient();
+      const reader = userClient ?? await getSlackClient();
       if (!reader) return notConnectedJson();
       if (!args.file_id && !args.file_url) {
         return errorJson({
@@ -116,11 +117,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       const tokenProvider = getTokenProvider();
       let token: string | null = null;
       if (tokenProvider) {
-        try {
-          token = (await tokenProvider.getUserToken()) ?? (await tokenProvider.getBotToken());
-        } catch {
-          // fall through
-        }
+        token = userClient ? await tokenProvider.getUserToken() : await tokenProvider.getBotToken();
       }
       if (!token) {
         return errorJson({
