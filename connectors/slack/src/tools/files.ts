@@ -8,7 +8,7 @@ import {
   parseSlackFileId,
   withErrorHandling,
 } from '../utils.js';
-import { getSlackClient, getSlackUserClient, getTokenProvider } from '../client.js';
+import { getSlackClient, getSlackUserClient } from '../client.js';
 import { resolveChannelId, withOwnBotMentionsAsPlainText } from '../helpers.js';
 import { readUploadSourceFile } from '../upload-path-safety.js';
 import { notConnectedJson } from './auth.js';
@@ -114,11 +114,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
           },
         });
       }
-      const tokenProvider = getTokenProvider();
-      let token: string | null = null;
-      if (tokenProvider) {
-        token = userClient ? await tokenProvider.getUserToken() : await tokenProvider.getBotToken();
-      }
+      const token = reader.token;
       if (!token) {
         return errorJson({
           error: 'No authentication token available',
