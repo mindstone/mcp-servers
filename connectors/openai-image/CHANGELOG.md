@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Recognize `gpt-image-2.6-sunburst` and `gpt-image-2.6-flare` as supported model overrides. The default remains `gpt-image-2.5-sunburst`.
+
 ## [0.4.0] - 2026-11-02
 
 ### Changed

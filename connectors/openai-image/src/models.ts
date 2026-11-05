@@ -2,6 +2,8 @@
 // own so other tools can read the list without loading the server.
 // gpt-image-1 is left out: OpenAI shut it down on 2026-10-23.
 export const SUPPORTED_MODELS = [
+  'gpt-image-2.6-sunburst',
+  'gpt-image-2.6-flare',
   'gpt-image-2.5-sunburst',
   'gpt-image-2.5-flare',
   'gpt-image-2',
