@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 /**
  * Workspace-path containment for attachment file I/O (AGENTS.md security
  * invariant #5). Downloaded attachments are written only inside the canonical
@@ -139,38 +140,43 @@ export interface WorkspaceAttachmentContent {
 export function readWorkspaceAttachment(
   inputPath: string,
   maxBytes?: number,
+  context?: FileReadContext,
+  location: (string | number)[] = [],
 ): WorkspaceAttachmentContent {
-  const root = getWorkspaceRoot();
+  const allowedPath = centralReadPath(context, inputPath, location);
+  const root = allowedPath === undefined ? getWorkspaceRoot() : '';
+  let canonical = allowedPath;
+  if (canonical === undefined) {
 
-  const expanded = inputPath.startsWith('~')
-    ? path.join(os.homedir(), inputPath.slice(1))
-    : inputPath;
-  const lexical = path.resolve(expanded);
+    const expanded = inputPath.startsWith('~')
+      ? path.join(os.homedir(), inputPath.slice(1))
+      : inputPath;
+    const lexical = path.resolve(expanded);
 
-  const canonicalCandidate = canonicalisePrefix(lexical);
-  if (!isInsideRoot(root, canonicalCandidate)) {
-    throw new Error(
-      `Attachment path is outside the workspace sandbox root (${root}). Got: ${inputPath}`,
-    );
-  }
-
-  let canonical: string;
-  try {
-    canonical = fs.realpathSync(lexical);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`Attachment file not found: ${inputPath}`);
+    const canonicalCandidate = canonicalisePrefix(lexical);
+    if (!isInsideRoot(root, canonicalCandidate)) {
+      throw new Error(
+        `Attachment path is outside the workspace sandbox root (${root}). Got: ${inputPath}`,
+      );
     }
-    throw err;
-  }
 
-  if (!isInsideRoot(root, canonical)) {
-    throw new Error(
-      `Attachment path resolves outside the workspace sandbox root (${root}); ` +
-        `symlinks may not escape the workspace. Got: ${inputPath}`,
-    );
-  }
+    try {
+      canonical = fs.realpathSync(lexical);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`Attachment file not found: ${inputPath}`);
+      }
+      throw err;
+    }
 
+    if (!isInsideRoot(root, canonical)) {
+      throw new Error(
+        `Attachment path resolves outside the workspace sandbox root (${root}); ` +
+          `symlinks may not escape the workspace. Got: ${inputPath}`,
+      );
+    }
+
+  }
   const fd = fs.openSync(canonical, 'r');
   try {
     const fdStat = fs.fstatSync(fd);
@@ -196,7 +202,10 @@ export function readWorkspaceAttachment(
     } catch {
       throw new Error(`Attachment path changed during validation: ${inputPath}`);
     }
-    if (!isInsideRoot(root, recanonical)) {
+    if (allowedPath !== undefined && recanonical !== allowedPath) {
+      throw new Error(`Attachment path was replaced during validation; refusing to read: ${inputPath}`);
+    }
+    if (allowedPath === undefined && !isInsideRoot(root, recanonical)) {
       throw new Error(
         `Attachment path was swapped to escape the workspace sandbox root (${root}) ` +
           `during validation. Got: ${inputPath}`,

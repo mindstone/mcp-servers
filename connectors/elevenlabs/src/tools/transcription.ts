@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -57,11 +59,12 @@ RELATED TOOLS:
 - generate_speech: the inverse operation (text to audio)
 - forced_alignment: align a known transcript to audio instead of transcribing
 
-RETURNS: enveloped text, word_count, language (caller-supplied code echoed as-is; an API-detected code is enveloped as untrusted content). With diarize, also utterances[] (speaker_id, start/end seconds, enveloped text) and speaker_count. With include_word_timestamps, also words[] (enveloped text, start/end, speaker_id when diarized). File path must be inside MCP_WORKSPACE_PATH (or os.tmpdir()).
+RETURNS: enveloped text, word_count, language (caller-supplied code echoed as-is; an API-detected code is enveloped as untrusted content). With diarize, also utterances[] (speaker_id, start/end seconds, enveloped text) and speaker_count. With include_word_timestamps, also words[] (enveloped text, start/end, speaker_id when diarized). When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).
 
 COST: Credits based on audio duration.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES }] } },
       inputSchema: z.object({
-        file_path: z.string().min(1).describe('Absolute path to local audio file to transcribe.'),
+        file_path: z.string().min(1).describe('Absolute path to local audio file to transcribe. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
         language_code: z.string().optional().describe('Language code (e.g., "en", "es", "fr"). Auto-detected if omitted.'),
         model_id: z.enum(['scribe_v1', 'scribe_v2']).optional().describe('STT model. Default: scribe_v1.'),
         tag_audio_events: z.boolean().optional().describe('When true, include non-speech events like "(laughter)" in the transcript. Default: false.'),
@@ -73,7 +76,8 @@ COST: Credits based on audio duration.`,
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new ElevenLabsError(
@@ -103,7 +107,7 @@ COST: Credits based on audio duration.`,
 
       // Sandbox local reads via shared file-input helper (MCP_WORKSPACE_PATH +
       // realpathSync TOCTOU guard — see file-input.ts).
-      const fileInput = readSandboxedFile(args.file_path);
+      const fileInput = readSandboxedFile(args.file_path, reads, ['file_path']);
 
       // Multipart upload. ElevenLabs Speech-to-Text v1 requires:
       //   - field name `file` (NOT `audio`)

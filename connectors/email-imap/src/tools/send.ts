@@ -1,3 +1,4 @@
+import { fileReadContext, type FileReadContext } from '../file-read-context.js';
 /**
  * Send/draft tools — sending emails and saving drafts.
  *
@@ -47,9 +48,9 @@ const outboundAttachmentSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'Path to a file inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system ' +
-        'temp directory when unset). Paths outside the sandbox — including via symlinks — ' +
-        'are refused.',
+      'Path to an attachment file. When connected to a host that authorizes file reads, ' +
+        'its path permission decision applies. Standalone clients require the file inside ' +
+        'the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
     ),
   filename: z
     .string()
@@ -86,16 +87,19 @@ export interface ResolvedOutboundAttachment {
  */
 function resolveOutboundAttachments(
   attachments: OutboundAttachment[] | undefined,
+  context?: FileReadContext,
 ): ResolvedOutboundAttachment[] | undefined {
   if (!attachments || attachments.length === 0) {
     return undefined;
   }
   const resolved: ResolvedOutboundAttachment[] = [];
   let totalBytes = 0;
-  for (const attachment of attachments) {
+  for (const [index, attachment] of attachments.entries()) {
     const read = readWorkspaceAttachment(
       attachment.path,
       MAX_OUTBOUND_ATTACHMENT_BYTES - totalBytes,
+      context,
+      ['attachments', index, 'path'],
     );
     totalBytes += read.sizeBytes;
     if (totalBytes > MAX_OUTBOUND_ATTACHMENT_BYTES) {
@@ -163,6 +167,7 @@ export interface DraftFields {
 export async function appendDraftMessage(
   fromEmail: string,
   fields: DraftFields,
+  context?: FileReadContext,
 ): Promise<{ messageId: string; mailbox: string; uid?: number }> {
   const { to, subject, text, html, reply_to_message_id } = fields;
 
@@ -187,7 +192,7 @@ export async function appendDraftMessage(
         }
       : {}),
     ...(fields.attachments
-      ? { attachments: resolveOutboundAttachments(fields.attachments) }
+      ? { attachments: resolveOutboundAttachments(fields.attachments, context) }
       : {}),
   });
   draftTransport.close();
@@ -233,8 +238,11 @@ export function registerSendTools(server: McpServer): void {
         '`EMAIL_IMAP_MAX_RECIPIENTS`) and outbound sends are rate-limited (default 50/hour, env ' +
         '`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`). When a cap is hit, ' +
         'the tool returns a structured error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or ' +
-        '`RATE_LIMIT_EXCEEDED`). Attachments (max 10, 25 MB total) are read only from inside ' +
-        'the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+        '`RATE_LIMIT_EXCEEDED`). Attachments (max 10, 25 MB total) use the path permission ' +
+        'decision of a connected host that authorizes file reads. Standalone clients require ' +
+        'attachment files inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system ' +
+        'temp directory when unset).',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -258,7 +266,8 @@ export function registerSendTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const config = ensureInitialized();
 
       const { to, subject, text, html, cc, bcc, reply_to_message_id } = args;
@@ -305,7 +314,7 @@ export function registerSendTools(server: McpServer): void {
 
       // Resolve and validate attachment paths BEFORE recording the send
       // attempt: a sandbox violation is a caller error, not a failed send.
-      const resolvedAttachments = resolveOutboundAttachments(args.attachments);
+      const resolvedAttachments = resolveOutboundAttachments(args.attachments, reads);
 
       // Record the attempt BEFORE calling the transport so that a looped
       // SMTP failure cannot bypass the cap by retrying.
@@ -343,9 +352,11 @@ export function registerSendTools(server: McpServer): void {
     {
       description:
         'Save a draft email to the Drafts folder. This mutates the remote account: hosts MUST ' +
-        'require explicit user confirmation before each invocation. Attachment paths must ' +
-        'resolve inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory ' +
-        'when unset).',
+        'require explicit user confirmation before each invocation. When connected to a host ' +
+        'that authorizes file reads, its path permission decision applies to attachments. ' +
+        'Standalone clients require attachment files inside the workspace sandbox ' +
+        '(MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -362,7 +373,8 @@ export function registerSendTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const config = ensureInitialized();
 
       const { to, subject, text, html, reply_to_message_id, attachments } = args;
@@ -382,7 +394,7 @@ export function registerSendTools(server: McpServer): void {
         html,
         reply_to_message_id,
         attachments,
-      });
+      }, reads);
 
       return JSON.stringify({
         ok: true,

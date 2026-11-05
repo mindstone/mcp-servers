@@ -6,6 +6,7 @@ export interface ToolMetadata {
   description: string;
   aliases?: string[];
   requiresAuth?: boolean;
+  _meta?: Record<string, unknown>;
   annotations?: {
     readOnlyHint?: boolean;  // true = read-only tool, false/undefined = write tool
     destructiveHint?: boolean;  // true = may delete/archive data
@@ -2672,6 +2673,7 @@ Requires Service Hub Professional or Enterprise.`,
 export const fileTools: ToolMetadata[] = [
   {
     name: 'upload_hubspot_file',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['filePath'], base: 'connectorCwd', expandTilde: false }] } },
     category: 'Files',
     description: `Upload a file to HubSpot's file manager from a local file path.
 
@@ -2787,6 +2789,7 @@ Notes that reference this file will no longer display the attachment.`,
   },
   {
     name: 'attach_file_to_record',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['filePath'], base: 'connectorCwd', expandTilde: false }] } },
     category: 'Files',
     description: `Upload a file and attach it to a CRM record in one step.
 

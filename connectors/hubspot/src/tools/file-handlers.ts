@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import path, { basename } from 'node:path';
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
@@ -56,6 +57,13 @@ async function assertWorkspaceContainedFilePath(filePath: string): Promise<strin
   }
 
   return resolvedFilePath;
+}
+
+async function approvedCentralPath(filePath: string, canonicalPath: string): Promise<string> {
+  if (await realpath(canonicalPath) !== canonicalPath) {
+    throw new Error(JSON.stringify({ error: `File changed after it was approved; refusing to read it: ${filePath}`, errorCode: 'FILE_NOT_FOUND', suggestion: 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.' }));
+  }
+  return canonicalPath;
 }
 
 function parseFileError(error: unknown, operation: string): ParsedHubSpotError {
@@ -144,9 +152,10 @@ export interface UploadFileArgs {
   access?: 'PRIVATE' | 'PUBLIC_NOT_INDEXABLE' | 'PUBLIC_INDEXABLE';
 }
 
-export async function handleUploadFile(args: UploadFileArgs) {
+export async function handleUploadFile(args: UploadFileArgs, context?: FileReadContext) {
   try {
-    const resolvedFilePath = await assertWorkspaceContainedFilePath(args.filePath);
+    const centralFilePath = centralReadPath(context, args.filePath, ['filePath']);
+    const resolvedFilePath = centralFilePath !== undefined ? await approvedCentralPath(args.filePath, centralFilePath) : await assertWorkspaceContainedFilePath(args.filePath);
     const fileInfo = await stat(resolvedFilePath);
     if (fileInfo.size > MAX_FILE_SIZE) {
       throw new Error(JSON.stringify({
@@ -262,9 +271,10 @@ export interface AttachFileToRecordArgs {
   };
 }
 
-export async function handleAttachFileToRecord(args: AttachFileToRecordArgs) {
+export async function handleAttachFileToRecord(args: AttachFileToRecordArgs, context?: FileReadContext) {
   try {
-    await getWorkspaceRootPath();
+    const centralFilePath = args.filePath ? centralReadPath(context, args.filePath, ['filePath']) : undefined;
+    if (centralFilePath === undefined) await getWorkspaceRootPath();
 
     if (!args.filePath && !args.fileUrl) {
       throw new Error(JSON.stringify({
@@ -292,7 +302,7 @@ export async function handleAttachFileToRecord(args: AttachFileToRecordArgs) {
     let fileName: string;
 
     if (args.filePath) {
-      const resolvedFilePath = await assertWorkspaceContainedFilePath(args.filePath);
+      const resolvedFilePath = centralFilePath !== undefined ? await approvedCentralPath(args.filePath, centralFilePath) : await assertWorkspaceContainedFilePath(args.filePath);
       const fileInfo = await stat(resolvedFilePath);
       if (fileInfo.size > MAX_FILE_SIZE) {
         throw new Error(JSON.stringify({

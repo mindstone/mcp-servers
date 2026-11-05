@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { vi } from 'vitest';
 
@@ -18,11 +19,11 @@ export const importConnectorModule = async (
   return import('../src/index.js');
 };
 
-export const createInMemoryClientPair = async (server: McpServer) => {
+export const createInMemoryClientPair = async (server: McpServer, capabilities?: ClientCapabilities) => {
   const client = new Client({
     name: 'openai-image-test-client',
     version: '1.0.0',
-  });
+  }, { capabilities });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
   await Promise.all([

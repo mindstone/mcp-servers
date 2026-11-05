@@ -1,3 +1,4 @@
+import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SERVER_NAME, SERVER_VERSION } from './types.js';
 import {
@@ -18,7 +19,7 @@ export function createServer(): McpServer {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
-  });
+  }, { capabilities: FILE_READ_CAPABILITIES });
 
   registerAuthTools(server);
   registerMessageTools(server);

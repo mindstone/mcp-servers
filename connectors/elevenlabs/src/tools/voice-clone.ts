@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -28,19 +30,21 @@ RELATED TOOLS:
 - generate_speech: synthesize speech with the new voice_id
 - list_voices: confirm the clone appears on the account
 
-RETURNS: voice_id and requires_verification flag. Every files[] path is sandboxed individually.
+RETURNS: voice_id and requires_verification flag. When connected to a host that authorizes file reads, its path permission decision applies to each files[] path. Standalone clients require each file inside MCP_WORKSPACE_PATH (or os.tmpdir()).
 
 COST: Uses a voice slot; may consume credits depending on plan.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['files', '*'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES }] } },
       inputSchema: z.object({
         name: z.string().min(1).describe('Display name for the cloned voice.'),
-        files: z.array(z.string().min(1)).min(1).describe('One or more absolute audio file paths inside MCP_WORKSPACE_PATH (each sandboxed).'),
+        files: z.array(z.string().min(1)).min(1).describe('One or more absolute audio file paths. When connected to a host that authorizes file reads, its path permission decision applies to each path; standalone clients require each file inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
         description: z.string().optional().describe('Optional voice description stored on the account.'),
         labels: z.record(z.string()).optional().describe('Optional key/value labels for the voice.'),
         remove_background_noise: z.boolean().optional().describe('When true, reduce background noise in samples. Default: false.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new ElevenLabsError(
@@ -52,8 +56,8 @@ COST: Uses a voice slot; may consume credits depending on plan.`,
 
       const formData = new FormData();
       formData.append('name', args.name);
-      for (const filePath of args.files) {
-        const fileInput = readSandboxedFile(filePath);
+      for (const [index, filePath] of args.files.entries()) {
+        const fileInput = readSandboxedFile(filePath, reads, ['files', index]);
         formData.append('files', sandboxedFileToBlob(fileInput), fileInput.fileName);
       }
       if (args.description) {

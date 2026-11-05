@@ -13,6 +13,8 @@ export type ResolveResult =
  * sandbox-violation — it should fall through to the existing not-found
  * code path so the error remains stable.
  */
+export const REMOTE_AUDIO_PREFIXES = ['http://', 'httP://', 'htTp://', 'htTP://', 'hTtp://', 'hTtP://', 'hTTp://', 'hTTP://', 'Http://', 'HttP://', 'HtTp://', 'HtTP://', 'HTtp://', 'HTtP://', 'HTTp://', 'HTTP://', 'https://', 'httpS://', 'httPs://', 'httPS://', 'htTps://', 'htTpS://', 'htTPs://', 'htTPS://', 'hTtps://', 'hTtpS://', 'hTtPs://', 'hTtPS://', 'hTTps://', 'hTTpS://', 'hTTPs://', 'hTTPS://', 'Https://', 'HttpS://', 'HttPs://', 'HttPS://', 'HtTps://', 'HtTpS://', 'HtTPs://', 'HtTPS://', 'HTtps://', 'HTtpS://', 'HTtPs://', 'HTtPS://', 'HTTps://', 'HTTpS://', 'HTTPs://', 'HTTPS://'];
+
 export function isRemoteUrl(input: string): boolean {
   return /^https?:\/\//i.test(input);
 }

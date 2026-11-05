@@ -1,3 +1,4 @@
+import { centralReadPath, fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
@@ -347,12 +348,14 @@ export function registerTaskTools(server: McpServer): void {
       description:
         'Upload a local file to Runway\'s ephemeral storage, returning a runway:// URI. ' +
         'Supports files up to 200MB. URI valid for 24 hours.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: false }] } },
       inputSchema: z.object({
         file_path: z.string().describe('Absolute path to the local file to upload.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const fs = await import('fs');
       const filePath = args.file_path;
 
@@ -367,7 +370,7 @@ export function registerTaskTools(server: McpServer): void {
       const { assertPathInAllowedRoot, uploadEphemeral } = await import('../client.js');
       let safePath: string;
       try {
-        safePath = assertPathInAllowedRoot(filePath);
+        safePath = centralReadPath(reads, filePath, ['file_path']) ?? assertPathInAllowedRoot(filePath);
       } catch (err) {
         if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'PATH_OUTSIDE_ALLOWED_ROOT') {
           const e = err as { message: string; code: string; resolution: string };
@@ -387,7 +390,7 @@ export function registerTaskTools(server: McpServer): void {
         return JSON.stringify({ ok: false, error: 'File must be at least 512 bytes.' });
       }
 
-      const uri = await uploadEphemeral(safePath);
+      const uri = await uploadEphemeral(reads.mode === 'central' ? filePath : safePath, reads, ['file_path']);
       const sizeMB = (stats.size / 1_048_576).toFixed(1);
       return JSON.stringify({
         ok: true, runway_uri: uri, size_mb: sizeMB,

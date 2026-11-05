@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import { getGmailService } from '../modules/gmail/index.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
@@ -29,7 +30,7 @@ async function initializeServices() {
     gmailService = getGmailService();
     await gmailService.initialize();
   }
-  
+
   if (!accountManager) {
     accountManager = getAccountManager();
   }
@@ -180,22 +181,33 @@ function getAttachmentWorkspaceRoot(): string {
 }
 
 /** @internal Exported for tests. */
-export function resolveAttachmentFromPath(filePath: string): { content: string; name: string; mimeType: string; size: number } {
-  const rootRealpath = getAttachmentWorkspaceRoot();
-  const candidatePath = path.resolve(filePath);
-  const candidateStats = lstatSync(candidatePath);
-  if (candidateStats.isSymbolicLink()) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'Attachment path must not be a symbolic link.'
-    );
+export function resolveAttachmentFromPath(filePath: string, context?: FileReadContext, location: (string | number)[] = []): { content: string; name: string; mimeType: string; size: number } {
+  let candidateRealpath = centralReadPath(context, filePath, location);
+  if (candidateRealpath === undefined) {
+    const rootRealpath = getAttachmentWorkspaceRoot();
+    const candidatePath = path.resolve(filePath);
+    const candidateStats = lstatSync(candidatePath);
+    if (candidateStats.isSymbolicLink()) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Attachment path must not be a symbolic link.'
+      );
+    }
+
+    candidateRealpath = realpathSync.native(candidatePath);
+    if (!isPathInsideDirectory(candidateRealpath, rootRealpath)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Attachment path must be within the workspace directory. Got: ${filePath}`
+      );
+    }
+
   }
 
-  const candidateRealpath = realpathSync.native(candidatePath);
-  if (!isPathInsideDirectory(candidateRealpath, rootRealpath)) {
+  if (context?.mode === 'central' && realpathSync(candidateRealpath) !== candidateRealpath) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      `Attachment path must be within the workspace directory. Got: ${filePath}`
+      'Attachment file changed while it was being verified; refusing to read it.'
     );
   }
 
@@ -249,10 +261,10 @@ export function resolveAttachmentFromPath(filePath: string): { content: string; 
   }
 }
 
-function processOutgoingAttachments(attachments?: OutgoingGmailAttachment[]): OutgoingGmailAttachment[] | undefined {
-  return attachments?.map(attachment => {
+function processOutgoingAttachments(attachments?: OutgoingGmailAttachment[], context?: FileReadContext, prefix: (string | number)[] = ['attachments']): OutgoingGmailAttachment[] | undefined {
+  return attachments?.map((attachment, index) => {
     if (attachment.path && !attachment.content) {
-      const resolved = resolveAttachmentFromPath(attachment.path);
+      const resolved = resolveAttachmentFromPath(attachment.path, context, [...prefix, index, 'path']);
       return {
         id: attachment.id || resolved.name,
         name: attachment.name || resolved.name,
@@ -318,7 +330,7 @@ function readAliasedStringArray(args: Record<string, unknown>, canonicalKey: str
 
 interface SearchEmailsParams {
   email?: string;
-  
+
   // Flat parameters (snake_case per MCP convention)
   query?: string;
   max_results?: number;
@@ -333,7 +345,7 @@ interface SearchEmailsParams {
   pageToken?: string;
   includeBody?: boolean;
   returnJson?: boolean;
-  
+
   // Legacy nested parameters (backwards compatible)
   search?: {
     from?: string | string[];
@@ -363,7 +375,7 @@ interface SearchEmailsParams {
 /** @internal Exported for testing only. */
 export function formatEmailsAsText(result: { emails: Array<{ id: string; threadId: string; from: string; to: string; subject: string; date: string; snippet?: string; body?: string; labelIds?: string[]; hasAttachment?: boolean; attachments?: Array<{ name: string }> }>, nextPageToken?: string, resultSummary: { total: number; returned: number; hasMore: boolean } }): string {
   const { emails, resultSummary } = result;
-  
+
   if (emails.length === 0) {
     return 'No emails found matching your search criteria.';
   }
@@ -375,7 +387,7 @@ export function formatEmailsAsText(result: { emails: Array<{ id: string; threadI
     const isUnread = email.labelIds?.includes('UNREAD');
     const labels = email.labelIds?.filter(l => l !== 'UNREAD' && l !== 'INBOX').join(', ') || '';
     const attachmentNote = email.hasAttachment ? ' [has attachments]' : '';
-    
+
     lines.push(`${i + 1}. **${email.subject || '(no subject)'}**${isUnread ? ' [UNREAD]' : ''}${attachmentNote}`);
     lines.push(`   From: ${email.from}`);
     lines.push(`   Date: ${email.date}`);
@@ -572,7 +584,7 @@ export async function handleComposeWorkspaceEmail(
 
 export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & Record<string, unknown>) {
   await initializeServices();
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
   const rawParams = params as unknown as Record<string, unknown>;
@@ -597,7 +609,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
     ...(isUnread !== undefined && { isUnread }),
     ...(params.labels !== undefined && { labels: params.labels }),
   };
-  
+
   // Handle query param: maps to search.content, AND-ed with other filters
   // Also accept 'q' as alias for 'query' (common LLM pattern)
   const queryParam = params.query || (params as unknown as Record<string, unknown>).q as string | undefined;
@@ -609,7 +621,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
       mergedSearch.content = queryParam;
     }
   }
-  
+
   // Merge options (snake_case canonical, flat params take precedence)
   const mergedOptions: SearchEmailsParams['options'] = {
     ...params.options,
@@ -617,7 +629,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
     ...(pageToken !== undefined && { pageToken }),
     ...(includeBody !== undefined && { includeBody }),
   };
-  
+
   // Also accept backwards-compatible aliases: maxResults (camelCase), limit
   const unknownParams = params as unknown as Record<string, unknown>;
   if ('maxResults' in unknownParams && mergedOptions.maxResults === undefined) {
@@ -629,7 +641,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
   if (typeof unknownParams.max_messages === 'number' && mergedOptions.maxResults === undefined) {
     mergedOptions.maxResults = unknownParams.max_messages;
   }
-  
+
   const search = mergedSearch;
   const options = mergedOptions;
 
@@ -656,7 +668,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const result = await gmailService.getEmails({ email, search: normalizedSearch, options, messageIds });
-      
+
       // Return formatted text by default, JSON only when explicitly requested
       if (returnJson) {
         return wrapUntrustedJsonControls(result, 'google-workspace:gmail:search', [
@@ -694,7 +706,7 @@ const DEFAULT_FULL_BODY_TAIL = 2;
 
 export function formatThreadAsText(result: { threadId: string; messagesCount: number; hasMore?: boolean; nextOffset?: number; messages: Array<{ id: string; from: string; to: string[]; date: string; subject: string; snippet?: string; body?: { text?: string; html?: string }; attachments?: Array<{ id: string; filename: string; mimeType: string; size: number }> }> }, offset = 0, includeFullBodies = false): string {
   const { threadId, messagesCount, hasMore, nextOffset, messages } = result;
-  
+
   if (messages.length === 0) {
     if (offset > 0) {
       return wrapUntrustedContent(`Thread ${threadId} has no more messages beyond offset ${offset} (${messagesCount} total).`, `google-workspace:gmail:thread/${threadId}`);
@@ -704,7 +716,7 @@ export function formatThreadAsText(result: { threadId: string; messagesCount: nu
 
   // Get subject from first message
   const subject = messages[0]?.subject || '(no subject)';
-  
+
   const lines: string[] = [];
   lines.push(`**Thread: ${subject}**`);
   lines.push(`[threadId: ${threadId}, ${messagesCount} message${messagesCount !== 1 ? 's' : ''}]\n`);
@@ -763,7 +775,7 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
   const includeBody = readAliasedBoolean(rawParams, 'include_body', 'includeBody') ?? true;
   const includeFullBodies = readAliasedBoolean(rawParams, 'include_full_bodies', 'includeFullBodies') ?? false;
   const returnJson = readAliasedBoolean(rawParams, 'return_json', 'returnJson') ?? false;
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
@@ -815,13 +827,13 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
   });
 }
 
-export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & Record<string, unknown>) {
+export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & Record<string, unknown>, context?: FileReadContext) {
   await initializeServices();
   const { to, subject, body, cc, bcc, attachments } = params;
   const rawParams = params as unknown as Record<string, unknown>;
   const isHtml = readAliasedBoolean(rawParams, 'is_html', 'isHtml');
   const replyToMessageId = readAliasedString(rawParams, 'reply_to_message_id', 'replyToMessageId');
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
@@ -912,7 +924,7 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
         threadId: threadingResolution.headers.threadId,
         inReplyTo: threadingResolution.headers.inReplyTo,
         references: threadingResolution.headers.references,
-        attachments: processOutgoingAttachments(attachments)
+        attachments: processOutgoingAttachments(attachments, context)
       };
 
       const sendResult = await gmailService.sendEmail(emailParams);
@@ -935,7 +947,7 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
 
 export async function handleGetWorkspaceGmailSettings(params: { email?: string }) {
   await initializeServices();
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
@@ -1065,13 +1077,13 @@ export async function handleListWorkspaceSendAs(params: { email?: string }) {
   });
 }
 
-export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
+export async function handleManageWorkspaceDraft(params: ManageDraftParams, context?: FileReadContext, attachmentLocation: (string | number)[] = ['data', 'attachments']) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;
   const action = params.action;
   const draftId = readAliasedString(rawParams, 'draft_id', 'draftId');
   const data = normalizeDraftData(params.data);
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
@@ -1116,7 +1128,7 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
                   threadId: data.threadId ?? threading.threadId,
                   inReplyTo: data.inReplyTo ?? threading.inReplyTo,
                   references: data.references ?? threading.references,
-                  attachments: processOutgoingAttachments(data.attachments)
+                  attachments: processOutgoingAttachments(data.attachments, context, attachmentLocation)
                 }
               });
             }
@@ -1152,7 +1164,7 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
                   threadId: data.threadId ?? threading.threadId,
                   inReplyTo: data.inReplyTo ?? threading.inReplyTo,
                   references: data.references ?? threading.references,
-                  attachments: processOutgoingAttachments(data.attachments)
+                  attachments: processOutgoingAttachments(data.attachments, context, attachmentLocation)
                 }
               });
             }
@@ -1203,7 +1215,7 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
 export async function handleManageWorkspaceLabel(params: ManageLabelParams) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
   const labelId = readAliasedString(rawParams, 'label_id', 'labelId');
@@ -1236,7 +1248,7 @@ export async function handleManageWorkspaceLabel(params: ManageLabelParams) {
 export async function handleManageWorkspaceLabelAssignment(params: ManageLabelAssignmentParams) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
   const messageId = readAliasedString(rawParams, 'message_id', 'messageId');
@@ -1268,7 +1280,7 @@ export async function handleManageWorkspaceAttachment(params: ManageAttachmentPa
   const { action, source, filename, content } = params;
   const messageId = readAliasedString(rawParams, 'message_id', 'messageId');
   const mimeType = readAliasedString(rawParams, 'mime_type', 'mimeType');
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
@@ -1311,7 +1323,7 @@ export async function handleManageWorkspaceAttachment(params: ManageAttachmentPa
 
           // Fall back to Gmail API for real Gmail attachments
           const gmailAttachment = await gmailService.getAttachment(email, messageId, filename);
-          
+
           if (!gmailAttachment || !gmailAttachment.content) {
             throw new McpError(
               ErrorCode.InvalidRequest,
@@ -1417,7 +1429,7 @@ export async function handleManageWorkspaceAttachment(params: ManageAttachmentPa
 export async function handleManageWorkspaceLabelFilter(params: ManageLabelFilterParams) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;
-  
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
   const filterId = readAliasedString(rawParams, 'filter_id', 'filterId');
@@ -1452,16 +1464,16 @@ export async function handleGetWorkspaceDraft(params: { email?: string; draftId:
   return handleManageWorkspaceDraft({ ...params, action: 'read' });
 }
 
-export async function handleCreateWorkspaceDraft(params: Record<string, unknown>) {
+export async function handleCreateWorkspaceDraft(params: Record<string, unknown>, context?: FileReadContext) {
   const { email, ...data } = params;
-  return handleManageWorkspaceDraft({ email: email as string | undefined, action: 'create', data: data as ManageDraftParams['data'] });
+  return handleManageWorkspaceDraft({ email: email as string | undefined, action: 'create', data: data as ManageDraftParams['data'] }, context, ['attachments']);
 }
 
-export async function handleUpdateWorkspaceDraft(params: Record<string, unknown>) {
+export async function handleUpdateWorkspaceDraft(params: Record<string, unknown>, context?: FileReadContext) {
   const email = params.email as string | undefined;
   const draftId = readAliasedString(params, 'draft_id', 'draftId');
   const { draft_id: _draftIdSnake, draftId: _draftIdCamel, ...data } = params;
-  return handleManageWorkspaceDraft({ email, action: 'update', draftId, data: data as ManageDraftParams['data'] });
+  return handleManageWorkspaceDraft({ email, action: 'update', draftId, data: data as ManageDraftParams['data'] }, context, ['attachments']);
 }
 
 export async function handleDeleteWorkspaceDraft(params: { email?: string; draft_id?: string; draftId?: string }) {

@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -200,11 +201,13 @@ function sanitiseBasename(p: string, fallback: string): string {
  * PATH_OUTSIDE_WORKSPACE: the path WAS inside the workspace at validation
  * time, so retrying can succeed.
  */
-function uploadSourceChangedError(inputPath: string): ConnectorError {
+function uploadSourceChangedError(inputPath: string, central = false): ConnectorError {
   return new ConnectorError(
     `file_path changed while it was being validated: ${inputPath}`,
     'UPLOAD_SOURCE_CHANGED',
-    'Retry the call, or pass a path to a regular file inside the workspace directory.',
+    central
+      ? 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.'
+      : 'Retry the call, or pass a path to a regular file inside the workspace directory.',
   );
 }
 
@@ -235,8 +238,10 @@ export function stageUploadSource(
   stagingDir: string,
   index: number,
   openFile: typeof fs.openSync = fs.openSync,
+  context?: FileReadContext,
 ): string {
-  const resolved = resolveWorkspaceReadPath(inputPath);
+  const allowedPath = centralReadPath(context, inputPath, ['file_paths', index]);
+  const resolved = allowedPath === undefined ? resolveWorkspaceReadPath(inputPath) : { ok: true as const, path: allowedPath };
   if (!resolved.ok) {
     throw new ConnectorError(
       resolved.error,
@@ -281,7 +286,7 @@ export function stageUploadSource(
       // before we could open it (the O_NOFOLLOW errno varies by platform).
       // EISDIR/EPERM/EACCES: swapped for a directory or an unreadable
       // object. Either way, refuse rather than read.
-      throw uploadSourceChangedError(inputPath);
+      throw uploadSourceChangedError(inputPath, allowedPath !== undefined);
     }
     throw err;
   }
@@ -300,17 +305,17 @@ export function stageUploadSource(
     // resolution: the path must still resolve inside the workspace to the
     // SAME dev+inode we opened. Bytes are read through the fd below, so a
     // swap landing after this check cannot change the uploaded content.
-    const recheck = resolveWorkspaceReadPath(inputPath);
+    const recheck = allowedPath === undefined ? resolveWorkspaceReadPath(inputPath) : { ok: true as const, path: allowedPath };
     let fresh: fs.Stats | undefined;
     if (recheck.ok) {
       try {
-        fresh = fs.statSync(recheck.path);
+        if (allowedPath === undefined || fs.realpathSync(allowedPath) === allowedPath) fresh = fs.statSync(recheck.path);
       } catch {
         fresh = undefined; // resolution failed — refuse below
       }
     }
     if (!fresh || fresh.dev !== stat.dev || fresh.ino !== stat.ino) {
-      throw uploadSourceChangedError(inputPath);
+      throw uploadSourceChangedError(inputPath, allowedPath !== undefined);
     }
     const outFd = fs.openSync(stagingPath, 'wx', STAGING_FILE_MODE);
     try {

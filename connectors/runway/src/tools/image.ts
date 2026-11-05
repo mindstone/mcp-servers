@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput, addContentModeration } from '../client.js';
@@ -13,6 +14,7 @@ export function registerImageTools(server: McpServer): void {
         'MODELS: gen4_image (high quality), gen4_image_turbo (fast/cheap), gemini_2.5_flash (Google Gemini). ' +
         'REFERENCE IMAGES: Tag with short label (e.g., "cat"), use @tag in prompt. ' +
         'WORKFLOW: Returns task_id → poll with check_runway_task or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['reference_images', '*', 'uri'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         prompt_text: z.string().describe('Text description. Use @tag to reference images.'),
         model: z.enum(['gen4_image', 'gen4_image_turbo', 'gemini_2.5_flash']).optional().describe('Default: gen4_image.'),
@@ -30,7 +32,8 @@ export function registerImageTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const model = args.model || 'gen4_image';
       const ratio = args.ratio || '1920:1080';
       const refs = args.reference_images;
@@ -39,8 +42,8 @@ export function registerImageTools(server: McpServer): void {
       const body: Record<string, unknown> = { model, promptText: args.prompt_text, ratio };
       if (refs && refs.length > 0) {
         const resolvedRefs = [];
-        for (const r of refs) {
-          resolvedRefs.push({ uri: await resolveMediaInput(r.uri, 'image'), ...(r.tag ? { tag: r.tag } : {}) });
+        for (const [index, r] of refs.entries()) {
+          resolvedRefs.push({ uri: await resolveMediaInput(r.uri, 'image', reads, ['reference_images', index, 'uri']), ...(r.tag ? { tag: r.tag } : {}) });
         }
         body.referenceImages = resolvedRefs;
       }

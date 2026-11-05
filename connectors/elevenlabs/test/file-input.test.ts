@@ -1,6 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs';
-import { mimeTypeForFileName } from '../src/tools/file-input.js';
+import * as os from 'os';
+import * as path from 'path';
+import { mimeTypeForFileName, readSandboxedFile, sandboxedFileToBlob } from '../src/tools/file-input.js';
+
+vi.mock('fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
 
 describe('mimeTypeForFileName', () => {
   const cases: Array<{ fileName: string; expected: string }> = [
@@ -19,14 +30,59 @@ describe('mimeTypeForFileName', () => {
 });
 
 describe('readSandboxedFile TOCTOU guard', () => {
-  it('re-checks final realpath containment before readFileSync', () => {
-    const source = fs.readFileSync(new URL('../src/tools/file-input.ts', import.meta.url), 'utf8');
-    const finalRealpath = source.indexOf('const verifiedPath = isRemoteUrl(rawFilePath) ? filePath : fs.realpathSync(filePath);');
-    const finalCheck = source.indexOf('isInsideAudioWorkspaceRoot(verifiedPath, root)');
-    const read = source.indexOf('fs.readFileSync(verifiedPath)');
-    expect(finalRealpath).toBeGreaterThanOrEqual(0);
-    expect(finalCheck).toBeGreaterThan(finalRealpath);
-    expect(finalCheck).toBeLessThan(read);
-    expect(source).toContain("'PATH_SANDBOX_VIOLATION'");
+  let base: string;
+
+  afterEach(() => {
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockClear();
+    vi.unstubAllEnvs();
+    if (base) fs.rmSync(base, { recursive: true, force: true });
+  });
+
+  function fixture() {
+    base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'eleven-file-input-')));
+    const workspace = path.join(base, 'workspace');
+    fs.mkdirSync(workspace);
+    const source = path.join(workspace, 'clip.wav');
+    const bytes = Buffer.from([0x00, 0x52, 0x49, 0x46, 0x46, 0x80, 0xff]);
+    fs.writeFileSync(source, bytes);
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    vi.mocked(fs.existsSync).mockClear();
+    vi.mocked(fs.readFileSync).mockClear();
+    return { source, bytes };
+  }
+
+  it('refuses a final realpath escape after standalone admission before reading bytes', async () => {
+    const { source } = fixture();
+    const outside = path.join(base, 'outside.wav');
+    fs.writeFileSync(outside, Buffer.from([0xff, 0x00, 0x81]));
+    const actual = await vi.importActual<typeof import('fs')>('fs');
+
+    // This existence check follows initial admission; only its timing is mocked.
+    vi.mocked(fs.existsSync).mockImplementationOnce(candidate => {
+      expect(candidate).toBe(source);
+      expect(fs.realpathSync(candidate)).toBe(source);
+      fs.unlinkSync(source);
+      fs.symlinkSync(outside, source);
+      return actual.existsSync(candidate);
+    });
+
+    expect(() => readSandboxedFile(source)).toThrowError(expect.objectContaining({
+      code: 'PATH_SANDBOX_VIOLATION',
+    }));
+    expect(fs.existsSync).toHaveBeenCalledExactlyOnceWith(source);
+    expect(fs.realpathSync(source)).toBe(outside);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it('preserves exact binary bytes, filename and MIME for an ordinary standalone file', async () => {
+    const { source, bytes } = fixture();
+    const result = readSandboxedFile(source);
+
+    expect(result).toStrictEqual({ buffer: bytes, fileName: 'clip.wav', verifiedPath: source });
+    expect(fs.readFileSync).toHaveBeenCalledExactlyOnceWith(source);
+    const blob = sandboxedFileToBlob(result);
+    expect(blob.type).toBe('audio/wav');
+    expect(Buffer.from(await blob.arrayBuffer())).toEqual(bytes);
   });
 });

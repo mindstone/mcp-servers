@@ -47,6 +47,8 @@ export interface RemoteImage {
  * (https:// / http://). Remote URLs bypass the local-file sandbox —
  * they never touch the filesystem.
  */
+export const REMOTE_IMAGE_PREFIXES = ['http://', 'httP://', 'htTp://', 'htTP://', 'hTtp://', 'hTtP://', 'hTTp://', 'hTTP://', 'Http://', 'HttP://', 'HtTp://', 'HtTP://', 'HTtp://', 'HTtP://', 'HTTp://', 'HTTP://', 'https://', 'httpS://', 'httPs://', 'httPS://', 'htTps://', 'htTpS://', 'htTPs://', 'htTPS://', 'hTtps://', 'hTtpS://', 'hTtPs://', 'hTtPS://', 'hTTps://', 'hTTpS://', 'hTTPs://', 'hTTPS://', 'Https://', 'HttpS://', 'HttPs://', 'HttPS://', 'HtTps://', 'HtTpS://', 'HtTPs://', 'HtTPS://', 'HTtps://', 'HTtpS://', 'HTtPs://', 'HTtPS://', 'HTTps://', 'HTTpS://', 'HTTPs://', 'HTTPS://'];
+
 export function isRemoteImageUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }

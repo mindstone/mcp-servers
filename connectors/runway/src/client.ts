@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 /**
  * Runway API HTTP client.
  *
@@ -456,6 +457,15 @@ export async function runwayRawFetch(
 // File resolution & ephemeral upload helpers
 // ============================================================================
 
+function resolveLocalReadPath(input: string, context: FileReadContext | undefined, location: (string | number)[]): string {
+  const allowedPath = centralReadPath(context, input, location);
+  if (allowedPath === undefined) return assertPathInAllowedRoot(input);
+  let current: string | undefined;
+  try { current = fs.realpathSync(allowedPath); } catch { /* reported below */ }
+  if (current !== allowedPath) throw new RunwayError(`File changed after it was approved; refusing to read it: ${input}`, 'FILE_NOT_FOUND', 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.');
+  return allowedPath;
+}
+
 /**
  * Upload a local file to Runway's ephemeral storage.
  * Returns a runway:// URI valid for 24 hours.
@@ -465,9 +475,9 @@ export async function runwayRawFetch(
  * BEFORE any file read or upstream API call, so a disallowed path never
  * triggers an `/uploads` request and the file's bytes are never read.
  */
-export async function uploadEphemeral(filePath: string): Promise<string> {
+export async function uploadEphemeral(filePath: string, context?: FileReadContext, location: (string | number)[] = []): Promise<string> {
   // Sandbox check first — refuse before reading the file or hitting /uploads.
-  const safePath = assertPathInAllowedRoot(filePath);
+  const safePath = resolveLocalReadPath(filePath, context, location);
 
   if (!fs.existsSync(safePath)) {
     throw new RunwayError(`File not found: ${filePath}`, 'FILE_NOT_FOUND',
@@ -546,13 +556,15 @@ export async function uploadEphemeral(filePath: string): Promise<string> {
 export async function resolveMediaInput(
   input: string,
   category: 'image' | 'video' | 'audio',
+  context?: FileReadContext,
+  location: (string | number)[] = [],
 ): Promise<string> {
   if (input.startsWith('https://') || input.startsWith('data:') || input.startsWith('runway://')) {
     return input;
   }
 
   // Sandbox the local-file branch first so a disallowed path is never read.
-  const safePath = assertPathInAllowedRoot(input);
+  const safePath = resolveLocalReadPath(input, context, location);
 
   try {
     const stats = fs.statSync(safePath);
@@ -562,7 +574,7 @@ export async function resolveMediaInput(
     }
     const limit = DATA_URI_BINARY_LIMITS[category];
     if (stats.size > limit) {
-      return await uploadEphemeral(safePath);
+      return await uploadEphemeral(context?.mode === 'central' ? input : safePath, context, location);
     }
     const buffer = fs.readFileSync(safePath);
     const ext = input.split('.').pop()?.toLowerCase() || 'bin';

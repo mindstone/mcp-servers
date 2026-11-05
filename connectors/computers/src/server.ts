@@ -1,3 +1,5 @@
+import { centralReadPath, fileReadContext } from './file-read-context.js';
+import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -78,7 +80,7 @@ async function waitCancellable(computers: Computers, located: Located, job: stri
 
 export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
   refuseRedirects();
-  const server = new McpServer({ name: 'computers', version });
+  const server = new McpServer({ name: 'computers', version }, { capabilities: FILE_READ_CAPABILITIES });
   const computers = new Computers(providersFromEnv(env));
   const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: true };
   const acts = { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
@@ -296,7 +298,7 @@ RETURNS: the command's output (page text, snapshot, or a result line), or an ima
   server.registerTool(
     'computer_copy_in',
     {
-      description: `Put a file on a computer: either a file from the person's Library, or text you write (a script, a config file, a list).
+      description: `Put a file on a computer: either a local file, or text you write (a script, a config file, a list). When connected to a host that authorizes file reads, its path permission decision applies to library_path. Standalone clients require the file inside the Library (MCP_WORKSPACE_PATH).
 
 WHEN TO USE:
 - A command or website on the computer needs one of the person's files: pass library_path.
@@ -305,18 +307,22 @@ WHEN TO USE:
 GOOD TO KNOW: one file at a time, up to 200 MB (zip a folder first). By default it won't overwrite a file on the computer; pass replace: true to overwrite.
 
 RETURNS: the path it landed at on the computer and its size.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['library_path'], base: 'workspaceRealpath', expandTilde: false, when: [{ relativeTo: 'root', selector: ['content'], test: 'undefined' }] }] } },
       inputSchema: {
         computer: computerArg,
-        library_path: z.string().optional().describe('A Library file to copy, relative to the Library (for example "Reports/q3.xlsx"). Give this or content.'),
+        library_path: z.string().optional().describe('A local file to copy. Relative paths start in the Library (for example "Reports/q3.xlsx"). When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside the Library (MCP_WORKSPACE_PATH). Give this or content.'),
         content: z.string().max(5_000_000).optional().describe('Text to write into the file instead of copying a Library file.'),
         destination: z.string().describe('Where to put it on the computer; relative paths start in its home folder (for example "q3.xlsx" or "data/q3.xlsx").'),
         replace: z.boolean().default(false).describe('true to overwrite an existing file there.'),
       },
       annotations: acts,
     },
-    tool(async ({ computer, library_path, content, destination, replace }: { computer: string; library_path?: string; content?: string; destination: string; replace: boolean }) =>
-      json(await computers.copyIn(await computers.ready(computer), library_path, content, destination, replace)),
-    ),
+    tool(async ({ computer, library_path, content, destination, replace }: { computer: string; library_path?: string; content?: string; destination: string; replace: boolean }, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
+      // ready() can start a computer and update its runner, so reject missing authority first.
+      if (content === undefined && library_path !== undefined) centralReadPath(reads, library_path, ['library_path']);
+      return json(await computers.copyIn(await computers.ready(computer), library_path, content, destination, replace, reads));
+    }),
   );
 
   server.registerTool(
