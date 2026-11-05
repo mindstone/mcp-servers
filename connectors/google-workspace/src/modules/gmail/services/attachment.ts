@@ -1,3 +1,4 @@
+import { isGoogleRecoveryExhausted } from '../../../utils/google-retry.js';
 import { google, gmail_v1 } from 'googleapis';
 import { describeApiError } from '../../../utils/apiError.js';
 import {
@@ -163,6 +164,7 @@ export class GmailAttachmentService {
         mimeType: metadata.mimeType,
       };
     } catch (error) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       if (error instanceof GmailError) throw error;
       throw new GmailError(
         'Failed to get attachment',

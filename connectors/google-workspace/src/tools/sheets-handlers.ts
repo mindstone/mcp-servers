@@ -55,7 +55,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadSpreadsheetArgs {
@@ -400,7 +400,7 @@ export async function handleReadSpreadsheet(args: ReadSpreadsheetArgs): Promise<
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:spreadsheet/${spreadsheetId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:spreadsheet/${spreadsheetId}`, ['spreadsheetId', 'continuationToken', 'data.continuationToken']);
     }
     
     // Format as human-readable text
@@ -474,7 +474,7 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:values/${spreadsheetId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:values/${spreadsheetId}`, ['spreadsheetId', 'continuationToken', 'data.continuationToken']);
     }
 
     if (isAnchorReadResponse(result.data)) {
@@ -948,7 +948,7 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:batch/${spreadsheetId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:batch/${spreadsheetId}`, ['*.data.continuationToken']);
     }
 
     if (valueView === 'shaped') {

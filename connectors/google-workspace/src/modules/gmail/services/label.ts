@@ -1,3 +1,4 @@
+import { isGoogleRecoveryExhausted } from '../../../utils/google-retry.js';
 import { gmail_v1 } from 'googleapis';
 import { describeApiError } from '../../../utils/apiError.js';
 import {
@@ -397,6 +398,7 @@ export class LabelService {
 
       return this.mapGmailLabel(response.data);
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       if (error instanceof Error && 'code' in error && error.code === '401') {
         throw new GmailError(
           'Authentication failed',
@@ -435,6 +437,7 @@ export class LabelService {
         labels: response.data.labels.map(this.mapGmailLabel)
       };
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to fetch labels',
         'FETCH_ERROR',
@@ -489,6 +492,7 @@ export class LabelService {
 
       return this.mapGmailLabel(response.data);
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       if (error instanceof Error && 'code' in error && error.code === '401') {
         throw new GmailError(
           'Authentication failed',
@@ -520,6 +524,7 @@ export class LabelService {
         id: params.labelId
       });
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to delete label',
         'DELETE_ERROR',
@@ -539,6 +544,7 @@ export class LabelService {
         }
       });
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to modify message labels',
         'MODIFY_ERROR',
@@ -607,6 +613,7 @@ export class LabelService {
         actions: params.actions
       };
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to create label filter',
         'CREATE_ERROR',
@@ -660,6 +667,7 @@ export class LabelService {
 
       return { filters };
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to get label filters',
         'FETCH_ERROR',
@@ -732,6 +740,7 @@ export class LabelService {
         actions: params.actions
       };
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to update label filter',
         'UPDATE_ERROR',
@@ -747,6 +756,7 @@ export class LabelService {
         id: params.filterId
       });
     } catch (error: unknown) {
+      if (isGoogleRecoveryExhausted(error)) throw error;
       throw new GmailError(
         'Failed to delete label filter',
         'DELETE_ERROR',

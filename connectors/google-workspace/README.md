@@ -74,6 +74,10 @@ node dist/index.js
 
 ## Configuration
 
+**When Google says "slow down".** There is nothing to configure here. Google limits how many requests an account can make per minute; this is a normal limit, not a quota you need to raise. When a request that only reads data (or is safe to repeat) is refused for that reason, the server waits and tries that one request again: a little longer each time, at most about a minute and a half in total, and never sooner than Google's own `Retry-After` header asks. Requests that already succeeded are not sent again. Some refusals are not retried, because waiting will not help: permission errors, daily quotas, a `Retry-After` longer than 64 seconds, and requests that create or change data (`POST` and `PATCH`). Those return Google's error straight away. When retrying stops, the error says so (`recoveryExhausted: true`); a host that retries failed calls itself can read that field and skip its own retry.
+
+**Values you pass back stay exact.** Results mark text that comes from outside (email bodies, file names, event titles) as untrusted content, by wrapping it in an `<untrusted-content>` tag. Values meant to be passed back into another call are returned exactly as Google sent them: page tokens (which fetch the next page of results) and the IDs of messages, threads, files, events, calendars, Chat spaces and Meet records. You can pass them straight into the next call.
+
 This server is designed to run alongside a host application that performs the Google OAuth flow on its own. The host writes credentials to disk; this server reads them.
 
 ### Required environment variables

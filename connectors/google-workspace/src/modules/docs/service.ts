@@ -29,7 +29,8 @@ import {
 import { TabCopyError, TabCopyRequest, copyTabContent } from './tabCopy.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
-import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError, isPassthroughGoogleError } from '../../utils/apiError.js';
+import { preserveGoogleRetryDecision } from '../../utils/google-retry.js';
 import { wrapUntrustedJsonStrings } from '../../utils/untrusted-content.js';
 import {
   ALL_TEXT_KEYS,
@@ -228,7 +229,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof DocsInputError) throw error;
       return {
         success: false,
@@ -382,7 +383,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -469,7 +470,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof DocsInputError) throw error;
       return {
         success: false,
@@ -574,7 +575,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof DocsInputError) throw error;
       return {
         success: false,
@@ -654,7 +655,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof DocsInputError) throw error;
       return {
         success: false,
@@ -701,7 +702,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -754,7 +755,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof DocsInputError) throw error;
       return {
         success: false,
@@ -780,7 +781,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
   private toFailure(error: unknown): DocsOperationResult {
     // An expired/revoked grant must keep its reconnect signal — folding it
     // into a plain error string would skip the host's auth_required handoff.
-    if (isAuthHandoffError(error)) throw error;
+    if (isPassthroughGoogleError(error)) throw error;
     if (error instanceof DocsInputError) throw error;
     return {
       success: false,
@@ -1302,10 +1303,10 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       // Auth handoffs keep their reconnect signal (after the cleanup attempt).
       if (isAuthHandoffError(cause)) throw cause;
       if (cause instanceof DocsInputError) throw cause;
-      return {
+      return preserveGoogleRetryDecision({
         success: false,
         error: `Copy failed during "${error.phase}": ${describeApiErrorUntrusted(cause, DOCS_API_ERROR_SOURCE)}.${outcome}`,
-      };
+      }, cause);
     }
   }
 

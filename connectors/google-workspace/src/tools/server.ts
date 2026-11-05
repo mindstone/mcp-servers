@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import logger from '../utils/logger.js';
+import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -1110,7 +1111,10 @@ export class GSuiteServer {
           _meta: extractResultMeta(result)
         };
       } catch (error) {
-        const response = this.formatErrorResponse(error);
+        const response = {
+          ...this.formatErrorResponse(error),
+          ...(isGoogleRecoveryExhausted(error) ? { recoveryExhausted: true } : {}),
+        };
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
           isError: true,
@@ -1164,19 +1168,19 @@ export class GSuiteServer {
       };
     }
 
+    if (numericStatus === 429 || isGoogleRecoveryExhausted(error)) {
+      return {
+        ok: false,
+        action_required: message,
+        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
+      };
+    }
+
     if (numericStatus === 403) {
       return {
         ok: false,
         action_required: message,
         next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.'
-      };
-    }
-
-    if (numericStatus === 429) {
-      return {
-        ok: false,
-        action_required: message,
-        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
       };
     }
 

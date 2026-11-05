@@ -5,32 +5,15 @@ import { Readable } from 'stream';
 import { DRIVE_SCOPES } from './scopes.js';
 import { GaxiosResponse } from 'gaxios';
 import { extractHttpStatus } from '../../utils/apiError.js';
+import { errorText, rateLimitReason } from '../../utils/google-retry.js';
 
 const MAX_INLINE_BINARY_BYTES = 500 * 1024; // 500KB
 
 /** A 403 caused by a missing OAuth scope (not by the file's sharing settings). */
 const INSUFFICIENT_SCOPE = /insufficient.*scope|insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i;
 
-/** The error's message plus its response body, where Google puts the structured reason. */
-function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
-  return `${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`;
-}
-
 function isInsufficientScopeError(error: unknown): boolean {
   return INSUFFICIENT_SCOPE.test(errorText(error));
-}
-
-/** Drive's quota reasons; Google sends these with a 403, so they look like a permission denial. */
-const RATE_LIMIT_REASON = /\b(?:userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded)\b/;
-
-/** The rate-limit reason of a 429, or of a 403 whose structured reason is a quota limit; undefined otherwise. */
-function rateLimitReason(error: unknown, status: number | undefined): string | undefined {
-  if (status !== 403 && status !== 429) return undefined;
-  const reason = RATE_LIMIT_REASON.exec(errorText(error))?.[0];
-  if (reason) return reason;
-  return status === 429 ? 'too many requests' : undefined;
 }
 
 /** A Drive rate limit hit while checking file access. Carries the HTTP status so error descriptions keep it. */
