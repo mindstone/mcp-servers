@@ -140,6 +140,32 @@ describe('Google short-window rate-limit recovery', () => {
   });
 
   it.each([
+    ['PUT', 429, 4], ['PUT', 403, 1],
+    ['DELETE', 429, 4], ['DELETE', 403, 1],
+    ['GET', 429, 8],
+  ] as const)('%s keeps the expected rate-limit retry count for %s', async (method, status, expectedRequests) => {
+    await load();
+    let requests = 0;
+    const response = () => {
+      requests++;
+      return HttpResponse.json(status === 403 ? QUOTA : { error: { message: 'Too many requests' } }, { status });
+    };
+    if (method === 'PUT') {
+      mswServer.use(http.put('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.update({
+        userId: 'me', id: 'label-1', requestBody: { name: 'Updated' },
+      })).rejects.toThrow();
+    } else if (method === 'DELETE') {
+      mswServer.use(http.delete('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.delete({ userId: 'me', id: 'label-1' })).rejects.toThrow();
+    } else {
+      mswServer.use(http.get(ROOT, response));
+      await expect(google.gmail('v1').users.messages.list({ userId: 'me' })).rejects.toThrow();
+    }
+    expect(requests).toBe(expectedRequests);
+  });
+
+  it.each([
     ['rateLimitExceeded', 403, 2], ['userRateLimitExceeded', 403, 2], ['RATE_LIMIT_EXCEEDED', 403, 2],
     ["Quota exceeded for quota metric 'Queries' and limit 'Queries per second'", 403, 2],
     ["Quota exceeded for quota metric 'Queries' and limit 'Queries per 100 seconds'", 403, 2],
@@ -233,11 +259,24 @@ describe('Google short-window rate-limit recovery', () => {
     expect(response.isError).toBe(true);
     expect(JSON.parse(response.content[0].text)).toMatchObject({
       ok: false,
-      action_required: QUOTA.error.message,
+      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
       recoveryExhausted: true,
     });
     expect(requests).toBe(expectedRequests);
+  });
+
+  it('keeps exhausted Docs rate-limit text wrapped in the server error envelope', async () => {
+    const { call } = await load();
+    mswServer.use(http.get('https://docs.googleapis.com/v1/documents/doc-1', () =>
+      HttpResponse.json(QUOTA, { status: 403 })));
+    const response = await call('read_workspace_document', { document_id: 'doc-1', return_json: true });
+    const envelope = JSON.parse(response.content[0].text);
+    expect(envelope).toMatchObject({
+      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
+      next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      recoveryExhausted: true,
+    });
   });
 
   it('keeps the Sheets service response for an insufficientPermissions 403', async () => {

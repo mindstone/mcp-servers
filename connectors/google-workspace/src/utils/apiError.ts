@@ -108,6 +108,8 @@ export function toMcpError(error: unknown, fallbackContext: string): Error {
   if (isAuthHandoffError(error) && error instanceof Error) return error;
   const detail = hasErrorDetails(error) && error.details
     ? `${error.message}: ${error.details}`
+    : isGoogleRecoveryExhausted(error)
+      ? describeApiErrorUntrusted(error, 'google-workspace:api-error')
     : describeApiError(error);
   return preserveGoogleRetryDecision(new McpError(ErrorCode.InternalError, `${fallbackContext}: ${detail}`), error);
 }

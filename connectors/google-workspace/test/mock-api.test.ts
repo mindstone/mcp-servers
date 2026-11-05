@@ -727,6 +727,28 @@ describe('Google Workspace mock API error handling', () => {
     expect(JSON.stringify(response).toLowerCase()).toContain('back off');
   });
 
+  it('gives rate-limit advice for a 403 without claiming retries were exhausted', async () => {
+    const handlers = await loadHandlers();
+    const response = handlers.formatErrorResponse({
+      response: {
+        status: 403,
+        data: { error: { errors: [{ reason: 'rateLimitExceeded' }] } },
+      },
+      message: "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute'",
+    }) as Record<string, unknown>;
+    expect(response.next_step).toContain('Back off before retrying');
+    expect(response).not.toHaveProperty('recoveryExhausted');
+  });
+
+  it('keeps rate-limit advice after a service has returned wrapped error text', async () => {
+    const handlers = await loadHandlers();
+    const response = handlers.formatErrorResponse(new Error(
+      '<untrusted-content source="google-workspace:sheets:api-error">Quota exceeded for quota metric \'Queries\' and limit \'Queries per minute\'</untrusted-content> (status 403)',
+    )) as Record<string, unknown>;
+    expect(response.next_step).toContain('Back off before retrying');
+    expect(response).not.toHaveProperty('recoveryExhausted');
+  });
+
   it('returns retry recovery guidance for 500 errors', async () => {
     const handlers = await loadHandlers();
     const response = handlers.formatErrorResponse({ response: { status: 500 }, message: 'Backend error' });

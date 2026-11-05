@@ -2,7 +2,8 @@ import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import logger from '../utils/logger.js';
-import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
+import { GOOGLE_RATE_LIMIT_NEXT_STEP, isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../utils/google-retry.js';
+import { describeApiErrorUntrusted } from '../utils/apiError.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -1120,7 +1121,7 @@ export class GSuiteServer {
   }
 
   private formatErrorResponse(error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const recoveryExhausted = isGoogleRecoveryExhausted(error);
     // Read the string domain-error `code` from ANY domain error, not just AccountError:
     // CalendarError/GmailError/ContactsError all expose a string `code`, and a
     // `getCalendarClient` auth failure surfaces as `CalendarError('AUTH_REQUIRED')`, not an
@@ -1163,11 +1164,16 @@ export class GSuiteServer {
       };
     }
 
-    if (numericStatus === 429 || isGoogleRecoveryExhausted(error)) {
+    const rateLimited = numericStatus === 429 || recoveryExhausted || isShortWindowRateLimit(error);
+    const message = rateLimited
+      ? describeApiErrorUntrusted(error, 'google-workspace:api-error')
+      : error instanceof Error ? error.message : 'Unknown error occurred';
+
+    if (rateLimited) {
       return {
         ok: false,
         action_required: message,
-        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
+        next_step: GOOGLE_RATE_LIMIT_NEXT_STEP
       };
     }
 
