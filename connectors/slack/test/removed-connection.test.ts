@@ -10,7 +10,7 @@ import {
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, statSync: vi.fn(actual.statSync) };
+  return { ...actual, readFileSync: vi.fn(actual.readFileSync), openSync: vi.fn(actual.openSync), renameSync: vi.fn(actual.renameSync) };
 });
 
 const tokens = {
@@ -18,7 +18,7 @@ const tokens = {
   botUserId: 'U999BOT', authedUserId: 'U123',
 };
 const replacement = { ...tokens, botToken: 'xoxb-new-example', userToken: 'xoxp-new-example' };
-const tokenKinds = ['non-rotating', 'unexpired rotating'] as const;
+const tokenKinds = ['non-rotating', 'unexpired rotating', 'expired rotating'] as const;
 const actions = [
   ['list_slack_users', {}],
   ['get_slack_user_profile', { user: 'U123' }],
@@ -26,6 +26,7 @@ const actions = [
   ['post_slack_message', { channel: 'C123', text: 'Example message' }],
   ['send_myself_a_note', { text: 'Example reminder' }],
   ['list_slack_workspaces', {}],
+  ['download_slack_file', { file_id: 'F123' }],
 ] as const;
 
 describe('removed Slack connection', () => {
@@ -44,9 +45,9 @@ describe('removed Slack connection', () => {
   function configure(kind: typeof tokenKinds[number]) {
     cfg = createSlackConfigDir({ tokens: {
       ...tokens,
-      ...(kind === 'unexpired rotating' ? {
+      ...(kind !== 'non-rotating' ? {
         botRefreshToken: 'xoxe-example-bot', userRefreshToken: 'xoxe-example-user',
-        botExpiresAt: Date.now() + 43_200_000, userExpiresAt: Date.now() + 43_200_000,
+        botExpiresAt: kind === 'expired rotating' ? 1 : Date.now() + 43_200_000, userExpiresAt: kind === 'expired rotating' ? 1 : Date.now() + 43_200_000,
       } : {}),
     } });
     return path.join(cfg.configPath, 'workspaces', 'T123.json');
@@ -69,6 +70,10 @@ describe('removed Slack connection', () => {
   function recordRequests() {
     const calls: string[] = [];
     mswServer.use(http.post(`${SLACK_API_BASE}/:method`, async ({ request, params }) => {
+      if (params.method === 'oauth.v2.access') {
+        const role = new URLSearchParams(await request.text()).get('refresh_token')?.includes('user') ? 'user' : 'bot';
+        return HttpResponse.json({ ok: true, access_token: role === 'user' ? tokens.userToken : tokens.botToken, refresh_token: `example-${role}-fresh`, expires_in: 43200 });
+      }
       const auth = request.headers.get('authorization');
       const role = auth === `Bearer ${tokens.botToken}` ? 'old bot'
         : auth === `Bearer ${tokens.userToken}` ? 'old user'
@@ -94,6 +99,9 @@ describe('removed Slack connection', () => {
       expect(calls).toContain('auth.test: old bot');
       calls.length = 0;
 
+      if (kind === 'expired rotating') {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 43_200_001);
+      }
       fs.unlinkSync(tokenPath);
       const result = await client!.callTool(tool, args);
       expect(calls).toEqual([]);
@@ -104,8 +112,9 @@ describe('removed Slack connection', () => {
 
     it.each(['bot', 'user'] as const)('retires cached tokens with the %s getter first, then loads a new connection', async first => {
       const tokenPath = configure(kind);
+      recordRequests();
       const { SlackTokenProvider } = await import('../src/tokenProvider.js');
-      const provider = new SlackTokenProvider(cfg!.configPath, 'T123', '', '');
+      const provider = new SlackTokenProvider(cfg!.configPath, 'T123', 'example-client', 'example-secret');
       expect(await provider.getBotToken() === tokens.botToken).toBe(true);
       expect(await provider.getUserToken() === tokens.userToken).toBe(true);
       fs.unlinkSync(tokenPath);
@@ -139,31 +148,37 @@ describe('removed Slack connection', () => {
     });
   });
 
-  it.each(['EACCES', 'EPERM', 'EIO', 'ENOTDIR'])('keeps cached tokens on stat %s without reloading', async code => {
-    const tokenPath = configure('non-rotating');
+  it.each((['non-rotating', 'unexpired rotating'] as const).flatMap(kind =>
+    ['EACCES', 'EPERM', 'EIO', 'ENOTDIR'].flatMap(code =>
+      (['bot', 'user'] as const).map(role => ({ kind, code, role }))),
+  ))('uses last observed $kind $role credentials without saving on read $code', async ({ kind, code, role }) => {
+    const tokenPath = configure(kind);
     const { SlackTokenProvider } = await import('../src/tokenProvider.js');
-    const provider = new SlackTokenProvider(cfg!.configPath, 'T123', '', '');
+    const provider = new SlackTokenProvider(cfg!.configPath, 'T123', 'example-client', 'example-secret');
     await provider.getBotToken();
     replaceFile(tokenPath);
-    const load = vi.spyOn(provider, 'loadTokens');
-
-    for (const role of ['bot', 'user']) {
-      vi.mocked(fs.statSync).mockImplementationOnce(() => { throw Object.assign(new Error('Stat failed'), { code }); });
-      const token = role === 'bot' ? await provider.getBotToken() : await provider.getUserToken();
-      expect(token === (role === 'bot' ? tokens.botToken : tokens.userToken)).toBe(true);
-    }
-    expect(load).not.toHaveBeenCalled();
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(fs.openSync).mockClear();
+    vi.mocked(fs.renameSync).mockClear();
+    vi.mocked(fs.readFileSync).mockImplementationOnce(() => { throw Object.assign(new Error('Read failed'), { code }); });
+    expect(await (role === 'bot' ? provider.getBotToken() : provider.getUserToken())).toBe(tokens[`${role}Token`]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(fs.renameSync).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledExactlyOnceWith(`[slack-mcp] ${code === 'EACCES' || code === 'EPERM' ? 'TOKEN_FILE_PERMISSION_DENIED' : 'TOKEN_FILE_UNREADABLE'}`);
+    expect(await provider.getBotToken() === replacement.botToken).toBe(true);
+    expect(await provider.getUserToken() === replacement.userToken).toBe(true);
   });
 
-  it('keeps the cache unchanged while the token file exists', async () => {
+  it('loads replacement authorization without a request during the absent gap', async () => {
     const tokenPath = configure('non-rotating');
     const { SlackTokenProvider } = await import('../src/tokenProvider.js');
-    const provider = new SlackTokenProvider(cfg!.configPath, 'T123', '', '');
+    const provider = new SlackTokenProvider(cfg!.configPath, 'T123', 'example-client', 'example-secret');
     await provider.getBotToken();
+    fs.unlinkSync(tokenPath);
     replaceFile(tokenPath);
-    const load = vi.spyOn(provider, 'loadTokens');
-    expect(await provider.getBotToken() === tokens.botToken).toBe(true);
-    expect(await provider.getUserToken() === tokens.userToken).toBe(true);
-    expect(load).not.toHaveBeenCalled();
+    expect(await provider.getBotToken() === replacement.botToken).toBe(true);
+    expect(await provider.getUserToken() === replacement.userToken).toBe(true);
   });
 });

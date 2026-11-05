@@ -3,7 +3,7 @@
  *
  * Honours the byte-compatible token-file schema at
  * `${configPath}/workspaces/{teamId}.json` written by the desktop host.
- * Reads the file on every access (cache is invalidated cheaply); refreshes
+ * Reads the file on every access, retaining unsaved rotations; refreshes
  * via `oauth.v2.access` when expired; rewrites with mode 0o600.
  *
  * `SLACK_DISABLE_REFRESH=1`:
@@ -32,6 +32,20 @@ import {
 import { sanitizeErrorMessage } from './utils.js';
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+/** Host labels and JSON formatting do not change connection authority. */
+function connectionCredentials(tokens: SlackTokenData) {
+  const {
+    botToken, userToken, botRefreshToken, userRefreshToken,
+    botExpiresAt, userExpiresAt, botUserId, authedUserId,
+    appKind, appId, clientId, clientSecret,
+  } = tokens;
+  return {
+    botToken, userToken, botRefreshToken, userRefreshToken,
+    botExpiresAt, userExpiresAt, botUserId, authedUserId,
+    appKind, appId, clientId, clientSecret,
+  };
+}
 
 /**
  * Returns true when refresh is disabled by env. Unsafe equality is fine —
@@ -106,6 +120,9 @@ export const __testOnlyLogRefreshEvent = logRefreshEvent;
 
 export class SlackTokenProvider {
   private cachedTokens: SlackTokenData | null = null;
+  private lastDiskSignature: string | null = null;
+  private connectionRevision = 0;
+  private persistPending = false;
   private botRefreshPromise: Promise<string> | null = null;
   private userRefreshPromise: Promise<string | null> | null = null;
 
@@ -143,7 +160,9 @@ export class SlackTokenProvider {
   }
 
   /**
-   * Read the on-disk token file and cache the result.
+   * Observe disk ownership without replacing a newer unsaved rotation with
+   * the unchanged credential baseline. Different credentials and confirmed
+   * deletion win; credential-neutral host fields are always taken from disk.
    *
    * Distinct error codes per § 5.3 — silent failure here is a bug because
    * a corrupt file (or a `chmod 000` file) gets the same response as a
@@ -161,7 +180,13 @@ export class SlackTokenProvider {
       raw = fs.readFileSync(tokenPath, 'utf-8');
     } catch (err) {
       const code = (err as NodeJS.ErrnoException)?.code;
-      if (code === 'ENOENT') return null;
+      if (code === 'ENOENT') {
+        if (this.lastDiskSignature !== null) this.connectionRevision++;
+        this.lastDiskSignature = null;
+        this.cachedTokens = null;
+        this.persistPending = false;
+        return null;
+      }
       if (code === 'EACCES' || code === 'EPERM') {
         throw new ConnectorError(
           'Slack token file exists but is not readable by this process.',
@@ -179,7 +204,16 @@ export class SlackTokenProvider {
       );
     }
     try {
-      this.cachedTokens = JSON.parse(raw) as SlackTokenData;
+      const tokens = JSON.parse(raw) as SlackTokenData;
+      const signature = JSON.stringify(connectionCredentials(tokens));
+      if (signature !== this.lastDiskSignature) {
+        this.connectionRevision++;
+        this.lastDiskSignature = signature;
+        this.cachedTokens = tokens;
+        this.persistPending = false;
+      } else if (this.cachedTokens) {
+        this.cachedTokens = { ...tokens, ...connectionCredentials(this.cachedTokens) };
+      }
       return this.cachedTokens;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -197,13 +231,13 @@ export class SlackTokenProvider {
     return expiresAt < Date.now() + REFRESH_BUFFER_MS;
   }
 
-  /** Force re-read on next access (after a known external write). */
+  /** Compatibility no-op: every access already observes disk changes. */
   invalidateCache(): void {
-    this.cachedTokens = null;
+    // Every access observes disk; keep any newer unsaved tokens until then.
   }
 
   async hasTokens(): Promise<boolean> {
-    const tokens = this.cachedTokens ?? (await this.loadTokens());
+    const tokens = await this.loadTokens();
     return !!tokens?.botToken;
   }
 
@@ -222,21 +256,35 @@ export class SlackTokenProvider {
     return { appKind: tokens?.appKind ?? 'shared', appName: tokens?.appName, botUsername: tokens?.botUsername };
   }
 
-  private clearCacheIfTokenFileRemoved(): void {
-    if (!this.cachedTokens) return;
+  // Getters must read the current cache after awaiting this helper, with no await before revision/flight decisions.
+  private async tokensForRequest(): Promise<ConnectorError | undefined> {
     try {
-      fs.statSync(this.getTokenPath());
-    } catch (err) {
-      // Only confirmed removal retires the cache; failed saves can leave
-      // valid rotated tokens in memory that are newer than the file.
-      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') this.cachedTokens = null;
+      await this.loadTokens();
+    } catch (readError) {
+      if (readError instanceof ConnectorError && this.cachedTokens &&
+          (readError.code === 'TOKEN_FILE_PERMISSION_DENIED' || readError.code === 'TOKEN_FILE_UNREADABLE')) {
+        console.error(`[slack-mcp] ${readError.code}`);
+        return readError;
+      }
+      throw readError;
     }
+    if (this.cachedTokens && this.persistPending) {
+      try {
+        await this.saveTokens(this.cachedTokens);
+      } catch (err) {
+        // The writer reports each failed retry. Healthy in-memory credentials
+        // remain usable even if the disk never recovers.
+        if (!(err instanceof ConnectorError && err.code === 'TOKEN_PERSIST_FAILED')) throw err;
+      }
+    }
+    return undefined;
   }
 
   async getBotToken(): Promise<string> {
-    this.clearCacheIfTokenFileRemoved();
-    let tokens = this.cachedTokens ?? (await this.loadTokens());
+    const readError = await this.tokensForRequest();
+    const tokens = this.cachedTokens;
     if (!tokens?.botToken) {
+      if (readError) throw readError;
       throw new ConnectorError(
         'No Slack bot token found.',
         'NO_TOKEN',
@@ -250,12 +298,7 @@ export class SlackTokenProvider {
     // Token still valid.
     if (!this.isExpired(tokens.botExpiresAt)) return tokens.botToken;
 
-    // Re-read disk: another process may have refreshed.
-    const diskTokens = await this.loadTokens();
-    if (diskTokens && !this.isExpired(diskTokens.botExpiresAt)) {
-      console.error('[slack-mcp] Bot token refreshed by another process, using disk token');
-      return diskTokens.botToken;
-    }
+    if (readError) throw readError;
 
     // Refresh disabled — throw a structured error the host turns into auth_required.
     if (isRefreshDisabled()) {
@@ -266,30 +309,35 @@ export class SlackTokenProvider {
       );
     }
 
-    const refreshToken = diskTokens?.botRefreshToken ?? tokens.botRefreshToken;
-    if (!refreshToken) return tokens.botToken;
+    const refreshToken = tokens.botRefreshToken;
 
     if (this.botRefreshPromise) return this.botRefreshPromise;
 
+    const revision = this.connectionRevision;
     logRefreshEvent('refresh_attempt', { teamId: this.teamId, tokenType: 'bot' });
     this.botRefreshPromise = (async () => {
       try {
-        const result = await this.refreshToken(refreshToken, 'bot', diskTokens ?? tokens!);
-        const updated: SlackTokenData = {
-          ...(diskTokens ?? tokens!),
-          botToken: result.accessToken,
-          botRefreshToken: result.refreshToken,
-          botExpiresAt: result.expiresAt,
-        };
-        // saveTokens caches the rotated tokens in memory FIRST (before disk
-        // I/O) so a persistence failure cannot lose Slack's single-use
-        // refresh token. If saveTokens throws TOKEN_PERSIST_FAILED, the
-        // in-memory cache already holds the rotated values — we re-throw
-        // distinctly so the host knows we have valid tokens in memory but
-        // couldn't persist. Critically, we do NOT call loadTokens() in the
-        // catch path: doing so would overwrite the freshly-rotated
-        // in-memory tokens with the now-stale on-disk value, and Slack
-        // would have already invalidated the old refresh token.
+        const result = await this.refreshToken(refreshToken, 'bot', tokens);
+        // Keep consumed refresh credentials before the ownership read can fail.
+        // An already observed disconnect/replacement must not regain old tokens.
+        if (revision === this.connectionRevision && this.cachedTokens) {
+          // Merge into the current snapshot so the other role's completed
+          // rotation and arbitrary host fields survive this save.
+          this.cachedTokens = {
+            ...this.cachedTokens,
+            botToken: result.accessToken,
+            botRefreshToken: result.refreshToken,
+            botExpiresAt: result.expiresAt,
+          };
+          this.persistPending = true;
+        }
+        await this.loadTokens();
+        if (revision !== this.connectionRevision) {
+          // Release the old flight before resolving the replacement connection.
+          this.botRefreshPromise = null;
+          return this.getBotToken();
+        }
+        const updated = this.cachedTokens!;
         await this.saveTokens(updated);
         logRefreshEvent('refresh_success', {
           teamId: this.teamId,
@@ -299,8 +347,8 @@ export class SlackTokenProvider {
         return updated.botToken;
       } catch (err) {
         // Persistence failure: rotated tokens survive in cachedTokens (set
-        // by saveTokens BEFORE the write attempt). Re-throw distinctly —
-        // do NOT remap to REFRESH_FAILED and do NOT call loadTokens().
+        // by saveTokens BEFORE the write attempt). Re-throw distinctly so
+        // the caller sees the persistence failure and can retry saving later.
         if (err instanceof ConnectorError && err.code === 'TOKEN_PERSIST_FAILED') {
           logRefreshEvent('refresh_failure', {
             teamId: this.teamId,
@@ -352,22 +400,22 @@ export class SlackTokenProvider {
    * no user token exists. User refresh failure is non-fatal for read paths
    * that fall back to the bot token (returns null), but auth-rejected
    * refreshes propagate so the host can surface auth_required for tools
-   * that strictly require the user token.
+   * that strictly require the user token. Confirmed disconnect and token-file
+   * errors also propagate instead of becoming an absent user credential.
    */
   async getUserToken(): Promise<string | null> {
-    this.clearCacheIfTokenFileRemoved();
-    let tokens = this.cachedTokens ?? (await this.loadTokens());
-    if (!tokens?.userToken) return null;
+    const readError = await this.tokensForRequest();
+    const tokens = this.cachedTokens;
+    if (!tokens?.userToken) {
+      if (readError) throw readError;
+      return null;
+    }
 
     if (!tokens.userRefreshToken) return tokens.userToken;
 
     if (!this.isExpired(tokens.userExpiresAt)) return tokens.userToken;
 
-    const diskTokens = await this.loadTokens();
-    if (diskTokens?.userToken && !this.isExpired(diskTokens.userExpiresAt)) {
-      console.error('[slack-mcp] User token refreshed by another process, using disk token');
-      return diskTokens.userToken;
-    }
+    if (readError) throw readError;
 
     if (isRefreshDisabled()) {
       throw new ConnectorError(
@@ -377,21 +425,40 @@ export class SlackTokenProvider {
       );
     }
 
-    const refreshToken = diskTokens?.userRefreshToken ?? tokens.userRefreshToken;
-    if (!refreshToken) return tokens.userToken;
+    const refreshToken = tokens.userRefreshToken;
 
     if (this.userRefreshPromise) return this.userRefreshPromise;
 
+    const revision = this.connectionRevision;
     logRefreshEvent('refresh_attempt', { teamId: this.teamId, tokenType: 'user' });
     this.userRefreshPromise = (async () => {
       try {
-        const result = await this.refreshToken(refreshToken, 'user', diskTokens ?? tokens!);
-        const updated: SlackTokenData = {
-          ...(diskTokens ?? tokens!),
-          userToken: result.accessToken,
-          userRefreshToken: result.refreshToken,
-          userExpiresAt: result.expiresAt,
-        };
+        const result = await this.refreshToken(refreshToken, 'user', tokens);
+        // Retain the rotation on an inconclusive read, but never save until
+        // disk ownership is known. The next request retries observation first.
+        if (revision === this.connectionRevision && this.cachedTokens) {
+          this.cachedTokens = {
+            ...this.cachedTokens,
+            userToken: result.accessToken,
+            userRefreshToken: result.refreshToken,
+            userExpiresAt: result.expiresAt,
+          };
+          this.persistPending = true;
+        }
+        await this.loadTokens();
+        if (revision !== this.connectionRevision) {
+          if (!this.cachedTokens) {
+            throw new ConnectorError(
+              'Slack connection was removed during user token refresh.',
+              'NO_TOKEN',
+              'Re-authenticate the Slack workspace via your MCP host application to provision tokens.',
+            );
+          }
+          // Release the old flight before resolving the replacement connection.
+          this.userRefreshPromise = null;
+          return this.getUserToken();
+        }
+        const updated = this.cachedTokens!;
         await this.saveTokens(updated);
         logRefreshEvent('refresh_success', {
           teamId: this.teamId,
@@ -400,8 +467,9 @@ export class SlackTokenProvider {
         });
         return result.accessToken;
       } catch (err) {
-        // Persistence failure: rotated tokens cached in memory; surface
-        // distinctly (don't loadTokens() back to stale value).
+        // Persistence failure: rotated tokens survive in cachedTokens (set
+        // by saveTokens BEFORE the write attempt). Re-throw distinctly so
+        // the caller sees the persistence failure and can retry saving later.
         if (err instanceof ConnectorError && err.code === 'TOKEN_PERSIST_FAILED') {
           logRefreshEvent('refresh_failure', {
             teamId: this.teamId,
@@ -412,9 +480,8 @@ export class SlackTokenProvider {
           throw err;
         }
 
-        // Auth-rejected refreshes propagate so the host can dispatch
-        // reauth via the auth_required shape; transient failures for the
-        // user token are non-fatal for read fallbacks (return null).
+        // Auth rejection, confirmed disconnect and token-file errors propagate;
+        // ordinary transient refresh failures retain the existing read fallback.
         if (err instanceof ConnectorError) {
           logRefreshEvent('refresh_failure', {
             teamId: this.teamId,
@@ -424,7 +491,9 @@ export class SlackTokenProvider {
             retryAfterSeconds: typeof err.extra?.retry_after_seconds === 'number' ? err.extra.retry_after_seconds : undefined,
             message: err.message,
           });
-          if (err.code === REFRESH_AUTH_REJECTED) throw err;
+          if (err.code === REFRESH_AUTH_REJECTED || err.code === 'NO_TOKEN' ||
+              err.code === 'TOKEN_FILE_PERMISSION_DENIED' || err.code === 'TOKEN_FILE_UNREADABLE' ||
+              err.code === 'TOKEN_FILE_CORRUPT') throw err;
           return null;
         }
 
@@ -593,17 +662,9 @@ export class SlackTokenProvider {
   private async saveTokens(tokens: SlackTokenData): Promise<void> {
     const tokenPath = this.getTokenPath();
     const dir = path.dirname(tokenPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
-
-    // Cache the rotated tokens FIRST so an in-progress write can never lose
-    // the freshly-rotated single-use refresh token from memory if disk I/O
-    // fails partway. The host process can keep using these in-memory tokens
-    // for the lifetime of the process even if the disk write fails. The
-    // refresh-path catch in getBotToken() / getUserToken() relies on this
-    // ordering — do not move the assignment below the write.
+    // Cache before ALL persistence I/O, including mkdir.
     this.cachedTokens = tokens;
+    this.persistPending = true;
 
     // Atomic + durable write: temp file in the same directory, fsync the
     // file, rename to the final path, fsync the parent dir (POSIX). § 5.1
@@ -613,6 +674,7 @@ export class SlackTokenProvider {
     const tmpPath = `${tokenPath}.tmp.${process.pid}.${Date.now()}`;
     const payload = JSON.stringify(tokens, null, 2);
     try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       // openSync(mode=0o600) creates the file with 0600 even on filesystems
       // that ignore the writeFileSync mode option.
       const fd = fs.openSync(tmpPath, 'w', 0o600);
@@ -668,6 +730,8 @@ export class SlackTokenProvider {
       } catch {
         // Windows or filesystem without dir-fsync — accept.
       }
+      this.lastDiskSignature = JSON.stringify(connectionCredentials(tokens));
+      this.persistPending = false;
     } catch (err) {
       // Best-effort cleanup of the temp file. Don't mask the original error.
       try {

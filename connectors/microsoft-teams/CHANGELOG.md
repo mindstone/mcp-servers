@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-03
+
+### Changed
+
+- Cards keep their send state in every copy and after a restart; a blocked send says why without a Retry that can't work.
+
 ### Fixed
 
 - Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.

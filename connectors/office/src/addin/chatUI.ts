@@ -98,10 +98,10 @@ const EMPTY_CONTROLLER_SNAPSHOT: ChatControllerSnapshot = {
 };
 const EMPTY_STREAMING_TEXT = '';
 const NOT_READY_COPY =
-  "Rebel's browser connection isn't paired yet. Open the Rebel desktop app, finish setup, and this panel will wake up.";
-const SETTING_UP_COPY = 'Rebel is still setting up. Try again in a moment.';
+  'Make sure Rebel is open on this computer; this panel connects by itself as soon as it is.';
+const SETTING_UP_COPY = 'Waiting for Rebel. Make sure Rebel is open on this computer; this panel connects by itself as soon as it is.';
 const REVOKED_COPY =
-  'Rebel revoked this connection. Open Rebel and re-pair to reconnect.';
+  'Rebel revoked this connection. Open Rebel and reconnect Microsoft Office in Settings.';
 const STREAM_DROPPED_COPY =
   "Rebel's streaming connection dropped. Your next message will try to reconnect.";
 const MISSING_CONTEXT_COPY = 'Open a document, then try again.';
@@ -768,7 +768,7 @@ export function createChatUI(
       view.creatingConversation;
     const placeholder =
       view.phase === 'not-ready'
-        ? 'Rebel is setting up — hang tight'
+        ? 'Waiting for Rebel'
         : view.conversationId
           ? 'Message Rebel…'
           : 'Ask about this document…';
@@ -1087,7 +1087,7 @@ function createNotReadyPanel(): HTMLElement {
 
   const title = document.createElement('h2');
   title.className = 'chat-empty-title';
-  title.textContent = 'Rebel is setting up';
+  title.textContent = 'Waiting for Rebel';
 
   const body = document.createElement('p');
   body.className = 'chat-empty-body';
@@ -1302,7 +1302,7 @@ function friendlyError(code: string, fallback: string): string {
     case 'PORT_UNREACHABLE':
       return "Rebel isn't reachable right now. Is the desktop app open?";
     case 'UNAUTHORIZED':
-      return NOT_READY_COPY;
+      return 'Open Rebel and reconnect Microsoft Office in Settings.';
     case 'NETWORK_ERROR':
     case 'TIMEOUT':
       return "Rebel isn't responding right now. Try again in a moment.";

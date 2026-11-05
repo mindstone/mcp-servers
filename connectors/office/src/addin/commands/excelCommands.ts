@@ -7,7 +7,7 @@
  * ExcelApi 1.8+ (data validation), ExcelApi 1.10+ (comments).
  */
 
-import { executeExcelCommand, type CommandResult } from '../officeExecutor.js';
+import { executeExcelCommand, fail, type CommandResult } from '../officeExecutor.js';
 
 export type ExcelCommandHandler = (params: Record<string, unknown>) => Promise<CommandResult>;
 
@@ -94,13 +94,9 @@ async function readRange(params: Record<string, unknown>): Promise<CommandResult
     if (hasHeaders && returnJson && totalRows > 0) {
       const headers = allValues[0] as string[];
       const dataRows = allValues.slice(1, 1 + limit);
-      const jsonRows = dataRows.map((row) => {
-        const obj: Record<string, unknown> = {};
-        for (let c = 0; c < headers.length; c++) {
-          obj[headers[c] ?? `Column${c + 1}`] = row[c];
-        }
-        return obj;
-      });
+      const jsonRows = dataRows.map((row) => Object.fromEntries(
+        headers.map((header, c) => [header ?? `Column${c + 1}`, row[c]]),
+      ));
       return { headers, rows: jsonRows, totalRows: totalRows - 1, returnedRows: jsonRows.length };
     }
 
@@ -208,17 +204,21 @@ async function addWorksheet(params: Record<string, unknown>): Promise<CommandRes
   const afterSheet = typeof params['afterSheet'] === 'string' ? params['afterSheet'] : undefined;
 
   return executeExcelCommand(async (context) => {
-    const newSheet = context.workbook.worksheets.add(name);
-    newSheet.load(['name', 'position']);
-
+    let targetPosition: number | undefined;
     if (position === 'start') {
-      newSheet.position = 0;
-    } else if (position === 'afterSheet' && afterSheet) {
+      targetPosition = 0;
+    } else if (position === 'afterSheet') {
+      if (!afterSheet) {
+        fail('INVALID_ARGUMENT', 'The "afterSheet" parameter is required for position "afterSheet".');
+      }
       const refSheet = context.workbook.worksheets.getItem(afterSheet);
       refSheet.load('position');
       await context.sync();
-      newSheet.position = refSheet.position + 1;
+      targetPosition = refSheet.position + 1;
     }
+    const newSheet = context.workbook.worksheets.add(name);
+    newSheet.load(['name', 'position']);
+    if (targetPosition !== undefined) newSheet.position = targetPosition;
     // 'end' is the default behavior
 
     await context.sync();
@@ -277,13 +277,9 @@ async function readTable(params: Record<string, unknown>): Promise<CommandResult
     const slicedRows = allRows.slice(offset, offset + limit);
 
     if (returnJson) {
-      const jsonRows = slicedRows.map((row) => {
-        const obj: Record<string, unknown> = {};
-        for (let c = 0; c < headers.length; c++) {
-          obj[headers[c] ?? `Column${c + 1}`] = row[c];
-        }
-        return obj;
-      });
+      const jsonRows = slicedRows.map((row) => Object.fromEntries(
+        headers.map((header, c) => [header ?? `Column${c + 1}`, row[c]]),
+      ));
       return { headers, rows: jsonRows, totalRows, returnedRows: jsonRows.length, offset };
     }
 
@@ -670,7 +666,7 @@ async function addConditionalFormatting(params: Record<string, unknown>): Promis
       }
 
       default:
-        throw new Error(`Unsupported conditional formatting type: "${rule['type'] as string}".`);
+        fail('INVALID_ARGUMENT', `Unsupported conditional formatting type: "${rule['type'] as string}".`);
     }
 
     await context.sync();
@@ -710,8 +706,9 @@ async function sortRange(params: Record<string, unknown>): Promise<CommandResult
       const headers = (headerRange.values[0] ?? []) as string[];
       const fields = (sortFields as Array<{ column: string; ascending?: boolean }>).map((sf) => {
         const colIndex = headers.findIndex((h) => h === sf.column);
+        if (colIndex < 0) fail('ITEM_NOT_FOUND', `Column "${sf.column}" not found. Available headers: ${headers.join(', ')}.`);
         return {
-          key: colIndex >= 0 ? colIndex : 0,
+          key: colIndex,
           ascending: sf.ascending !== false,
         } as Excel.SortField;
       });
@@ -720,12 +717,15 @@ async function sortRange(params: Record<string, unknown>): Promise<CommandResult
     } else {
       const sheet = getWorksheet(context, worksheetName);
       const range = sheet.getRange(rangeAddr!);
+      range.load(['columnIndex', 'columnCount']);
+      await context.sync();
       const fields = (sortFields as Array<{ column: string; ascending?: boolean }>).map((sf) => {
-        // Column letter to 0-based index: 'A' → 0, 'B' → 1, etc.
         const colLetter = sf.column.toUpperCase();
-        const colIndex = colLetter.charCodeAt(0) - 65;
+        if (!/^[A-Z]{1,3}$/.test(colLetter)) fail('INVALID_ARGUMENT', `Column "${sf.column}" must be a worksheet column letter.`);
+        const colIndex = [...colLetter].reduce((index, letter) => index * 26 + letter.charCodeAt(0) - 64, 0) - 1 - range.columnIndex;
+        if (colIndex < 0 || colIndex >= range.columnCount) fail('INVALID_ARGUMENT', `Column "${sf.column}" is outside range ${rangeAddr}.`);
         return {
-          key: colIndex >= 0 ? colIndex : 0,
+          key: colIndex,
           ascending: sf.ascending !== false,
         } as Excel.SortField;
       });
@@ -757,51 +757,42 @@ async function filterTable(params: Record<string, unknown>): Promise<CommandResu
   }
 
   return executeExcelCommand(async (context) => {
-    if (tableName) {
-      const table = context.workbook.tables.getItem(tableName);
-
-      if (!filters) {
-        // Clear all filters
-        table.clearFilters();
-        await context.sync();
-        return { success: true, action: 'cleared' };
-      }
-
-      const headerRange = table.getHeaderRowRange();
-      headerRange.load('values');
+    const table = tableName ? context.workbook.tables.getItem(tableName) : undefined;
+    const sheet = table ? undefined : getWorksheet(context, worksheetName);
+    const range = table ? table.getHeaderRowRange() : sheet!.getRange(rangeAddr!);
+    if (!filters) {
+      if (table) table.clearFilters();
+      else sheet!.autoFilter.clearCriteria();
       await context.sync();
-
-      const headers = (headerRange.values[0] ?? []) as string[];
-
-      for (const f of filters as Array<{ column: string; criteria: { type: string; values?: string[]; operator?: string; value?: unknown } }>) {
-        const colIndex = headers.findIndex((h) => h === f.column);
-        if (colIndex < 0) continue;
-
-        const column = table.columns.getItemAt(colIndex);
-        if (f.criteria.type === 'values' && Array.isArray(f.criteria.values)) {
-          column.filter.applyValuesFilter(f.criteria.values);
-        } else if (f.criteria.type === 'condition') {
-          const dynamicCriteria: Excel.FilterCriteria = {
-            filterOn: Excel.FilterOn.custom,
-            criterion1: `${f.criteria.operator ?? ''}${f.criteria.value ?? ''}`,
-          };
-          column.filter.applyCustomFilter(dynamicCriteria.criterion1!);
-        }
-      }
-    } else {
-      const sheet = getWorksheet(context, worksheetName);
-      const range = sheet.getRange(rangeAddr!);
-
-      if (!filters) {
-        sheet.autoFilter.clearCriteria();
-        await context.sync();
-        return { success: true, action: 'cleared' };
-      }
-
-      // Apply auto-filter on the range
-      sheet.autoFilter.apply(range);
+      return { success: true, action: 'cleared' };
     }
-
+    const headerRange = table ? range : range.getRow(0);
+    headerRange.load('values');
+    await context.sync();
+    const headers = (headerRange.values[0] ?? []).map(String);
+    const resolved = (filters as Array<{ column: string; criteria: { type: string; values?: string[]; operator?: string; value?: unknown } }>).map((f) => {
+      const index = headers.indexOf(f.column);
+      if (index < 0) fail('ITEM_NOT_FOUND', `Column "${f.column}" not found. Available headers: ${headers.join(', ')}.`);
+      let criteria: Excel.FilterCriteria;
+      if (f.criteria.type === 'values' && Array.isArray(f.criteria.values)) {
+        criteria = { filterOn: Excel.FilterOn.values, values: f.criteria.values };
+      } else if (f.criteria.type === 'condition') {
+        const operators: Record<string, string> = {
+          greaterThan: '>', greaterThanOrEqual: '>=', lessThan: '<', lessThanOrEqual: '<=', equals: '=', notEqual: '<>',
+          '>': '>', '>=': '>=', '<': '<', '<=': '<=', '=': '=', '<>': '<>',
+        };
+        const operator = f.criteria.operator ?? '';
+        if (!Object.prototype.hasOwnProperty.call(operators, operator)) fail('INVALID_ARGUMENT', `Unsupported filter operator "${operator}". Use ${Object.keys(operators).join(', ')}.`);
+        criteria = { filterOn: Excel.FilterOn.custom, criterion1: `${operators[operator]}${f.criteria.value ?? ''}` };
+      } else {
+        fail('INVALID_ARGUMENT', `Unsupported filter criteria for "${f.column}".`);
+      }
+      return { index, criteria };
+    });
+    for (const { index, criteria } of resolved) {
+      if (table) table.columns.getItemAt(index).filter.apply(criteria);
+      else sheet!.autoFilter.apply(range, index, criteria);
+    }
     await context.sync();
     return { success: true, action: 'applied' };
   });
@@ -1087,7 +1078,7 @@ async function addDataValidation(params: Record<string, unknown>): Promise<Comma
       }
 
       default:
-        throw new Error(`Unsupported validation type: "${rule['type'] as string}".`);
+        fail('INVALID_ARGUMENT', `Unsupported validation type: "${rule['type'] as string}".`);
     }
 
     if (showErrorAlert || errorMessage) {

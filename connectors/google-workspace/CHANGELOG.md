@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-03
+
+### Changed
+
+- Cards keep their send state in every copy and after a restart; a blocked send says why without a Retry that can't work.
+
 ### Fixed
 
 - When Google refuses a read because of its per-minute limit, wait and retry that one request (up to about a minute and a half, honouring `Retry-After`) instead of failing the whole tool call; requests that succeeded are not repeated. When retrying stops, the error says so (`recoveryExhausted: true`) and gives rate-limit advice rather than "reconnect the account".
