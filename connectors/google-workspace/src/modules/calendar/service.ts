@@ -793,26 +793,25 @@ export class CalendarService {
       }
 
       // For 'this_and_following', we need to check if this is a recurring event
-      try {
-        const { data: event } = await calendar.events.get({
-          calendarId: 'primary',
-          eventId
-        });
+      const { data: event } = await calendar.events.get({
+        calendarId: 'primary',
+        eventId
+      });
         
-        const isRecurring = !!event.recurringEventId || !!event.recurrence;
+      const isRecurring = !!event.recurringEventId || !!event.recurrence;
         
-        if (!isRecurring) {
-          throw new CalendarError(
-            'Deletion scope can only be applied to recurring events',
-            'INVALID_REQUEST',
-            'The specified event is not recurring'
-          );
-        }
+      if (!isRecurring) {
+        throw new CalendarError(
+          'Deletion scope can only be applied to recurring events',
+          'INVALID_REQUEST',
+          'The specified event is not recurring'
+        );
+      }
 
-        // For 'this_and_following', we need to use a different approach
-        // Google Calendar API handles recurring events differently
+      // For 'this_and_following', we need to use a different approach
+      // Google Calendar API handles recurring events differently
         
-        if (event.recurringEventId) {
+      if (event.recurringEventId) {
           // This is an instance of a recurring event
           // We need to get the master event to update its recurrence rules
           const { data: masterEvent } = await calendar.events.get({
@@ -866,7 +865,7 @@ export class CalendarService {
             eventId,
             sendUpdates
           });
-        } else if (event.recurrence) {
+      } else if (event.recurrence) {
           // This is a master event with recurrence rules
           // We need to update the recurrence rule to end before this instance
           const eventDate = new Date(event.start?.dateTime || event.start?.date || '');
@@ -900,19 +899,6 @@ export class CalendarService {
               recurrence: updatedRules
             }
           });
-        }
-      } catch (error) {
-        if (isGoogleRecoveryExhausted(error)) throw error;
-        if (error instanceof CalendarError) {
-          throw error;
-        }
-        
-        // If we can't get the event or another error occurs, fall back to simple delete
-        await calendar.events.delete({
-          calendarId: 'primary',
-          eventId,
-          sendUpdates
-        });
       }
     });
   }
