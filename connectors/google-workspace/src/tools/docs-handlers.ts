@@ -926,6 +926,7 @@ export async function handleCopyDocumentTab(args: CopyDocumentTabArgs): Promise<
 
     if (!result.success || !result.data) {
       const failure = new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab');
+      Object.assign(failure, { cause: result.cause });
       if (result.status !== undefined) Object.assign(failure, { status: result.status });
       throw preserveGoogleRetryDecision(failure, result);
     }

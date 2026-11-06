@@ -1303,10 +1303,12 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       // Auth handoffs keep their reconnect signal (after the cleanup attempt).
       if (isAuthHandoffError(cause)) throw cause;
       if (cause instanceof DocsInputError) throw cause;
+      const status = extractHttpStatus(cause);
       return preserveGoogleRetryDecision({
         success: false,
         error: `Copy failed during "${error.phase}": ${describeApiErrorUntrusted(cause, DOCS_API_ERROR_SOURCE)}.${outcome}`,
-        ...(extractHttpStatus(cause) === undefined ? {} : { status: extractHttpStatus(cause) }),
+        cause,
+        ...(status === 429 ? { status } : {}),
       }, cause);
     }
   }

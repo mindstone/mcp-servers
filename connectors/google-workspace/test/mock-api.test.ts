@@ -875,6 +875,33 @@ describe('Google Workspace mock API error handling', () => {
     expect(requests).toBe(1);
   });
 
+  it('does not send a reply when the original-message lookup is rate limited', async () => {
+    let sends = 0;
+    installHappyPathGoogleApiMocks();
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/messages/msg-rate-limited', () => HttpResponse.json({
+        error: { code: 429, message: 'Too many requests' },
+      }, { status: 429 })),
+      http.post('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', () => {
+        sends++;
+        return HttpResponse.json({ id: 'unexpected-send' });
+      }),
+    );
+    const handlers = await loadHandlers();
+
+    const response = await handlers.call('send_workspace_email', {
+      to: ['recipient@example.com'],
+      subject: 'Rate-limited reply lookup',
+      body: 'Hello',
+      reply_to_message_id: 'msg-rate-limited',
+    });
+    const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
+    expect(response.isError).toBe(true);
+    expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+    expect(envelope.action_required).toContain('Too many requests');
+    expect(sends).toBe(0);
+  });
+
   it('does not re-run Calendar create or delete operations after a rate-limit 403', async () => {
     let createRequests = 0;
     let deleteRequests = 0;
@@ -2151,6 +2178,37 @@ const DRIVE_SCOPE = {
 };
 
 describe('Docs tab copy', () => {
+  it('keeps the copy outcome sentence with rate-limit advice through the real tool path', async () => {
+    const { batches } = installCopyDocMocks({ failWhen: (req) => Boolean(req.insertText), failStatus: 429 });
+    const handlers = await loadHandlers();
+
+    const response = await handlers.call('copy_workspace_document_tab', {
+      document_id: 'copy-doc',
+      source_tab_id: 't.tmpl',
+      target_tab_id: 't.old',
+      overwrite_existing: true,
+    });
+    const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
+    expect(response.isError).toBe(true);
+    expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+    expect(envelope.action_required).toContain('Target tab t.old was cleared and may be partly written; restore it from the document\'s version history.');
+    expect(batches.filter(batch => batch.requests.some(req => req.insertText))).toHaveLength(1);
+  });
+
+  it('does not re-run a copy after a non-rate-limit HTTP failure', async () => {
+    const { batches } = installCopyDocMocks({ failWhen: (req) => Boolean(req.insertText), failStatus: 401 });
+    const handlers = await loadHandlers();
+
+    const response = await handlers.call('copy_workspace_document_tab', {
+      document_id: 'copy-doc',
+      source_tab_id: 't.tmpl',
+      target_tab_id: 't.old',
+      overwrite_existing: true,
+    });
+    expect(response.isError).toBe(true);
+    expect(batches.filter(batch => batch.requests.some(req => req.insertText))).toHaveLength(1);
+  });
+
   it('copies into a new nested tab: checks first, reads the source without suggestions, and reports a passed verification', async () => {
     const { gets, batches, driveGets } = installCopyDocMocks({ newTabContentFrom: 't.tmpl' });
     const handlers = await loadHandlers();
