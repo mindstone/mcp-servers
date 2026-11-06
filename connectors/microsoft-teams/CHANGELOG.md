@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-06
+
+### Changed
+
+- Compose cards keep the send warning and the failure reason on screen, and Retry sends again when a send is uncertain.
+
 ### Fixed
 
 - Compose cards keep failed-send and blocked-send reasons visible when a message is uncertain.
