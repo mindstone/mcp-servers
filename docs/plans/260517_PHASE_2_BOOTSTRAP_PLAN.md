@@ -150,7 +150,7 @@ Update this section as each publish + dispatch + Rebel-merge completes. State le
                        | state    | npm@new       | rebel PR | merge SHA | notes
 -----------------------+----------+---------------+----------+-----------+-----------------------------
 apple-shortcuts        | DONE     | 0.1.2         | n/a      | n/a       | earlier wave burst
-hubspot                | DONE     | 0.2.0         | PR#62    | 8032f4b   | 2026-05-22 bump (FOX-3354 + FOX-3376); registry: io.github.mindstone/mcp-server-hubspot@0.2.0; Rebel catalog: 9fd9112f4 on dev; on-call 7d to 2026-05-29 (@harryblam)
+hubspot                | DONE     | 0.2.0         | PR#62    | 8032f4b   | 2026-05-22 bump (FOX-3354 + FOX-3376); registry: io.github.mindstone/mcp-server-hubspot@0.2.0; on-call 7d to 2026-05-29
 browser-automation     | PUB      | 0.1.7         |          |           | published 2026-05-18 wave
 elevenlabs             | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
 email-imap             | PUB      | 0.2.3         |          |           | published 2026-05-18 wave
