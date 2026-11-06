@@ -1,7 +1,7 @@
 {
   "id": "bundled-browser-automation",
   "name": "Rebel's Browser",
-  "description": "A separate browser Rebel runs on this computer, for sites no other connector covers: open pages, fill forms, collect information and take screenshots. Keeps its own sign-ins between uses. Formerly Browser Automation. 'Take a screenshot of my LinkedIn profile' or 'Fill out this web form'.",
+  "description": "A separate browser Rebel runs on this computer, for sites no other connector covers: open pages, fill forms, collect information and take screenshots. Keeps its own sign-ins between uses. 'Take a screenshot of my LinkedIn profile' or 'Fill out this web form'. This browser has separate sign-ins from the person's browser named Your Browser.",
   "category": "productivity",
   "icon": "globe",
   "maturity": "stable",
