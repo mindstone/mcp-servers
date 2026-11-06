@@ -849,6 +849,8 @@ PARAMETERS: target (channel ID, #channel-name, or a DM channel), text. For a DM 
     {
       description: `Post a message to a Slack channel as yourself.
 
+PREVIEW FIRST: If the person, or instructions you are following, ask to see, preview or approve the message before it is sent, do not call this tool; show it as an editable draft instead, and post only when they send it.
+
 DM SAFETY: For direct messages (D... channels), intended_recipient (the recipient
 User ID) is REQUIRED. Without it the message is NOT sent — a DM has no visible
 recipient name, so sending unverified risks reaching the wrong person. The tool
@@ -981,6 +983,8 @@ Posted as the user — messages are editable in Slack.`,
     'reply_to_slack_thread',
     {
       description: `Reply to an existing message thread in Slack. A personal app replies as its bot; shared apps reply as you. If a personal app's bot is not in the channel, the reply is posted as you with a hint to invite the app.
+
+PREVIEW FIRST: If the person, or instructions you are following, ask to see, preview or approve the reply before it is sent, do not call this tool; show it as an editable draft instead, and post only when they send it.
 
 PARAMETERS: channel, thread_ts, text. The thread_ts comes from ts_slack /
 thread_ts_slack on a message returned by get_slack_channel_history.`,
