@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-06
+
+### Changed
+
+- Compose cards keep the send warning and the failure reason on screen, and Retry sends again when a send is uncertain.
+
 ### Fixed
 
 - Compose cards keep failed-message and blocked-message reasons visible when a message is uncertain.
