@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep failed-message and blocked-message reasons visible when a message is uncertain.
+
 ## [0.3.6] - 2026-11-06
 
 ### Changed

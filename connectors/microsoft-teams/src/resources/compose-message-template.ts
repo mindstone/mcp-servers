@@ -432,6 +432,7 @@ export const COMPOSE_MESSAGE_HTML = `
       var sendMayHaveGone = false;
       var sent = false;
       var sendBlocked = false;
+      var persistentBlockMessage = '';
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -595,6 +596,13 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function clearError() {
+        if (persistentBlockMessage) {
+          errorText.textContent = persistentBlockMessage;
+          retryButton.classList.toggle('hidden', sendBlocked);
+          errorBox.classList.remove('hidden');
+          postResize();
+          return;
+        }
         errorText.textContent = '';
         errorBox.classList.add('hidden');
       }
@@ -638,11 +646,11 @@ export const COMPOSE_MESSAGE_HTML = `
       // a blind retry could send a duplicate).
       function showSendUnknown() {
         sendMayHaveGone = true;
-        clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
+        unknownText.textContent = "Check whether it sent before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
+        retryButton.classList.toggle('hidden', sendBlocked);
         if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
@@ -908,7 +916,7 @@ export const COMPOSE_MESSAGE_HTML = `
         var collapseMessage = sendMayHaveGone
           ? 'Collapsed. Check whether it sent if you are not sure.'
           : 'Draft collapsed. Nothing sent.';
-        clearError();
+        if (!sendMayHaveGone) clearError();
         clearSuccess();
         clearUnknown();
         setCollapsed(true, collapseMessage);
@@ -925,7 +933,7 @@ export const COMPOSE_MESSAGE_HTML = `
 
       [toInput, bodyInput].forEach(function (element) {
         element.addEventListener('input', function () {
-          if (!sendBlocked) clearError();
+          if (!sendBlocked || persistentBlockMessage) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
           postResize();
@@ -994,11 +1002,15 @@ export const COMPOSE_MESSAGE_HTML = `
           var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
           if (retryCannotChangeBlock) {
             sendBlocked = true;
+            if (true) {
+              persistentBlockMessage = errorMessage;
+            }
             sendButton.disabled = true;
           }
-          if ((!blockedBeforeSend || sendMayHaveGone)) {
+          if (!blockedBeforeSend || sendMayHaveGone) {
             showSendUnknown();
           }
+
           showError(errorMessage);
           return;
         }

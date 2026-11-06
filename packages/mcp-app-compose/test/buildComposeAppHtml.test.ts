@@ -551,6 +551,49 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
   });
 
+  it('keeps a send failure reason when the host later releases the in-flight warning', () => {
+    const window = mount();
+    const message = 'Recipient address rejected.';
+    click(window, 'sendButton');
+    reply(window, { message });
+    deliver(window, maybeOutcome);
+    deliver(window, null);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+    expect(window.document.getElementById('unknownText')!.textContent).toContain('Check');
+    click(window, 'cancelButton');
+    click(window, 'reopenButton');
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+  });
+
+  it('hides Retry when a blocked send is followed by an uncertain host outcome', () => {
+    const window = loadWindow(blockedDraftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Ready to send.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: {
+        jsonrpc: '2.0',
+        id: sendCall?.id,
+        error: { message: 'Sending is disabled by your organization.', data: { reason: 'admin-disabled' } },
+      },
+    }));
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const draftCall = postedMessages(window).filter((message) => message.method === 'tools/call').at(-1);
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: draftCall?.id, error: { message: 'Draft save failed.' } },
+    }));
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).toBeNull();
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { method: 'mcp-app:card-outcome', params: { outcome: 'maybe-sent' } },
+      source: window.eval('window.parent'),
+    }));
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
+  });
+
   it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('keeps Nothing sent for a pre-execution %s block', (reason) => {
     const window = mount();
     click(window, 'sendButton');
@@ -581,6 +624,19 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
+  it.each(['admin-disabled', 'security-policy'])('keeps an earlier uncertain send\'s %s reason after maybe-sent', (reason) => {
+    const window = mount(maybeOutcome);
+    const message = reason === 'admin-disabled' ? 'Sending is disabled by your organization.' : 'Sending is blocked by security policy.';
+    click(window, 'retryButton');
+    reply(window, { message, data: { reason } });
+    deliver(window, maybeOutcome);
+    deliver(window, null);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
+  });
+
   it('keeps Retry for a not-dispatched send so a recovered server can send it', () => {
     const window = mount();
     click(window, 'sendButton');
@@ -604,6 +660,7 @@ describe.each([
     if (reason !== 'not-dispatched') {
       if (mode === 'email' && reason === 'user-disabled') {
         expect(isHidden(window, 'blockedBox')).toBe(false);
+        expect(isHidden(window, 'errorBox')).toBe(true);
       } else {
         expect(isHidden(window, 'errorBox')).toBe(false);
         expect(window.document.getElementById('errorText')!.textContent).toBe('Tool call blocked.');
@@ -833,12 +890,12 @@ describe('buildComposeAppHtml — host neutrality', () => {
   });
 
   it('ships the host-neutral lost-reply wording', () => {
-    const emailSend =
-      "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
-    const chatSend =
-      "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
-    const draftSave =
-      "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+    const emailSend = "Check your Sent folder before sending again, so it doesn't go out twice.";
+    const chatSend = "Check whether it sent before sending again, so it doesn't go out twice.";
+    const draftSave = "Check your Drafts folder before trying again, so you don't create a duplicate.";
+    expect(gmailHtml).not.toContain('No confirmation came back in time.');
+    expect(slackHtml).not.toContain('No confirmation came back in time.');
+    expect(teamsHtml).not.toContain('No confirmation came back in time.');
     expect(gmailHtml).toContain(emailSend);
     expect(draftHtml).toContain(draftSave);
     expect(slackHtml).toContain(chatSend);
@@ -1369,7 +1426,7 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     expect(fresh.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
-  it('keeps earlier send uncertainty but discards answered send contents through a draft-save timeout', () => {
+  it('keeps send uncertainty through a draft-save timeout and retries the send', () => {
     const window = loadWindow(draftHtml);
     setFieldValue(window, 'toInput', 'jane@example.com');
     setFieldValue(window, 'subjectInput', 'Update');
@@ -1385,6 +1442,18 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
     expect(typeof callback).toBe('function');
     (callback as () => void)();
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(window.document.getElementById('unknownTitle')!.textContent).toBe('Not sure if this sent.');
+    expect(window.document.getElementById('unknownText')!.textContent).toContain('Check your Sent folder');
+    const retryButton = window.document.getElementById('retryButton')!;
+    retryButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    const calls = postedMessages(window).filter((message) => message.method === 'tools/call');
+    expect(calls).toHaveLength(3);
+    expect(calls[2]?.params?.name).toBe('send_workspace_email');
+    expect(calls[2]?.id).not.toBe(sendCall?.id);
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: calls[2]?.id, error: { message: 'Connection lost again.' } },
+    }));
     window.document.getElementById('cancelButton')!.dispatchEvent(new window.Event('click'));
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
     window.dispatchEvent(new window.MessageEvent('message', {
@@ -1394,6 +1463,114 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     expect(isHidden(window, 'collapsedState')).toBe(false);
     expect(isHidden(window, 'reopenButton')).toBe(true);
     expect(window.document.getElementById('sentBody')!.textContent).toBe('');
+  });
+
+  it('resends after an uncertain draft failure is Cancelled and Reopened', () => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Posted send contents.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: sendCall?.id, error: { message: 'Connection lost.' } },
+    }));
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const draftCall = postedMessages(window).filter((message) => message.method === 'tools/call').at(-1);
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: draftCall?.id, error: { message: 'Draft save failed.' } },
+    }));
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(window.document.getElementById('unknownTitle')!.textContent).toBe('Not sure if this sent.');
+    window.document.getElementById('cancelButton')!.dispatchEvent(new window.Event('click'));
+    window.document.getElementById('reopenButton')!.dispatchEvent(new window.Event('click'));
+    const retryButton = window.document.getElementById('retryButton')!;
+    retryButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    const calls = postedMessages(window).filter((message) => message.method === 'tools/call');
+    expect(calls).toHaveLength(3);
+    expect(calls[2]?.params?.name).toBe('send_workspace_email');
+  });
+
+  it.each(['admin-disabled', 'security-policy'])('keeps a non-retryable block reason through Reopen and a draft timeout (%s)', (reason) => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Posted send contents.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: sendCall?.id, error: { message: 'Connection lost.' } },
+    }));
+    window.document.getElementById('retryButton')!.dispatchEvent(new window.Event('click'));
+    const retryCall = postedMessages(window).filter((message) => message.method === 'tools/call').at(-1);
+    const message = reason === 'admin-disabled' ? 'Sending is disabled by your organization.' : 'Sending is blocked by security policy.';
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: retryCall?.id, error: { message, data: { reason } } },
+    }));
+    window.document.getElementById('cancelButton')!.dispatchEvent(new window.Event('click'));
+    window.document.getElementById('reopenButton')!.dispatchEvent(new window.Event('click'));
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
+    const timeout = vi.spyOn(window, 'setTimeout');
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+  });
+
+  it.each(['admin-disabled', 'security-policy'])('keeps a clean %s reason through Cancel, Reopen, and a draft timeout', (reason) => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Posted send contents.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    const message = reason === 'admin-disabled' ? 'Sending is disabled by your organization.' : 'Sending is blocked by security policy.';
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: sendCall?.id, error: { message, data: { reason } } },
+    }));
+    window.document.getElementById('cancelButton')!.dispatchEvent(new window.Event('click'));
+    window.document.getElementById('reopenButton')!.dispatchEvent(new window.Event('click'));
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+
+    const timeout = vi.spyOn(window, 'setTimeout');
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+  });
+
+  it.each(['admin-disabled', 'security-policy'])('shows newer draft errors instead of replacing them with the %s reason', (reason) => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Posted send contents.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: sendCall?.id, error: { message: 'Connection lost.' } },
+    }));
+    window.document.getElementById('retryButton')!.dispatchEvent(new window.Event('click'));
+    const retryCall = postedMessages(window).filter((message) => message.method === 'tools/call').at(-1);
+    const blockMessage = reason === 'admin-disabled' ? 'Sending is disabled by your organization.' : 'Sending is blocked by security policy.';
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: retryCall?.id, error: { message: blockMessage, data: { reason } } },
+    }));
+    setFieldValue(window, 'subjectInput', '');
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    expect(window.document.getElementById('errorText')!.textContent).toBe('Add a subject before saving.');
+
+    setFieldValue(window, 'subjectInput', 'Update');
+    expect(window.document.getElementById('errorText')!.textContent).toBe(blockMessage);
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const draftCall = postedMessages(window).filter((message) => message.method === 'tools/call').at(-1);
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: draftCall?.id, error: { message: 'Draft save failed.' } },
+    }));
+    expect(window.document.getElementById('errorText')!.textContent).toBe('Draft save failed.');
   });
 
   it('keeps the send path intact alongside the draft action', () => {

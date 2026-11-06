@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep failed-send and blocked-send reasons visible when a send is uncertain, and Retry sends again after a failed draft save.
+
 ## [0.4.0] - 2026-11-03
 
 ### Changed

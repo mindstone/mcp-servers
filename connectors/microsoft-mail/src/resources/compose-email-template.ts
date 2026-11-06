@@ -485,6 +485,7 @@ export const COMPOSE_EMAIL_HTML = `
       var pendingAction = null;
       var retryAction = null;
       var sendBlocked = false;
+      var persistentBlockMessage = '';
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -687,6 +688,13 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function clearError() {
+        if (persistentBlockMessage) {
+          errorText.textContent = persistentBlockMessage;
+          retryButton.classList.toggle('hidden', sendBlocked && retryAction !== 'draft');
+          errorBox.classList.remove('hidden');
+          postResize();
+          return;
+        }
         errorText.textContent = '';
         errorBox.classList.add('hidden');
       }
@@ -730,11 +738,12 @@ export const COMPOSE_EMAIL_HTML = `
       // a blind retry could send a duplicate).
       function showSendUnknown() {
         sendMayHaveGone = true;
-        clearError();
+        retryAction = null;
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
+        unknownText.textContent = "Check your Sent folder before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
+        retryButton.classList.toggle('hidden', sendBlocked);
         if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
@@ -748,7 +757,8 @@ export const COMPOSE_EMAIL_HTML = `
         if (pendingAction === 'draft') {
           pendingAction = null;
           setSavingDraft(false);
-          showDraftSaveUnknown();
+          if (sendMayHaveGone) showSendUnknown();
+          else showDraftSaveUnknown();
           return;
         }
         pendingAction = null;
@@ -764,7 +774,7 @@ export const COMPOSE_EMAIL_HTML = `
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
         unknownText.textContent =
-          "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+          "Check your Drafts folder before trying again, so you don't create a duplicate.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -1119,7 +1129,7 @@ export const COMPOSE_EMAIL_HTML = `
         var collapseMessage = sendMayHaveGone
           ? 'Collapsed. Check your Sent folder if you are not sure.'
           : 'Draft collapsed. Nothing sent.';
-        clearError();
+        if (!sendMayHaveGone) clearError();
         clearSuccess();
         clearUnknown();
         setCollapsed(true, collapseMessage);
@@ -1146,7 +1156,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       [toInput, ccInput, bccInput, subjectInput, bodyInput].forEach(function (element) {
         element.addEventListener('input', function () {
-          if (!sendBlocked) clearError();
+          if (!sendBlocked || persistentBlockMessage) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
           postResize();
@@ -1226,11 +1236,20 @@ export const COMPOSE_EMAIL_HTML = `
           var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
           if (completedAction !== 'draft' && retryCannotChangeBlock) {
             sendBlocked = true;
+            if (true) {
+              persistentBlockMessage = errorMessage;
+            }
             sendButton.disabled = true;
           }
-          if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
+          if (completedAction === 'draft' && sendMayHaveGone) {
+            // A draft save is undeclared, so it cannot resolve an earlier send
+            // uncertainty. Retry must remain a Send, never a silent draft save.
+            retryAction = null;
+            showSendUnknown();
+          } else if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
+
           showError(errorMessage);
           return;
         }

@@ -301,7 +301,7 @@ function resolveMode(config) {
       sentCollapseDefault: 'Email sent.',
       sentCollapseStamped: 'Email sent · ',
       unknownDetailTextLiteral:
-        '"No confirmation came back in time. Check your Sent folder before sending again, so it doesn\'t go out twice."',
+        '"Check your Sent folder before sending again, so it doesn\'t go out twice."',
       cancelCollapseUnknownText: 'Collapsed. Check your Sent folder if you are not sure.',
     };
   }
@@ -340,7 +340,7 @@ function resolveMode(config) {
     sentCollapseDefault: 'Message sent.',
     sentCollapseStamped: 'Message sent · ',
     unknownDetailTextLiteral:
-      '"No confirmation came back in time. Check whether it sent before sending again, so it doesn\'t go out twice."',
+      '"Check whether it sent before sending again, so it doesn\'t go out twice."',
     cancelCollapseUnknownText: 'Collapsed. Check whether it sent if you are not sure.',
   };
 }
@@ -839,6 +839,7 @@ ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request bel
       var pendingAction = null;
       var retryAction = null;
 ` : ''}      var sendBlocked = false;
+      var persistentBlockMessage = '';
 ${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
@@ -1042,6 +1043,13 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
 ` : ''}      function clearError() {
+        if (persistentBlockMessage) {
+          errorText.textContent = persistentBlockMessage;
+          retryButton.classList.toggle('hidden', sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''});
+          errorBox.classList.remove('hidden');
+          postResize();
+          return;
+        }
         errorText.textContent = '';
         errorBox.classList.add('hidden');
       }
@@ -1085,11 +1093,11 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       // a blind retry could send a duplicate).
       function showSendUnknown() {
         sendMayHaveGone = true;
-        clearError();
-        clearSuccess();
+${hasDraft ? "        retryAction = null;\n" : ''}        clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = ${m.unknownDetailTextLiteral};
         unknownBox.classList.remove('hidden');
+        retryButton.classList.toggle('hidden', sendBlocked);
         if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
@@ -1103,7 +1111,8 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
 ${hasDraft ? `        if (pendingAction === 'draft') {
           pendingAction = null;
           setSavingDraft(false);
-          showDraftSaveUnknown();
+          if (sendMayHaveGone) showSendUnknown();
+          else showDraftSaveUnknown();
           return;
         }
         pendingAction = null;
@@ -1119,7 +1128,7 @@ ${hasDraft ? `      // Same lost-reply honesty as a send, lower stakes: a blind 
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
         unknownText.textContent =
-          "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+          "Check your Drafts folder before trying again, so you don't create a duplicate.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -1530,7 +1539,7 @@ ${hasDraft ? `        if (retryAction === 'draft') {
         var collapseMessage = sendMayHaveGone
           ? ${quoteJsString(m.cancelCollapseUnknownText)}
           : 'Draft collapsed. Nothing sent.';
-        clearError();
+        if (!sendMayHaveGone) clearError();
         clearSuccess();
         clearUnknown();
         setCollapsed(true, collapseMessage);
@@ -1569,7 +1578,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
 
 ` : ''}      ${m.inputListenerElements}.forEach(function (element) {
         element.addEventListener('input', function () {
-          if (!sendBlocked) clearError();
+          if (!sendBlocked || persistentBlockMessage) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
           postResize();
@@ -1649,11 +1658,23 @@ ${hasDraft ? `          if (completedAction === 'draft') {
           var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
           if (${hasDraft ? "completedAction !== 'draft' && " : ''}retryCannotChangeBlock) {
             sendBlocked = true;
+            if (${blockedSend ? "blockedReason !== 'user-disabled'" : 'true'}) {
+              persistentBlockMessage = errorMessage;
+            }
             sendButton.disabled = true;
           }
-          if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
+${hasDraft ? `          if (completedAction === 'draft' && sendMayHaveGone) {
+            // A draft save is undeclared, so it cannot resolve an earlier send
+            // uncertainty. Retry must remain a Send, never a silent draft save.
+            retryAction = null;
+            showSendUnknown();
+          } else if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
+` : `          if (!blockedBeforeSend || sendMayHaveGone) {
+            showSendUnknown();
+          }
+`}
 ${blockedSend ? `          // Only the host's closed user-disabled reason permits the Gmail
           // escape hatch; message text cannot establish why a call failed.
 ${hasDraft ? `          // Draft failures must never open the send-only escape hatch.
