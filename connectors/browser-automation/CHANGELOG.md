@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+- Always run the bundled `agent-browser`. An `agent-browser` on PATH is no longer preferred: npm's is a Node wrapper, and commands run through it could not be ended.
 
 ### Fixed
 

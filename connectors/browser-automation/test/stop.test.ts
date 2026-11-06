@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,15 +125,24 @@ describe('stopping the server', () => {
     expect(consoleError).toHaveBeenCalled();
   });
 
-  it('ends commands still running, so no client outlives the daemon and starts a new one', async () => {
+  it('ends a command still running, so no client outlives the daemon and starts a new one', async () => {
     const { browserClient, calls, stdin, exitedPromise } = await setup();
     await browserClient.execAgentBrowser(['open', 'https://example.com']);
-    expect(calls[0].signal?.aborted).toBe(false);
+    const childProcess = await import('node:child_process');
+    const execFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+    // As execFile does: the client runs until its signal aborts, then is killed.
+    execFile.mockImplementation((_file: string, _args: string[], options: { signal: AbortSignal }, done: Function) => {
+      options.signal.addEventListener('abort', () => done(Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })));
+    });
+    const running = browserClient.execAgentBrowser(['open', 'https://example.org']);
+    const outcome = running.then(() => 'finished', () => 'ended');
+    await new Promise((resolve) => setImmediate(resolve));
 
     stdin.emit('end');
     await exitedPromise;
 
-    expect(calls[0].signal?.aborted).toBe(true);
+    await expect(outcome).resolves.toBe('ended');
+    expect(calls).toHaveLength(1);
   });
 
   it('refuses new browser commands once stopping', async () => {
@@ -154,6 +163,8 @@ describe('the close command', () => {
     vi.stubEnv('AGENT_BROWSER_EXECUTABLE_PATH', '/no/such/browser');
     vi.stubEnv('AGENT_BROWSER_SOCKET_DIR', '/run/browser');
     vi.stubEnv('AGENT_BROWSER_SESSION', 'work');
+    vi.stubEnv('AGENT_BROWSER_NAMESPACE', 'team');
+    vi.stubEnv('AGENT_BROWSER_CONFIG', '/etc/browser.json');
   });
 
   it('carries no launch setting, which would launch a browser before closing', async () => {
@@ -173,7 +184,12 @@ describe('the close command', () => {
 
     await execAgentBrowser(['close']);
 
-    expect(calls[0].env).toMatchObject({ AGENT_BROWSER_SOCKET_DIR: '/run/browser', AGENT_BROWSER_SESSION: 'work' });
+    expect(calls[0].env).toMatchObject({
+      AGENT_BROWSER_CONFIG: '/etc/browser.json',
+      AGENT_BROWSER_NAMESPACE: 'team',
+      AGENT_BROWSER_SESSION: 'work',
+      AGENT_BROWSER_SOCKET_DIR: '/run/browser',
+    });
   });
 
   it('leaves other commands their launch settings', async () => {
@@ -232,6 +248,8 @@ describe('closing the browser for good', () => {
     pidFile = join(dir, 'default.pid');
     vi.stubEnv('AGENT_BROWSER_SOCKET_DIR', dir);
     vi.stubEnv('AGENT_BROWSER_SESSION', '');
+    vi.stubEnv('AGENT_BROWSER_NAMESPACE', '');
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     alive = new Set([DAEMON, CHROME]);
     onKill = undefined;
     writeFileSync(pidFile, `${DAEMON}\n`);
@@ -261,17 +279,17 @@ describe('closing the browser for good', () => {
     expect(signalsSent()).toEqual([]);
   });
 
-  it('closes again when a command that was still running brings the daemon back', async () => {
-    let closed = 0;
+  it('leaves alone a replacement that a settings restart started meanwhile', async () => {
+    const REPLACEMENT = 424250;
     const calls = await mockCommands((call, timeoutMs, done) => {
-      closed += 1;
-      if (closed === 2) rmSync(pidFile, { force: true });
+      alive.add(REPLACEMENT);
+      writeFileSync(pidFile, `${REPLACEMENT}`);
       done(null, '', '');
     });
 
     await closeForGood();
 
-    expect(closes(calls)).toHaveLength(2);
+    expect(closes(calls)).toHaveLength(1);
     expect(signalsSent()).toEqual([]);
   });
 
@@ -297,16 +315,18 @@ describe('closing the browser for good', () => {
     expect(forcedAfter).toBeLessThan(10_000);
   });
 
-  it('keeps trying a close that fails straight away, then force-stops once the budget is spent', async () => {
+  it('force-stops soon after a close that fails straight away', async () => {
     const calls = await mockCommands((call, timeoutMs, done) => {
       if (call.args.includes('close')) done(Object.assign(new Error('boom'), { stderr: 'failed' }), '', 'failed');
       else done(null, alive.has(CHROME) ? `${CHROME}\n` : '', '');
     });
+    const started = Date.now();
 
     await closeForGood();
 
-    expect(closes(calls).length).toBeGreaterThan(1);
+    expect(closes(calls)).toHaveLength(1);
     expect(signalsSent()).toEqual([[CHROME, 'SIGKILL'], [DAEMON, 'SIGKILL']]);
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 
   it('stops the daemon when it has no children', async () => {
@@ -321,11 +341,10 @@ describe('closing the browser for good', () => {
   });
 
   it('stops the whole tree with taskkill on Windows', async () => {
-    const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const calls = await mockCommands(closeHangs);
 
     await closeForGood();
-    platform.mockRestore();
 
     expect(calls.find((call) => call.file === 'taskkill')?.args).toEqual(['/PID', String(DAEMON), '/T', '/F']);
     expect(signalsSent()).toEqual([]);
@@ -347,6 +366,18 @@ describe('closing the browser for good', () => {
     await closeForGood();
 
     expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('finds the pid file of a namespace', async () => {
+    vi.stubEnv('AGENT_BROWSER_NAMESPACE', 'team');
+    rmSync(pidFile);
+    mkdirSync(join(dir, 'namespaces', 'team', 'run'), { recursive: true });
+    writeFileSync(join(dir, 'namespaces', 'team', 'run', 'default.pid'), `${DAEMON}`);
+    await mockCommands(closeHangs);
+
+    await closeForGood();
+
+    expect(signalsSent()).toContainEqual([DAEMON, 'SIGKILL']);
   });
 
   it('finds the pid file of a named session', async () => {

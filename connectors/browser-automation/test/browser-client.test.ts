@@ -108,25 +108,9 @@ describe('execAgentBrowser — argument shape', () => {
     expect(capturedArgs).not.toContain('--headed');
     expect(capturedArgs).not.toContain('--headless');
   });
-
-  it('uses agent-browser alone when it is on PATH', async () => {
-    const childProcess = await import('node:child_process');
-    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
-
-    const calls: string[] = [];
-    mockExecFile.mockImplementation((cmd: string, _args: string[], _opts: unknown, callback: Function) => {
-      calls.push(cmd);
-      callback(null, 'ok', '');
-    });
-
-    const result = await execAgentBrowser(['snapshot', '-i']);
-
-    expect(calls).toEqual(['agent-browser']);
-    expect(result.stdout).toBe('ok');
-  });
 });
 
-describe('execAgentBrowser — bundled agent-browser when none is on PATH', () => {
+describe('execAgentBrowser — the bundled agent-browser', () => {
   const originalEnv = process.env.AGENT_BROWSER_SHOW_WINDOW;
   // Matches either path separator, so the assertion holds on any host OS.
   const NATIVE_BINARY = /[\\/]node_modules[\\/]agent-browser[\\/]bin[\\/]agent-browser-[a-z0-9-]+(\.exe)?$/;
@@ -137,7 +121,7 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     else process.env.AGENT_BROWSER_SHOW_WINDOW = originalEnv;
   });
 
-  async function runAfterPathMiss(
+  async function runBundled(
     callerArgs: string[],
     options?: { headed?: boolean },
   ): Promise<{ calls: Array<{ cmd: string; args: string[]; opts: Record<string, unknown> }>; stdout: string }> {
@@ -149,8 +133,7 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     mockExecFile.mockImplementation(
       (cmd: string, args: string[], opts: Record<string, unknown>, callback: Function) => {
         calls.push({ cmd, args, opts });
-        if (calls.length === 1) callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-        else callback(null, 'ok', '');
+        callback(null, 'ok', '');
       },
     );
 
@@ -159,28 +142,24 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     return { calls, stdout: result.stdout };
   }
 
-  it('after a PATH miss, runs the bundled native binary directly, with no shell', async () => {
+  it('runs the bundled native binary directly, once, with no shell', async () => {
     process.env.AGENT_BROWSER_SHOW_WINDOW = 'false';
-    const { calls, stdout } = await runAfterPathMiss(['fill', '@e3', 'line one\nline two']);
+    const { calls, stdout } = await runBundled(['fill', '@e3', 'line one\nline two']);
 
-    expect(calls).toHaveLength(2);
-    expect(calls[0].cmd).toBe('agent-browser');
-    expect(calls[1].cmd).toMatch(NATIVE_BINARY);
-    expect(calls[1].args).toEqual(['fill', '@e3', 'line one\nline two']);
-    expect(calls[1].opts).toEqual(calls[0].opts);
-    expect(calls[1].opts.windowsHide).toBe(true);
-    expect(calls[1].opts).not.toHaveProperty('shell');
-    expect(calls.map((c) => c.cmd)).not.toContain('npx');
-    expect(calls[1].args).not.toContain('-y');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].cmd).toMatch(NATIVE_BINARY);
+    expect(calls[0].args).toEqual(['fill', '@e3', 'line one\nline two']);
+    expect(calls[0].opts.windowsHide).toBe(true);
+    expect(calls[0].opts).not.toHaveProperty('shell');
     expect(stdout).toBe('ok');
   });
 
   it('keeps --headed after the command in the bundled run', async () => {
     process.env.AGENT_BROWSER_SHOW_WINDOW = 'true';
-    const { calls } = await runAfterPathMiss(['open', 'https://example.com']);
+    const { calls } = await runBundled(['open', 'https://example.com']);
 
-    expect(calls[1].cmd).toMatch(NATIVE_BINARY);
-    expect(calls[1].args).toEqual(['open', '--headed', 'https://example.com']);
+    expect(calls[0].cmd).toMatch(NATIVE_BINARY);
+    expect(calls[0].args).toEqual(['open', '--headed', 'https://example.com']);
   });
 });
 

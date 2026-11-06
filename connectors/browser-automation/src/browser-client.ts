@@ -33,14 +33,16 @@ const stopping = new AbortController();
 // close` normally takes well under a second, but it queues behind any command
 // the daemon is stuck on, and saving the session from a stuck page is slow.
 const CLOSE_BUDGET_MS = 8_000;
-// A command that was running when the close began can start the daemon again.
-const CLOSE_RECHECK_MS = 1_000;
+// The daemon exits just after it answers a close.
+const DAEMON_EXIT_WAIT_MS = 1_000;
+const FORCE_STOP_TIMEOUT_MS = 2_000;
 
 // What `agent-browser` needs to reach a running daemon. Its other settings can
 // be launch settings, and any launch setting makes the CLI launch a browser
 // before running the command: with no usable browser, `close` then fails
 // without reaching the daemon.
 const DAEMON_ADDRESS_ENV = new Set([
+  'AGENT_BROWSER_CONFIG',
   'AGENT_BROWSER_SESSION',
   'AGENT_BROWSER_SESSION_NAME',
   'AGENT_BROWSER_SOCKET_DIR',
@@ -51,19 +53,21 @@ let bundledBinary: string | null = null;
 
 /**
  * Path to the native binary of the agent-browser package this connector depends
- * on. Run directly, never through the package's Node wrapper: the wrapper does
- * not pass signals on, so ending it leaves the real client running, and a client
- * that outlives its daemon starts a new one to retry its command. Directly also
- * means no `.cmd` shim, which execFile cannot start on Windows without a shell.
- * Throws MODULE_NOT_FOUND when the dependency is missing.
+ * on. Always this one, run directly: the package's Node wrapper, which is also
+ * what an npm install puts on PATH, does not pass signals on, so ending it leaves
+ * the real client running, and a client that outlives its daemon starts a new
+ * one to retry its command. Directly also means no `.cmd` shim, which execFile
+ * cannot start on Windows without a shell. Throws MODULE_NOT_FOUND when the
+ * dependency is missing.
  */
 function resolveBundledBinary(): string {
   if (!bundledBinary) {
     const bin = dirname(createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js'));
     const glibc = (process.report.getReport() as { header?: { glibcVersionRuntime?: string } }).header?.glibcVersionRuntime;
     const os = process.platform === 'linux' && !glibc ? 'linux-musl' : process.platform;
-    const extension = process.platform === 'win32' ? '.exe' : '';
-    bundledBinary = join(bin, `agent-browser-${os}-${process.arch}${extension}`);
+    // The package ships one Windows binary, which ARM Windows runs by emulation.
+    const name = process.platform === 'win32' ? 'agent-browser-win32-x64.exe' : `agent-browser-${os}-${process.arch}`;
+    bundledBinary = join(bin, name);
     // Hosts may install without lifecycle scripts, which set this.
     if (process.platform !== 'win32') {
       try {
@@ -165,9 +169,8 @@ function cliFailureMessage(
  * on the CLI — passing one would be a CLI error — so headless is the absence
  * of `--headed`.
  *
- * Runs an `agent-browser` executable from PATH when there is one; otherwise
- * runs the native binary of the connector's own agent-browser dependency. Both
- * use execFile with no shell, so no argument is ever interpreted by a shell.
+ * Runs the native binary of the connector's own agent-browser dependency, with
+ * execFile and no shell, so no argument is ever interpreted by a shell.
  */
 export function execAgentBrowser(
   args: string[],
@@ -199,9 +202,9 @@ async function runAgentBrowser(
     args = [args[0], '--headed', ...args.slice(1)];
   }
 
-  const run = async (file: string, fileArgs: string[]): Promise<ExecResult> => {
+  try {
     // execFile is safe against command injection (no shell interpretation)
-    const result = await execFileAsync(file, fileArgs, {
+    const result = await execFileAsync(resolveBundledBinary(), args, {
       env,
       timeout: timeoutMs,
       signal: stopping.signal,
@@ -210,19 +213,6 @@ async function runAgentBrowser(
       windowsHide: true,
     });
     return { stdout: result.stdout, stderr: result.stderr ?? '' };
-  };
-
-  try {
-    return await run('agent-browser', args);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw classifyFailure(error, args[0], timeoutMs);
-    }
-  }
-
-  // Not on PATH: run the bundled copy.
-  try {
-    return await run(resolveBundledBinary(), args);
   } catch (error: unknown) {
     throw classifyFailure(error, args[0], timeoutMs);
   }
@@ -242,10 +232,10 @@ function classifyFailure(error: unknown, command: string, timeoutMs: number): Co
     );
   }
 
-  // Neither a PATH executable nor the bundled dependency could be started.
+  // The bundled dependency could not be started.
   if (err.code === 'MODULE_NOT_FOUND' || err.code === 'ENOENT') {
     return new ConnectorError(
-      'agent-browser is not on PATH and the copy bundled with this connector could not be found',
+      'The copy of agent-browser bundled with this connector could not be found',
       'BINARY_NOT_FOUND',
       "This connector's installation is incomplete. Reinstall the connector.",
     );
@@ -294,17 +284,20 @@ export async function closeBrowserOnStop(): Promise<void> {
 /**
  * Close the browser, saving the session so sign-ins persist, and make sure the
  * daemon has gone. Force-stops a daemon that a close cannot reach or that is
- * stuck: it runs commands one at a time, and a signal waits for them too.
+ * stuck: it runs commands one at a time, and a signal waits for them too. Acts
+ * only on the daemon running now: a settings restart can start a replacement
+ * while this runs, and that browser is not ours to close.
  */
 export async function closeBrowserForGood(): Promise<void> {
-  const deadline = Date.now() + CLOSE_BUDGET_MS;
-  do {
-    await runAgentBrowser(['close'], { timeoutMs: Math.max(deadline - Date.now(), 1) }).catch(() => {});
-    await new Promise((resolve) => setTimeout(resolve, CLOSE_RECHECK_MS));
-  } while (runningDaemonPid() !== null && Date.now() < deadline);
+  const daemon = runningDaemonPid();
+  await runAgentBrowser(['close'], { timeoutMs: CLOSE_BUDGET_MS }).catch(() => {});
+  if (daemon === null) return;
 
-  const pid = runningDaemonPid();
-  if (pid !== null) await forceStop(pid);
+  const deadline = Date.now() + DAEMON_EXIT_WAIT_MS;
+  while (runningDaemonPid() === daemon && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (runningDaemonPid() === daemon) await forceStop(daemon);
 }
 
 /**
@@ -313,9 +306,10 @@ export async function closeBrowserForGood(): Promise<void> {
  * lookup for the settings a host can use.
  */
 function runningDaemonPid(): number | null {
-  const { AGENT_BROWSER_SESSION, AGENT_BROWSER_SOCKET_DIR, XDG_RUNTIME_DIR } = process.env;
-  const dir = AGENT_BROWSER_SOCKET_DIR
+  const { AGENT_BROWSER_NAMESPACE, AGENT_BROWSER_SESSION, AGENT_BROWSER_SOCKET_DIR, XDG_RUNTIME_DIR } = process.env;
+  const base = AGENT_BROWSER_SOCKET_DIR
     || (XDG_RUNTIME_DIR ? join(XDG_RUNTIME_DIR, 'agent-browser') : join(homedir(), '.agent-browser'));
+  const dir = AGENT_BROWSER_NAMESPACE ? join(base, 'namespaces', AGENT_BROWSER_NAMESPACE, 'run') : base;
   try {
     const text = readFileSync(join(dir, `${AGENT_BROWSER_SESSION || 'default'}.pid`), 'utf8').trim();
     const pid = Number(text);
@@ -330,12 +324,13 @@ function runningDaemonPid(): number | null {
 
 /** Stop the daemon and its children: Chrome and, on Linux, a display server. */
 async function forceStop(pid: number): Promise<void> {
+  const options = { timeout: FORCE_STOP_TIMEOUT_MS, windowsHide: true };
   if (process.platform === 'win32') {
-    await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F']).catch(() => {});
+    await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], options).catch(() => {});
     return;
   }
   // Chrome's own helper processes exit with Chrome. pgrep fails when there are no children.
-  const children = await execFileAsync('pgrep', ['-P', String(pid)]).catch(() => ({ stdout: '' }));
+  const children = await execFileAsync('pgrep', ['-P', String(pid)], options).catch(() => ({ stdout: '' }));
   for (const target of [...children.stdout.split('\n').filter(Boolean).map(Number), pid]) {
     try {
       process.kill(target, 'SIGKILL');

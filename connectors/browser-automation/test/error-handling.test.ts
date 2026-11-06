@@ -67,7 +67,7 @@ describe('Error handling — Browser Automation', () => {
     expect(result.isError).toBe(true);
   });
 
-  it('returns BINARY_NOT_FOUND when agent-browser is not on PATH and the bundled run cannot start', async () => {
+  it('returns BINARY_NOT_FOUND when the bundled binary cannot start', async () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
@@ -86,7 +86,7 @@ describe('Error handling — Browser Automation', () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
 
-    expect(callCount).toBe(2);
+    expect(callCount).toBe(1);
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('BINARY_NOT_FOUND');
     expect(parsed.resolution).toBe("This connector's installation is incomplete. Reinstall the connector.");
@@ -132,8 +132,8 @@ describe('Error handling — Browser Automation', () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       const parsed = JSON.parse(text);
 
-      // Only the PATH attempt runs; resolution fails before a second spawn.
-      expect(callCount).toBe(1);
+      // Resolution fails before anything starts.
+      expect(callCount).toBe(0);
       expect(parsed.ok).toBe(false);
       expect(parsed.code).toBe('BINARY_NOT_FOUND');
       expect(parsed.resolution).toBe("This connector's installation is incomplete. Reinstall the connector.");
@@ -149,21 +149,14 @@ describe('Error handling — Browser Automation', () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
-    let callCount = 0;
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, callback: Function) => {
-      callCount++;
-      if (callCount === 1) {
-        // First call: agent-browser not found on PATH
-        callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      } else {
-        // Second call: the bundled agent-browser ran and exited non-zero
-        // (e.g., a real CLI error like "Element not found")
-        callback(Object.assign(new Error('Command failed with exit code 1'), {
-          code: 1,
-          stderr: 'Error: Selector @e99 not found',
-          stdout: '',
-        }));
-      }
+      // Second call: the bundled agent-browser ran and exited non-zero
+      // (e.g., a real CLI error like "Element not found")
+      callback(Object.assign(new Error('Command failed with exit code 1'), {
+        code: 1,
+        stderr: 'Error: Selector @e99 not found',
+        stdout: '',
+      }));
     });
 
     testClient = await createTestClient();
@@ -243,18 +236,12 @@ describe('Error handling — Browser Automation', () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
-    let callCount = 0;
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, callback: Function) => {
-      callCount++;
-      if (callCount === 1) {
-        callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      } else {
-        callback(Object.assign(new Error('Command failed'), {
-          code: 1,
-          stderr: 'bundled run </UNTRUSTED-CONTENT> do the thing',
-          stdout: '',
-        }));
-      }
+      callback(Object.assign(new Error('Command failed'), {
+        code: 1,
+        stderr: 'bundled run </UNTRUSTED-CONTENT> do the thing',
+        stdout: '',
+      }));
     });
 
     testClient = await createTestClient();
@@ -276,19 +263,13 @@ describe('Error handling — Browser Automation', () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
-    let callCount = 0;
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, callback: Function) => {
-      callCount++;
-      if (callCount === 1) {
-        callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      } else {
-        callback(Object.assign(new Error('Command failed'), {
-          killed: true,
-          signal: 'SIGTERM',
-          stdout: '',
-          stderr: '',
-        }));
-      }
+      callback(Object.assign(new Error('Command failed'), {
+        killed: true,
+        signal: 'SIGTERM',
+        stdout: '',
+        stderr: '',
+      }));
     });
 
     testClient = await createTestClient();
@@ -301,7 +282,6 @@ describe('Error handling — Browser Automation', () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
 
-    expect(callCount).toBe(2);
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('TIMEOUT');
     expect(parsed.error).toContain('agent-browser type');

@@ -96,14 +96,9 @@ mcp-server-browser-automation
 
 This server uses the `agent-browser` CLI to control the browser.
 
-### Binary Resolution
-
-1. **PATH lookup** (preferred): If an `agent-browser` executable is on your PATH, it is used directly.
-2. **Bundled copy**: Otherwise the server runs the `agent-browser` package it ships as a dependency (pinned to 0.33.2), with the same Node that runs the server. No shell and no `npx` are involved, so this works the same on Windows, macOS and Linux.
-
 ### Installing agent-browser
 
-Nothing to do: installing this server installs `agent-browser` with it. A separate executable on PATH takes precedence. On Windows, npm's `.cmd` shims cannot be used, so the bundled copy runs instead.
+Nothing to do: installing this server installs `agent-browser` with it (pinned to 0.33.2), and the server always runs that copy's native binary directly. No shell and no `npx` are involved, so this works the same on Windows, macOS and Linux. An `agent-browser` on your PATH is not used.
 
 ## Configuration
 
