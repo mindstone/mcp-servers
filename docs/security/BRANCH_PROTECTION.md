@@ -7,7 +7,7 @@ These settings live in GitHub UI / API, not in repo files. When you change a set
 
 ## 0. The posture in one paragraph
 
-`main` takes changes **only by pull request, for everyone, admins included**, and no human approval is needed: review happens while the code is written. Greg, 2026-11-04: "A Okay, let's do the PRs plus a required secret scan." This replaces the direct-push model of June. PRs are gated by **required status checks**, including a secret scan and the version-bump guard (a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
+`main` takes changes **only by pull request, for everyone, admins included**, and no human approval is needed: review happens while the code is written. The owner, 2026-11-04: "A Okay, let's do the PRs plus a required secret scan." This replaces the direct-push model of June. PRs are gated by **required status checks**, including a secret scan and the version-bump guard (a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
 
 ## 1. Branch protection — `main` (ruleset)
 
@@ -15,7 +15,7 @@ Configured under `Settings → Rules → Rulesets`, in the ruleset `main: pull r
 
 | Setting | Chosen value | Rationale |
 |---|---|---|
-| Require a pull request before merging | **On** | Greg's decision, 2026-11-04. |
+| Require a pull request before merging | **On** | The owner's decision, 2026-11-04. |
 | Required approving reviews | **0** | Review happens while the code is written, through the AI review chain (cross-family adversarial review on releases; CHIEF_ENGINEER-style review on Rebel-side work), not through GitHub review clicks. |
 | Allowed merge methods | **Merge, squash, rebase** | `mcp:release` and the fleet's merge both use merge commits. |
 | Require status checks to pass | **On**, from GitHub Actions only: `secret-scan`, `Catalogue is up to date`, `One-click install blocks match server.json`, `Discover connectors for status-check`, `server.json registry validation`, `package version bumps require a CHANGELOG entry`, `package version bumps land only via release tooling` | Blocks a merge on a failed check. All six older checks passed on 25 of 25 recently merged PRs, releases included, before they became binding for admins. |
