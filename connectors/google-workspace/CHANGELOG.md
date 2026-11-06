@@ -7,9 +7,13 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-06
+
 ### Changed
 
+- Google rate limits: reads wait and retry, writes do not; failed series deletes report the error; adds dormant host-approved file reads.
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
 ### Fixed
 
 - If shortening a recurring event fails, report the error instead of deleting the whole series.
