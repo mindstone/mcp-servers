@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ConnectorError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { getFieldSuggestions } from './field-suggestions.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -46,6 +47,7 @@ export function withErrorHandling<T>(
       // MUST be enveloped before it reaches model-visible output (invariant #6).
       const vendorCode = (error as { errorCode?: unknown }).errorCode;
       if (error instanceof Error && typeof vendorCode === 'string') {
+        const fieldSuggestions = getFieldSuggestions(error);
         return {
           content: [
             {
@@ -56,6 +58,7 @@ export function withErrorHandling<T>(
                 code: 'VENDOR_ERROR',
                 vendor_code: vendorCode,
                 resolution: VENDOR_ERROR_RESOLUTIONS.get(vendorCode),
+                ...(fieldSuggestions ? { field_suggestions: fieldSuggestions } : {}),
               }),
             },
           ],
