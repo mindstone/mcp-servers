@@ -11,7 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
-- Add bounded close-match suggestions for refused Salesforce fields while preserving the original vendor error.
+### Added
+
+- When Salesforce refuses a field, the error also offers up to three real field names from that object as possible matches. The original error is unchanged.
 
 ## [0.2.5] - 2026-11-02
 
