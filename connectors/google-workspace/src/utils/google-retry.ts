@@ -30,8 +30,7 @@ export function rateLimitReason(error: unknown, status: number | undefined): str
 
 export function isShortWindowRateLimit(error: unknown): boolean {
   const text = errorText(error);
-  const statusMatch = /\bstatus\s+(403|429)\b/i.exec(text);
-  const status = extractHttpStatus(error) ?? (statusMatch ? Number(statusMatch[1]) : undefined);
+  const status = extractHttpStatus(error);
   if (LONG_WINDOW_QUOTA.test(text)) return false;
   return status === 429 || (status === 403 && (
     /\b(?:rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED)\b/.test(text) ||
@@ -80,7 +79,8 @@ export function createGoogleRetryConfig({
       const method = error.config.method?.toUpperCase() ?? 'GET';
       if (!RETRY_METHODS.has(method)) return false;
       const attempt = error.config.retryConfig?.currentRetryAttempt ?? 0;
-      if ((extractHttpStatus(error) === 403 || extractHttpStatus(error) === 429) && LONG_WINDOW_QUOTA.test(errorText(error))) return false;
+      const extractedStatus = extractHttpStatus(error);
+      if (EXTENDED_RATE_LIMIT_METHODS.has(method) && (extractedStatus === 403 || extractedStatus === 429) && LONG_WINDOW_QUOTA.test(errorText(error))) return false;
       if (EXTENDED_RATE_LIMIT_METHODS.has(method) && isShortWindowRateLimit(error)) {
         if (attempt >= MAX_RATE_LIMIT_RETRIES || retryAfterMs(error) > MAX_RETRY_AFTER_MS) {
           Object.defineProperty(error, TERMINAL_RETRY_DECISION, { value: true });

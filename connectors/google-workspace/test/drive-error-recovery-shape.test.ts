@@ -30,4 +30,16 @@ describe('Drive recovery-guidance errors', () => {
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
     });
   });
+
+  it.each([403, 429])('returns rate-limit guidance for a Drive write rate limit without exhaustion (%s)', status => {
+    const error = Object.assign(new Error(status === 403 ? 'Quota exceeded for quota metric per minute' : 'Too many requests'), {
+      response: { status },
+    });
+
+    expect(formatDriveRecoveryError('delete file', error)).toEqual({
+      ok: false,
+      action_required: `Drive delete file failed (${status})`,
+      next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+    });
+  });
 });

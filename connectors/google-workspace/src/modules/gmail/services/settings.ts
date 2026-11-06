@@ -1,4 +1,4 @@
-import { isGoogleRecoveryExhausted } from '../../../utils/google-retry.js';
+import { isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../../../utils/google-retry.js';
 import { google } from 'googleapis';
 import { describeApiError } from '../../../utils/apiError.js';
 import {
@@ -119,7 +119,7 @@ export class SettingsService {
 
       return response;
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
       if (error instanceof GmailError) {
         throw error;
       }
@@ -204,7 +204,7 @@ export class SettingsService {
         domainOnly: Boolean(updated.restrictToDomain)
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
       if (error instanceof GmailError) {
         throw error;
       }
@@ -236,7 +236,7 @@ export class SettingsService {
 
       return { sendAs };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
       if (error instanceof GmailError) {
         throw error;
       }

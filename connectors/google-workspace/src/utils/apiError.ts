@@ -1,6 +1,10 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { wrapUntrustedContent } from './untrusted-content.js';
-import { isGoogleRecoveryExhausted, preserveGoogleRetryDecision } from './google-retry.js';
+import { isGoogleRecoveryExhausted, isShortWindowRateLimit, preserveGoogleRetryDecision } from './google-retry.js';
+
+function isHttpStatus(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599;
+}
 
 /**
  * Extracts the HTTP status from a googleapis (GaxiosError-shaped) failure,
@@ -11,10 +15,13 @@ import { isGoogleRecoveryExhausted, preserveGoogleRetryDecision } from './google
 export function extractHttpStatus(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const candidate = error as { response?: { status?: unknown }; status?: unknown; code?: unknown };
-  if (typeof candidate.response?.status === 'number') return candidate.response.status;
-  if (typeof candidate.status === 'number') return candidate.status;
-  if (typeof candidate.code === 'number') return candidate.code;
-  if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) return Number(candidate.code);
+  if (isHttpStatus(candidate.response?.status)) return candidate.response.status;
+  if (isHttpStatus(candidate.status)) return candidate.status;
+  if (isHttpStatus(candidate.code)) return candidate.code;
+  if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) {
+    const status = Number(candidate.code);
+    if (isHttpStatus(status)) return status;
+  }
   return undefined;
 }
 
@@ -87,7 +94,7 @@ export function isAuthHandoffError(error: unknown): boolean {
 
 /** Keep structured recovery decisions out of lossy string-only error results. */
 export function isPassthroughGoogleError(error: unknown): boolean {
-  return isAuthHandoffError(error) || isGoogleRecoveryExhausted(error);
+  return isAuthHandoffError(error) || isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error);
 }
 
 /**
@@ -99,13 +106,16 @@ export function isPassthroughGoogleError(error: unknown): boolean {
  * it into `McpError(InternalError)` would erase the domain `code` that
  * `formatErrorResponse` reads to emit the `auth_required` reconnect handoff,
  * silently degrading an expired-token failure to a generic "Failed to …"
- * message. Any other domain error surfaces its `details`; anything else is
- * described with its HTTP status. Prevents the "Failed to X" opaque-error class
- * where the real cause was silently dropped.
+ * message. A short-window rate-limit transport error is also passed through so
+ * the server can preserve its status and emit rate-limit guidance. Any other
+ * domain error surfaces its `details`; anything else is described with its HTTP
+ * status. Prevents the "Failed to X" opaque-error class where the real cause
+ * was silently dropped.
  */
 export function toMcpError(error: unknown, fallbackContext: string): Error {
   if (error instanceof McpError) return error;
   if (isAuthHandoffError(error) && error instanceof Error) return error;
+  if (isShortWindowRateLimit(error) && error instanceof Error) return error;
   const detail = hasErrorDetails(error) && error.details
     ? `${error.message}: ${error.details}`
     : isGoogleRecoveryExhausted(error)

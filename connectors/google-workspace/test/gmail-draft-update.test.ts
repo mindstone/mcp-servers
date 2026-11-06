@@ -142,19 +142,14 @@ describe('DraftService update/create error details and threading', () => {
     });
   });
 
-  it('includes the HTTP status in GmailError.details when create fails', async () => {
+  it('passes a rate-limited create failure through with its HTTP status', async () => {
     const rateLimited = Object.assign(new Error('Rate limit exceeded'), {
       response: { status: 429 },
     });
     const create = vi.fn().mockRejectedValue(rateLimited);
     const service = makeDraftService({ create });
 
-    await expect(
-      service.createDraft('jane@example.com', draftData)
-    ).rejects.toMatchObject({
-      code: 'CREATE_ERROR',
-      details: 'Rate limit exceeded (status 429)',
-    });
+    await expect(service.createDraft('jane@example.com', draftData)).rejects.toBe(rateLimited);
   });
 
   // extractHttpStatus fallbacks — each supported GaxiosError-ish shape independently (reviewer F2).
