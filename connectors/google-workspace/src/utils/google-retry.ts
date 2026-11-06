@@ -4,6 +4,7 @@ import { extractHttpStatus } from './apiError.js';
 
 const TERMINAL_RETRY_DECISION = Symbol.for('google-workspace.terminal-retry-decision');
 const RETRY_METHODS = new Set(['GET', 'HEAD', 'PUT', 'OPTIONS', 'DELETE']);
+const EXTENDED_RATE_LIMIT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Google's documented exponential backoff caps at 32–64 seconds. Our 32-second
 // caps total 95 seconds over seven retries; jitter in [2/3, 1] guarantees at
 // least 63 1/3 seconds of waiting, so one attempt follows a full minute window.
@@ -11,12 +12,22 @@ const MAX_RATE_LIMIT_RETRIES = 7;
 const MAX_RETRY_AFTER_MS = 64_000;
 const MAX_BACKOFF_MS = 32_000;
 const LONG_WINDOW_QUOTA = /\b(?:dailyLimitExceeded|quotaExceeded)\b|per\s+day/i;
+export const GOOGLE_RATE_LIMIT_NEXT_STEP = 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.';
 
 /** The error's message and response body, where Google puts structured reasons. */
 export function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
-  return `${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`;
+  const seen = new Set<object>();
+  const parts: string[] = [];
+  let current = error;
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    const candidate = current as { response?: { data?: unknown }; cause?: unknown };
+    const message = current instanceof Error ? current.message : '';
+    const data = candidate.response?.data;
+    parts.push(`${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`);
+    seen.add(current);
+    current = candidate.cause;
+  }
+  return parts.join('\n');
 }
 
 /** Keep Drive's existing daily-quota classification for file-access checks. */
@@ -27,8 +38,8 @@ export function rateLimitReason(error: unknown, status: number | undefined): str
 }
 
 export function isShortWindowRateLimit(error: unknown): boolean {
-  const status = extractHttpStatus(error);
   const text = errorText(error);
+  const status = extractHttpStatus(error);
   if (LONG_WINDOW_QUOTA.test(text)) return false;
   return status === 429 || (status === 403 && (
     /\b(?:rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED)\b/.test(text) ||
@@ -74,10 +85,12 @@ export function createGoogleRetryConfig({
   return {
     shouldRetry(error) {
       if ((error.config.signal?.aborted && error.code !== 'TimeoutError') || error.code === 'AbortError') return false;
-      if (!RETRY_METHODS.has(error.config.method?.toUpperCase() ?? 'GET')) return false;
+      const method = error.config.method?.toUpperCase() ?? 'GET';
+      if (!RETRY_METHODS.has(method)) return false;
       const attempt = error.config.retryConfig?.currentRetryAttempt ?? 0;
-      if ((extractHttpStatus(error) === 403 || extractHttpStatus(error) === 429) && LONG_WINDOW_QUOTA.test(errorText(error))) return false;
-      if (isShortWindowRateLimit(error)) {
+      const extractedStatus = extractHttpStatus(error);
+      if (EXTENDED_RATE_LIMIT_METHODS.has(method) && (extractedStatus === 403 || extractedStatus === 429) && LONG_WINDOW_QUOTA.test(errorText(error))) return false;
+      if (EXTENDED_RATE_LIMIT_METHODS.has(method) && isShortWindowRateLimit(error)) {
         if (attempt >= MAX_RATE_LIMIT_RETRIES || retryAfterMs(error) > MAX_RETRY_AFTER_MS) {
           Object.defineProperty(error, TERMINAL_RETRY_DECISION, { value: true });
           return false;
@@ -90,7 +103,8 @@ export function createGoogleRetryConfig({
         status === 429 || (status >= 500 && status <= 599));
     },
     async retryBackoff(error, gaxiosDelay) {
-      if (!isShortWindowRateLimit(error)) return sleep(gaxiosDelay);
+      const method = error.config.method?.toUpperCase() ?? 'GET';
+      if (!EXTENDED_RATE_LIMIT_METHODS.has(method) || !isShortWindowRateLimit(error)) return sleep(gaxiosDelay);
       // gaxios increments currentRetryAttempt BEFORE calling retryBackoff.
       const n = Math.max(0, (error.config.retryConfig?.currentRetryAttempt ?? 1) - 1);
       const cap = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** n);

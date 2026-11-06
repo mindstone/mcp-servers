@@ -2,7 +2,7 @@ import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import { getGmailService } from '../modules/gmail/index.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { toMcpError } from '../utils/apiError.js';
+import { isPassthroughGoogleError, toMcpError } from '../utils/apiError.js';
 import { SendEmailParams } from '../modules/gmail/types.js';
 import {
   ManageLabelParams,
@@ -127,6 +127,7 @@ async function resolveReplyThreading(email: string, replyToMessageId: string): P
 
     return { headers: result };
   } catch (error) {
+    if (isPassthroughGoogleError(error)) throw error;
     logger.warn(
       `[gmail-handlers] Reply threading degraded: failed to fetch original message ${replyToMessageId} for account ${email}:`,
       error instanceof Error ? error.message : error,

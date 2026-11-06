@@ -1,4 +1,4 @@
-import { preserveGoogleRetryDecision } from '../../../utils/google-retry.js';
+import { isGoogleRecoveryExhausted, preserveGoogleRetryDecision } from '../../../utils/google-retry.js';
 import { google, gmail_v1 } from 'googleapis';
 import {
   EmailResponse,
@@ -17,7 +17,7 @@ import { buildMimeMessage } from './mime-builder.js';
 import { AttachmentResponseTransformer } from '../../attachments/response-transformer.js';
 import { AttachmentIndexService } from '../../attachments/index-service.js';
 import logger from '../../../utils/logger.js';
-import { describeApiError } from '../../../utils/apiError.js';
+import { describeApiError, isPassthroughGoogleError } from '../../../utils/apiError.js';
 
 type GmailMessage = gmail_v1.Schema$Message;
 
@@ -201,6 +201,7 @@ export class EmailService {
         }))
       };
     } catch (error) {
+      if (isPassthroughGoogleError(error) && !isGoogleRecoveryExhausted(error)) throw error;
       if (isNotFoundError(error)) {
         logger.warn({ err: error, messageId }, 'getMessage failed; treating as not found');
         return null;
@@ -326,6 +327,7 @@ export class EmailService {
         messages
       };
     } catch (error) {
+      if (isPassthroughGoogleError(error) && !isGoogleRecoveryExhausted(error)) throw error;
       throw preserveGoogleRetryDecision(new GmailError(
         `Failed to get thread ${threadId}`,
         'THREAD_ERROR',
@@ -479,6 +481,7 @@ export class EmailService {
 
       return transformedResponse;
     } catch (error) {
+      if (isPassthroughGoogleError(error) && !isGoogleRecoveryExhausted(error)) throw error;
       if (error instanceof GmailError) {
         throw error;
       }
@@ -557,6 +560,7 @@ export class EmailService {
 
       return response;
     } catch (error) {
+      if (isPassthroughGoogleError(error) && !isGoogleRecoveryExhausted(error)) throw error;
       if (error instanceof GmailError) {
         throw error;
       }
