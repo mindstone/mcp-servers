@@ -42,7 +42,6 @@ const FORCE_STOP_TIMEOUT_MS = 2_000;
 // before running the command: with no usable browser, `close` then fails
 // without reaching the daemon.
 const DAEMON_ADDRESS_ENV = new Set([
-  'AGENT_BROWSER_CONFIG',
   'AGENT_BROWSER_SESSION',
   'AGENT_BROWSER_SESSION_NAME',
   'AGENT_BROWSER_SOCKET_DIR',
@@ -88,6 +87,12 @@ function withoutLaunchSettings(env: Record<string, string>): Record<string, stri
 
 function buildEnv(): Record<string, string> {
   const env: Record<string, string> = { ...process.env as Record<string, string> };
+
+  // Which daemon to use is decided here, never by an agent-browser config file
+  // (the environment wins over one), so a stop can find the daemon by its pid
+  // file. See runningDaemonPid.
+  env.AGENT_BROWSER_SESSION ||= 'default';
+  env.AGENT_BROWSER_NAMESPACE ??= '';
 
   // Always use session persistence
   if (!env.AGENT_BROWSER_SESSION_NAME) {

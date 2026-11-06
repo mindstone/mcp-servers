@@ -184,12 +184,26 @@ describe('the close command', () => {
 
     await execAgentBrowser(['close']);
 
+    expect(calls[0].env).not.toHaveProperty('AGENT_BROWSER_CONFIG');
     expect(calls[0].env).toMatchObject({
-      AGENT_BROWSER_CONFIG: '/etc/browser.json',
       AGENT_BROWSER_NAMESPACE: 'team',
       AGENT_BROWSER_SESSION: 'work',
       AGENT_BROWSER_SOCKET_DIR: '/run/browser',
     });
+  });
+
+  it('pins the daemon address, so a config file cannot move it from where a stop looks', async () => {
+    vi.stubEnv('AGENT_BROWSER_SESSION', '');
+    vi.stubEnv('AGENT_BROWSER_NAMESPACE', undefined);
+    const calls = await mockCommands();
+    const { execAgentBrowser } = await import('../src/browser-client.js');
+
+    await execAgentBrowser(['open', 'https://example.com']);
+    await execAgentBrowser(['close']);
+
+    for (const call of calls) {
+      expect(call.env).toMatchObject({ AGENT_BROWSER_SESSION: 'default', AGENT_BROWSER_NAMESPACE: '' });
+    }
   });
 
   it('leaves other commands their launch settings', async () => {
