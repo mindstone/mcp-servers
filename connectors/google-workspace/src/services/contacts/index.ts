@@ -5,6 +5,7 @@ import {
 } from "../base/BaseGoogleService.js";
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import { describeApiError, isPassthroughGoogleError } from "../../utils/apiError.js";
+import { isGoogleRecoveryExhausted } from "../../utils/google-retry.js";
 import {
   GetContactsParams,
   GetContactsResponse,
@@ -141,7 +142,8 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
           readMask,
           pageSize: 1,
         });
-      } catch {
+      } catch (error) {
+        if (isGoogleRecoveryExhausted(error)) throw error;
         // Warmup failures are non-fatal - continue with actual search
       }
 

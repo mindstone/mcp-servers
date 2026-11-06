@@ -1,7 +1,6 @@
-import { isGoogleRecoveryExhausted } from '../../../utils/google-retry.js';
 import { google } from 'googleapis';
 import { BaseGoogleService } from '../../../services/base/BaseGoogleService.js';
-import { describeApiError } from '../../../utils/apiError.js';
+import { describeApiError, isPassthroughGoogleError } from '../../../utils/apiError.js';
 import {
   GetEmailsParams,
   SendEmailParams,
@@ -74,7 +73,7 @@ export class GmailService extends BaseGoogleService<ReturnType<typeof google.gma
       await super.initialize();
       this.initialized = true;
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       throw new GmailError(
         'Failed to initialize Gmail service',
         'INIT_ERROR',

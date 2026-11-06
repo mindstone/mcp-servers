@@ -2,8 +2,8 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDriveService, getDriveActivityService } from '../modules/drive/index.js';
 import { normalizeDriveItemName } from '../modules/drive/activity-service.js';
-import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
-import { toMcpError } from '../utils/apiError.js';
+import { GOOGLE_RATE_LIMIT_NEXT_STEP, isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../utils/google-retry.js';
+import { extractHttpStatus, toMcpError } from '../utils/apiError.js';
 import { FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions } from '../modules/drive/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -98,21 +98,22 @@ function formatSharedDrivesAsText(drives: any[]): string {
 
 /** @internal Exported for tests. */
 export function formatDriveRecoveryError(operation: string, error: unknown) {
-  const status = error && typeof error === 'object'
-    ? (error as { code?: unknown; response?: { status?: unknown } }).response?.status
-      ?? (error as { code?: unknown }).code
-    : undefined;
-  const statusText = status ? ` (${status})` : '';
+  const status = extractHttpStatus(error);
+  const statusText = status === undefined ? '' : ` (${status})`;
   const message = error instanceof Error
     ? error.message
     : error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
       ? (error as { message: string }).message
       : 'Unknown error';
+  const recoveryExhausted = isGoogleRecoveryExhausted(error);
+  const rateLimited = status === 429 || isShortWindowRateLimit(error);
   return {
     ok: false,
-    ...(isGoogleRecoveryExhausted(error) ? { recoveryExhausted: true } : {}),
+    ...(recoveryExhausted ? { recoveryExhausted: true } : {}),
     action_required: `Drive ${operation} failed${statusText}`,
-    next_step: `${message}. Check Google Workspace authentication and Drive permissions, then retry.`,
+    next_step: recoveryExhausted || rateLimited
+      ? GOOGLE_RATE_LIMIT_NEXT_STEP
+      : `${message}. Check Google Workspace authentication and Drive permissions, then retry.`,
   };
 }
 

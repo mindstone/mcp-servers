@@ -29,6 +29,10 @@ describe('extractHttpStatus', () => {
     expect(extractHttpStatus(Object.assign(new Error('x'), { code: 'ENOTFOUND' }))).toBeUndefined();
   });
 
+  it('ignores protocol error codes that are outside the HTTP range', () => {
+    expect(extractHttpStatus(Object.assign(new Error('x'), { code: -32603 }))).toBeUndefined();
+  });
+
   it('returns undefined for non-objects', () => {
     expect(extractHttpStatus('boom')).toBeUndefined();
     expect(extractHttpStatus(null)).toBeUndefined();
@@ -93,7 +97,7 @@ describe('toMcpError', () => {
   it('describes a raw API error with its status', () => {
     const err = Object.assign(new Error('Rate limit exceeded'), { response: { status: 429 } });
     const mcp = toMcpError(err, 'Failed to list tasks');
-    expect(mcp.message).toContain('Failed to list tasks: Rate limit exceeded (status 429)');
+    expect(mcp).toBe(err);
   });
 
   it('falls back to Unknown error for a non-Error throw with no details', () => {

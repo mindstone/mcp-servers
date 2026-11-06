@@ -140,6 +140,51 @@ describe('Google short-window rate-limit recovery', () => {
   });
 
   it.each([
+    ['PUT', 429, 4], ['PUT', 403, 1],
+    ['DELETE', 429, 4], ['DELETE', 403, 1],
+    ['GET', 429, 8],
+  ] as const)('%s keeps the expected rate-limit retry count for %s', async (method, status, expectedRequests) => {
+    await load();
+    let requests = 0;
+    const response = () => {
+      requests++;
+      return HttpResponse.json(status === 403 ? QUOTA : { error: { message: 'Too many requests' } }, { status });
+    };
+    if (method === 'PUT') {
+      mswServer.use(http.put('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.update({
+        userId: 'me', id: 'label-1', requestBody: { name: 'Updated' },
+      })).rejects.toThrow();
+    } else if (method === 'DELETE') {
+      mswServer.use(http.delete('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.delete({ userId: 'me', id: 'label-1' })).rejects.toThrow();
+    } else {
+      mswServer.use(http.get(ROOT, response));
+      await expect(google.gmail('v1').users.messages.list({ userId: 'me' })).rejects.toThrow();
+    }
+    expect(requests).toBe(expectedRequests);
+  });
+
+  it.each(['PUT', 'DELETE'] as const)('keeps the ordinary retry count for a %s long-window quota', async method => {
+    await load();
+    let requests = 0;
+    const response = () => {
+      requests++;
+      return HttpResponse.json({ error: { message: 'dailyLimitExceeded' } }, { status: 429 });
+    };
+    if (method === 'PUT') {
+      mswServer.use(http.put('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.update({
+        userId: 'me', id: 'label-1', requestBody: { name: 'Updated' },
+      })).rejects.toThrow();
+    } else {
+      mswServer.use(http.delete('https://gmail.googleapis.com/gmail/v1/users/me/labels/label-1', response));
+      await expect(google.gmail('v1').users.labels.delete({ userId: 'me', id: 'label-1' })).rejects.toThrow();
+    }
+    expect(requests).toBe(4);
+  });
+
+  it.each([
     ['rateLimitExceeded', 403, 2], ['userRateLimitExceeded', 403, 2], ['RATE_LIMIT_EXCEEDED', 403, 2],
     ["Quota exceeded for quota metric 'Queries' and limit 'Queries per second'", 403, 2],
     ["Quota exceeded for quota metric 'Queries' and limit 'Queries per 100 seconds'", 403, 2],
@@ -157,6 +202,11 @@ describe('Google short-window rate-limit recovery', () => {
     if (expectedRequests === 1) await expect(request).rejects.toThrow(String(message));
     else await expect(request).resolves.toMatchObject({ status: 200 });
     expect(requests).toBe(expectedRequests);
+  });
+
+  it('does not infer a rate-limit status from unrelated error text', async () => {
+    const { isShortWindowRateLimit } = await import('../src/utils/google-retry.js');
+    expect(isShortWindowRateLimit(new Error('Invalid value "status 429" (status 400)'))).toBe(false);
   });
 
   it.each([408, 503])('keeps the default three retries for status %s', async status => {
@@ -199,9 +249,12 @@ describe('Google short-window rate-limit recovery', () => {
     mswServer.use(http.get(ROOT, () => { requests++; return HttpResponse.json(QUOTA, { status: 403 }); }));
     const response = await call();
     expect(response.isError).toBe(true);
-    expect(JSON.parse(response.content[0].text)).toMatchObject({ recoveryExhausted: true });
-    expect(response.content[0].text).toContain('status 403');
-    expect(response.content[0].text).toContain(QUOTA.error.message);
+    expect(JSON.parse(response.content[0].text)).toEqual({
+      ok: false,
+      action_required: `<untrusted-content source="google-workspace:api-error">MCP error -32603: Failed to search emails: Failed to get emails: Error: ${QUOTA.error.message} (status 403)</untrusted-content>`,
+      next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      recoveryExhausted: true,
+    });
     expect(requests).toBe(8);
   });
 
@@ -233,11 +286,24 @@ describe('Google short-window rate-limit recovery', () => {
     expect(response.isError).toBe(true);
     expect(JSON.parse(response.content[0].text)).toMatchObject({
       ok: false,
-      action_required: QUOTA.error.message,
+      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
       recoveryExhausted: true,
     });
     expect(requests).toBe(expectedRequests);
+  });
+
+  it('keeps exhausted Docs rate-limit text wrapped in the server error envelope', async () => {
+    const { call } = await load();
+    mswServer.use(http.get('https://docs.googleapis.com/v1/documents/doc-1', () =>
+      HttpResponse.json(QUOTA, { status: 403 })));
+    const response = await call('read_workspace_document', { document_id: 'doc-1', return_json: true });
+    const envelope = JSON.parse(response.content[0].text);
+    expect(envelope).toMatchObject({
+      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
+      next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      recoveryExhausted: true,
+    });
   });
 
   it('keeps the Sheets service response for an insufficientPermissions 403', async () => {
@@ -336,6 +402,26 @@ describe('Google short-window rate-limit recovery', () => {
     }));
     await google.gmail('v1').users.messages.list({ userId: 'me' });
     expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([3000, 2000, 4000, 8000, 16000, 32000, 32000]);
+  });
+
+  it('uses the ordinary delay for a PUT despite a long Retry-After', async () => {
+    const { createGoogleRetryConfig } = await import('../src/utils/google-retry.js');
+    const sleep = vi.fn(async (_ms: number) => {});
+    const retryConfig = createGoogleRetryConfig({ sleep, random: () => 1 });
+    const error = Object.assign(new Error('Too many requests'), {
+      config: {
+        method: 'PUT',
+        retryConfig: { currentRetryAttempt: 1 },
+      },
+      response: {
+        status: 429,
+        headers: { 'retry-after': '120' },
+      },
+    });
+
+    await retryConfig.retryBackoff?.(error as never, 250);
+
+    expect(sleep).toHaveBeenCalledWith(250);
   });
 
   it('keeps DriveRateLimitError after the request retries are exhausted', async () => {
