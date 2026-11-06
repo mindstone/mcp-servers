@@ -16,9 +16,18 @@ export const GOOGLE_RATE_LIMIT_NEXT_STEP = 'Google Workspace rate limit reached.
 
 /** The error's message and response body, where Google puts structured reasons. */
 export function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
-  return `${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`;
+  const seen = new Set<object>();
+  const parts: string[] = [];
+  let current = error;
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    const candidate = current as { response?: { data?: unknown }; cause?: unknown };
+    const message = current instanceof Error ? current.message : '';
+    const data = candidate.response?.data;
+    parts.push(`${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`);
+    seen.add(current);
+    current = candidate.cause;
+  }
+  return parts.join('\n');
 }
 
 /** Keep Drive's existing daily-quota classification for file-access checks. */

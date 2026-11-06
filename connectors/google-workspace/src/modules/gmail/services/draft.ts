@@ -1,4 +1,3 @@
-import { isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../../../utils/google-retry.js';
 
 import { google } from 'googleapis';
 import { 
@@ -8,7 +7,7 @@ import {
 } from '../types.js';
 import { GmailAttachmentService } from './attachment.js';
 import { buildMimeMessage } from './mime-builder.js';
-import { describeApiError } from '../../../utils/apiError.js';
+import { describeApiError, isPassthroughGoogleError } from '../../../utils/apiError.js';
 import logger from '../../../utils/logger.js';
 
 export type DraftAction = 'create' | 'read' | 'update' | 'delete' | 'send';
@@ -102,7 +101,7 @@ export class DraftService {
         attachments: data.attachments
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       const details = describeApiError(error);
       logger.warn(`Failed to create draft: ${details}`);
       throw new GmailError(
@@ -143,7 +142,7 @@ export class DraftService {
         resultSizeEstimate: data.resultSizeEstimate || 0
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       throw new GmailError(
         'Failed to list drafts',
         'LIST_ERROR',
@@ -179,7 +178,7 @@ export class DraftService {
         updated: new Date().toISOString() // Gmail API doesn't provide updated time, using current time
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       throw new GmailError(
         'Failed to get draft',
         'GET_ERROR',
@@ -262,7 +261,7 @@ export class DraftService {
         attachments: data.attachments
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       const details = describeApiError(error);
       logger.warn(`Failed to update draft ${draftId}: ${details}`);
       throw new GmailError(
@@ -283,7 +282,7 @@ export class DraftService {
 
       return;
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       throw new GmailError(
         'Failed to delete draft',
         'DELETE_ERROR',
@@ -371,7 +370,7 @@ export class DraftService {
         labelIds: data.labelIds || undefined
       };
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       throw new GmailError(
         'Failed to send draft',
         'SEND_ERROR',

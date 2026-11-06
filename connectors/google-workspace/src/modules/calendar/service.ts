@@ -1,4 +1,4 @@
-import { isGoogleRecoveryExhausted } from '../../utils/google-retry.js';
+import { isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../../utils/google-retry.js';
 import { google, calendar_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
@@ -20,6 +20,7 @@ import { DriveService } from '../drive/service.js';
 import { ATTACHMENT_FOLDERS, AttachmentSource, AttachmentMetadata } from '../attachments/types.js';
 import { AccountError } from '../accounts/types.js';
 import { isUnauthorizedError } from '../accounts/unauthorized.js';
+import { isPassthroughGoogleError } from '../../utils/apiError.js';
 
 type CalendarEvent = calendar_v3.Schema$Event;
 type GoogleEventAttachment = calendar_v3.Schema$EventAttachment;
@@ -72,6 +73,7 @@ export class CalendarService {
       });
       this.initialized = true;
     } catch (error) {
+      if (isPassthroughGoogleError(error)) throw error;
       throw new CalendarError(
         'Failed to initialize Calendar service',
         'INIT_ERROR',
@@ -172,7 +174,7 @@ export class CalendarService {
       this.oauth2Client.setCredentials(tokenStatus.token);
       return google.calendar({ version: 'v3', auth: this.oauth2Client });
     } catch (error) {
-      if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof CalendarError) {
         throw error;
       }
@@ -192,6 +194,7 @@ export class CalendarService {
       return await operation();
     } catch (error: unknown) {
       if (isGoogleRecoveryExhausted(error)) throw error;
+      if (isShortWindowRateLimit(error)) throw error;
       if (isUnauthorizedError(error)) {
         if (process.env.GOOGLE_WORKSPACE_DISABLE_REFRESH === '1') {
           throw new AccountError(
@@ -410,6 +413,7 @@ export class CalendarService {
         return Promise.all(trimmedEvents.map(event => this.mapEventResponse(email, event)));
       } catch (error: any) {
         if (isGoogleRecoveryExhausted(error)) throw error;
+        if (isShortWindowRateLimit(error)) throw error;
         // Handle permission errors for shared calendars
         if (calendarId && calendarId !== 'primary' && (error.code === 403 || error.status === 403)) {
           throw new CalendarError(
@@ -451,7 +455,7 @@ export class CalendarService {
 
         return this.mapEventResponse(email, event);
       } catch (error: any) {
-        if (isGoogleRecoveryExhausted(error)) throw error;
+        if (isPassthroughGoogleError(error)) throw error;
         // Handle not found errors with helpful hint for primary calendar
         if (error.code === 404 || error.status === 404) {
           const hint = targetCalendarId === 'primary'
@@ -611,6 +615,7 @@ export class CalendarService {
         };
       } catch (error: any) {
         if (isGoogleRecoveryExhausted(error)) throw error;
+        if (isShortWindowRateLimit(error)) throw error;
         // Handle permission errors for shared calendars
         if (targetCalendarId !== 'primary' && (error.code === 403 || error.status === 403)) {
           throw new CalendarError(

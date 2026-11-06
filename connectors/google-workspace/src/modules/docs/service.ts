@@ -29,7 +29,7 @@ import {
 import { TabCopyError, TabCopyRequest, copyTabContent } from './tabCopy.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
-import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError, isPassthroughGoogleError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, extractHttpStatus, isAuthHandoffError, isPassthroughGoogleError } from '../../utils/apiError.js';
 import { preserveGoogleRetryDecision } from '../../utils/google-retry.js';
 import { wrapUntrustedJsonStrings } from '../../utils/untrusted-content.js';
 import {
@@ -1306,6 +1306,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       return preserveGoogleRetryDecision({
         success: false,
         error: `Copy failed during "${error.phase}": ${describeApiErrorUntrusted(cause, DOCS_API_ERROR_SOURCE)}.${outcome}`,
+        ...(extractHttpStatus(cause) === undefined ? {} : { status: extractHttpStatus(cause) }),
       }, cause);
     }
   }

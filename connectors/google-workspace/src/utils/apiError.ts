@@ -13,14 +13,19 @@ function isHttpStatus(value: unknown): value is number {
  * (e.g. a DNS `ENOTFOUND` where `code` is a non-numeric string).
  */
 export function extractHttpStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const candidate = error as { response?: { status?: unknown }; status?: unknown; code?: unknown };
-  if (isHttpStatus(candidate.response?.status)) return candidate.response.status;
-  if (isHttpStatus(candidate.status)) return candidate.status;
-  if (isHttpStatus(candidate.code)) return candidate.code;
-  if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) {
-    const status = Number(candidate.code);
-    if (isHttpStatus(status)) return status;
+  const seen = new Set<object>();
+  let current = error;
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    const candidate = current as { response?: { status?: unknown }; status?: unknown; code?: unknown; cause?: unknown };
+    if (isHttpStatus(candidate.response?.status)) return candidate.response.status;
+    if (isHttpStatus(candidate.status)) return candidate.status;
+    if (isHttpStatus(candidate.code)) return candidate.code;
+    if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) {
+      const status = Number(candidate.code);
+      if (isHttpStatus(status)) return status;
+    }
+    seen.add(current);
+    current = candidate.cause;
   }
   return undefined;
 }
@@ -94,7 +99,7 @@ export function isAuthHandoffError(error: unknown): boolean {
 
 /** Keep structured recovery decisions out of lossy string-only error results. */
 export function isPassthroughGoogleError(error: unknown): boolean {
-  return isAuthHandoffError(error) || isGoogleRecoveryExhausted(error) || isShortWindowRateLimit(error);
+  return isAuthHandoffError(error) || isGoogleRecoveryExhausted(error) || extractHttpStatus(error) === 429 || isShortWindowRateLimit(error);
 }
 
 /**
@@ -115,7 +120,7 @@ export function isPassthroughGoogleError(error: unknown): boolean {
 export function toMcpError(error: unknown, fallbackContext: string): Error {
   if (error instanceof McpError) return error;
   if (isAuthHandoffError(error) && error instanceof Error) return error;
-  if (isShortWindowRateLimit(error) && error instanceof Error) return error;
+  if ((extractHttpStatus(error) === 429 || isShortWindowRateLimit(error)) && error instanceof Error) return error;
   const detail = hasErrorDetails(error) && error.details
     ? `${error.message}: ${error.details}`
     : isGoogleRecoveryExhausted(error)

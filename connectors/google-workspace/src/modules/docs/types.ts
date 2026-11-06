@@ -197,6 +197,8 @@ export interface DocsOperationResult {
     | InsertTextResponse
     | TabCopyResponse;
   error?: string;
+  /** HTTP status preserved for the tool boundary when a write wrapper fails. */
+  status?: number;
   occurrencesChanged?: number;
 }
 

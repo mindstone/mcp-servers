@@ -24,6 +24,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/forms.body.readonly',
   'https://www.googleapis.com/auth/forms.responses.readonly',
+  'https://www.googleapis.com/auth/chat.messages.create',
 ].join(' ');
 
 type MockEndpoint = { method: string; path: string };
@@ -824,6 +825,99 @@ describe('Google Workspace mock API error handling', () => {
     expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
     expect(envelope).not.toHaveProperty('recoveryExhausted');
     expect(requests).toBe(1);
+  });
+
+  it('keeps wrapped rate-limit advice for a non-replayed Chat send', async () => {
+    let requests = 0;
+    mswServer.use(http.post('https://chat.googleapis.com/v1/spaces/space-1/messages', () => {
+      requests++;
+      return HttpResponse.json({ error: { message: 'Too many requests' } }, { status: 429 });
+    }));
+    const handlers = await loadHandlers();
+
+    const response = await handlers.call('send_chat_message', {
+      space: 'spaces/space-1',
+      text: 'Rate-limited message',
+    });
+    const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
+    expect(response.isError).toBe(true);
+    expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
+    expect(envelope.action_required).toContain('Too many requests');
+    expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+    expect(envelope).not.toHaveProperty('recoveryExhausted');
+    expect(requests).toBe(1);
+  });
+
+  it('keeps rate-limit advice and wrapped text for a daily-quota 429', async () => {
+    let requests = 0;
+    mswServer.use(http.post('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', () => {
+      requests++;
+      return HttpResponse.json({
+        error: {
+          code: 429,
+          message: 'Daily Limit Exceeded',
+          errors: [{ reason: 'dailyLimitExceeded' }],
+        },
+      }, { status: 429 });
+    }));
+    const handlers = await loadHandlers();
+
+    const response = await handlers.call('send_workspace_email', {
+      to: ['recipient@example.com'],
+      subject: 'Daily quota test',
+      body: 'Hello',
+    });
+    const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
+    expect(response.isError).toBe(true);
+    expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
+    expect(envelope.action_required).toContain('Daily Limit Exceeded');
+    expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+    expect(requests).toBe(1);
+  });
+
+  it('does not re-run Calendar create or delete operations after a rate-limit 403', async () => {
+    let createRequests = 0;
+    let deleteRequests = 0;
+    installHappyPathGoogleApiMocks();
+    mswServer.use(
+      http.post('https://www.googleapis.com/calendar/v3/calendars/primary/events', () => {
+        createRequests++;
+        return HttpResponse.json({
+          error: {
+            code: 403,
+            message: 'Quota exceeded for quota metric per minute',
+            errors: [{ reason: 'rateLimitExceeded' }],
+          },
+        }, { status: 403 });
+      }),
+      http.delete('https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1', () => {
+        deleteRequests++;
+        return HttpResponse.json({
+          error: {
+            code: 403,
+            message: 'Quota exceeded for quota metric per minute',
+            errors: [{ reason: 'rateLimitExceeded' }],
+          },
+        }, { status: 403 });
+      }),
+    );
+    const handlers = await loadHandlers();
+
+    const create = await handlers.call('create_workspace_calendar_event', {
+      summary: 'Rate-limited event',
+      start: { dateTime: '2026-05-19T14:00:00Z' },
+      end: { dateTime: '2026-05-19T14:05:00Z' },
+    });
+    const remove = await handlers.call('delete_workspace_calendar_event', { event_id: 'event-1' });
+
+    for (const response of [create, remove]) {
+      const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
+      expect(response.isError).toBe(true);
+      expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+      expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
+    }
+    expect(createRequests).toBe(1);
+    expect(deleteRequests).toBe(1);
   });
 
   it('returns retry recovery guidance for 500 errors', async () => {

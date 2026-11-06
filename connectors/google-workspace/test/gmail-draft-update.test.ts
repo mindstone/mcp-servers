@@ -152,6 +152,19 @@ describe('DraftService update/create error details and threading', () => {
     await expect(service.createDraft('jane@example.com', draftData)).rejects.toBe(rateLimited);
   });
 
+  it('keeps CREATE_ERROR details for a non-rate-limited create failure', async () => {
+    const serverError = Object.assign(new Error('Draft service unavailable'), {
+      response: { status: 500 },
+    });
+    const create = vi.fn().mockRejectedValue(serverError);
+    const service = makeDraftService({ create });
+
+    await expect(service.createDraft('jane@example.com', draftData)).rejects.toMatchObject({
+      code: 'CREATE_ERROR',
+      details: 'Draft service unavailable (status 500)',
+    });
+  });
+
   // extractHttpStatus fallbacks — each supported GaxiosError-ish shape independently (reviewer F2).
   it('reads a top-level status when response.status is absent', async () => {
     const err = Object.assign(new Error('Bad Request'), { status: 400 });
