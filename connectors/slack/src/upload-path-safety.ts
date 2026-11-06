@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -146,8 +147,10 @@ export async function readUploadSourceFile(
   filePath: string,
   maxSizeBytes: number,
   openFile: typeof fs.promises.open = fs.promises.open,
+  context?: FileReadContext,
 ): Promise<ReadSourceResult> {
-  const resolved = resolveUploadSourcePath(filePath);
+  const allowedPath = centralReadPath(context, filePath, ['file_path']);
+  const resolved = allowedPath === undefined ? resolveUploadSourcePath(filePath) : { ok: true as const, path: allowedPath };
   if (!resolved.ok) {
     return { ok: false, error: resolved.error };
   }
@@ -204,11 +207,14 @@ export async function readUploadSourceFile(
     // between validation and `open` would have redirected the descriptor
     // outside the workspace. Re-resolve the canonical path now; it must stay
     // confined AND still identify the same inode we opened.
-    const root = getUploadSourceRoot();
+    const root = allowedPath === undefined ? getUploadSourceRoot() : '';
     let recheck: fs.Stats;
     try {
       const canonicalNow = fs.realpathSync(resolved.path);
-      if (!(canonicalNow === root || canonicalNow.startsWith(root + path.sep))) {
+      if (allowedPath !== undefined && canonicalNow !== allowedPath) {
+        return { ok: false, error: 'file_path was replaced while being read. Refusing the upload — retry if this was not expected.' };
+      }
+      if (allowedPath === undefined && !(canonicalNow === root || canonicalNow.startsWith(root + path.sep))) {
         return {
           ok: false,
           error:

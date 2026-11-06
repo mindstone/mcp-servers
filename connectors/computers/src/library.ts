@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from './file-read-context.js';
 /**
  * Files on this device that the connector may copy to or from a computer: only inside the
  * workspace the host gives it (MCP_WORKSPACE_PATH, the person's Library), checked after
@@ -29,17 +30,29 @@ const refused = (path: string) =>
   new ConnectorError(`${path} is outside the Library.`, 'OUTSIDE_LIBRARY', 'Use a path relative to the Library, such as "Reports/q3.xlsx".');
 
 /** The real path of an existing Library file to read. */
-export async function libraryFileToRead(path: string, env?: NodeJS.ProcessEnv): Promise<{ absolute: string; size: number }> {
-  const root = await realpath(libraryRoot(env)).catch(() => {
-    throw new ConnectorError('The Library folder does not exist.', 'NO_LIBRARY', 'Check the Library location in your MCP host\'s settings, then try again.');
+export async function libraryFileToRead(path: string, env?: NodeJS.ProcessEnv, context?: FileReadContext): Promise<{ absolute: string; size: number }> {
+  let actual = centralReadPath(context, path, ['library_path']);
+  if (actual === undefined) {
+    const root = await realpath(libraryRoot(env)).catch(() => {
+      throw new ConnectorError('The Library folder does not exist.', 'NO_LIBRARY', 'Check the Library location in your MCP host\'s settings, then try again.');
+    });
+    const lexical = resolve(root, path);
+    if (outside(root, lexical)) throw refused(path);
+    actual = await realpath(lexical).catch(() => {
+      throw new ConnectorError(`${path} is not in the Library.`, 'SOURCE_MISSING', 'Check the file name; paths are relative to the Library.');
+    });
+    if (outside(root, actual)) throw refused(path);
+  } else {
+    const current = await realpath(actual).catch(() => {
+      throw new ConnectorError(`${path} was not found.`, 'SOURCE_MISSING', 'Check the source file exists, then try again.');
+    });
+    if (current !== actual) throw new ConnectorError(`${path} changed after it was approved.`, 'SOURCE_MISSING', 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.');
+  }
+  const info = await stat(actual).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+      throw new ConnectorError(`${path} was not found.`, 'SOURCE_MISSING', 'Check the source file exists, then try again.');
+    throw error;
   });
-  const lexical = resolve(root, path);
-  if (outside(root, lexical)) throw refused(path);
-  const actual = await realpath(lexical).catch(() => {
-    throw new ConnectorError(`${path} is not in the Library.`, 'SOURCE_MISSING', 'Check the file name; paths are relative to the Library.');
-  });
-  if (outside(root, actual)) throw refused(path);
-  const info = await stat(actual);
   if (!info.isFile()) throw new ConnectorError(`${path} is not a file.`, 'NOT_A_FILE', 'Copy one file at a time; to copy a folder, zip it first.');
   if (info.size > MAX_FILE_BYTES) throw new ConnectorError(`${path} is larger than 200 MB.`, 'FILE_TOO_LARGE', 'Split or compress it first, or have the computer download it from the web instead.');
   return { absolute: actual, size: info.size };

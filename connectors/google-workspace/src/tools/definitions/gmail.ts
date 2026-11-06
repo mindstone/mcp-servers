@@ -440,6 +440,7 @@ This tool does not send the email directly. It prepares the draft and launches t
   },
   {
     name: 'send_workspace_email',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }] }] } },
     category: 'Gmail/Messages',
     description: `Send an email from a Gmail account.
 
@@ -878,6 +879,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
   },
   {
     name: 'create_workspace_draft',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }] }] } },
     category: 'Gmail/Drafts',
     description: `Create a new Gmail draft. Use this when the user asks to save to drafts, save/create a Gmail draft, or save an already-drafted email without sending or opening another review UI. Supports plain text and HTML bodies, CC/BCC, reply threading, and attachments.`,
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -954,6 +956,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
   },
   {
     name: 'update_workspace_draft',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }] }] } },
     category: 'Gmail/Drafts',
     description: `Update an existing Gmail draft. Replaces the draft content with the provided fields. Supports attachments and reply threading.`,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
@@ -1074,6 +1077,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
   },
   {
     name: 'manage_workspace_draft',
+    _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['data', 'attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }, { relativeTo: 'root', selector: ['action'], test: 'equals', value: 'create' }] }, { selector: ['data', 'attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }, { relativeTo: 'root', selector: ['action'], test: 'equals', value: 'update' }] }] } },
     category: 'Gmail/Drafts',
     description: `Legacy consolidated draft tool. Prefer the individual draft tools for new calls.`,
     aliases: ['manage_draft'],

@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
@@ -23,10 +24,11 @@ export function registerImageTools(server: McpServer): void {
         '2. Wait ~15 seconds, then call check_kling_task(task_id, task_type="image")\n' +
         '3. Repeat step 2 until status is "succeed" — the response then includes image URL(s)\n\n' +
         'REFERENCE IMAGE (optional): guide the generation with an existing image, EITHER as a public HTTPS URL ' +
-        '(image_url) OR a local file (image_path, inside MCP_WORKSPACE_PATH or the system temp directory; ' +
-        '.jpg / .jpeg / .png, max 10MB).\n\n' +
+        '(image_url) OR a local file (image_path; ' +
+        '.jpg / .jpeg / .png, max 10MB). When connected to a host that authorizes file reads, its path permission decision applies to image_path. Standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory).\n\n' +
         'MODELS (newest to oldest): kling-v3 (Kling 3.0, highest quality, about twice the cost of kling-v2-1), ' +
         'kling-v2-1 (default), kling-v2, kling-v1-5, kling-v1.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['image_path'], base: 'connectorCwd', expandTilde: true, when: [{ relativeTo: 'root', selector: ['image_url'], test: 'falsy' }] }] } },
       inputSchema: z.object({
         prompt: z
           .string()
@@ -62,7 +64,7 @@ export function registerImageTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            'Absolute path to a local reference image inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
+            'Absolute path to a local reference image. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
           ),
         callback_url: z
           .string()
@@ -74,7 +76,8 @@ export function registerImageTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       if (args.image_url && args.image_path) {
         return JSON.stringify({
           ok: false,
@@ -108,7 +111,7 @@ export function registerImageTools(server: McpServer): void {
         body.image = args.image_url;
       } else if (args.image_path) {
         // Local file: workspace-fenced read, Base64-encoded into the request.
-        body.image = encodeLocalImage(args.image_path);
+        body.image = encodeLocalImage(args.image_path, reads);
       }
       if (args.callback_url) body.callback_url = args.callback_url;
 

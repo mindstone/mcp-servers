@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
 ## [0.3.0] - 2026-08-05
 
 ### Changed

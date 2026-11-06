@@ -1,3 +1,4 @@
+import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
@@ -13,7 +14,7 @@ export function createServer(): McpServer {
   const server = new McpServer({
     name: 'nano-banana-mcp-server',
     version: pkg.version,
-  });
+  }, { capabilities: FILE_READ_CAPABILITIES });
 
   registerConfigureTools(server);
   registerGenerateTools(server);

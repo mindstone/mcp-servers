@@ -162,3 +162,17 @@ Video models: `generate_video_from_image` takes `gen4_turbo` (default), `gen4.5`
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.
+
+### Host-authorized local inputs
+
+`files/readModes` version 1 is an experimental extension used by these connectors,
+not part of the MCP standard. A compatible host (the app running the connector)
+decides which input files a tool call may read. The connector opens only the
+host-approved physical path, after resolving symlinks. The host supplies this
+permission information with each call; it is not a tool argument you need to set.
+Missing or invalid permission information, or a file absent from the approved
+list, stops the read.
+
+Clients that do not negotiate this extension keep the connector's existing
+standalone file restrictions. This extension changes input-read permissions;
+existing output destinations, upload formats, size limits and file checks apply.

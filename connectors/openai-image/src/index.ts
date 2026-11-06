@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { FILE_READ_CAPABILITIES, centralReadPath, fileReadContext, type FileReadContext } from './file-read-context.js';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import http from 'node:http';
@@ -1106,13 +1107,15 @@ const workspaceFenceError = (
 const loadLocalEditImage = async (
   inputPath: string,
   options?: { pngOnly?: boolean },
+  context?: FileReadContext,
+  location: (string | number)[] = [],
 ): Promise<LoadedLocalImage> => {
   const imageLabel = options?.pngOnly ? 'Mask image' : 'Reference image';
   const safeInputPath = envelopeToolInput(inputPath);
-  const resolvedPathResult = await resolveWorkspaceScopedImagePath(
-    inputPath,
-    imageLabel,
-  );
+  const allowedPath = centralReadPath(context, inputPath, location);
+  const resolvedPathResult = allowedPath === undefined
+    ? await resolveWorkspaceScopedImagePath(inputPath, imageLabel)
+    : { resolvedPath: allowedPath, realPath: allowedPath, workspaceReal: '' };
   if ('errorText' in resolvedPathResult) {
     throw workspaceFenceError(
       resolvedPathResult.errorText,
@@ -1230,7 +1233,9 @@ const loadLocalEditImage = async (
         );
       }
       if (
-        !(await isInsideConfiguredCanonicalZone(descriptorPath, workspaceReal))
+        allowedPath === undefined
+          ? !(await isInsideConfiguredCanonicalZone(descriptorPath, workspaceReal))
+          : descriptorPath !== allowedPath
       ) {
         throw workspaceFenceError(
           `${imageLabel} changed while it was being verified: ${safeInputPath}`,
@@ -1253,7 +1258,7 @@ const loadLocalEditImage = async (
 
     return {
       path: realPath,
-      filename: path.basename(resolvedPath),
+      filename: path.basename(allowedPath === undefined ? resolvedPath : inputPath),
       mime,
       data,
     };
@@ -1809,10 +1814,12 @@ const registerTools = (targetServer: McpServer): void => {
         openWorldHint: true,
         idempotentHint: false,
       },
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['image_paths', '*'], base: 'workspace', expandTilde: false }, { selector: ['mask_path'], base: 'workspace', expandTilde: false }] } },
       inputSchema: editImageSchema,
     },
     async (input, context): Promise<CallToolResult> =>
       withErrorHandling(async () => {
+        const reads = fileReadContext(targetServer.server.getClientCapabilities(), context);
         const apiKey = ensureConfiguredApiKey();
         const model = configuredModel();
         const size = input.size ?? 'square';
@@ -1824,13 +1831,13 @@ const registerTools = (targetServer: McpServer): void => {
         ensureTransparentBackgroundSupported(input.background, outputFormat, model);
 
         const referenceImages: LoadedLocalImage[] = [];
-        for (const imagePath of input.image_paths) {
-          referenceImages.push(await loadLocalEditImage(imagePath));
+        for (const [index, imagePath] of input.image_paths.entries()) {
+          referenceImages.push(await loadLocalEditImage(imagePath, undefined, reads, ['image_paths', index]));
         }
 
         let maskImage: LoadedLocalImage | null = null;
         if (input.mask_path) {
-          maskImage = await loadLocalEditImage(input.mask_path, { pngOnly: true });
+          maskImage = await loadLocalEditImage(input.mask_path, { pngOnly: true }, reads, ['mask_path']);
         }
 
         const form = new FormData();
@@ -1919,7 +1926,7 @@ export const createServer = (): McpServer => {
   const server = new McpServer({
     name: 'OpenAIImageGeneration',
     version: SERVER_VERSION,
-  });
+  }, { capabilities: FILE_READ_CAPABILITIES });
   registerTools(server);
   return server;
 };

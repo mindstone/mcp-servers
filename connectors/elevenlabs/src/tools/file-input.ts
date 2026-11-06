@@ -1,3 +1,4 @@
+import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ElevenLabsError } from '../types.js';
@@ -11,6 +12,8 @@ export interface SandboxedFileInput {
 
 const FILE_INPUT_RESOLUTION =
   'Provide a path to an existing audio file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). Remote URLs are not supported.';
+const CHANGED_RESOLUTION =
+  'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.';
 
 /**
  * Read bytes from a local file path constrained to the MCP_WORKSPACE_PATH
@@ -26,9 +29,12 @@ const FILE_INPUT_RESOLUTION =
  * Callers own multipart field naming (`file` vs `audio`); this helper
  * returns `{ buffer, fileName, verifiedPath }` only.
  */
-export function readSandboxedFile(rawFilePath: string): SandboxedFileInput {
+export function readSandboxedFile(rawFilePath: string, context?: FileReadContext, location: (string | number)[] = ['file_path']): SandboxedFileInput {
+  const allowedPath = isRemoteUrl(rawFilePath) ? undefined : centralReadPath(context, rawFilePath, location);
   let filePath: string;
-  if (isRemoteUrl(rawFilePath)) {
+  if (allowedPath !== undefined) {
+    filePath = allowedPath;
+  } else if (isRemoteUrl(rawFilePath)) {
     // Preserve pre-existing behaviour for URL inputs: existsSync below
     // returns FILE_NOT_FOUND (non-sandbox error code).
     filePath = rawFilePath;
@@ -54,7 +60,10 @@ export function readSandboxedFile(rawFilePath: string): SandboxedFileInput {
   // Defence-in-depth: re-canonicalise via realpathSync at the very last moment
   // to close the TOCTOU window between sandbox validation and readFileSync.
   const verifiedPath = isRemoteUrl(rawFilePath) ? filePath : fs.realpathSync(filePath);
-  if (!isRemoteUrl(rawFilePath)) {
+  if (allowedPath !== undefined && verifiedPath !== allowedPath) {
+    throw new ElevenLabsError(`File changed after it was approved; refusing to read it: ${rawFilePath}`, 'FILE_NOT_FOUND', CHANGED_RESOLUTION);
+  }
+  if (allowedPath === undefined && !isRemoteUrl(rawFilePath)) {
     const root = getAudioWorkspaceRoot();
     if (!isInsideAudioWorkspaceRoot(verifiedPath, root)) {
       throw new ElevenLabsError(

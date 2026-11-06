@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vi } from 'vitest';
 
@@ -27,6 +28,8 @@ export interface McpTestClient {
 export interface InMemoryTestClientOptions {
   /** Function that creates the MCP server to test. Dynamically imported after env stubs are applied. */
   createServer: () => McpServer;
+  /** Initialize capabilities for protocol negotiation tests. */
+  clientCapabilities?: ClientCapabilities;
   /** Environment variable overrides. Applied via vi.stubEnv before creating the server. */
   env?: Record<string, string>;
 }
@@ -53,7 +56,7 @@ export async function createInMemoryTestClient(options: InMemoryTestClientOption
     server = createServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
-    client = new Client({ name: 'test-client', version: '1.0.0' });
+    client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: options.clientCapabilities });
     await Promise.all([
       client.connect(clientTransport),
       server.connect(serverTransport),

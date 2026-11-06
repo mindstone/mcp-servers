@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput } from '../client.js';
@@ -111,6 +112,7 @@ export function registerAudioTools(server: McpServer): void {
       description:
         'Replace the voice in an audio or video file with a different voice, preserving speech content. ' +
         'COST: 1 credit per 3 seconds.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['media'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         media: z.string().describe('Audio or video file. HTTPS URL or local file path.'),
         media_type: z.enum(['audio', 'video']).optional().describe('Whether input is audio or video. Default: audio.'),
@@ -119,9 +121,10 @@ export function registerAudioTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const mediaType = args.media_type || 'audio';
-      const mediaUri = await resolveMediaInput(args.media, mediaType as 'audio' | 'video');
+      const mediaUri = await resolveMediaInput(args.media, mediaType as 'audio' | 'video', reads, ['media']);
       const voice = args.voice || 'Maya';
 
       const body: Record<string, unknown> = {
@@ -147,6 +150,7 @@ export function registerAudioTools(server: McpServer): void {
       description:
         'Translate and dub audio into a different language, cloning the original speaker\'s voice. ' +
         'COST: 1 credit per 2 seconds. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['audio'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         audio: z.string().describe('Audio file to dub. HTTPS URL or local file path.'),
         target_language: z.enum(DUBBING_LANGUAGES).describe('Target language code (e.g., "es" for Spanish).'),
@@ -156,8 +160,9 @@ export function registerAudioTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
-      const audioUri = await resolveMediaInput(args.audio, 'audio');
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
+      const audioUri = await resolveMediaInput(args.audio, 'audio', reads, ['audio']);
       const targetLang = args.target_language;
 
       const body: Record<string, unknown> = { model: 'eleven_voice_dubbing', audioUri, targetLang };
@@ -181,13 +186,15 @@ export function registerAudioTools(server: McpServer): void {
       description:
         'Isolate voice from background audio. Extracts clean speech. Input must be 4.6s-3600s. ' +
         'COST: 1 credit per 6 seconds.',
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['audio'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         audio: z.string().describe('Audio file with voice + background. HTTPS URL or local file.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
-      const audioUri = await resolveMediaInput(args.audio, 'audio');
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
+      const audioUri = await resolveMediaInput(args.audio, 'audio', reads, ['audio']);
       const result = await runwayFetch<TaskResponse>('/voice_isolation', {
         method: 'POST',
         body: JSON.stringify({ model: 'eleven_voice_isolation', audioUri }),

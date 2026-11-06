@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as path from 'node:path';
@@ -204,16 +205,17 @@ Uses Slack's 3-step external upload flow (files.getUploadURLExternal → POST
 bytes → files.completeUploadExternal); the legacy files.upload endpoint was
 sunset by Slack in November 2025.
 
-WORKSPACE CONSTRAINT (security invariant): file_path must resolve inside the
-host's workspace directory (MCP_WORKSPACE_PATH, or the system temp dir when
-unset). Paths outside it — including symlinks pointing outside — are refused.
+When connected to a host that authorizes file reads, its path permission
+decision applies. Standalone clients require file_path to resolve inside the
+workspace directory (MCP_WORKSPACE_PATH, or the system temp dir when unset).
 Max file size: 50MB.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: false }] } },
       inputSchema: z
         .object({
           file_path: z
             .string()
             .min(1)
-            .describe('Path to the local file. Must be inside the workspace directory.'),
+            .describe('Path to the local file. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside the workspace directory.'),
           channel: z
             .string()
             .optional()
@@ -240,7 +242,8 @@ Max file size: 50MB.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const userClient = await getSlackUserClient();
       if (!userClient) {
         return errorJson({
@@ -256,15 +259,18 @@ Max file size: 50MB.`,
       // fstat on that descriptor, and reads through it — so a hostile process
       // swapping the path after validation cannot redirect the upload outside
       // the workspace or past the size cap. See upload-path-safety.ts.
-      const source = await readUploadSourceFile(args.file_path, UPLOAD_MAX_SIZE_BYTES);
+      const source = await readUploadSourceFile(args.file_path, UPLOAD_MAX_SIZE_BYTES, undefined, reads);
       if (!source.ok) {
         const isSize = source.error.startsWith('File too large');
+        const isChanged = reads.mode === 'central' && (source.error.includes('changed') || source.error.includes('was replaced'));
         return errorJson({
           error: source.error,
           action_required: isSize
             ? 'Upload a smaller file, or share it via a link instead.'
-            : 'Place a regular file inside the workspace directory and retry with that path.',
-          next_step: isSize ? 'retry_with_smaller_file' : 'retry_with_workspace_path',
+            : isChanged
+              ? 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.'
+              : 'Place a regular file inside the workspace directory and retry with that path.',
+          next_step: isSize ? 'retry_with_smaller_file' : isChanged ? 'retry' : 'retry_with_workspace_path',
         });
       }
       if (args.thread_ts && !args.channel) {

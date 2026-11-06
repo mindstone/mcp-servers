@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -53,9 +55,10 @@ RELATED TOOLS:
 RETURNS: dubbing_id and expected_duration_sec. The job runs server-side — poll get_dubbing; do not assume instant completion.
 
 COST: Dubbing credits per minute of source media.`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES, when: [{ relativeTo: 'root', selector: ['source_url'], test: 'falsy' }] }] } },
       inputSchema: z.object({
         target_lang: z.string().min(2).describe('Target language code (e.g. es, fr, de). Required.'),
-        file_path: z.string().optional().describe('Local audio/video file inside MCP_WORKSPACE_PATH (multipart field file).'),
+        file_path: z.string().optional().describe('Local audio/video file (multipart field file). When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).'),
         source_url: z.string().url().optional().describe('Alternatively, a URL ElevenLabs fetches server-side (no local sandbox).'),
         name: z.string().optional().describe('Optional job label (echoed by get_dubbing).'),
         source_lang: z.string().optional().describe('Source language code when known (auto-detect when omitted).'),
@@ -64,7 +67,8 @@ COST: Dubbing credits per minute of source media.`,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new ElevenLabsError(
@@ -97,7 +101,7 @@ COST: Dubbing credits per minute of source media.`,
       formData.append('watermark', String(args.watermark ?? false));
 
       if (args.file_path) {
-        const fileInput = readSandboxedFile(args.file_path);
+        const fileInput = readSandboxedFile(args.file_path, reads, ['file_path']);
         formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
       } else if (args.source_url) {
         formData.append('source_url', args.source_url);

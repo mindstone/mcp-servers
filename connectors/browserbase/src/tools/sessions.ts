@@ -1,3 +1,4 @@
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { browserbaseFetch, browserbaseFetchText, requireApiKey } from '../client.js';
@@ -20,7 +21,7 @@ import { wrapUntrusted } from '../untrusted-content.js';
 const sessionStatusSchema = z.enum(['PENDING', 'RUNNING', 'ERROR', 'TIMED_OUT', 'COMPLETED']);
 
 const WORKSPACE_HINT =
-  'Local file path to upload. The path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset) — paths outside the workspace sandbox are rejected before any disk read.';
+  'Local file path to upload. When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset).';
 
 export function registerSessionTools(server: McpServer): void {
   server.registerTool(
@@ -553,7 +554,7 @@ RETURNS: downloads[] (pageId, status NOT_REQUESTED|PENDING|COMPLETED|FAILED, dow
 WHEN TO USE:
 - An automation needs a local file (CSV, image, PDF) inside the browser, e.g. for a file-input upload on a page
 
-SECURITY: file_path is sandboxed — the path must resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
+SECURITY: When connected to a host that authorizes file reads, its path permission decision applies to file_path. Standalone clients require the path to resolve inside MCP_WORKSPACE_PATH (or the system temp directory when unset); anything outside is rejected before any disk read.
 
 ERROR RECOVERY:
 - 401: API key is missing or invalid → configure_browserbase_api_key
@@ -565,6 +566,7 @@ RELATED TOOLS:
 - get_session: Confirm the session is still alive
 
 RETURNS: ok, message with the in-session path (/tmp/.uploads/<filename>).`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: {
         session_id: z.string().min(1).describe('The session ID to upload into (must be running).'),
         file_path: z.string().min(1).describe(WORKSPACE_HINT),
@@ -576,9 +578,10 @@ RETURNS: ok, message with the in-session path (/tmp/.uploads/<filename>).`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       requireApiKey();
-      const form = await buildUploadFormData(args.file_path);
+      const form = await buildUploadFormData(args.file_path, reads);
       await browserbaseFetch<Record<string, unknown>>(
         `/sessions/${encodeURIComponent(args.session_id)}/uploads`,
         { method: 'POST', body: form },

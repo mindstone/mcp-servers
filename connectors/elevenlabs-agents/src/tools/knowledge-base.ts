@@ -1,3 +1,5 @@
+import { REMOTE_AUDIO_PREFIXES } from './path-safety.js';
+import { fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
@@ -51,7 +53,7 @@ type KnowledgeBaseDocumentMode = 'text' | 'file' | 'url';
 const addKnowledgeBaseDocumentSchema = z.object({
   text: z.string().min(1).optional().describe('Text content to add to the knowledge base.'),
   file_path: z.string().min(1).optional()
-    .describe('Absolute path to a local file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
+    .describe('Absolute path to a local file. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
   url: z.string().url().optional()
     .describe('Public URL that ElevenLabs should fetch server-side. Must be https on a public host; loopback, private, link-local, and cloud-metadata addresses are rejected.'),
   enable_auto_sync: z.boolean().optional()
@@ -226,7 +228,7 @@ FREE.`,
 
 WHEN TO USE:
 - Add a short text snippet directly
-- Upload a local file from MCP_WORKSPACE_PATH
+- Upload a local file
 - Register a stable public URL that ElevenLabs fetches server-side
 
 EXAMPLE: {"text": "Refunds are processed within 3 business days.", "name": "Refund policy"}
@@ -243,9 +245,10 @@ RETURNS: document.
 COST: FREE for the write itself; URL fetches and downstream agent usage may consume workspace resources.
 
 COMMON MISTAKES:
-- file mode only accepts local paths inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).
+- When connected to a host that authorizes file reads, its path permission decision applies in file mode. Standalone clients only accept local paths inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).
 - Provide exactly one content source field: text, file_path, or url.
 - url mode expects a stable public https URL that ElevenLabs can reach server-side (loopback, private, link-local, and cloud-metadata addresses are rejected).`,
+      _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: true, nonLocalPrefixes: REMOTE_AUDIO_PREFIXES, when: [{ relativeTo: 'root', selector: ['text'], test: 'undefined' }, { relativeTo: 'root', selector: ['url'], test: 'undefined' }] }] } },
       inputSchema: addKnowledgeBaseDocumentSchema,
       annotations: {
         readOnlyHint: false,
@@ -254,7 +257,8 @@ COMMON MISTAKES:
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const apiKey = requireApiKey();
       const mode = resolveKnowledgeBaseDocumentMode(args as Record<string, unknown>);
       let result: unknown;
@@ -276,7 +280,7 @@ COMMON MISTAKES:
             'Provide file_path and retry the upload.',
           );
         }
-        const fileInput = readSandboxedFile(args.file_path);
+        const fileInput = readSandboxedFile(args.file_path, reads, ['file_path']);
         const formData = new FormData();
         formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
         if (args.name) {
