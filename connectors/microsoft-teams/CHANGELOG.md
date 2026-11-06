@@ -4,6 +4,10 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep failed-send and blocked-send reasons visible when a message is uncertain.
+
 ## [0.3.2] - 2026-11-03
 
 ### Changed

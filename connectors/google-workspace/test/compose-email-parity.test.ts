@@ -17,6 +17,8 @@
 //    Refined to keep earlier send uncertainty visible beside a later send block.
 //    Rebaselined for transient sending status, settled uncertainty, persistent
 //    policy explanations and the pending-reply payload cleanup refinements.
+//    Rebaselined for preserving send failure reasons beside uncertainty and
+//    routing Retry back to Send after an uncertain draft save.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the

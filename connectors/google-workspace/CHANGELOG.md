@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep failed-send and blocked-send reasons visible when a send is uncertain, and Retry sends again after a failed draft save.
+
 ## [0.5.4] - 2026-11-06
 
 ### Changed

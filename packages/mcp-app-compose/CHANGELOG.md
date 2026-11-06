@@ -16,6 +16,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Retry stays unavailable after your own setting blocks sending. Block classification uses only the host's closed `error.data.reason`, never message text.
 - After a draft-save timeout, Cancel says "Nothing sent" because saving a draft does not send it; an earlier uncertain send still keeps its check-before-resending wording.
 - The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+- Compose cards keep failed-send and blocked-send reasons visible when a send is uncertain, and Retry sends again after a failed draft save.
 
 ### Added
 
@@ -34,7 +35,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` for supporting hosts; draft-save requests do not declare a send outcome.
 - The blocked-send Gmail escape hatch uses only `error.data.reason === 'user-disabled'`. Admin-disabled, security-policy and not-dispatched failures do not open the escape hatch.
 - The compose form's built-in wording no longer names a particular host app:
-  the lost-reply notices now start "No confirmation came back in time…", the
+  the lost-reply notices now use channel-specific check-before-resending guidance, the
   Slack direct-message notice reads "This will be sent as a direct message to
   the person you asked to contact.", and a code comment shipped inside the HTML
   now says "The host renders this iframe".

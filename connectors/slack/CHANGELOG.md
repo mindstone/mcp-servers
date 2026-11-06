@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep failed-message and blocked-message reasons visible when a message is uncertain.
+
 ### Changed
 
 - `post_slack_message` and `reply_to_slack_thread` say not to post when the person, or instructions the model follows, ask to see the message first; the model shows an editable draft instead.
