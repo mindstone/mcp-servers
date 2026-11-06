@@ -129,7 +129,7 @@ describe('execAgentBrowser — argument shape', () => {
 describe('execAgentBrowser — bundled agent-browser when none is on PATH', () => {
   const originalEnv = process.env.AGENT_BROWSER_SHOW_WINDOW;
   // Matches either path separator, so the assertion holds on any host OS.
-  const BIN_ENTRY = /[\\/]node_modules[\\/]agent-browser[\\/]bin[\\/]agent-browser\.js$/;
+  const NATIVE_BINARY = /[\\/]node_modules[\\/]agent-browser[\\/]bin[\\/]agent-browser-[a-z0-9-]+(\.exe)?$/;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -159,15 +159,14 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     return { calls, stdout: result.stdout };
   }
 
-  it('after a PATH miss, runs the bundled bin entry with this Node and no shell', async () => {
+  it('after a PATH miss, runs the bundled native binary directly, with no shell', async () => {
     process.env.AGENT_BROWSER_SHOW_WINDOW = 'false';
     const { calls, stdout } = await runAfterPathMiss(['fill', '@e3', 'line one\nline two']);
 
     expect(calls).toHaveLength(2);
     expect(calls[0].cmd).toBe('agent-browser');
-    expect(calls[1].cmd).toBe(process.execPath);
-    expect(calls[1].args[0]).toMatch(BIN_ENTRY);
-    expect(calls[1].args.slice(1)).toEqual(['fill', '@e3', 'line one\nline two']);
+    expect(calls[1].cmd).toMatch(NATIVE_BINARY);
+    expect(calls[1].args).toEqual(['fill', '@e3', 'line one\nline two']);
     expect(calls[1].opts).toEqual(calls[0].opts);
     expect(calls[1].opts.windowsHide).toBe(true);
     expect(calls[1].opts).not.toHaveProperty('shell');
@@ -180,8 +179,8 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     process.env.AGENT_BROWSER_SHOW_WINDOW = 'true';
     const { calls } = await runAfterPathMiss(['open', 'https://example.com']);
 
-    expect(calls[1].cmd).toBe(process.execPath);
-    expect(calls[1].args.slice(1)).toEqual(['open', '--headed', 'https://example.com']);
+    expect(calls[1].cmd).toMatch(NATIVE_BINARY);
+    expect(calls[1].args).toEqual(['open', '--headed', 'https://example.com']);
   });
 });
 

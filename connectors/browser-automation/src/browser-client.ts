@@ -1,5 +1,9 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { chmodSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { ConnectorError, DEFAULT_TIMEOUT_MS, SESSION_NAME } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
@@ -21,30 +25,61 @@ const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 // Whether this process has run an agent-browser command, so it may have started
 // (or picked up) the background agent-browser daemon. See closeBrowserOnStop.
 let ranBrowserCommand = false;
-// Set once the host is stopping this server: no new browser commands start.
-let stopping = false;
-// Browser commands still running, so a stop can close again after a launch
-// that finishes after the first close.
-const commandsInFlight = new Set<Promise<ExecResult>>();
+// Aborted once the host is stopping this server: commands still running end,
+// and no new ones start.
+const stopping = new AbortController();
 
-// A host gives a stopping server only a short grace before killing it;
-// `agent-browser close` normally takes well under a second.
-const STOP_CLOSE_TIMEOUT_MS = 5_000;
+// How long a close gets before the daemon is force-stopped. `agent-browser
+// close` normally takes well under a second, but it queues behind any command
+// the daemon is stuck on, and saving the session from a stuck page is slow.
+const CLOSE_BUDGET_MS = 8_000;
+// A command that was running when the close began can start the daemon again.
+const CLOSE_RECHECK_MS = 1_000;
 
-let bundledEntry: string | null = null;
+// What `agent-browser` needs to reach a running daemon. Its other settings can
+// be launch settings, and any launch setting makes the CLI launch a browser
+// before running the command: with no usable browser, `close` then fails
+// without reaching the daemon.
+const DAEMON_ADDRESS_ENV = new Set([
+  'AGENT_BROWSER_SESSION',
+  'AGENT_BROWSER_SESSION_NAME',
+  'AGENT_BROWSER_SOCKET_DIR',
+  'AGENT_BROWSER_NAMESPACE',
+]);
+
+let bundledBinary: string | null = null;
 
 /**
- * Path to the JS entry of the agent-browser package this connector depends
- * on. Run with `process.execPath` rather than through an npm `.cmd` shim or
- * npx: on Windows, execFile cannot start a shim without a shell, and npx
- * reaches the CLI through cmd.exe, which cuts arguments at the first newline.
+ * Path to the native binary of the agent-browser package this connector depends
+ * on. Run directly, never through the package's Node wrapper: the wrapper does
+ * not pass signals on, so ending it leaves the real client running, and a client
+ * that outlives its daemon starts a new one to retry its command. Directly also
+ * means no `.cmd` shim, which execFile cannot start on Windows without a shell.
  * Throws MODULE_NOT_FOUND when the dependency is missing.
  */
-function resolveBundledEntry(): string {
-  if (!bundledEntry) {
-    bundledEntry = createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js');
+function resolveBundledBinary(): string {
+  if (!bundledBinary) {
+    const bin = dirname(createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js'));
+    const glibc = (process.report.getReport() as { header?: { glibcVersionRuntime?: string } }).header?.glibcVersionRuntime;
+    const os = process.platform === 'linux' && !glibc ? 'linux-musl' : process.platform;
+    const extension = process.platform === 'win32' ? '.exe' : '';
+    bundledBinary = join(bin, `agent-browser-${os}-${process.arch}${extension}`);
+    // Hosts may install without lifecycle scripts, which set this.
+    if (process.platform !== 'win32') {
+      try {
+        chmodSync(bundledBinary, 0o755);
+      } catch {
+        // Already executable, or missing: running it reports which.
+      }
+    }
   }
-  return bundledEntry;
+  return bundledBinary;
+}
+
+function withoutLaunchSettings(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([name]) => !name.startsWith('AGENT_BROWSER_') || DAEMON_ADDRESS_ENV.has(name)),
+  );
 }
 
 function buildEnv(): Record<string, string> {
@@ -131,25 +166,21 @@ function cliFailureMessage(
  * of `--headed`.
  *
  * Runs an `agent-browser` executable from PATH when there is one; otherwise
- * runs the connector's own agent-browser dependency with this Node. Both use
- * execFile with no shell, so no argument is ever interpreted by a shell.
+ * runs the native binary of the connector's own agent-browser dependency. Both
+ * use execFile with no shell, so no argument is ever interpreted by a shell.
  */
 export function execAgentBrowser(
   args: string[],
   options?: ExecOptions,
 ): Promise<ExecResult> {
-  if (stopping) {
+  if (stopping.signal.aborted) {
     return Promise.reject(new ConnectorError(
       'The browser is closing because the app is stopping this connector',
       'STOPPING',
       'Try again once the app is running again.',
     ));
   }
-  const command = runAgentBrowser(args, options);
-  commandsInFlight.add(command);
-  const forget = () => commandsInFlight.delete(command);
-  command.then(forget, forget);
-  return command;
+  return runAgentBrowser(args, options);
 }
 
 async function runAgentBrowser(
@@ -157,13 +188,14 @@ async function runAgentBrowser(
   options?: ExecOptions,
 ): Promise<ExecResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const env = buildEnv();
+  const closing = args[0] === 'close';
+  const env = closing ? withoutLaunchSettings(buildEnv()) : buildEnv();
   ranBrowserCommand = true;
 
   // Inject --headed AFTER the command (positional index 1). The CLI parses
   // the first positional as the command name, so flags must follow it.
   // Headless is the absence of --headed; the CLI has no --headless flag.
-  if (resolveHeaded(options?.headed, env) && args.length > 0) {
+  if (!closing && resolveHeaded(options?.headed, env) && args.length > 0) {
     args = [args[0], '--headed', ...args.slice(1)];
   }
 
@@ -172,6 +204,7 @@ async function runAgentBrowser(
     const result = await execFileAsync(file, fileArgs, {
       env,
       timeout: timeoutMs,
+      signal: stopping.signal,
       maxBuffer: MAX_BUFFER,
       // GUI hosts should not open a console window for each CLI call on Windows.
       windowsHide: true,
@@ -189,7 +222,7 @@ async function runAgentBrowser(
 
   // Not on PATH: run the bundled copy.
   try {
-    return await run(process.execPath, [resolveBundledEntry(), ...args]);
+    return await run(resolveBundledBinary(), args);
   } catch (error: unknown) {
     throw classifyFailure(error, args[0], timeoutMs);
   }
@@ -231,24 +264,83 @@ function classifyFailure(error: unknown, command: string, timeoutMs: number): Co
  *
  * The daemon detaches from this process and, for a visible browser, never
  * stops by itself, so without this it outlives the host and a later run reuses
- * it with stale settings. Closing saves the session, so sign-ins persist. Does
- * nothing if this process never ran a browser command, so a server started only
- * to list its tools never touches a browser it did not use. Once called, new
- * browser commands are refused.
+ * it with stale settings. Does nothing if this process never ran a browser
+ * command, so a server started only to list its tools never touches a browser
+ * it did not use. Once called, new browser commands are refused.
+ *
+ * A host kills a stopping server after a short grace, which a close can
+ * outlast, and a close killed part-way leaves the daemon running. So the work
+ * runs in a process of its own (see closeBrowserForGood), and this one can exit
+ * at once. That process has no host to report to. Commands still running end
+ * first: a client left waiting would start a new daemon once the old one goes.
  */
 export async function closeBrowserOnStop(): Promise<void> {
-  stopping = true;
+  stopping.abort();
   if (!ranBrowserCommand) return;
-  const running = [...commandsInFlight];
+  await new Promise<void>((resolve, reject) => {
+    const closer = spawn(process.execPath, [fileURLToPath(new URL('./close-browser.js', import.meta.url))], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    closer.once('error', reject);
+    closer.once('spawn', () => {
+      closer.unref();
+      resolve();
+    });
+  });
+}
+
+/**
+ * Close the browser, saving the session so sign-ins persist, and make sure the
+ * daemon has gone. Force-stops a daemon that a close cannot reach or that is
+ * stuck: it runs commands one at a time, and a signal waits for them too.
+ */
+export async function closeBrowserForGood(): Promise<void> {
+  const deadline = Date.now() + CLOSE_BUDGET_MS;
+  do {
+    await runAgentBrowser(['close'], { timeoutMs: Math.max(deadline - Date.now(), 1) }).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, CLOSE_RECHECK_MS));
+  } while (runningDaemonPid() !== null && Date.now() < deadline);
+
+  const pid = runningDaemonPid();
+  if (pid !== null) await forceStop(pid);
+}
+
+/**
+ * The daemon's pid, read from the file it removes when it exits. Asking the
+ * daemon would queue behind whatever it is stuck on. Follows the CLI's own
+ * lookup for the settings a host can use.
+ */
+function runningDaemonPid(): number | null {
+  const { AGENT_BROWSER_SESSION, AGENT_BROWSER_SOCKET_DIR, XDG_RUNTIME_DIR } = process.env;
+  const dir = AGENT_BROWSER_SOCKET_DIR
+    || (XDG_RUNTIME_DIR ? join(XDG_RUNTIME_DIR, 'agent-browser') : join(homedir(), '.agent-browser'));
   try {
-    await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
-  } finally {
-    // A command that was still running (say, opening a page) may have started
-    // the browser again after that close, or the close failed while it ran:
-    // close once more when it has finished.
-    if (running.length > 0) {
-      await Promise.allSettled(running);
-      await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+    const text = readFileSync(join(dir, `${AGENT_BROWSER_SESSION || 'default'}.pid`), 'utf8').trim();
+    const pid = Number(text);
+    // 0 and negative pids would signal whole process groups.
+    if (!/^\d+$/.test(text) || pid <= 1) return null;
+    process.kill(pid, 0);
+    return pid;
+  } catch {
+    return null;
+  }
+}
+
+/** Stop the daemon and its children: Chrome and, on Linux, a display server. */
+async function forceStop(pid: number): Promise<void> {
+  if (process.platform === 'win32') {
+    await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F']).catch(() => {});
+    return;
+  }
+  // Chrome's own helper processes exit with Chrome. pgrep fails when there are no children.
+  const children = await execFileAsync('pgrep', ['-P', String(pid)]).catch(() => ({ stdout: '' }));
+  for (const target of [...children.stdout.split('\n').filter(Boolean).map(Number), pid]) {
+    try {
+      process.kill(target, 'SIGKILL');
+    } catch {
+      // Already gone.
     }
   }
 }

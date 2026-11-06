@@ -2,7 +2,8 @@ import { closeBrowserOnStop } from './browser-client.js';
 
 /**
  * Close the browser when the host stops this server: the host ends our stdin
- * (the MCP stdio stop order) or sends SIGTERM/SIGINT. Runs once, then exits.
+ * (the MCP stdio stop order) or sends SIGTERM/SIGINT. Runs once, then exits,
+ * leaving a separate process to finish closing the browser.
  */
 export function closeBrowserWhenHostStops(
   stdin: NodeJS.EventEmitter = process.stdin,

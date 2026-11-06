@@ -160,7 +160,7 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_close** — Close the browser session
 - **browser_authenticate** — Open a visible browser for manual login
 
-The browser stays open between calls. When the host stops this server (it closes the server's stdin, or sends SIGTERM or SIGINT), the server closes the browser and its `agent-browser` background process, saving the session first. The server declares the experimental MCP capability `super-mcp/keep-alive`, which asks a host that stops idle servers (such as super-mcp) to keep it running until the host itself stops, so an idle pause doesn't close the browser.
+The browser stays open between calls. When the host stops this server (it closes the server's stdin, or sends SIGTERM or SIGINT), a separate process closes the browser and its `agent-browser` background process, saving the session first, so the host never waits for it. If a close cannot get through within 8 seconds (a page is hanging, say), that process force-stops them, which cannot save the session. The server declares the experimental MCP capability `super-mcp/keep-alive`, which asks a host that stops idle servers (such as super-mcp) to keep it running until the host itself stops, so an idle pause doesn't close the browser.
 
 ## Workflow
 
