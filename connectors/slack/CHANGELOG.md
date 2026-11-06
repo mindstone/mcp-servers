@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-06
+
+### Changed
+
+- Keep Slack connected through token refresh and reconnects, and recover eligible reads without changing the account used.
+
 ### Changed
 
 - `post_slack_message` and `reply_to_slack_thread` say not to post when the person, or instructions the model follows, ask to see the message first; the model shows an editable draft instead.
