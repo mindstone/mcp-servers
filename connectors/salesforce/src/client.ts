@@ -14,6 +14,7 @@ import {
   deleteToken,
   saveAccounts,
 } from './auth.js';
+import { enrichFieldError } from './field-suggestions.js';
 
 const TOKEN_SAVE_FAILED = 'Failed to save refreshed token';
 const REFRESH_TOKEN_EXPIRED = 'expired access/refresh token';
@@ -188,6 +189,7 @@ export async function withConnection<T>(
         'Call salesforce_connect_account to re-connect.',
       );
     }
+    await enrichFieldError(conn, error, () => connections.delete(resolvedId));
     throw error;
   }
 }
