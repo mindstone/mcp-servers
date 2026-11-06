@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- `post_slack_message` and `reply_to_slack_thread` say not to post when the person, or instructions the model follows, ask to see the message first; the model shows an editable draft instead.
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
 ### Fixed
