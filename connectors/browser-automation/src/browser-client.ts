@@ -22,6 +22,18 @@ export interface ExecOptions {
 
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 
+// The CLI scans every argument for options and has no `--` terminator, so a value
+// that is exactly an option is read as one, whatever position it is in. Tool
+// values come from the model and from pages, and options can change what the CLI
+// launches, so such a value is refused. Longer text ("--foo bar") and numbers
+// ("-5") are not options to the CLI and pass.
+const OPTION_SHAPED = /^--?[a-zA-Z][\w-]*(=[\s\S]*)?$/;
+// The options this connector itself passes, by command.
+const OWN_OPTIONS: Record<string, string[]> = {
+  snapshot: ['-i'],
+  screenshot: ['--full', '--annotate'],
+};
+
 // Whether this process has run an agent-browser command, so it may have started
 // (or picked up) the background agent-browser daemon. See closeBrowserOnStop.
 let ranBrowserCommand = false;
@@ -186,6 +198,14 @@ export function execAgentBrowser(
       'The browser is closing because the app is stopping this connector',
       'STOPPING',
       'Try again once the app is running again.',
+    ));
+  }
+  const [command, ...values] = args;
+  if (values.some((value) => OPTION_SHAPED.test(value) && !OWN_OPTIONS[command]?.includes(value))) {
+    return Promise.reject(new ConnectorError(
+      'This value cannot be used because the browser tool would read it as a command-line option',
+      'OPTION_SHAPED_VALUE',
+      'Use a different value. An exact option such as --name or -n cannot be typed, selected or passed to the browser.',
     ));
   }
   return runAgentBrowser(args, options);
