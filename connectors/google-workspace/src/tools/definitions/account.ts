@@ -17,7 +17,7 @@ export const accountTools: ToolMetadata[] = [
       accounts: [
         {
           email, category, description, auth_status,    // unchanged legacy fields
-          package_id,        // super-mcp instance id (e.g. "GoogleWorkspace-greg-work-com") — use this when routing tool calls
+          package_id,        // super-mcp instance id (e.g. "GoogleWorkspace-alex-work-com") — use this when routing tool calls
           account_label,     // human-readable label (description + email)
           is_default         // exactly one account in the list is marked true
         },

@@ -23,7 +23,7 @@ cd "$REPO_ROOT"
 
 # Publishable connectors. Identical to the M1.4 CI matrix and the
 # VAL-CROSS-* CONNECTORS list. _template/ and the (now-deleted)
-# hello-harry-mcp/ are intentionally excluded.
+# hello-*-mcp/ are intentionally excluded.
 #
 # The mission proposal and validation contract describe these as "the 25
 # publishable connectors", but the actual count under connectors/

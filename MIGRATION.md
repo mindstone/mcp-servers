@@ -75,7 +75,7 @@ The npm-side migration is a three-step procedure per package. The repo-side migr
 
 ### Pre-flight checklist (one time)
 
-- [x] CODEOWNERS team `@mindstone/oss-maintainers` exists (closed 2026-05-17, id 17581413, member: `harryblam`). Replace placeholder maintainer roster with the real list before Phase 3.
+- [x] CODEOWNERS team `@mindstone/oss-maintainers` exists (closed 2026-05-17). Replace placeholder maintainer roster with the real list before Phase 3.
 - [x] `.github/workflows/publish.yml` removed (PR #32 merged 2026-05-17). No CI publish path exists; do not resurrect without revisiting the audit doc.
 - [ ] Enable branch protection on `main` and tag protection on `*-v*` per `docs/security/BRANCH_PROTECTION.md`. (Settings drift check: re-run §5 verification commands in that doc.)
 - [ ] Verify the npm publisher account has 2FA enabled (`npm whoami` → expected `mindstone-engineering`; 2FA mode is WebAuthn-only at time of writing). This account is the single point of authority for every `@mindstone/mcp-server-*` publish.
