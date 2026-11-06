@@ -11,8 +11,11 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-06
+
 ### Changed
 
+- Stop the browser however the quit goes, always run the bundled binary, and refuse tool values that are exactly a command-line option.
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 - Always run the bundled `agent-browser`. An `agent-browser` on PATH is no longer preferred: npm's is a Node wrapper, and commands run through it could not be ended. A session or namespace set in an `agent-browser` config file is no longer used; set `AGENT_BROWSER_SESSION` or `AGENT_BROWSER_NAMESPACE` instead.
 
