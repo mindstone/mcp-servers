@@ -14,6 +14,13 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+- Always run the bundled `agent-browser`. An `agent-browser` on PATH is no longer preferred: npm's is a Node wrapper, and commands run through it could not be ended. A session or namespace set in an `agent-browser` config file is no longer used; set `AGENT_BROWSER_SESSION` or `AGENT_BROWSER_NAMESPACE` instead.
+
+### Fixed
+
+- The browser and its `agent-browser` background process now stop when the host app quits even if a page is hanging, the network is down or no browser could be started. Closing used to need a working browser and to finish inside the host's short stop grace. A process of its own now finishes the close after the server has gone, and force-stops a background process that a close cannot reach within 8 seconds; a force-stop cannot save the session.
+- `browser_close` no longer tries to launch a browser before closing.
+- A browser command that times out now really ends. The bundled `agent-browser` runs directly instead of through its Node wrapper, which left the real command running, where it could start the background process again.
 
 ## [0.2.5] - 2026-11-03
 

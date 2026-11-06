@@ -8,7 +8,7 @@
  * server, it closes the browser (see src/stop.ts).
  *
  * Requirements:
- * - agent-browser executable on PATH, or the bundled dependency run with this Node
+ * - None beyond this package: it runs the native binary of its agent-browser dependency
  *
  * Environment variables:
  * - AGENT_BROWSER_SESSION_NAME: Session name for persistence (default: "mcp")

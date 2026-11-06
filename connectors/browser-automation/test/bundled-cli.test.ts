@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { execAgentBrowser } from '../src/browser-client.js';
 
-it('runs the bundled CLI when PATH has no agent-browser executable', async () => {
+it('runs the real bundled binary, whatever is on PATH', async () => {
   const emptyPath = mkdtempSync(join(tmpdir(), 'browser-automation-path-'));
   try {
     vi.stubEnv('PATH', emptyPath);
