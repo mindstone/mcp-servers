@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-06
+
+### Changed
+
+- When Salesforce refuses a field, the error also offers up to three real field names from that object as possible matches.
+
 ### Added
 
 - When Salesforce refuses a field, the error also offers up to three real field names from that object as possible matches. The original error is unchanged.
