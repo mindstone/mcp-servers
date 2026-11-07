@@ -9,7 +9,17 @@ The history below `[Unreleased]` was reconstructed from git history during the
 `@mindstone-engineering` to `@mindstone` npm scope migration; subsequent entries
 are maintained manually as part of the PR review checklist.
 
+In the older security notes, “vendored” means a copied-in helper and “canonical”
+means its maintained reference version. An untrusted-content envelope labels
+external text as data for the model; an envelope breakout lets that text appear
+to end the label early.
+
 ## [Unreleased]
+
+### Security
+
+- Upgrade the connector's direct Nodemailer dependency to 10.3.1 for sending and saving or updating drafts; consumers receive it with the connector update, without a manual transitive-dependency override. In Nodemailer versions from 3.0.0 up to, but excluding, 10.1.4, crafted recipient addresses could be parsed as a different destination, risking delivery to an unintended recipient ([GHSA-85x2-q946-cp5h](https://github.com/advisories/GHSA-85x2-q946-cp5h)).
+- The mailbox client, Imapflow, still installs Nodemailer 8.0.5 for an optional proxy-connection helper that this connector does not use. That nested copy does not parse this connector's recipients. On 7 November 2026, `npm audit --omit=dev` still reports a Critical finding in `proxy-addr` and High findings in `@modelcontextprotocol/sdk`, `body-parser`, `express-rate-limit`, `fast-uri`, `hono`, `imapflow`, `ip-address`, nested `nodemailer`, and `zod`. These audit labels do not establish whether each issue is reachable in this connector. Run that audit command in the connector directory for the current advisory details.
 
 ### Changed
 
