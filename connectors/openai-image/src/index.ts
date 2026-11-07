@@ -6,7 +6,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type McpServerOptions } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -1922,11 +1922,11 @@ const registerTools = (targetServer: McpServer): void => {
   );
 };
 
-export const createServer = (): McpServer => {
+export const createServer = (options: Pick<McpServerOptions, 'maxToolInputElements'> = {}): McpServer => {
   const server = new McpServer({
     name: 'OpenAIImageGeneration',
     version: SERVER_VERSION,
-  }, { capabilities: FILE_READ_CAPABILITIES });
+  }, { ...options, capabilities: FILE_READ_CAPABILITIES });
   registerTools(server);
   return server;
 };
@@ -1939,11 +1939,25 @@ export const isLoopbackHost = (host?: string): boolean => {
   );
 };
 
+const isLoopbackOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    return url.origin === origin &&
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]');
+  } catch {
+    return false;
+  }
+};
+
 // Request bodies are JSON-RPC envelopes carrying paths and prompts, never
 // image bytes — a few MB is generous. Without a cap, any loopback client
 // passing isLoopbackHost could OOM the process with a multi-gigabyte body
 // (the buffer accumulates before SDK validation runs).
 const MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024;
+// generate_image has 8 scalar keys; edit_image has 10 keys + 4 image_paths
+// members. The SDK counts only arguments, excluding request metadata.
+const MAX_HTTP_TOOL_INPUT_ELEMENTS = 14;
 
 export const readJsonBody = async (
   req: http.IncomingMessage,
@@ -1991,35 +2005,45 @@ const startStdioMode = async (): Promise<void> => {
   logger.info('[openai-image] Server started on stdio.');
 };
 
-const startHttpMode = async (port: number): Promise<void> => {
-  const httpServer = http.createServer(async (req, res) => {
-    if (!isLoopbackHost(req.headers.host)) {
-      res.statusCode = 403;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Forbidden host');
-      return;
-    }
+export const handleHttpRequest = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
+  if (!isLoopbackHost(req.headers.host)) {
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('Forbidden host');
+    return;
+  }
 
-    const requestServer = createServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
+  const origins = req.headersDistinct.origin;
+  if (origins !== undefined && (origins.length !== 1 || !isLoopbackOrigin(origins[0]))) {
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('Forbidden origin');
+    return;
+  }
 
-    try {
-      await requestServer.connect(transport);
-      const body = await readJsonBody(req);
-      await transport.handleRequest(req, res, body);
-    } catch (error) {
-      logger.error('[openai-image] HTTP request error.', { error });
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal error');
-      }
-    } finally {
-      await transport.close().catch(() => undefined);
-      await requestServer.close().catch(() => undefined);
-    }
+  const requestServer = createServer({ maxToolInputElements: MAX_HTTP_TOOL_INPUT_ELEMENTS });
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
   });
+
+  try {
+    await requestServer.connect(transport);
+    const body = await readJsonBody(req);
+    await transport.handleRequest(req, res, body);
+  } catch (error) {
+    logger.error('[openai-image] HTTP request error.', { error });
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal error');
+    }
+  } finally {
+    await transport.close().catch(() => undefined);
+    await requestServer.close().catch(() => undefined);
+  }
+};
+
+const startHttpMode = async (port: number): Promise<void> => {
+  const httpServer = http.createServer(handleHttpRequest);
 
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error): void => reject(error);

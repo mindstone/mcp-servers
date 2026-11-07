@@ -124,6 +124,10 @@ node dist/index.js
 - `MCP_ALLOWED_SYMLINK_ROOTS` — optional JSON array of absolute paths. The connector reads (and writes generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of these declared roots — the same roots the host's built-in file tools trust for declared Spaces. Fail-closed: if the value is missing, empty, malformed JSON, not an array, or **any** entry is non-string / empty / relative, the whole value is rejected and the connector falls back to strict workspace-only containment with one structured stderr warning. Standalone OSS users omit it; Rebel's host injects it automatically from your declared Spaces.
 - `MCP_HTTP_PORT` — optional. When set, the server speaks MCP over HTTP on this port bound to `127.0.0.1` (loopback only, non-loopback `Host` headers are rejected) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.
 
+HTTP requests without an `Origin` header are accepted. A present `Origin` must be a canonical `http://` or `https://` origin for `localhost`, `127.0.0.1` or `[::1]`, at any port. For example, use `http://localhost:3000` without a trailing slash; omit scheme-default ports (`:80` for HTTP, `:443` for HTTPS). Remote, extension, literal `null`, empty, malformed, duplicate and noncanonical Origins receive `403 Forbidden origin` before the request body is read. To recover, use a canonical loopback Origin, omit `Origin` in a non-browser client, or use stdio.
+
+HTTP tool arguments are bounded to the largest supported input shape (four reference images plus a mask and all edit options); the existing 4 MiB request-body limit remains. Any local account can reach this port and invoke tools using the server's API key; on shared machines, use stdio.
+
 ## Host configuration examples
 
 ### Claude Desktop / Cursor
