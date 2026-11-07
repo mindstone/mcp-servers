@@ -191,6 +191,9 @@ without contacting the SMTP transport. Caps are env-tunable but defaults are
 baked into the source — hosts do **not** need to set any env var to get safe
 behaviour.
 
+Sending and saving or updating drafts use a maintained Nodemailer release
+that correctly parses quoted local parts inside angle brackets.
+
 ## Security: untrusted-content envelopes and destructive tools
 
 Every attacker-controlled text field the connector returns — message bodies,

@@ -175,7 +175,6 @@ export async function appendDraftMessage(
   const draftTransport = nodemailer.createTransport({
     streamTransport: true,
     buffer: true,
-    newline: 'unix',
   });
 
   const draftResult = await draftTransport.sendMail({
