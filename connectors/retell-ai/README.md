@@ -112,7 +112,7 @@ Set the following environment variable:
 | Variable | Required | Description |
 |---|---|---|
 | `RETELL_API_KEY` | Yes | Retell AI API key. Get one at [retellai.com/dashboard](https://www.retellai.com/dashboard) |
-| `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded as knowledge-base sources (`create_knowledge_base` / `add_knowledge_base_sources` `file_paths`). File reads are sandboxed to this directory; defaults to the system temp directory. |
+| `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded as knowledge-base sources (`create_knowledge_base` / `add_knowledge_base_sources` `file_paths`). Defaults to the system temp directory. For standalone clients, file reads are sandboxed to this directory; for negotiated `files/readModes` version 1, see [Host-authorized local inputs](#host-authorized-local-inputs). |
 
 ### MCP Host Configuration
 
@@ -166,15 +166,21 @@ MUST surface the full recipient list (`from_number` plus every `to_number`)
 and get explicit user confirmation before invoking it. Consider checking
 `get_concurrency` first so a campaign does not starve inbound capacity.
 
-### Knowledge-base file uploads are workspace-sandboxed
+### Knowledge-base file uploads are workspace-sandboxed for standalone clients
 
 `create_knowledge_base` and `add_knowledge_base_sources` accept local
-`file_paths`. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system
+`file_paths`. For standalone clients, including clients that do not negotiate
+`files/readModes` version 1, reads are constrained to `MCP_WORKSPACE_PATH` (or the system
 temp directory when unset) using canonical-prefix containment: `..`
 traversal, absolute paths outside the sandbox, and symlinks that escape it
-are rejected before any disk read. The read itself is open-then-validate:
-the connector opens a descriptor, confirms the opened inode is the file the
-sandbox approved, reads through that descriptor, and re-checks the
+are rejected before any disk read. With negotiated version 1,
+the host selects a mode for each call: in central mode, input reads use only
+the host-authorized canonical path described under
+[Host-authorized local inputs](#host-authorized-local-inputs); in standalone
+mode, the standalone restrictions apply.
+In every mode, the read itself is open-then-validate:
+the connector opens a descriptor, confirms the opened inode is the approved
+file, reads through that descriptor, and re-checks the
 descriptor after the read — a file swapped, replaced, or modified between
 validation and read fails closed, and the 50MB bound is enforced on the
 bytes actually read. Retell limits uploads to 25 files, 50MB each.
