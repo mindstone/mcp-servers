@@ -346,7 +346,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 
 ## Security notes
 
-- For standalone clients, including clients that do not negotiate `files/readModes` version 1, local-upload reads enforce workspace containment using `MCP_WORKSPACE_PATH` + canonical path checks. With negotiated version 1, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs).
+- For standalone clients, including clients that do not negotiate `files/readModes` version 1, local-upload reads enforce workspace containment using `MCP_WORKSPACE_PATH` + canonical path checks. With negotiated version 1, the host selects a mode for each call: in central mode, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs); in standalone mode, the standalone restrictions apply.
 - Local credentials are read from host-managed files; account selection is pinned by `HUBSPOT_ACCOUNT_EMAIL`.
 - This server does not run a local OAuth callback server; OAuth is host-orchestrated.
 - Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.

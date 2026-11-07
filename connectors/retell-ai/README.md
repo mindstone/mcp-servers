@@ -173,9 +173,11 @@ and get explicit user confirmation before invoking it. Consider checking
 `files/readModes` version 1, reads are constrained to `MCP_WORKSPACE_PATH` (or the system
 temp directory when unset) using canonical-prefix containment: `..`
 traversal, absolute paths outside the sandbox, and symlinks that escape it
-are rejected before any disk read. With negotiated version 1, reads use only
+are rejected before any disk read. With negotiated version 1,
+the host selects a mode for each call: in central mode, input reads use only
 the host-authorized canonical path described under
-[Host-authorized local inputs](#host-authorized-local-inputs).
+[Host-authorized local inputs](#host-authorized-local-inputs); in standalone
+mode, the standalone restrictions apply.
 In every mode, the read itself is open-then-validate:
 the connector opens a descriptor, confirms the opened inode is the approved
 file, reads through that descriptor, and re-checks the

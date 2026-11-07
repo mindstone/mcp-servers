@@ -103,8 +103,10 @@ node dist/index.js
   clients that do not negotiate `files/readModes` version 1, outbound attachments
   on `email_send` / `email_save_draft` / `email_update_draft` may only be read
   from inside it (paths outside — including via symlinks — are refused).
-  With negotiated version 1, input reads use only the host-authorized canonical
-  path described under [Host-authorized local inputs](#host-authorized-local-inputs).
+  With negotiated version 1, the host selects a mode for each call: in central
+  mode, input reads use only the host-authorized canonical path described under
+  [Host-authorized local inputs](#host-authorized-local-inputs); in standalone
+  mode, the standalone restrictions apply.
   Successful downloads keep their staging directory (it is the container of
   the returned file); accumulated `email-imap-attachment-*` directories are
   safe to delete once the files are no longer needed. Defaults to the system

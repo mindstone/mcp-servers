@@ -87,9 +87,11 @@ directory. Paths outside the sandbox — including `..` traversal and symlinks
 that escape it — are refused. For standalone clients, including clients that
 do not negotiate `files/readModes` version 1, `opus_upload_video` reads follow
 these same restrictions: place source videos inside the workspace (or temp)
-directory before uploading. With negotiated version 1, input reads use only
+directory before uploading. With negotiated version 1,
+the host selects a mode for each call: in central mode, input reads use only
 the host-authorized canonical path described under
-[Host-authorized local inputs](#host-authorized-local-inputs).
+[Host-authorized local inputs](#host-authorized-local-inputs); in standalone
+mode, the standalone restrictions apply.
 In every mode, pick download targets inside the workspace (or temp) directory.
 
 ## Host configuration examples
@@ -141,7 +143,7 @@ In every mode, pick download targets inside the workspace (or temp) directory.
 - `opus_share_project` — Update a project's sharing visibility (marked destructive)
 
 ### Upload
-- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; standalone reads confined to the workspace sandbox, negotiated version 1 reads use only the [host-authorized canonical path](#host-authorized-local-inputs); marked destructive)
+- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; standalone-mode reads confined to the workspace sandbox, central-mode reads use only the [host-authorized canonical path](#host-authorized-local-inputs); marked destructive)
 
 ### Downloads
 - `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox. Only OpusClip CDN / Google Cloud Storage hosts are accepted; hostnames are DNS-resolved and every resolved address must be public
