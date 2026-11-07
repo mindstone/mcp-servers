@@ -79,13 +79,18 @@ node dist/index.js
 - `OPUS_BRIDGE_TIMEOUT_MS` — HTTP timeout for the optional host-app bridge (default `30000` ms, max 30 min)
 - `MCP_WORKSPACE_PATH` — workspace directory for local-file access (see below)
 
-### Local-file sandbox
+### Local-file sandbox and input permissions
 
-`opus_upload_video` (reads) and `opus_download_clip` (writes) are confined to a
+`opus_download_clip` writes are confined to a
 workspace sandbox: `MCP_WORKSPACE_PATH` when set, otherwise the system temp
 directory. Paths outside the sandbox — including `..` traversal and symlinks
-that escape it — are refused. Place source videos inside the workspace (or
-temp) directory before uploading, and pick download targets inside it.
+that escape it — are refused. For standalone clients, including clients that
+do not negotiate `files/readModes` version 1, `opus_upload_video` reads follow
+these same restrictions: place source videos inside the workspace (or temp)
+directory before uploading. With negotiated version 1, input reads use only
+the host-authorized canonical path described under
+[Host-authorized local inputs](#host-authorized-local-inputs).
+In every mode, pick download targets inside the workspace (or temp) directory.
 
 ## Host configuration examples
 
@@ -136,7 +141,7 @@ temp) directory before uploading, and pick download targets inside it.
 - `opus_share_project` — Update a project's sharing visibility (marked destructive)
 
 ### Upload
-- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; reads confined to the workspace sandbox; marked destructive)
+- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; standalone reads confined to the workspace sandbox, negotiated version 1 reads use only the [host-authorized canonical path](#host-authorized-local-inputs); marked destructive)
 
 ### Downloads
 - `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox. Only OpusClip CDN / Google Cloud Storage hosts are accepted; hostnames are DNS-resolved and every resolved address must be public

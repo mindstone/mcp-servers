@@ -168,7 +168,7 @@ node dist/index.js
 ### Transcription
 - `transcribe_audio` — Transcribe speech from an audio file to text, with optional speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`include_word_timestamps`); `scribe_v1` and `scribe_v2` models
 
-Local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). See `src/tools/file-input.ts`. Generated and downloaded files (speech audio, subtitles, history/dubbing downloads, voice-design previews) are written into the same canonical workspace root with exclusive creation — existing files are never overwritten. See `src/tools/path-safety.ts`.
+For standalone clients, including clients that do not negotiate `files/readModes` version 1, local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). With negotiated version 1, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs). See `src/tools/file-input.ts`. In every mode, generated and downloaded files (speech audio, subtitles, history/dubbing downloads, voice-design previews) are written into the canonical workspace root with exclusive creation — existing files are never overwritten. See `src/tools/path-safety.ts`.
 
 ## Licence
 

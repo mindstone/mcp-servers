@@ -99,9 +99,12 @@ node dist/index.js
 - `MCP_WORKSPACE_PATH` — workspace directory used for attachment file I/O.
   `email_get_attachment` downloads into a fresh, private
   `email-imap-attachment-*` staging directory created directly under this
-  path (the returned `path` points there), and outbound attachments on
-  `email_send` / `email_save_draft` / `email_update_draft` may only be read
+  path (the returned `path` points there). For standalone clients, including
+  clients that do not negotiate `files/readModes` version 1, outbound attachments
+  on `email_send` / `email_save_draft` / `email_update_draft` may only be read
   from inside it (paths outside — including via symlinks — are refused).
+  With negotiated version 1, input reads use only the host-authorized canonical
+  path described under [Host-authorized local inputs](#host-authorized-local-inputs).
   Successful downloads keep their staging directory (it is the container of
   the returned file); accumulated `email-imap-attachment-*` directories are
   safe to delete once the files are no longer needed. Defaults to the system

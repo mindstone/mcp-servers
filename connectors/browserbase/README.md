@@ -106,7 +106,7 @@ node dist/index.js
 |---|---|---|
 | `BROWSERBASE_API_KEY` | Yes | Browserbase API key. Get one at [browserbase.com/settings](https://www.browserbase.com/settings) |
 | `BROWSERBASE_REQUEST_TIMEOUT_MS` | No | Per-request timeout for Browserbase API calls in milliseconds (default 30000) |
-| `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded by `upload_session_file`, `upload_extension`, and `upload_certificate`. File reads are sandboxed to this directory; defaults to the system temp directory. |
+| `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded by `upload_session_file`, `upload_extension`, and `upload_certificate`. Defaults to the system temp directory. For standalone clients, file reads are sandboxed to this directory; for negotiated `files/readModes` version 1, see [Host-authorized local inputs](#host-authorized-local-inputs). |
 
 When running inside a host that provides the credential bridge, `configure_browserbase_api_key` persists the key through the host instead of the environment.
 
@@ -140,9 +140,9 @@ Every `create_session` starts a billable browser (per-minute, 1-minute minimum).
 
 Anything authored outside your account — fetched page content, search results, page titles in debug URLs, agent run tasks/results/messages, CDP log bodies, replay playlists, download filenames, function output, error details — is wrapped in `<untrusted-content source="browserbase:…">` envelopes with close-tag breakout escaping before it reaches the model. CDP log `rawBody` values are additionally truncated beyond ~4KB with a truncation note.
 
-### File uploads are workspace-sandboxed
+### File uploads are workspace-sandboxed for standalone clients
 
-`upload_session_file`, `upload_extension`, and `upload_certificate` accept local `file_path`s. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system temp directory when unset) using canonical-prefix containment: `..` traversal, absolute paths outside the sandbox, and symlinks that escape it are rejected before any disk read. The read is open-then-validate: the connector opens a descriptor, confirms the opened inode is the file the sandbox approved, reads through that descriptor, and re-checks it after the read — a file swapped or modified mid-read fails closed.
+`upload_session_file`, `upload_extension`, and `upload_certificate` accept local `file_path`s. For standalone clients, including clients that do not negotiate `files/readModes` version 1, reads are constrained to `MCP_WORKSPACE_PATH` (or the system temp directory when unset) using canonical-prefix containment: `..` traversal, absolute paths outside the sandbox, and symlinks that escape it are rejected before any disk read. With negotiated version 1, reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs). In every mode, the read is open-then-validate: the connector opens a descriptor, confirms the opened inode is the approved file, reads through that descriptor, and re-checks it after the read — a file swapped or modified mid-read fails closed.
 
 ### fetch_url cannot probe internal networks
 
