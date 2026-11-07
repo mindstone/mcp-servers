@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Reject remote, extension, literal `null`, empty, malformed, duplicate and noncanonical HTTP Origins with `403 Forbidden origin` before reading the body. Use a canonical HTTP/HTTPS loopback Origin, omit `Origin` in a non-browser client, or use stdio to recover. Origin-less clients and canonical loopback Origins remain supported.
+- Use SDK 1.32.2 with an HTTP-only tool-input element bound derived from the supported schemas, preserving four reference images, a mask and all edit options. Retain the 4 MiB HTTP body limit and unbounded stdio tool arguments. Any local account can still reach the HTTP port and invoke tools using the server's API key; use stdio on shared machines.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
