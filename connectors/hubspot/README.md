@@ -17,7 +17,7 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 
 ## Why this exists
 
-HubSpot publishes an [official HTTP MCP server](https://developers.hubspot.com/mcp) (public beta announced early 2026), and several community HubSpot MCPs exist as well. When we built this connector we needed something different: a local-only server that runs on the user's machine, supports more than one HubSpot account at the same time, keeps each account's credentials in its own file, labels new records so people can tell what was created by an AI agent, and limits file uploads to a single workspace folder on disk. None of the existing options covered all of that, so we wrote our own and put it through our own security review.
+HubSpot publishes an [official HTTP MCP server](https://developers.hubspot.com/mcp) (public beta announced early 2026), and several community HubSpot MCPs exist as well. When we built this connector we needed something different: a local-only server that runs on the user's machine, supports more than one HubSpot account at the same time, keeps each account's credentials in its own file, labels new records so people can tell what was created by an AI agent, and, for standalone clients (including clients that do not negotiate `files/readModes` version 1), limits file uploads to a single workspace folder on disk. None of the existing options covered all of that, so we wrote our own and put it through our own security review.
 
 ## Example interaction
 
@@ -346,7 +346,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 
 ## Security notes
 
-- File tools enforce workspace containment using `MCP_WORKSPACE_PATH` + canonical path checks.
+- For standalone clients, including clients that do not negotiate `files/readModes` version 1, local-upload reads enforce workspace containment using `MCP_WORKSPACE_PATH` + canonical path checks. With negotiated version 1, the host selects a mode for each call: in central mode, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs); in standalone mode, the standalone restrictions apply.
 - Local credentials are read from host-managed files; account selection is pinned by `HUBSPOT_ACCOUNT_EMAIL`.
 - This server does not run a local OAuth callback server; OAuth is host-orchestrated.
 - Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.

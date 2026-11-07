@@ -124,7 +124,7 @@ This server is designed to run alongside a host application that performs the Sl
 - `SLACK_CLIENT_SECRET` — OAuth Connected App client secret. Same conditions as `SLACK_CLIENT_ID`.
 - `SLACK_DISABLE_REFRESH` — Set to `1` to disable token refresh on this surface. The server will fail-closed with a structured `auth_required` response on token expiry instead of attempting an `oauth.v2.access` refresh. Use this on the cloud surface so desktop remains the sole refresh authority and avoids racing for single-use refresh tokens.
 - `SLACK_REQUEST_TIMEOUT_MS` — Override the default 60s upstream timeout. Must be a positive integer ≤ 300000 (5 minutes).
-- `MCP_WORKSPACE_PATH` — Directory that `upload_slack_file` reads are constrained to. Paths outside it (including symlinks pointing outside) are refused. Defaults to the system temp dir when unset.
+- `MCP_WORKSPACE_PATH` — Directory that `upload_slack_file` reads are constrained to for standalone clients, including clients that do not negotiate `files/readModes` version 1. For these clients, paths outside it (including symlinks pointing outside) are refused. Defaults to the system temp dir when unset. With negotiated version 1, the host selects a mode for each call: in central mode, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs); in standalone mode, the standalone restrictions apply.
 
 ### Authentication flow
 
@@ -272,7 +272,7 @@ Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting h
 
 ### Files
 - `download_slack_file` — Download a file attachment by ID or URL.
-- `upload_slack_file` — Upload a local file (workspace-constrained, race-free reads; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
+- `upload_slack_file` — Upload a local file (race-free reads, workspace-constrained for standalone clients; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
 
 ### Workspace
 - `add_slack_bookmark` — Add a bookmark to a channel.
@@ -289,7 +289,7 @@ Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting h
 - **Atomic, durable token persistence** — token files are written via temp-file + `fsync` + `rename`, then `chmod 0600`, so a crash mid-write cannot lose Slack's single-use refresh token.
 - **Refresh-failure differentiation** — transient network errors, HTTP 429 rate-limits, Slack auth rejections (`invalid_grant`), and malformed responses produce distinct error codes so hosts can react correctly without retrying unrecoverable failures.
 - **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh` during `prepublishOnly`, and by `scripts/check-internal-refs.mjs` — also run as `npm run security:internal-refs` — which additionally rejects internal issue-tracker references in `src/` and `dist/`).
-- **Race-free upload source reads** — `upload_slack_file` validates the source path inside the workspace, then opens it once (no-follow, non-blocking), enforces regular-file-only and the 50MB cap via `fstat` on the opened descriptor, re-verifies the descriptor's dev+inode against a fresh confined path resolution (defeats post-validation replacement, including swapped ancestor directories), and reads the bytes through the descriptor with the cap enforced on what is actually read.
+- **Race-free upload source reads** — In standalone mode, `upload_slack_file` validates the source path inside the workspace; when a host that negotiates `files/readModes` version 1 selects central mode for the call, it uses only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs). In every mode, it opens the approved path once (no-follow, non-blocking), enforces regular-file-only and the 50MB cap via `fstat` on the opened descriptor, re-verifies the descriptor's dev+inode against a fresh resolution of the approved path (defeats post-validation replacement, including swapped ancestor directories), and reads the bytes through the descriptor with the cap enforced on what is actually read.
 - **Envelope parity on add-paths** — `add_slack_bookmark` and `add_slack_reminder` envelope the Slack-returned title/text exactly like the list paths, with close-tag breakout escaping.
 
 Full implementation-level notes (request-timeout composition, MSW request manifest, token-file error states, server-version drift checks, etc.) live in [`docs/connectors/slack-cohort-hygiene.md`](../../docs/connectors/slack-cohort-hygiene.md).
