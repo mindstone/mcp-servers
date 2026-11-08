@@ -1,0 +1,190 @@
+{
+  "tools": [
+    {
+      "name": "read_workspace_spreadsheet_values",
+      "description": "Read values from a specific range in a Google Sheets spreadsheet.\n\n    Use this for focused data extraction. For spreadsheet metadata, use read_workspace_spreadsheet.\n    If you intend to write back to this range, call with value_view: 'shaped' first to see formulas — overwriting formulas with computed values is silently destructive.\n    For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for the full range, or the first max_rows/max_cols if set. Use continuation_token to page through the middle.\n    Rows in the text output are numbered with their sheet row numbers. Merged cells show their value only in the first cell of the merge and the other cells read as empty, so when finding a row by its labels, carry a merged label down to the rows below it.\n\n    Usage examples:\n    \n    1. Read a range:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1!A1:D10\" }\n    \n    2. Read entire sheet:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1\" }\n    \n    3. Read by columns:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1!A:D\", \"major_dimension\": \"COLUMNS\" }\n    \n    A1 notation examples:\n    - \"Sheet1!A1:D10\" - specific range\n    - \"Sheet1\" - entire sheet\n    - \"A1:D10\" - range in first sheet\n    - \"Sheet1!A:D\" - columns A through D",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "description": "Google Sheets spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "description": "A1 notation range to read (e.g., \"Sheet1!A1:D10\")"
+          },
+          "major_dimension": {
+            "type": "string",
+            "enum": [
+              "ROWS",
+              "COLUMNS"
+            ],
+            "description": "How to group values - by ROWS (default) or COLUMNS"
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum sheet rows to return from ordinary reads and continuation pages (no limit by default). Does not trim anchor envelopes. On an unbounded or 1000+ row text read, pass anchor_mode: 'never' for the limit to apply. Truncation creates no continuation token; re-read an explicit range to retrieve omitted cells."
+          },
+          "max_cols": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum sheet columns to return from ordinary reads and continuation pages (no limit by default). Does not trim anchor envelopes. On an unbounded or 1000+ row text read, pass anchor_mode: 'never' for the limit to apply. Truncation creates no continuation token and does not advance an existing token."
+          },
+          "return_json": {
+            "type": "boolean",
+            "description": "Return raw ValueRange JSON instead of formatted text (default: false)"
+          },
+          "value_view": {
+            "type": "string",
+            "enum": [
+              "formatted",
+              "shaped",
+              "formula",
+              "unformatted"
+            ],
+            "description": "How to render cells. 'shaped' (recommended for write-back planning) surfaces formulas alongside computed values, infers headers/column types, and flags structural anomalies. 'formatted' returns display values only (legacy default). 'formula' returns formula strings. 'unformatted' returns raw values."
+          },
+          "anchor_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "always",
+              "never"
+            ],
+            "description": "How to handle large or unbounded reads. 'auto' (default) returns an anchor envelope (first 50 + last 10 rows + summary + continuation token) when the range is unbounded or >= 1000 rows. 'always' forces the envelope regardless of size. 'never' returns the full range, or the first max_rows/max_cols if set. Note: JSON callers default to legacy shape; use 'always' to receive the envelope in JSON mode."
+          },
+          "continuation_token": {
+            "type": "string",
+            "description": "Opaque token from a previous anchor envelope's continuationToken field. Returns the rows between the first and last windows of the original read. Tokens are spreadsheet-scoped and time-bounded; stale tokens (sheet changed materially) are refused."
+          }
+        },
+        "required": [
+          "spreadsheet_id",
+          "range"
+        ]
+      }
+    },
+    {
+      "name": "update_workspace_spreadsheet_values",
+      "description": "Update values in a specific range of a Google Sheets spreadsheet.\n\n    Overwrites existing data in the specified range. Use append_to_workspace_spreadsheet to add data without overwriting.\n    Prefer formulas over computed values. By default this tool refuses to overwrite cells that currently contain formulas; pass overwrite_formulas: true to force, or write to non-formula cells. Best-effort: protects against formula overwrite absent concurrent edits to the same range during the call. Sheets has no transactional write API; under concurrent edits the guard cannot guarantee zero overwrites. value_input_option defaults to USER_ENTERED so '=SUM(...)' is parsed as a formula; use RAW only when literally storing '=' as text.\n    To add a new column or row formatted like its neighbours (for example a new date column in a tracker), insert it first with insert_workspace_spreadsheet_dimension, then write to it. Write numbers as plain numbers (1234.56), not locale-formatted text such as \"€1.234,56\": the cell's own format displays them, and formatted text can be stored as text that totals ignore.\n\n    Usage examples:\n    \n    1. Update specific cells:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1!A1:B2\", \"values\": [[\"Name\", \"Score\"], [\"Alice\", 100]] }\n    \n    2. Update single cell:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1!A1\", \"values\": [[\"Updated Value\"]] }\n    \n    3. Update with raw values:\n       { \"email\": \"user@example.com\", \"spreadsheet_id\": \"1ABC123xyz\", \"range\": \"Sheet1!A1\", \"values\": [[\"=SUM(B1:B10)\"]], \"value_input_option\": \"RAW\" }",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "description": "Google Sheets spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "description": "A1 notation range to update (e.g., \"Sheet1!A1:D10\")"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "2D array of values to write (rows of cells)"
+          },
+          "value_input_option": {
+            "type": "string",
+            "enum": [
+              "RAW",
+              "USER_ENTERED"
+            ],
+            "description": "How to interpret values: RAW (literal) or USER_ENTERED (parse formulas/dates, default)"
+          },
+          "overwrite_formulas": {
+            "type": "boolean",
+            "description": "If false (default), this tool refuses to overwrite cells that currently contain formulas. Best-effort: protects against formula overwrite absent concurrent edits during the call. Set to true to skip the formula-safety pre-read and authorize overwriting unconditionally."
+          }
+        },
+        "required": [
+          "spreadsheet_id",
+          "range",
+          "values"
+        ]
+      }
+    }
+  ],
+  "results": {
+    "shapedReads": [
+      {
+        "input": {
+          "range": "Targets!B2",
+          "rowCount": 1,
+          "columnCount": 1,
+          "formulaCellCount": 0,
+          "columnTypes": [
+            "number"
+          ],
+          "cells": [
+            [
+              {
+                "value": 18,
+                "unformattedValue": 18
+              }
+            ]
+          ]
+        },
+        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 18<\\/untrusted-content></untrusted-content>"
+      },
+      {
+        "input": {
+          "range": "Targets!B2",
+          "rowCount": 1,
+          "columnCount": 1,
+          "formulaCellCount": 0,
+          "columnTypes": [
+            "number"
+          ],
+          "cells": [
+            [
+              {
+                "value": 19.25,
+                "unformattedValue": 19.25
+              }
+            ]
+          ]
+        },
+        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 19.25<\\/untrusted-content></untrusted-content>"
+      }
+    ],
+    "update": {
+      "input": {
+        "operation": "Update",
+        "spreadsheetId": "progress-sheet",
+        "details": {
+          "updatedCells": 1,
+          "updatedRows": 1
+        }
+      },
+      "text": "Update completed successfully!\n\nURL: https://docs.google.com/spreadsheets/d/progress-sheet/edit\nUpdated cells: 1\nUpdated rows: 1"
+    }
+  }
+}
