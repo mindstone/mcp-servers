@@ -2,6 +2,9 @@
 
 Thanks for your interest in contributing! This document explains how to get involved.
 
+For shared-initializer worktrees, see the
+[contributor worktree configuration](docs/project/PROJECT_OVERRIDES.md).
+
 ## Getting Started
 
 1. Fork the repository
