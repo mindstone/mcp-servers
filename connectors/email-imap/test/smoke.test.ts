@@ -16,6 +16,19 @@ vi.mock('nodemailer', () => ({
   createTransport: mockCreateTransport,
 }));
 
+function expectAttachmentReadInputMetadata(
+  tools: ReadonlyArray<{ name: string; _meta?: Record<string, unknown> }>,
+): void {
+  for (const toolName of ['email_send', 'email_save_draft', 'email_update_draft']) {
+    const tool = tools.find(({ name }) => name === toolName);
+    expect(tool, `${toolName} must be registered`).toBeDefined();
+    expect(tool?._meta?.['files/readInputs']).toEqual({
+      version: 1,
+      inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }],
+    });
+  }
+}
+
 describe('Smoke test — tool registration', () => {
   let testClient: Awaited<ReturnType<typeof import('./helpers/mcp-test-client.js').createTestClient>>;
 
@@ -62,6 +75,7 @@ describe('Smoke test — tool registration', () => {
       'email_set_flags',
       'email_update_draft',
     ]);
+    expectAttachmentReadInputMetadata(toolsResult.tools);
   });
 });
 
@@ -86,6 +100,7 @@ describe('Spawned stdio smoke test', () => {
     try {
       const toolsResult = await client.client.listTools();
       expect(toolsResult.tools).toHaveLength(17);
+      expectAttachmentReadInputMetadata(toolsResult.tools);
     } finally {
       await client.close();
     }
