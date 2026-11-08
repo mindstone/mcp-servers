@@ -16,6 +16,12 @@ to end the label early.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-08
+
+### Changed
+
+- Fix approved relative attachment uploads through declared file-read modes.
+
 ### Security
 
 - Upgrade the connector's direct Nodemailer dependency to 10.3.1 for sending and saving or updating drafts; consumers receive it with the connector update, without a manual transitive-dependency override. In Nodemailer versions from 3.0.0 up to, but excluding, 10.1.4, crafted recipient addresses could be parsed as a different destination, risking delivery to an unintended recipient ([GHSA-85x2-q946-cp5h](https://github.com/advisories/GHSA-85x2-q946-cp5h)).
