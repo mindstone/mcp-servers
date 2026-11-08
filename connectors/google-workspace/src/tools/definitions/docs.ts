@@ -394,7 +394,7 @@ export const docsTools: ToolMetadata[] = [
          "email": "user@example.com",
          "document_id": "1ABC123xyz",
          "requests": [
-           { "replaceAllText": { "containsText": { "text": "{{placeholder}}", "match_case": true }, "replace_text": "Actual Value" } }
+           { "replaceAllText": { "containsText": { "text": "{{placeholder}}", "matchCase": true }, "replaceText": "Actual Value" } }
          ]
        }
 
@@ -439,8 +439,8 @@ export const docsTools: ToolMetadata[] = [
          "email": "user@example.com",
          "document_id": "1ABC123xyz",
          "requests": [
-           { "replaceAllText": { "containsText": { "text": "{{date}}" }, "replace_text": "2025-01-15" } },
-           { "replaceAllText": { "containsText": { "text": "{{author}}" }, "replace_text": "John Doe" } }
+           { "replaceAllText": { "containsText": { "text": "{{date}}" }, "replaceText": "2025-01-15" } },
+           { "replaceAllText": { "containsText": { "text": "{{author}}" }, "replaceText": "John Doe" } }
          ],
          "write_control": { "requiredRevisionId": "abc123" }
        }

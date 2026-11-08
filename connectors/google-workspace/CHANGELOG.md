@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the `batch_update_workspace_document` examples to use Google Docs' native nested request keys.
+
 ## [0.5.5] - 2026-11-06
 
 ### Changed
