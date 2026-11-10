@@ -5,6 +5,12 @@ Thanks for your interest in contributing! This document explains how to get invo
 For shared-initializer worktrees, see the
 [contributor worktree configuration](docs/project/PROJECT_OVERRIDES.md).
 
+## How Changes Are Published
+
+This repository is published from Mindstone's private main codebase, the Mindstone Rebel repo. Changes land there first and are exported here as one commit each.
+
+Pull requests on this repository can't be merged here any more. To propose a change, open an issue, or a pull request anyway; a maintainer will carry the change into the main codebase, where it can be reviewed and exported back here.
+
 ## Getting Started
 
 1. Fork the repository
@@ -44,7 +50,7 @@ test-harness/      # Shared test utilities (linked via file: dependency)
 8. Create `STATUS.json`: run `node scripts/init-status.mjs <your-connector>`, then set the `surface` and verify `auth.type` (the script leaves `surface: "TBD"`, which CI rejects). If your connector registers tools in a way `scripts/check-status.mjs` can't count yet (e.g. a `server.tool(...)` factory over an array), see the exclusion list in `.github/workflows/ci.yml` and `docs/plans/260609_catalogue_drift_prevention.md`.
 9. Regenerate the committed derived files and commit them: `node scripts/build-catalogue.mjs && node scripts/gen-install-links.mjs` (adds your catalogue page, the index row, and the README install-links block)
 10. Verify locally: `npm run build && npm test && mcp-publisher validate server.json` (see [Registry submission](#registry-submission) for the publisher CLI)
-11. Submit a pull request
+11. Open an issue or pull request for a maintainer to review
 
 ## Registry Submission
 
@@ -70,7 +76,7 @@ mcp-publisher validate server.json
 
 A passing validate is required before opening a PR. CI runs the same check on every PR — see `.github/workflows/server-json-check.yml`.
 
-The pinned, no-install equivalent is `node scripts/check-server-json.mjs <connector>` (same `mcp-publisher` version and registry round-trip as CI; fails closed when offline). Any server.json edit lands via PR — where the "server.json check" gate validates it pre-merge — or, if it must be pushed directly, only after this script passes locally: the registry enforces rules server-side (e.g. description length <= 100) that no local schema check catches.
+The pinned, no-install equivalent is `node scripts/check-server-json.mjs <connector>` (same `mcp-publisher` version and registry round-trip as CI; fails closed when offline). Any server.json edit must pass this script (or the "server.json check" CI gate) before it lands: the registry enforces rules server-side (e.g. description length <= 100) that no local schema check catches.
 
 ### Publishing to the registry
 
@@ -119,6 +125,7 @@ Add a tools/list test asserting the exported schema accepts both forms — see
 
 ## Pull Requests
 
+- Pull requests on this repository can't be merged here any more. A maintainer carries accepted changes into the Mindstone Rebel repo, where they land and are exported back here.
 - Keep PRs focused on a single change
 - Include tests for new functionality
 - Update the connector's README if behaviour changes
@@ -133,7 +140,7 @@ Every connector ships its own `CHANGELOG.md` following [Keep a Changelog](https:
 
 There is exactly one rule for how changes reach `main` and npm:
 
-- **Code changes** land via PR — **without version changes**. Keep adding your release notes under `## [Unreleased]` in the connector's `CHANGELOG.md` as you go.
+- **Code changes** land via a pull request in the main codebase (see [How Changes Are Published](#how-changes-are-published)) — **without version changes**. Keep adding your release notes under `## [Unreleased]` in the connector's `CHANGELOG.md` as you go.
 - **Version bumps and releases** land **only** via the release tooling — `npm run mcp:release <connector>` or `npm run mcp:release <shared-name>` for `packages/*` libraries (e.g. `microsoft-shared`), run from the Mindstone Rebel repo. The tooling bumps every version surface in lockstep (`package.json`, `package-lock.json`, `server.json` for connectors — `STATUS.json` stores no version under schema v2), promotes `## [Unreleased]` to the new version header, regenerates the committed catalogue/install-links artifacts (connectors only), runs the pre-release security-review gate, and stamps the release commit with the `Release-Gate` trailer that `.github/workflows/release.yml` requires before publishing to npm (and the MCP registry for connectors). Shared libraries skip catalogue/registry stages; see the Rebel runbook (`docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md`).
 - **Never bundle a version bump into a PR.** The version-bump guard check (`.github/workflows/version-bump-guard.yml`; see [`docs/security/BRANCH_PROTECTION.md`](docs/security/BRANCH_PROTECTION.md) for its branch-protection status) fails any PR that changes the `version` of an existing connector **or** `packages/*` package. If your fix deserves a release, say so in the PR description — a maintainer runs the release tooling after your code lands.
 - **First publishes are the exception**: a brand-new connector's bootstrap publish is a manual maintainer task (see below). The PR guard and the publish workflow both exempt packages that did not exist at the base ref.

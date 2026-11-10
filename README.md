@@ -97,6 +97,10 @@ For per-connector security notes, see each connector's README.
 
 To report a vulnerability, please see [SECURITY.md](SECURITY.md).
 
+## Contributing
+
+This repository is exported from Mindstone's private main codebase, the Mindstone Rebel repo, one commit per change. Pull requests opened here can't be merged directly, but they're still welcome: a maintainer carries them into the main codebase. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## The Mindstone open-source family
 
 This repo is one of several open-source projects from Mindstone:
