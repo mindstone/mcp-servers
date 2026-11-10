@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-10
+
+### Changed
+
+- Reliable Windows setup, structured AI feedback and clear undo guidance.
+
 ### Changed
 
 - Successful edits and their tool descriptions share undo guidance for the local Office app and platform, including native undo exceptions and PowerPoint for Mac reversal limits. PowerPoint text, notes and shape-format edits return the previous values.
