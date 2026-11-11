@@ -899,7 +899,7 @@ function makeWorksheetInsertContext() {
   const reference = { position: 2, load: vi.fn() };
   let position = 3;
   const sheet = {
-    name: 'New sheet', load: vi.fn(),
+    name: 'New sheet', load: vi.fn(() => { pending.push('load'); }),
     get position() { return position; },
     set position(value: number) { pending.push(`position=${value}`); position = value; },
   };
@@ -920,7 +920,7 @@ it('reads the reference position before adding and positioning a worksheet in on
   expect(await mustGet(getExcelCommandHandler('add_worksheet'), 'add_worksheet')({ position: 'afterSheet', afterSheet: 'Reference' }))
     .toMatchObject({ success: true, data: { name: 'New sheet', position: 3 } });
   expect(worksheets.getItem).toHaveBeenCalledWith('Reference');
-  expect(batches).toEqual([[], ['add', 'position=3']]);
+  expect(batches).toEqual([[], ['add', 'position=3', 'load']]);
 });
 
 it('rejects afterSheet without a reference before adding a worksheet', async () => {
@@ -1145,6 +1145,17 @@ describe('one Word insert undo step', () => {
       expect(paragraphs.map(p => p.runs.map(r => r.text).join(''))).toEqual(['same same slant', 'Second bold']);
     },
   );
+
+  it.each(['# Head\r\nBody', '# Head\rBody', '# Head\r\n\r\nBody'])('splits Windows and Word line breaks in %j', async (text) => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text }))
+      .toMatchObject({ success: true, data: { paragraphsInserted: 2 } });
+    expect(paragraphs.map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
+      .toEqual([{ text: 'Head', style: 'Heading 1' }, { text: 'Body', style: 'Normal' }]);
+    expect(batches.filter(batch => batch.length)).toHaveLength(1);
+  });
 
   it.each(['Quote', 'Heading 4'])('leaves plain runs free of direct bold and italic with style %s', async (style) => {
     const { context, paragraphs, batches } = makeWordInsertContext();

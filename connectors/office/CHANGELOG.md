@@ -11,6 +11,13 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Word inserts split Windows (CRLF) and Word (lone CR) line breaks into separate paragraphs, so a markdown heading on its own line is styled as a heading.
+- Excel `add_worksheet` returns the new sheet's final position when it is placed at the start or after another sheet.
+- An add-in that does not know a command, or a command that fails inside Office, now returns its own error code (`UNKNOWN_COMMAND` or `ADDIN_EXECUTION_ERROR`) with matching recovery guidance instead of `UNKNOWN_ERROR`.
+- Install and uninstall wording: the trusted local certificate may need approval when it is first created or renewed, and every platform's uninstall summary says to turn off the Office connector to keep the add-in removed.
+
 ## [0.4.0] - 2026-11-10
 
 ### Changed

@@ -253,7 +253,7 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
   const style = typeof params['style'] === 'string' ? params['style'] : undefined;
 
   return executeWordCommand(async (context) => {
-    const lines = (text as string).split('\n').filter((line) => line.length > 0);
+    const lines = (text as string).split(/\r\n?|\n/).filter((line) => line.length > 0);
     const parsedLines = lines.map(parseMarkdownLine);
     const formatting: DeferredInsertFormatting = { styles: [], runs: [] };
 

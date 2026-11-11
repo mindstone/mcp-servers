@@ -631,7 +631,7 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
 
   // Office requires HTTPS for SourceLocation URLs, even for localhost.
   // Use Microsoft's office-addin-dev-certs package which generates a trusted
-  // localhost certificate and installs the CA into the system keychain.
+  // localhost certificate and installs the CA into the login keychain.
   const httpsOptions = await getHttpsServerOptions();
   const server = https.createServer(httpsOptions);
 

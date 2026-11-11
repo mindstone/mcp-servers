@@ -737,6 +737,8 @@ const ERROR_CATALOG = {
   UNAUTHORIZED: { retryable: false, fix: 'Restart the Microsoft Office connector in Settings to restore its connection credentials.' },
   INVALID_REQUEST: { retryable: false, fix: lookFirst },
   INTERNAL_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
+  UNKNOWN_COMMAND: { retryable: false, fix: 'The Rebel panel in Office may be out of date. Ask the user to close and reopen the Rebel panel, then try once more; if it still fails, tell the user what Office said.' },
+  ADDIN_EXECUTION_ERROR: { retryable: false, fix: 'Office reported an error while running this command, and an edit may have partly applied. Read the current state, tell the user what Office reported, and do not blindly repeat the same call.' },
   UNKNOWN_ERROR: { retryable: false, fix: "Tell the user what Office said; don't repeat the same call." },
 };
 
@@ -1053,7 +1055,7 @@ const installManifest = async (manifestDir) => {
   return results;
 };
 
-// No certificate trust needed — sidecar uses plain HTTP on localhost.
+// The sidecar serves HTTPS on localhost with a trusted local certificate (see src/sidecar/index.ts).
 
 /**
  * Remove the macOS manifests or the Windows registry value (uninstall).
@@ -1091,7 +1093,7 @@ const uninstallManifest = async () => {
 // Tool definitions
 // ---------------------------------------------------------------------------
 
-const windowsUninstallGuidance = 'On Windows, the add-in stays removed only while the Office connection is turned off in Rebel, because the connector registers it again whenever it starts.';
+const uninstallGuidance = 'To keep the add-in removed, turn off the Office connector; otherwise it is added again the next time the connector starts.';
 
 // 0a. rebel_office_setup — (Re-)install or uninstall the Office add-in
 registerTool(TOOL_NAMES.setup, {
@@ -1102,7 +1104,7 @@ registerTool(TOOL_NAMES.setup, {
     'the sidecar, which installs the add-in manifest automatically. Use this tool only to:\n' +
     '  • Force a re-install after deleting manifests manually\n' +
     '  • Uninstall the add-in (action="uninstall")\n\n' +
-    windowsUninstallGuidance + '\n\n' +
+    uninstallGuidance + '\n\n' +
     'After install, open (or restart) Word, Excel, or PowerPoint. The Rebel button will appear ' +
     'on the Home tab; on first use in Windows, choose Add-ins → Developer Add-ins → Rebel. Click Rebel to open the panel and see "Connected".',
   inputSchema: {
@@ -1127,7 +1129,7 @@ registerTool(TOOL_NAMES.setup, {
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
     return respond(results.some(r => r.status === 'failed')
       ? { success: false, code: 'SIDECAR_ERROR', error: summary }
-      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.${process.platform === 'win32' ? ` ${windowsUninstallGuidance}` : ''}` } });
+      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal. ${uninstallGuidance}` } });
   }
 
   // Lazy-start the sidecar so we have a manifest + state file to work with

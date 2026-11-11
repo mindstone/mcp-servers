@@ -17,6 +17,7 @@ type ServerTestApi = {
   resetForTests: () => void;
 };
 
+const uninstallGuidance = 'To keep the add-in removed, turn off the Office connector; otherwise it is added again the next time the connector starts.';
 let stateDir: string;
 let stateFile: string;
 let client: Client | undefined;
@@ -41,10 +42,10 @@ afterEach(async () => {
   await fs.rm(stateDir, { recursive: true, force: true });
 });
 
-async function connectSetup(statePath: string | undefined = stateFile) {
+async function connectSetup(statePath: string | undefined = stateFile, platform: 'win32' | 'darwin' = 'win32') {
   vi.stubEnv('MCP_OFFICE_SIDECAR_STATE', statePath);
-  // Set Windows before import so module-level platform checks use the same branch as the handler.
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+  // Set the platform before import so module-level platform checks use the same branch as the handler.
+  vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
   const serverModule = (await import('../src/index.js')) as unknown as { __test: ServerTestApi };
   testApi = serverModule.__test;
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -73,9 +74,31 @@ describe('Windows setup tool', () => {
 
     const result = await setup('uninstall');
     expect(result).toMatchObject({ ok: true, data: { summary: expect.stringContaining('all: removed') } });
-    expect(result.data.summary).toContain('On Windows, the add-in stays removed only while the Office connection is turned off in Rebel, because the connector registers it again whenever it starts.');
+    expect(result.data.summary).toContain(uninstallGuidance);
     expect(unregisterWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
     expect(registerWindowsAddin).not.toHaveBeenCalled();
+  });
+
+  it('removes an owned Mac manifest and gives the same keep-it-removed advice', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'office-setup-home-'));
+    try {
+      // The Mac manifest paths are computed from the home folder at import time.
+      vi.spyOn(os, 'homedir').mockReturnValue(home);
+      const wordWef = path.join(home, 'Library/Containers/com.microsoft.Word/Data/Documents/wef');
+      await fs.mkdir(wordWef, { recursive: true });
+      await fs.writeFile(path.join(wordWef, 'manifest.xml'), '<OfficeApp/>');
+      await connectSetup(stateFile, 'darwin');
+
+      const result = await setup('uninstall');
+      expect(result).toMatchObject({ ok: true, data: { results: [
+        { app: 'word', status: 'removed' }, { app: 'excel', status: 'not_installed' }, { app: 'powerpoint', status: 'not_installed' },
+      ] } });
+      expect(result.data.summary).toContain(uninstallGuidance);
+      await expect(fs.stat(path.join(wordWef, 'manifest.xml'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(unregisterWindowsAddin).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(home, { recursive: true, force: true });
+    }
   });
 
   it('reports a missing state directory configuration without calling the registry', async () => {

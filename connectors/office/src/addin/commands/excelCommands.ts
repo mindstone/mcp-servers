@@ -217,8 +217,8 @@ async function addWorksheet(params: Record<string, unknown>): Promise<CommandRes
       targetPosition = refSheet.position + 1;
     }
     const newSheet = context.workbook.worksheets.add(name);
-    newSheet.load(['name', 'position']);
     if (targetPosition !== undefined) newSheet.position = targetPosition;
+    newSheet.load(['name', 'position']);
     // 'end' is the default behavior
 
     await context.sync();
