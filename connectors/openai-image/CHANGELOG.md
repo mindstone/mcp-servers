@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
+### Changed
+
+- Defaults to GPT Image 2.6 Sunburst, names the model in each result, reads host-approved files, and checks HTTP origins.
+
 ### Security
 
 - Reject remote, extension, literal `null`, empty, malformed, duplicate and noncanonical HTTP Origins with `403 Forbidden origin` before reading the body. Use a canonical HTTP/HTTPS loopback Origin, omit `Origin` in a non-browser client, or use stdio to recover. Origin-less clients and canonical loopback Origins remain supported.
