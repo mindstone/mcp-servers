@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Changed
 
+- The success message names the model that made the image: `Image generated with gemini-3.1-flash-image and saved to: …`.
+
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
 ## [0.5.0] - 2026-11-02

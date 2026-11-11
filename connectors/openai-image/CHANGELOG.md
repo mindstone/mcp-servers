@@ -16,9 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
+- Default model is now `gpt-image-2.6-sunburst`, OpenAI's newest image model (tried with real images on 2026-11-05). `gpt-image-1.5` and `gpt-image-1-mini` leave the known list; naming them in `OPENAI_IMAGE_MODEL` still works and logs a warning.
+- The success message names the model that made the images: `Generated 1 image with gpt-image-2.6-sunburst, saved to: …`.
+
 ### Added
 
-- Recognize `gpt-image-2.6-sunburst` and `gpt-image-2.6-flare` as supported model overrides. The default remains `gpt-image-2.5-sunburst`.
+- Recognize `gpt-image-2.6-sunburst` and `gpt-image-2.6-flare` as supported model overrides.
 
 ## [0.4.0] - 2026-11-02
 

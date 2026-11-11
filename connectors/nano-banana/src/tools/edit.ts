@@ -438,8 +438,8 @@ export function registerEditTools(server: McpServer): void {
       }
 
       const textMessage = savedPath
-        ? `Image edited and saved to: ${savedPath}`
-        : 'Image edited successfully!';
+        ? `Image edited with ${model} and saved to: ${savedPath}`
+        : `Image edited with ${model}.`;
 
       return {
         content: [

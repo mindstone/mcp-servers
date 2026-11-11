@@ -186,7 +186,7 @@ describe('save_path overwrite refusal', () => {
 
     expect(result.isError).toBe(true);
     expect(result.text).toContain('SAVE_EXISTS');
-    expect(result.text).not.toContain('Image generated and saved to');
+    expect(result.text).not.toContain('and saved to:');
     // The pre-existing file must be byte-identical — never truncated.
     expect(fs.readFileSync(existing).equals(originalBytes)).toBe(true);
     // The generated image is still returned inline so the result is not lost.

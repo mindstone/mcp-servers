@@ -218,8 +218,8 @@ export function registerGenerateTools(server: McpServer): void {
       }
 
       const textMessage = savedPath
-        ? `Image generated and saved to: ${savedPath}`
-        : 'Image generated successfully!';
+        ? `Image generated with ${model} and saved to: ${savedPath}`
+        : `Image generated with ${model}.`;
 
       return {
         content: [

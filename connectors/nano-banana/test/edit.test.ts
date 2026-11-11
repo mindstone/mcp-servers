@@ -89,9 +89,11 @@ describe('nano_banana_edit — source-image sandbox (M3.6)', () => {
     const result = await testClient.callTool('nano_banana_edit', {
       source_image_path: sourcePath,
       prompt: 'rotate',
+      model: 'gemini-3-pro-image',
     });
 
     expect(result.isError).toBeFalsy();
+    expect(result.text).toContain('Image edited with gemini-3-pro-image');
     expect(result.content.find((c: { type: string }) => c.type === 'image')).toBeDefined();
     expect(getCalls()).toBe(1);
   });

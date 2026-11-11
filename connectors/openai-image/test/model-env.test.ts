@@ -23,6 +23,6 @@ describe('model env handling', () => {
       [LEGACY_MODEL_ENV]: 'gpt-image-1-mini',
     });
 
-    expect(connector.configuredModel()).toBe('gpt-image-2.5-sunburst');
+    expect(connector.configuredModel()).toBe('gpt-image-2.6-sunburst');
   });
 });

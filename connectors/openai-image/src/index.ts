@@ -1513,7 +1513,7 @@ const ensureTransparentBackgroundSupported = (
     throw new OpenAIImageToolError(
       'INVALID_INPUT',
       `Model ${envelopeConfiguredModel(model)} does not support transparent backgrounds.`,
-      `Set OPENAI_IMAGE_MODEL to ${DEFAULT_MODEL} (the default) or gpt-image-2.5-flare, or omit the background option.`,
+      `Set OPENAI_IMAGE_MODEL to ${DEFAULT_MODEL} (the default) or gpt-image-2.6-flare, or omit the background option.`,
     );
   }
 };
@@ -1637,6 +1637,7 @@ const editImageSchema = z.object({
 
 const toolSuccessText = (
   action: 'generated' | 'edited',
+  model: string,
   savedPaths: string[],
   requestedCount: number,
 ): string => {
@@ -1646,7 +1647,8 @@ const toolSuccessText = (
 
   const baseVerb = action === 'generated' ? 'Generated' : 'Edited';
   const noun = savedPaths.length === 1 ? 'image' : 'images';
-  const lines = [`${baseVerb} ${savedPaths.length} ${noun}, saved to:`];
+  const shownModel = isSupportedModel(model) ? model : envelopeConfiguredModel(model);
+  const lines = [`${baseVerb} ${savedPaths.length} ${noun} with ${shownModel}, saved to:`];
   for (const savedPath of savedPaths) {
     lines.push(`  ${savedPath}`);
   }
@@ -1785,6 +1787,7 @@ const registerTools = (targetServer: McpServer): void => {
 
         const textMessage = toolSuccessText(
           'generated',
+          model,
           savedImages.map((entry) => entry.path),
           count,
         );
@@ -1904,6 +1907,7 @@ const registerTools = (targetServer: McpServer): void => {
 
         const textMessage = toolSuccessText(
           'edited',
+          model,
           savedImages.map((entry) => entry.path),
           count,
         );

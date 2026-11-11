@@ -9,14 +9,16 @@ import {
 
 describe('model list', () => {
   it('defaults to a supported model', () => {
-    expect(DEFAULT_MODEL).toBe('gpt-image-2.5-sunburst');
+    expect(DEFAULT_MODEL).toBe('gpt-image-2.6-sunburst');
     expect(isSupportedModel(DEFAULT_MODEL)).toBe(true);
   });
 
-  it('lists both gpt-image-2.5 models and drops the shut-down gpt-image-1', () => {
+  it('lists both gpt-image-2.5 models and drops the gpt-image-1 generation', () => {
     expect(SUPPORTED_MODELS).toContain('gpt-image-2.5-flare');
     expect(SUPPORTED_MODELS).toContain('gpt-image-2.5-sunburst');
     expect(isSupportedModel('gpt-image-1')).toBe(false);
+    expect(isSupportedModel('gpt-image-1.5')).toBe(false);
+    expect(isSupportedModel('gpt-image-1-mini')).toBe(false);
   });
 
   it('recognizes both gpt-image-2.6 variants', () => {

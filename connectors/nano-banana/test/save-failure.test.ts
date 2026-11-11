@@ -53,7 +53,7 @@ describe('save_path handling', () => {
     expect(result.isError).toBeFalsy();
     const saved = path.join(workspaceDir, 'out', 'saved-image.png');
     expect(fs.existsSync(saved)).toBe(true);
-    expect(result.text).toContain(saved);
+    expect(result.text).toContain(`Image generated with gemini-3.1-flash-image and saved to: ${saved}`);
   });
 
   it('generate: a failed save returns SAVE_FAILED and keeps the image inline', async () => {
@@ -68,7 +68,7 @@ describe('save_path handling', () => {
 
     expect(result.isError).toBe(true);
     expect(result.text).toContain('SAVE_FAILED');
-    expect(result.text).not.toContain('Image generated and saved to');
+    expect(result.text).not.toContain('and saved to:');
     const imageContent = result.content.find((c: { type: string }) => c.type === 'image');
     expect(imageContent).toBeDefined();
   });

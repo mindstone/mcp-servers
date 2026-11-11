@@ -1,19 +1,17 @@
 // The OpenAI image models this connector knows, newest first. Exported on its
 // own so other tools can read the list without loading the server.
-// gpt-image-1 is left out: OpenAI shut it down on 2026-10-23.
+// gpt-image-2 stays for its transparency gate below; older models are left out.
 export const SUPPORTED_MODELS = [
   'gpt-image-2.6-sunburst',
   'gpt-image-2.6-flare',
   'gpt-image-2.5-sunburst',
   'gpt-image-2.5-flare',
   'gpt-image-2',
-  'gpt-image-1.5',
-  'gpt-image-1-mini',
 ] as const;
 
 export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
 
-export const DEFAULT_MODEL: SupportedModel = 'gpt-image-2.5-sunburst';
+export const DEFAULT_MODEL: SupportedModel = 'gpt-image-2.6-sunburst';
 
 export const isSupportedModel = (model: string): model is SupportedModel =>
   (SUPPORTED_MODELS as readonly string[]).includes(model);
