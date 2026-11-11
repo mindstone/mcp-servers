@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-11
+
+### Changed
+
+- Names the model that made each image and reads host-approved files.
+
 ### Changed
 
 - The success message names the model that made the image: `Image generated with gemini-3.1-flash-image and saved to: …`.
