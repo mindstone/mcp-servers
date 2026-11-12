@@ -33,9 +33,9 @@ Read your Things 3 lists, projects and areas on macOS, and, if you turn it on, a
 
 ## Install
 
-[![Add to Cursor](https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=Things%203&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtaW5kc3RvbmUvbWNwLXNlcnZlci10aGluZ3MiXSwiZW52Ijp7IlRISU5HU19BTExPV19XUklURVMiOiIwIiwiVEhJTkdTX0FMTE9XX1RSQVNIIjoiMCJ9fQ)
-[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22Things%203%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-things%22%5D%2C%22env%22%3A%7B%22THINGS_ALLOW_WRITES%22%3A%220%22%2C%22THINGS_ALLOW_TRASH%22%3A%220%22%7D%7D)
-[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%22Things%203%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-things%22%5D%2C%22env%22%3A%7B%22THINGS_ALLOW_WRITES%22%3A%220%22%2C%22THINGS_ALLOW_TRASH%22%3A%220%22%7D%7D)
+[![Add to Cursor](https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=Things%203&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtaW5kc3RvbmUvbWNwLXNlcnZlci10aGluZ3MiXSwiZW52Ijp7fX0)
+[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22Things%203%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-things%22%5D%2C%22env%22%3A%7B%7D%7D)
+[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%22Things%203%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-things%22%5D%2C%22env%22%3A%7B%7D%7D)
 
 Or via npx:
 

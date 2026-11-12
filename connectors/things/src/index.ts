@@ -3,8 +3,7 @@
  * Things 3 MCP server (stdio). See README.md for setup.
  *
  * Environment variables:
- * - THINGS_ALLOW_WRITES=1: also offer the tools that add, change and complete to-dos.
- * - THINGS_ALLOW_TRASH=1: with THINGS_ALLOW_WRITES, also offer moving a to-do to the Trash.
+ * - THINGS_READ_ONLY=1: offer only the tools that read; nothing can be changed.
  * - THINGSDB: path to a Things database, instead of finding it (for testing).
  *
  * stdout carries the protocol; anything else goes to stderr.

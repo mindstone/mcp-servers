@@ -2,7 +2,7 @@
   "name": "@mindstone/mcp-server-things",
   "version": "0.1.0",
   "mcpName": "io.github.mindstone/mcp-server-things",
-  "description": "MCP server for Things 3 on macOS: read your lists, projects and areas; optionally add, update, complete and trash to-dos",
+  "description": "MCP server for Things 3 on macOS: read your lists, projects and areas; add, update, complete and trash to-dos",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {

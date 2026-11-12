@@ -26,8 +26,9 @@ precious data.
    - The schema version (`Meta.databaseVersion`) must be inside the verified range (22-29), or reads
      refuse with a message saying so, rather than misreading a changed schema.
 2. **Writes: the Things URL scheme, plus AppleScript for Trash. Never SQL.** The URL-scheme auth token is read from
-   the database (`TMSettings`) and never logged or returned. Writes are hidden unless
-   `THINGS_ALLOW_WRITES=1`.
+   the database (`TMSettings`) and never logged or returned. Every tool is offered, each
+   with exact hints, and the host decides which need the user's approval; `THINGS_READ_ONLY=1`
+   offers the reads alone.
 3. **Never send a command Things would reject.** A rejected URL command pops a modal alert in front
    of the user. So every write is validated first against a fresh snapshot: dates real, tags existing,
    project or area existing and open, item existing, not trashed, not a repeating template, the
@@ -86,11 +87,19 @@ What changed:
   - titles one line and within Things' limit; tags existing and comma-free; one notes operation per
     update, and the resulting notes within Things' limit; `deadline: null` on an item with no
     deadline dropped, not refused; empty strings, empty arrays and nulls count as not given.
-- **Trash has its own switch**, `THINGS_ALLOW_TRASH=1`, off by default, on top of
-  `THINGS_ALLOW_WRITES=1`. The prototype refused to trash a person's own to-dos over MCP, because a
-  host's "allow this tool?" prompt is not the person approving that item. A separate, deliberate
-  switch, a `destructiveHint`, a description that says "only when the user asked to delete this
-  one", and a title re-checked inside the AppleScript that deletes are the generic equivalent.
+- **Every tool is offered; the host decides who approves.** Decided 2026-11-12:
+
+  > Okay, let's add writes and deletes as tools. I don't know, don't we have some kind of metadata
+  > that says whether or not something's read only? And that way then presumably the harness, you
+  > know, Claude or Rebel could surface that to the user and maybe only make the read only ones
+  > allowed or treat them differently somehow. But I definitely want to include all the
+  > functionality in the MCP.
+
+  So the earlier opt-in switches (`THINGS_ALLOW_WRITES`, `THINGS_ALLOW_TRASH`) are gone. Each tool
+  carries exact `readOnlyHint` / `destructiveHint` values (a test pins all nine), Claude Code and
+  Claude Desktop ask per tool until allowed, and Rebel gates on `readOnlyHint`. Trash keeps its other
+  guards: a description that says "only when the user asked to delete this one", `current_title`,
+  and a title re-checked inside the AppleScript that deletes. `THINGS_READ_ONLY=1` is the opt-out.
 - **The schema ceiling no longer locks everyone out.** A newer `databaseVersion` still reads, with a
   warning in every result, as long as every column the queries use is there; writes refuse until
   the server is updated.

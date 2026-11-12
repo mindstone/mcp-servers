@@ -47,7 +47,7 @@ describe.runIf(live)('live writes: one to-do of its own, nothing else', () => {
 
   beforeAll(async () => {
     before = await modifiedTimes();
-    client = await createInMemoryTestClient({ createServer, env: { THINGS_ALLOW_WRITES: '1', THINGS_ALLOW_TRASH: '1' } });
+    client = await createInMemoryTestClient({ createServer, env: {} });
   });
 
   afterAll(async () => {

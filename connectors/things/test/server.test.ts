@@ -47,28 +47,31 @@ async function connect(env: Record<string, string> = {}, f: Fixture = fixture) {
 }
 
 describe('which tools are offered', () => {
-  it('reads only, by default', async () => {
+  // Hosts decide from these hints which tools need the user's approval (a host may let reads run
+  // and ask before changes), so every tool is offered and every hint is exact.
+  const HINTS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean }> = {
+    things_get_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    things_search: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    things_get_item: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    things_get_project: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    things_get_overview: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    things_add_todo: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    things_update_todo: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    things_set_status: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    things_trash: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  };
+
+  it('every tool, reads and changes, by default, each with exact hints', async () => {
     const { client } = await connect();
     const { tools } = await client.client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['things_get_item', 'things_get_list', 'things_get_overview', 'things_get_project', 'things_search']);
-    for (const t of tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+    expect(tools.map((t) => t.name).sort()).toEqual(Object.keys(HINTS).sort());
+    for (const t of tools) expect(t.annotations, t.name).toEqual({ title: t.title, ...HINTS[t.name], openWorldHint: false });
   });
 
-  it('writes with THINGS_ALLOW_WRITES, trash only with THINGS_ALLOW_TRASH too', async () => {
-    let { client: c } = await connect({ THINGS_ALLOW_WRITES: '1' });
-    let names = (await c.client.listTools()).tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['things_add_todo', 'things_update_todo', 'things_set_status']));
-    expect(names).not.toContain('things_trash');
-    await c.close();
-    ({ client: c } = await connect({ THINGS_ALLOW_TRASH: '1' }));
-    names = (await c.client.listTools()).tools.map((t) => t.name);
-    expect(names).not.toContain('things_trash');
-    await c.close();
-    ({ client: c } = await connect({ THINGS_ALLOW_WRITES: 'true', THINGS_ALLOW_TRASH: '1' }));
-    const tools = (await c.client.listTools()).tools;
-    expect(tools.find((t) => t.name === 'things_trash')?.annotations).toMatchObject({ destructiveHint: true });
-    expect(tools.find((t) => t.name === 'things_update_todo')?.annotations).toMatchObject({ destructiveHint: true, idempotentHint: false });
-    expect(tools.find((t) => t.name === 'things_add_todo')?.annotations).toMatchObject({ destructiveHint: false, idempotentHint: false });
+  it('only the read-only tools with THINGS_READ_ONLY', async () => {
+    const { client } = await connect({ THINGS_READ_ONLY: '1' });
+    const names = (await client.client.listTools()).tools.map((t) => t.name).sort();
+    expect(names).toEqual(Object.keys(HINTS).filter((n) => HINTS[n].readOnlyHint).sort());
   });
 
   it('gives instructions short enough for every host to keep whole', () => {
@@ -173,7 +176,7 @@ describe('reading', () => {
 
 describe('writing, over the protocol', () => {
   it('adds, reports confirmed, and then reports existing for a retry', async () => {
-    const { client, sim } = await connect({ THINGS_ALLOW_WRITES: '1' });
+    const { client, sim } = await connect();
     const a = parse((await client.callTool('things_add_todo', { title: 'Order a sofa', project: 'house', when: 'today', tags: [], notes: '' })).text);
     expect(a.meta.outcome).toBe('confirmed');
     expect(a.data.item).toMatchObject({ title: 'Order a sofa', project: 'House move', when: 'today' });
@@ -184,7 +187,7 @@ describe('writing, over the protocol', () => {
   });
 
   it('changes a to-do, returning how it was before', async () => {
-    const { client } = await connect({ THINGS_ALLOW_WRITES: '1' });
+    const { client } = await connect();
     const r = parse((await client.callTool('things_update_todo', { id: 'todo-area-0001', current_title: 'Fix the shelf', when: 'tomorrow', deadline: null, add_tags: ['Home'] })).text);
     expect(r.meta.outcome).toBe('confirmed');
     expect(r.data.item).toMatchObject({ when: '2026-11-13', tags: ['Home'] });
@@ -192,7 +195,7 @@ describe('writing, over the protocol', () => {
   });
 
   it('refuses a stale title as an error, quoting titles only inside an envelope', async () => {
-    const { client, sim } = await connect({ THINGS_ALLOW_WRITES: '1' });
+    const { client, sim } = await connect();
     const r = await client.callTool('things_set_status', { id: 'todo-area-0001', current_title: 'Fix the door', status: 'completed' });
     expect(r.isError).toBe(true);
     expect(r.text).toMatch(/<untrusted-content source="things">Fix the shelf<\/untrusted-content>/);
