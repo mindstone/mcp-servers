@@ -9,7 +9,7 @@ import {
   RUNWAY_API_SOURCE,
 } from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { pathSegment, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -29,7 +29,7 @@ export function registerTaskTools(server: McpServer): void {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const result = await runwayFetch<TaskDetail>(`/tasks/${args.task_id}`);
+      const result = await runwayFetch<TaskDetail>(`/tasks/${pathSegment(args.task_id)}`);
       const response: Record<string, unknown> = {
         ok: true, task_id: result.id, status: result.status, created_at: result.createdAt,
       };
@@ -69,6 +69,7 @@ export function registerTaskTools(server: McpServer): void {
       const pollInterval = Math.max(5, args.poll_interval || 15) * 1000;
       const timeout = Math.min(600, Math.max(30, args.timeout || 300)) * 1000;
       const taskId = args.task_id;
+      const taskPath = `/tasks/${pathSegment(taskId)}`;
       const startTime = Date.now();
       const maxTransientErrors = 3;
       let transientErrors = 0;
@@ -76,7 +77,7 @@ export function registerTaskTools(server: McpServer): void {
       while (Date.now() - startTime < timeout) {
         let result: TaskDetail;
         try {
-          result = await runwayFetch<TaskDetail>(`/tasks/${taskId}`);
+          result = await runwayFetch<TaskDetail>(taskPath);
           transientErrors = 0;
         } catch (pollErr) {
           transientErrors++;
@@ -125,7 +126,7 @@ export function registerTaskTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const cancelRes = await runwayRawFetch(`/tasks/${args.task_id}`, { method: 'DELETE' });
+      const cancelRes = await runwayRawFetch(`/tasks/${pathSegment(args.task_id)}`, { method: 'DELETE' });
       if (!cancelRes.ok && cancelRes.status !== 204) {
         throw new RunwayError(
           `Failed to cancel task (HTTP ${cancelRes.status})`,

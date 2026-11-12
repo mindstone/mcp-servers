@@ -1,6 +1,23 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { RunwayError } from './types.js';
 
+/**
+ * Encodes one value for use as a single URL path segment, so an ID can never
+ * change which endpoint a request reaches. encodeURIComponent alone is not
+ * enough: URL parsing still treats `.` and `..` (and their %2E forms) as
+ * directory steps, so those and the empty string are refused.
+ */
+export function pathSegment(value: string): string {
+  if (value === '' || value === '.' || value === '..') {
+    throw new RunwayError(
+      `Invalid ID: ${JSON.stringify(value)}`,
+      'INVALID_ARGUMENTS',
+      'Pass the ID exactly as Runway returned it.',
+    );
+  }
+  return encodeURIComponent(value);
+}
+
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
 /**

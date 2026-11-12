@@ -4,7 +4,7 @@ import { runwayFetch, runwayRawFetch } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import type { VoicePreviewResponse } from '../types.js';
 import { RunwayError } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { pathSegment, withErrorHandling } from '../utils.js';
 
 /**
  * External-response schema for GET /v1/voices. `name` and `description` are
@@ -124,7 +124,7 @@ export function registerVoiceTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const delRes = await runwayRawFetch(`/voices/${args.voice_id}`, { method: 'DELETE' });
+      const delRes = await runwayRawFetch(`/voices/${pathSegment(args.voice_id)}`, { method: 'DELETE' });
       if (!delRes.ok && delRes.status !== 204) {
         throw new RunwayError(
           `Failed to delete voice (HTTP ${delRes.status})`,
