@@ -104,8 +104,13 @@ function connectorSourceFiles(srcDir) {
 // envelope-evidence scan and require an envelope import/CALL from NON-helper
 // source to count as covered. (We still scan helper files for network signals —
 // a helper that itself fetches would legitimately count.)
+//
+// The vendored hardened bridge reader (src/bridge-reader.ts, see
+// scripts/check-bridge-reader.mjs) is excluded the same way: it envelopes only
+// the host bridge's own reply, so its `wrapUntrusted` call must not count as
+// coverage for the connector's external text.
 function isEnvelopeHelperFile(f) {
-  return /(?:^|[\\/])untrusted-content\.[jt]s$/.test(f);
+  return /(?:^|[\\/])(?:untrusted-content|bridge-reader)\.[jt]s$/.test(f);
 }
 
 // Heuristic: does this connector return responses fetched from an external
@@ -420,6 +425,27 @@ function runSelfTest() {
       `,
     });
     leg('subprocess egress + raw result (not baselined) must FAIL', 'fox3490-subprocess-raw', false);
+
+    // The vendored bridge reader calls wrapUntrusted on the bridge's reply only;
+    // fetch + that file + raw external text must still FAIL.
+    makeFixtureConnector(tmp, 'bridge-reader-only', {
+      'untrusted-content.ts': HELPER_FILE_CONTENTS,
+      'bridge-reader.ts': `
+        import { wrapUntrusted } from './untrusted-content.js';
+        export async function postToBridge() {
+          const res = await fetch('http://127.0.0.1:1/x');
+          return { warning: wrapUntrusted(String(await res.text()), 'demo:bridge.warning') };
+        }
+      `,
+      'server.ts': `
+        export async function listThings() {
+          const res = await fetch('https://example.com/things');
+          const data = await res.json();
+          return { content: [{ type: 'text', text: data.description }] };
+        }
+      `,
+    });
+    leg('fetch + vendored bridge reader + raw result must FAIL', 'bridge-reader-only', false);
 
     const failures = legs.filter((l) => !l.pass);
     if (failures.length > 0) {
