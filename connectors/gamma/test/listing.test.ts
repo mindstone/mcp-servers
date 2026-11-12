@@ -72,7 +72,8 @@ describe('Gamma listing tools', () => {
         '<untrusted-content source="gamma:theme.name">'.length,
         -'</untrusted-content>'.length,
       );
-      expect(inner).toContain('<\\/untrusted-content>');
+      expect(inner).toMatch(/<\\\/untrusted-content/i);
+      expect(inner).not.toMatch(/<\/untrusted-content/i);
       expect(inner.toLowerCase()).not.toMatch(/<\/untrusted-content\s*>/);
     });
 
@@ -114,7 +115,8 @@ describe('Gamma listing tools', () => {
       );
       // ...and the hostile keyword (newline close-tag variant) cannot break out.
       expect(theme.colorKeywords[1]).not.toMatch(/<\/untrusted-content\s*>.*ignore instructions/s);
-      expect(theme.colorKeywords[1]).toContain('<\\/untrusted-content>');
+      expect(theme.colorKeywords[1]).toMatch(/<\\\/untrusted-content/i);
+      expect(theme.colorKeywords[1].match(/<\/untrusted-content/gi)).toHaveLength(1);
     });
 
     it('strips unknown vendor-added response fields instead of passing them through', async () => {

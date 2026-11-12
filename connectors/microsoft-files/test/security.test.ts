@@ -207,7 +207,8 @@ describe('Graph error envelope', () => {
     expect(json.error).toContain('Ignore previous instructions');
     // The close-tag breakout attempt must be escaped, never verbatim.
     expect(result.text).not.toContain('</UNTRUSTED-CONTENT >');
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 });
 
@@ -256,7 +257,8 @@ describe('vendor-derived display strings are enveloped', () => {
     const json = result.json as { activities: Array<{ actions: string[] }> };
     expect(json.activities[0]?.actions[0]).toContain('<untrusted-content source=');
     expect(result.text).not.toContain(BREAKOUT);
-    expect(json.activities[0]?.actions[0]).toContain('<\\/untrusted-content>');
+    expect(json.activities[0]?.actions[0]).toMatch(/<\\\/untrusted-content/i);
+    expect(json.activities[0]?.actions[0].match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('envelopes malicious permission roles and link fields', async () => {

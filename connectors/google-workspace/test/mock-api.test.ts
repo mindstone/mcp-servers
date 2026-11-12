@@ -3172,10 +3172,10 @@ function installTrackerValuesMocks(ranges: Record<string, { range: string; value
   );
 }
 
-/** The numbered table lines of a read result, without the untrusted-content tags around each table. */
+/** The numbered table lines of a read result, without the untrusted-content tags (raw or escaped, as when nested) around each table. */
 function tableLines(output: unknown): string[] {
   return String(output)
-    .replace(/<untrusted-content[^>]*>|<\/untrusted-content>/g, '')
+    .replace(/<\\?untrusted-content[^>]*>|<\\?\/untrusted-content>/g, '')
     .split('\n')
     .filter((line) => /^\s*\d+\|/.test(line));
 }

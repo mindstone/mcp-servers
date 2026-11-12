@@ -11,7 +11,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
+import { wrapUntrustedJsonControls } from "../utils/untrusted-controls.js";
 
 // Cap page sizes well below the Chat API maximum (1000) to keep responses manageable
 const MAX_CHAT_PAGE_SIZE = 100;

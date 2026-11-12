@@ -85,7 +85,8 @@ describe('Humaans company & location tools', () => {
     expect(label.endsWith('</untrusted-content>')).toBe(true);
     expect(label.split('</untrusted-content>').length - 1).toBe(1);
     expect(label).not.toContain('</UNTRUSTED-CONTENT>');
-    expect(label).toContain('<\\/untrusted-content>');
+    expect(label).toMatch(/<\\\/untrusted-content/i);
+    expect(label.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('get_humaans_company returns company info', async () => {

@@ -104,7 +104,8 @@ describe('error paths', () => {
     // The injected close tag must be neutralised — the only intact close tag
     // is the envelope's own final one.
     const inner = errorText.slice(0, -'</untrusted-content>'.length);
-    expect(inner).toContain('<\\/untrusted-content>');
+    expect(inner).toMatch(/<\\\/untrusted-content/i);
+    expect(inner).not.toMatch(/<\/untrusted-content/i);
     expect(inner.toLowerCase()).not.toContain('</untrusted-content');
   });
 

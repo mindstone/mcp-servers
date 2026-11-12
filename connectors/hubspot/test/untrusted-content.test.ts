@@ -95,7 +95,8 @@ describe('sanitizeHubSpotResponse (deny-by-default walk)', () => {
     // Prose is enveloped; embedded close-tag variants are defanged.
     expectEnveloped(result.results[0].properties.firstname, 'hubspot:crm/contacts');
     const notes = expectEnveloped(result.results[0].properties.notes, 'hubspot:crm/contacts');
-    expect(notes).toContain(ESCAPED_CLOSE_TAG);
+    expect(notes).toMatch(/<\\\/untrusted-content/i);
+    expect(notes.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(notes).not.toContain('</UNTRUSTED-CONTENT>');
   });
 
@@ -193,7 +194,8 @@ describe('sanitizeHubSpotResponse (deny-by-default walk)', () => {
     // …but admin-authored prose on the same object is still enveloped.
     expectEnveloped(property.label, 'hubspot:properties');
     const description = expectEnveloped(property.description, 'hubspot:properties');
-    expect(description).toContain(ESCAPED_CLOSE_TAG);
+    expect(description).toMatch(/<\\\/untrusted-content/i);
+    expect(description.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('honours literal rules for definitions nested under a list response', () => {
@@ -325,7 +327,8 @@ describe('sanitizeHubSpotResponse (deny-by-default walk)', () => {
       'hubspot:crm/companies',
     ) as { properties: { name: string } };
     const name = expectEnveloped(record.properties.name, 'hubspot:crm/companies');
-    expect(name).toContain(ESCAPED_CLOSE_TAG);
+    expect(name).toMatch(/<\\\/untrusted-content/i);
+    expect(name.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('wraps a form field label but keeps the bound property name literal', () => {
@@ -500,7 +503,8 @@ describe('untrusted-content envelopes end-to-end', () => {
     expectEnveloped(out.results[0].properties.email, 'hubspot:crm/contacts');
 
     const firstname = expectEnveloped(out.results[0].properties.firstname, 'hubspot:crm/contacts');
-    expect(firstname).toContain(ESCAPED_CLOSE_TAG);
+    expect(firstname).toMatch(/<\\\/untrusted-content/i);
+    expect(firstname.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(firstname).not.toContain('</untrusted-content >');
     expectEnveloped(out.results[0].properties.company, 'hubspot:crm/contacts');
   });
@@ -518,7 +522,8 @@ describe('untrusted-content envelopes end-to-end', () => {
     expect(out.results[0].id).toBe('msg-1');
     expect(out.results[0].type).toBe('MESSAGE');
     const text = expectEnveloped(out.results[0].text, 'hubspot:conversations');
-    expect(text).toContain(ESCAPED_CLOSE_TAG);
+    expect(text).toMatch(/<\\\/untrusted-content/i);
+    expect(text.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expectEnveloped(out.results[0].senders[0].name, 'hubspot:conversations');
   });
 
@@ -537,6 +542,7 @@ describe('untrusted-content envelopes end-to-end', () => {
     expect(out.submissions[0].values[0].name).toBe('email');
     // …but every submitted value is enveloped.
     const message = expectEnveloped(out.submissions[0].values[1].value, 'hubspot:forms/submissions');
-    expect(message).toContain(ESCAPED_CLOSE_TAG);
+    expect(message).toMatch(/<\\\/untrusted-content/i);
+    expect(message.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 });

@@ -258,7 +258,8 @@ describe('bridge response handling', () => {
       expect(closeMatches.length).toBe(1);
       const errorText = json.error as string;
       expect(errorText.startsWith('<untrusted-content source="workday-bridge">')).toBe(true);
-      expect(errorText).toContain('<\\/untrusted-content>');
+      expect(errorText).toMatch(/<\\\/untrusted-content/i);
+      expect(errorText.match(/<\/untrusted-content/gi)).toHaveLength(1);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -284,7 +285,8 @@ describe('bridge response handling', () => {
       expect(closeMatches.length).toBe(1);
       const message = json.message as string;
       expect(message).toContain('<untrusted-content source="workday-bridge">');
-      expect(message).toContain('<\\/untrusted-content>');
+      expect(message).toMatch(/<\\\/untrusted-content/i);
+      expect(message.match(/<\/untrusted-content/gi)).toHaveLength(1);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }

@@ -22,7 +22,6 @@ import {
   makeProjectResponse,
 } from './fixtures/opus-data.js';
 import { validateOutboundUrlSync, DOWNLOAD_ALLOWED_HOST_SUFFIXES, type DnsLookupFn } from '../src/url-safety.js';
-import { wrapUntrusted } from '../src/untrusted-content.js';
 import { withErrorHandling } from '../src/utils.js';
 import { openUploadSource } from '../src/tools/upload.js';
 
@@ -197,30 +196,6 @@ describe('adversarial envelopes', () => {
     expect(res.isError).toBe(true);
     const parsed = JSON.parse((res.content[0] as { text: string }).text) as { error: string };
     expectEnveloped(parsed.error, 'opus:unhandled-error');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Envelope helper robustness
-// ---------------------------------------------------------------------------
-
-describe('wrapUntrusted helper', () => {
-  it('is idempotent for the same source', () => {
-    const once = wrapUntrusted('hello', 'opus:test') as string;
-    expect(wrapUntrusted(once, 'opus:test')).toBe(once);
-  });
-
-  it('escapes case and whitespace close-tag variants', () => {
-    for (const tag of ['</UNTRUSTED-CONTENT>', '</untrusted-content >', '</untrusted-content\t>']) {
-      const wrapped = wrapUntrusted(`a${tag}b`, 'opus:test') as string;
-      expect(wrapped).toContain('<\\/untrusted-content>');
-      // No intact close tag may survive inside the payload region.
-      const inner = wrapped.slice(
-        '<untrusted-content source="opus:test">'.length,
-        -'</untrusted-content>'.length,
-      );
-      expect(inner.toLowerCase()).not.toMatch(/<\/untrusted-content\s*>/);
-    }
   });
 });
 

@@ -152,7 +152,8 @@ describe('Humaans teams tools', () => {
     expect(name.split('</untrusted-content>').length - 1).toBe(1);
     // The injected uppercase variant was neutralised, not passed through
     expect(name).not.toContain('</UNTRUSTED-CONTENT>');
-    expect(name).toContain('<\\/untrusted-content>');
+    expect(name).toMatch(/<\\\/untrusted-content/i);
+    expect(name.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('list_humaans_teams flags partial results when the scan hits the page cap', async () => {

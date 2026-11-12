@@ -264,7 +264,8 @@ describe('Gamma generation tools', () => {
       expect(result.isError).toBeFalsy();
       const data = result.json as { status: string; error: string };
       expect(data.status).toBe('failed');
-      expect(data.error).toContain('<\\/untrusted-content>');
+      expect(data.error).toMatch(/<\\\/untrusted-content/i);
+      expect(data.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
       // The only live close tag is the envelope's own, at the very end.
       const liveCloseTags = data.error.match(/<\/untrusted-content\s*>/gi) ?? [];
       expect(liveCloseTags).toHaveLength(1);

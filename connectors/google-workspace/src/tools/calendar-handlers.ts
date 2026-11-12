@@ -5,7 +5,8 @@ import { toMcpError } from '../utils/apiError.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { EventResponse, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedJsonValues } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 
 // Singleton instances
 let driveService: DriveService;
@@ -419,7 +420,7 @@ export async function handleFindFreeSlots(params: {
         };
       }
 
-      return wrapUntrustedJsonStrings({
+      return wrapUntrustedJsonValues({
         timezone,
         timeRange: { start: queryTimeMin, end: queryTimeMax },
         calendars: results

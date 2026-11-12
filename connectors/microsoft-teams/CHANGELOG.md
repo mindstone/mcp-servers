@@ -4,6 +4,10 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ## [0.3.3] - 2026-11-06
 
 ### Changed

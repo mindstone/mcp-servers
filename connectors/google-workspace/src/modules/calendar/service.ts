@@ -17,7 +17,7 @@ import { DriveService } from '../drive/service.js';
 import { AccountError } from '../accounts/types.js';
 import { isUnauthorizedError } from '../accounts/unauthorized.js';
 import { isPassthroughGoogleError } from '../../utils/apiError.js';
-import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-controls.js';
 
 type CalendarEvent = calendar_v3.Schema$Event;
 type GoogleEventAttachment = calendar_v3.Schema$EventAttachment;

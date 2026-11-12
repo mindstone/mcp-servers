@@ -8,7 +8,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../utils/untrusted-controls.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 

@@ -121,7 +121,8 @@ describe('Humaans time away tools', () => {
     expect(name.split('</untrusted-content>').length - 1).toBe(1);
     // The injected uppercase variant was neutralised, not passed through
     expect(name).not.toContain('</UNTRUSTED-CONTENT>');
-    expect(name).toContain('<\\/untrusted-content>');
+    expect(name).toMatch(/<\\\/untrusted-content/i);
+    expect(name.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   // --- VAL-B1-HUMAANS-003: create_humaans_time_away validates required fields via Zod ---
@@ -290,7 +291,8 @@ describe('Humaans time away tools', () => {
     expect(name.split('</untrusted-content>').length - 1).toBe(1);
     // The injected uppercase variant was neutralised, not passed through
     expect(name).not.toContain('</UNTRUSTED-CONTENT>');
-    expect(name).toContain('<\\/untrusted-content>');
+    expect(name).toMatch(/<\\\/untrusted-content/i);
+    expect(name.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('list_humaans_time_away_allocations returns allocations', async () => {
@@ -574,7 +576,8 @@ describe('Humaans time away tools', () => {
     expect(json.error).toContain('Invalid payload');
     // The injected close tag is neutralised: exactly one real close tag, at the end
     expect(json.error.split('</untrusted-content>').length - 1).toBe(1);
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('envelopes and caps non-JSON vendor error bodies', async () => {

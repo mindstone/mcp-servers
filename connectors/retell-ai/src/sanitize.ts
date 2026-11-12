@@ -16,7 +16,7 @@
  * prose, and are surfaced for the user to open — not auto-followed by the
  * connector.
  */
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonValues } from './untrusted-content.js';
 
 type Obj = Record<string, unknown>;
 
@@ -29,7 +29,7 @@ function wrapStr(v: unknown, source: string): unknown {
 }
 
 function wrapJsonStrings(v: unknown, source: string): unknown {
-  return wrapUntrustedJsonStrings(v, source);
+  return wrapUntrustedJsonValues(v, source);
 }
 
 function wrapArrayItems(v: unknown, source: string): unknown {

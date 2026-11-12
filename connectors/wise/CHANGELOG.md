@@ -23,6 +23,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Profile auto-selection checks the profiles reply and requires the chosen id to be a positive integer before it goes into a URL.
 - The activities cursor is returned only when it uses an opaque-token alphabet; otherwise pagination stops. This limits its characters; it does not prove the cursor came from Wise.
 - The MCP SDK is pinned to 1.32.2, and its HTTP-server dependencies are updated to fixed versions. The connector runs over stdio only, so none of the advisories these fix were reachable from it.
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ## [0.1.1] - 2026-08-10
 

@@ -20,7 +20,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 
 // Handler argument types
 interface ReadPresentationArgs {

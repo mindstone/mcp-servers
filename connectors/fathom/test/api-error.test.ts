@@ -47,7 +47,8 @@ describe('API error body handling', () => {
     expect(json.error).toContain('<untrusted-content source="fathom:api.error_body">');
     // The attacker's close-tag variant must be neutralised, not passed through.
     expect(json.error).not.toContain('</untrusted-content >');
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(json.error).not.toContain(API_KEY);
   });
 

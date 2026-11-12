@@ -3,7 +3,7 @@ import { getCommentsService } from '../modules/comments/index.js';
 import { resolveEmail } from '../modules/accounts/index.js';
 import { CommentInfo, ReplyInfo } from '../modules/comments/types.js';
 import { McpToolResponse } from './types.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../utils/untrusted-controls.js';
 import {
   readAliasedBoolean,
   readAliasedNumber,

@@ -55,7 +55,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 
 // Handler argument types
 interface ReadSpreadsheetArgs {

@@ -19,7 +19,6 @@ import {
   sanitizePhoneNumber,
 } from '../src/sanitize.js';
 import * as sanitizeModule from '../src/sanitize.js';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from '../src/untrusted-content.js';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import {
@@ -46,7 +45,7 @@ import {
 
 const ESCAPED_CLOSE_TAG = '<\\/untrusted-content>';
 
-/** Same variant detector as `src/untrusted-content.ts` — whitespace/case-tolerant close-tag breakout. */
+/** Detect close-tag variants in the external-text fixtures. */
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/i;
 
 function rawInputRequiresDefang(rawInput: string): boolean {
@@ -58,7 +57,7 @@ function expectEnveloped(value: unknown, source: string): string {
   const text = value as string;
   expect(text).toContain(`<untrusted-content source="${source}">`);
   expect(text.endsWith('</untrusted-content>')).toBe(true);
-  expect(text.match(/<\/untrusted-content>/gi) ?? []).toHaveLength(1);
+  expect(text.match(/<\/untrusted-content/gi) ?? []).toHaveLength(1);
   return text;
 }
 
@@ -70,11 +69,11 @@ function expectEnveloped(value: unknown, source: string): string {
 function expectEnvelopedAndDefanged(value: unknown, source: string, rawInput?: string): void {
   const text = expectEnveloped(value, source);
   if (rawInput !== undefined && rawInputRequiresDefang(rawInput)) {
-    expect(text).toContain(ESCAPED_CLOSE_TAG);
+    expect(text).toMatch(/<\\\/untrusted-content/i);
   }
   expect(text).not.toContain('</UNTRUSTED-CONTENT');
   expect(text).not.toContain('</untrusted-content\n>');
-  expect(text.match(/<\/untrusted-content>/gi) ?? []).toHaveLength(1);
+  expect(text.match(/<\/untrusted-content/gi) ?? []).toHaveLength(1);
 }
 
 function expectWrappedMapEntry(
@@ -98,7 +97,7 @@ function assertSentinelOnlyInsideEnvelopes(value: unknown, jsonPath = '$'): void
         /^<untrusted-content source="[^"]*">[\s\S]*<\/untrusted-content>$/.test(value),
         `${jsonPath} contains API-authored text outside an envelope: ${value}`,
       ).toBe(true);
-      expect(value.match(/<\/untrusted-content>/gi) ?? [], `${jsonPath} envelope breakout`).toHaveLength(1);
+      expect(value.match(/<\/untrusted-content/gi) ?? [], `${jsonPath} envelope breakout`).toHaveLength(1);
     }
     return;
   }
@@ -113,67 +112,6 @@ function assertSentinelOnlyInsideEnvelopes(value: unknown, jsonPath = '$'): void
     }
   }
 }
-
-describe('wrapUntrusted', () => {
-  it('wraps and defangs close-tag breakout attempts', () => {
-    const wrapped = wrapUntrusted(ATTACK_PAYLOAD, 'elevenlabs-agents:get_conversation:transcript')!;
-    expect(wrapped).toContain(ESCAPED_CLOSE_TAG);
-    expect(wrapped.endsWith('</untrusted-content>')).toBe(true);
-    expect((wrapped.match(/<\/untrusted-content>/gi) ?? [])).toHaveLength(1);
-  });
-
-  it.each([
-    ['', 'no whitespace'],
-    [' ', 'space'],
-    ['\t', 'tab'],
-    ['\n', 'newline'],
-    ['\r', 'carriage return'],
-    ['\f', 'form feed'],
-    ['\v', 'vertical tab'],
-    [' \t\n\r\f\v ', 'mixed whitespace'],
-  ])('escapes close-tag breakout with %s before > (%s)', (ws) => {
-    const wrapped = wrapUntrusted(
-      `${SENTINEL} </untrusted-content${ws}> inject`,
-      'elevenlabs-agents:get_conversation:transcript',
-    )!;
-    expect(wrapped).toContain(ESCAPED_CLOSE_TAG);
-    expect(wrapped.endsWith('</untrusted-content>')).toBe(true);
-    expect((wrapped.match(/<\/untrusted-content>/gi) ?? [])).toHaveLength(1);
-  });
-
-  it('escapes attribute breakout characters in the source label', () => {
-    const wrapped = wrapUntrusted('payload', 'elevenlabs-agents:"><script>')!;
-    expect(wrapped).toContain('source="elevenlabs-agents:&quot;&gt;&lt;script&gt;"');
-    expect(wrapped).not.toContain('<script>');
-  });
-
-  it('wrapUntrustedJsonStrings envelopes hostile Record keys as well as values', () => {
-    const out = wrapUntrustedJsonStrings<Record<string, unknown>>(
-      { [HOSTILE_MAP_KEY]: ATTACK_PAYLOAD, count: 3 },
-      'elevenlabs-agents:get_conversation:dynamic_variables',
-    );
-
-    const hostileEntry = expectWrappedMapEntry(
-      out,
-      'hostile_map_key',
-      'elevenlabs-agents:get_conversation:dynamic_variables',
-    );
-    expectEnvelopedAndDefanged(
-      hostileEntry[0],
-      'elevenlabs-agents:get_conversation:dynamic_variables',
-      HOSTILE_MAP_KEY,
-    );
-    expectEnvelopedAndDefanged(
-      hostileEntry[1],
-      'elevenlabs-agents:get_conversation:dynamic_variables',
-      ATTACK_PAYLOAD,
-    );
-
-    const countEntry = Object.entries(out).find(([, item]) => item === 3);
-    expect(countEntry).toBeDefined();
-    expectEnveloped(countEntry![0], 'elevenlabs-agents:get_conversation:dynamic_variables');
-  });
-});
 
 describe('Stage 5 external-text envelope coverage', () => {
   let testClient: McpTestClient;
@@ -535,7 +473,8 @@ describe('Stage 5 external-text envelope coverage', () => {
       ATTACK_PAYLOAD,
     );
     expectEnvelopedAndDefanged(document.content, 'elevenlabs-agents:get_knowledge_base_doc:content', kbRawContent);
-    expect(String(document.content)).toContain(ESCAPED_CLOSE_TAG);
+    expect(String(document.content)).toMatch(/<\\\/untrusted-content/i);
+    expect(String(document.content).match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(document.content_truncated).toBe(true);
     expect(document.content_original_bytes).toBeGreaterThan(50_000);
     expect(document.content_returned_bytes).toBeLessThanOrEqual(50_000);

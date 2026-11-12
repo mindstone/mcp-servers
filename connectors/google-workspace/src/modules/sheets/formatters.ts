@@ -13,7 +13,7 @@ import type {
   SpreadsheetResponse,
   SuspiciousWriteWarning,
 } from './types.js';
-import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-controls.js';
 import { firstRowOfA1 } from './a1Utils.js';
 
 export const VALUES_TRUNCATION_NOTICE = 'Data truncated by max_rows/max_cols; re-read an explicit range to retrieve omitted cells.';

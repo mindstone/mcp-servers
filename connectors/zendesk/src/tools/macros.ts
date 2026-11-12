@@ -4,7 +4,7 @@ import type { ZendeskMacro, ZendeskMacroApplyResult, ZendeskTicket } from '../ty
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
 import { formatMacro, wrapMacroFields, wrapUntrustedTicketContent, UNTRUSTED_TICKET_SOURCE } from '../formatters.js';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonValues } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerMacroTools(server: McpServer): void {
@@ -171,7 +171,7 @@ Example:
         // future nested property would otherwise reach the model raw.
         // This wrapped copy is never sent back to Zendesk — the apply path
         // below builds its payload from the raw preview ticket.
-        const previewForDisplay = wrapUntrustedJsonStrings(previewTicket, UNTRUSTED_TICKET_SOURCE);
+        const previewForDisplay = wrapUntrustedJsonValues(previewTicket, UNTRUSTED_TICKET_SOURCE);
         return JSON.stringify({
           ok: true,
           preview: true,

@@ -16,7 +16,6 @@ const ACCESS_KEY = 'test-access-key';
 const SECRET_KEY = 'test-secret-key-at-least-32-chars-long';
 
 const BASE = 'https://api-singapore.klingai.com/v1';
-const ESCAPED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function clientEnv() {
   return {
@@ -94,7 +93,8 @@ describe('vendor error message sanitization', () => {
     const json = result.json as { ok: boolean; error: string; code: string };
     expect(json.code).toBe('KLING_1300');
     expect(json.error).toContain('<untrusted-content source="kling-api-error">');
-    expect(json.error).toContain(ESCAPED_CLOSE_TAG);
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
     // The raw breakout variant must not survive: the only literal close tag
     // in the decoded payload is the envelope's own.
     expect(json.error.match(/<\/untrusted-content>/gi) ?? []).toHaveLength(1);

@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Fixed
 
 - `get_knowledge_base_doc` says why when the body text could not be fetched, in a new `content_error` result field, instead of returning the metadata as if the document had no text.

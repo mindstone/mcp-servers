@@ -458,7 +458,8 @@ describe('Google short-window rate-limit recovery', () => {
     expect(first.emails[0].id).toBe('msg-1');
     expect(first.emails[0].threadId).toBe('thread-msg-1');
     expect(first.emails[0].subject).toContain('<untrusted-content');
-    expect(first.emails[0].body).toContain('<\\/untrusted-content>injected');
+    expect(first.emails[0].body).toContain('<\\/UNTRUSTED-CONTENT >injected');
+    expect(first.emails[0].body.match(/<\/untrusted-content/gi)).toHaveLength(1);
     await handleSearchWorkspaceEmails({ email: EMAIL, query: 'x', page_token: first.nextPageToken, return_json: true });
     await handleSearchWorkspaceEmails({ email: EMAIL, message_ids: [first.emails[0].id], return_json: true });
     expect(seenTokens).toEqual([null, token]);
@@ -517,7 +518,8 @@ describe('Google short-window rate-limit recovery', () => {
       expect(created.id).toBe(id);
       for (const description of [first.events[0].description, fetched.description]) {
         expect(description).toContain('<untrusted-content');
-        expect(description).toContain('<\\/untrusted-content>injected');
+        expect(description).toContain('<\\/UNTRUSTED-CONTENT >injected');
+        expect(description.match(/<\/untrusted-content/gi)).toHaveLength(1);
       }
     });
 
@@ -624,16 +626,23 @@ describe('Google short-window rate-limit recovery', () => {
       expect(seen).toEqual([null, token]);
       if ('spaces' in first) {
         expect(first.spaces[0].name).toBe(space);
-        expect(first.spaces[0].displayName).toContain('<\\/untrusted-content>injected');
+        expect(first.spaces[0].displayName).toContain('<\\/UNTRUSTED-CONTENT >injected');
+        expect(first.spaces[0].displayName.match(/<\/untrusted-content/gi)).toHaveLength(1);
       }
-      if ('messages' in first) expect(first.messages[0].text).toContain('<\\/untrusted-content>injected');
+      if ('messages' in first) {
+        expect(first.messages[0].text).toContain('<\\/UNTRUSTED-CONTENT >injected');
+        expect(first.messages[0].text.match(/<\/untrusted-content/gi)).toHaveLength(1);
+      }
       if ('conferenceRecords' in first) expect(first.conferenceRecords?.[0].name).toBe(record);
       if ('transcripts' in first) {
         expect(first.transcripts?.[0].name).toBe(transcript);
         expect(first.transcripts?.[0].docsDestination?.document).toBe('doc-1');
         expect(first.transcripts?.[0].docsDestination?.exportUri).toContain('<untrusted-content');
       }
-      if ('transcriptEntries' in first) expect(first.transcriptEntries?.[0].text).toContain('<\\/untrusted-content>injected');
+      if ('transcriptEntries' in first) {
+        expect(first.transcriptEntries?.[0].text).toContain('<\\/UNTRUSTED-CONTENT >injected');
+        expect(first.transcriptEntries?.[0].text.match(/<\/untrusted-content/gi)).toHaveLength(1);
+      }
     });
 
   it('round-trips calendar-list ids into an event request while wrapping calendar names', async () => {
@@ -666,6 +675,7 @@ describe('Google short-window rate-limit recovery', () => {
     const result = await handleSendChatMessage({ email: EMAIL, space, text: 'Hello' });
     expect(result.name).toBe(name);
     expect(result.thread?.name).toBe(threadName);
-    expect(result.text).toContain('<\\/untrusted-content>injected');
+    expect(result.text).toContain('<\\/UNTRUSTED-CONTENT >injected');
+    expect(result.text.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 });

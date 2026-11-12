@@ -14,7 +14,8 @@ import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedJsonValues } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 import logger from '../utils/logger.js';
 
 // Singleton instances
@@ -1057,7 +1058,7 @@ export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacat
         contactsOnly: readAliasedBoolean(rawParams, 'contacts_only', 'contactsOnly'),
         domainOnly: readAliasedBoolean(rawParams, 'domain_only', 'domainOnly')
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:vacation-responder');
+      return wrapUntrustedJsonValues(result, 'google-workspace:gmail:vacation-responder');
     } catch (error) {
       throw toMcpError(error, 'Failed to update vacation responder');
     }
@@ -1071,7 +1072,7 @@ export async function handleListWorkspaceSendAs(params: { email?: string }) {
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const result = await gmailService.listSendAs({ email });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:send-as');
+      return wrapUntrustedJsonValues(result, 'google-workspace:gmail:send-as');
     } catch (error) {
       throw toMcpError(error, 'Failed to list send-as aliases');
     }

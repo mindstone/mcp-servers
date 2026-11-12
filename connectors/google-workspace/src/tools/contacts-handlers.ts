@@ -13,7 +13,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from "../utils/untrusted-controls.js";
 
 // Singleton instances - Initialize or inject as per project pattern
 let contactsService: ContactsService;

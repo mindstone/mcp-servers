@@ -9,7 +9,6 @@ import {
   listTeams,
   sendChatMessage,
 } from '../src/teams.js';
-import { wrapUntrusted } from '../src/untrusted-content.js';
 
 function createClient(response: unknown): Client {
   const builder: Record<string, unknown> = {};
@@ -90,18 +89,9 @@ describe('untrusted-content contract', () => {
       expect(from.slice(0, -'</untrusted-content>'.length).toLowerCase()).not.toContain(
         '</untrusted-content',
       );
-      expect(from).toContain('<\\/untrusted-content>');
+      expect(from).toMatch(/<\\\/untrusted-content/i);
+      expect(from.match(/<\/untrusted-content/gi)).toHaveLength(1);
     }
-  });
-
-  it('is idempotent for the same source', () => {
-    const source = 'microsoft-teams:test';
-    const once = wrapUntrusted('some </untrusted-content> text', source);
-    expect(wrapUntrusted(once, source)).toBe(once);
-    // A different source must re-wrap, not pass through.
-    const twice = wrapUntrusted(once, 'microsoft-teams:other');
-    expect(twice).not.toBe(once);
-    expect(twice?.startsWith('<untrusted-content source="microsoft-teams:other">')).toBe(true);
   });
 
   it('fails closed when a structural Graph field carries envelope-breakout characters', async () => {

@@ -5,7 +5,8 @@
 //
 // Usage:
 //   node scripts/check-untrusted-coverage.mjs <connector-name>
-//   node scripts/check-untrusted-coverage.mjs --all   # sweep every connector except _template
+//   node scripts/check-untrusted-coverage.mjs --all   # sweep every connector (_template: helper copies only)
+//   node scripts/check-untrusted-coverage.mjs --self-test
 //
 // Exits 0 on pass, non-zero on a NEW gap. See "What this can and cannot prove".
 //
@@ -58,6 +59,14 @@
 // but when adding a connector on a novel transport, add its egress signal here
 // (or baseline/exempt it explicitly) rather than relying on silence.
 //
+// ── Vendored helper copies ─────────────────────────────────────────────────
+// Connectors cannot import the test-harness at runtime, so each one vendors the
+// envelope helper. Every file named untrusted-content.ts under a connector's
+// src/ (including _template's) must be byte-identical to
+// test-harness/src/untrusted-content.ts, so there is one maintained helper and
+// a copy can never drift from the tested reference (FOX-8548). Connector-specific
+// helpers live in a file with another name.
+//
 // History: docs/plans/260611_fox3490-untrusted-envelopes/ (FOX-3490).
 
 import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -72,6 +81,9 @@ const repoRoot = resolve(__dirname, '..');
 // at a temporary synthetic fixture tree so the gate's regression cases can be
 // exercised without committing fake connectors.
 let connectorsRoot = join(repoRoot, 'connectors');
+
+const CANONICAL_HELPER_PATH = join(repoRoot, 'test-harness', 'src', 'untrusted-content.ts');
+const CANONICAL_HELPER = readFileSync(CANONICAL_HELPER_PATH, 'utf8');
 
 function walk(dir, files = []) {
   if (!existsSync(dir)) return files;
@@ -200,6 +212,26 @@ const exemptSet = new Set(
     : Object.keys(baseline.exemptConnectors ?? {}),
 );
 
+// Every vendored helper copy under src/ must equal the canonical file. Returns
+// null when all copies match (or there are none), else a failure result.
+function checkHelperCopies(connector) {
+  const srcDir = join(connectorsRoot, connector, 'src');
+  const drifted = walk(srcDir)
+    .filter((f) => /(?:^|[\\/])untrusted-content\.ts$/.test(f))
+    .filter((f) => readFileSync(f, 'utf8') !== CANONICAL_HELPER)
+    .map((f) => f.slice(join(connectorsRoot, connector).length + 1));
+  if (drifted.length === 0) return null;
+  return {
+    ok: false,
+    message:
+      `check-untrusted-coverage: ${connector} — vendored helper differs from ` +
+      `test-harness/src/untrusted-content.ts: ${drifted.join(', ')}\n` +
+      `  Copy the canonical file over it unchanged:\n` +
+      `    cp test-harness/src/untrusted-content.ts connectors/${connector}/${drifted[0]}\n` +
+      `  Connector-specific helpers belong in a file with another name.`,
+  };
+}
+
 // Evaluate one connector. Returns { ok, message } and never exits — the caller
 // decides how to aggregate (single-connector vs --all sweep).
 function evaluateConnector(connector) {
@@ -213,6 +245,9 @@ function evaluateConnector(connector) {
     // No source to analyse — nothing to gate.
     return { ok: true, message: `check-untrusted-coverage: ${connector} — no src/ directory; skipping` };
   }
+
+  const helperDrift = checkHelperCopies(connector);
+  if (helperDrift) return helperDrift;
 
   // Split source into the connector's OWN code vs vendored helper
   // implementation files. Network signals are scanned across ALL source (a
@@ -319,24 +354,38 @@ function discoverConnectors() {
     .sort();
 }
 
+// Sweep every connector plus _template; returns the number failing.
+function sweepAll() {
+  const connectors = discoverConnectors();
+  let failed = 0;
+  // _template is a scaffold, not a connector: only its helper copy is checked.
+  const templateDrift = checkHelperCopies('_template');
+  if (templateDrift) {
+    console.log(templateDrift.message);
+    failed += 1;
+  }
+  for (const c of connectors) {
+    const { ok, message } = evaluateConnector(c);
+    console.log(message);
+    if (!ok) failed += 1;
+  }
+  console.log(`\ncheck-untrusted-coverage: swept ${connectors.length} connectors and _template, ${failed} failing`);
+  return failed;
+}
+
 // ── Self-test: prove the gate's load-bearing behaviours against synthetic
 // fixtures. The critical case (F1 regression) is "fetch + an UNUSED vendored
 // untrusted-content helper + raw result" — this MUST fail, because before the
 // helper-file exclusion the gate counted the helper's own `wrapUntrusted`
 // declaration as coverage and false-passed exactly this connector shape.
 function writeFixtureFile(srcDir, name, contents) {
+  mkdirSync(dirname(join(srcDir, name)), { recursive: true });
   writeFileSync(join(srcDir, name), contents);
 }
 
-// A faithful copy of the wrapUntrusted helper declaration, so the synthetic
-// helper file matches the real `connectors/_template/src/untrusted-content.ts`
-// signal surface (this is what used to self-satisfy the envelope scan).
-const HELPER_FILE_CONTENTS = `
-export function wrapUntrusted(text, source) {
-  if (text == null) return text;
-  return '<untrusted-content source="' + source + '">' + text + '</untrusted-content>';
-}
-`;
+// The canonical helper itself: its `wrapUntrusted` declaration is what used to
+// self-satisfy the envelope scan.
+const HELPER_FILE_CONTENTS = CANONICAL_HELPER;
 
 function makeFixtureConnector(root, name, files) {
   const srcDir = join(root, name, 'src');
@@ -447,6 +496,44 @@ function runSelfTest() {
     });
     leg('fetch + vendored bridge reader + raw result must FAIL', 'bridge-reader-only', false);
 
+    // FOX-8548: a vendored helper copy that drifts from the canonical file FAILS,
+    // even when the connector otherwise reaches the envelope.
+    const enveloped = `
+        import { wrapUntrusted } from './untrusted-content.js';
+        export async function listThings() {
+          const res = await fetch('https://example.com/things');
+          return { content: [{ type: 'text', text: wrapUntrusted(await res.text(), 'demo') }] };
+        }
+      `;
+    makeFixtureConnector(tmp, 'helper-drifted', {
+      'untrusted-content.ts': CANONICAL_HELPER + '\n// local tweak\n',
+      'server.ts': enveloped,
+    });
+    leg('drifted vendored helper must FAIL', 'helper-drifted', false);
+
+    makeFixtureConnector(tmp, 'helper-drifted-nested', {
+      'untrusted-content.ts': CANONICAL_HELPER,
+      'utils/untrusted-content.ts': CANONICAL_HELPER.replace('wrapUntrusted', 'wrapUntrustedLocal'),
+      'server.ts': enveloped,
+    });
+    leg('drifted helper in a subfolder must FAIL', 'helper-drifted-nested', false);
+
+    makeFixtureConnector(tmp, 'helper-no-network-drifted', {
+      'untrusted-content.ts': 'export const wrapUntrusted = (t) => t;\n',
+      'server.ts': `export const echo = (m) => m;`,
+    });
+    leg('drifted helper with no network must still FAIL', 'helper-no-network-drifted', false);
+
+    // --all also checks _template's helper copy, though _template is not a connector.
+    const templateRoot = join(tmp, 'template-sweep');
+    makeFixtureConnector(templateRoot, '_template', { 'untrusted-content.ts': CANONICAL_HELPER + '\n// drift\n' });
+    connectorsRoot = templateRoot;
+    const templateFailed = sweepAll();
+    connectorsRoot = tmp;
+    const templatePass = templateFailed === 1;
+    legs.push({ label: '--all with a drifted _template helper must FAIL', pass: templatePass });
+    console.log(`  ${templatePass ? 'PASS' : 'FAIL'} — --all with a drifted _template helper must FAIL (${templateFailed} failing)`);
+
     const failures = legs.filter((l) => !l.pass);
     if (failures.length > 0) {
       console.error(`\ncheck-untrusted-coverage: SELF-TEST FAILED (${failures.length}/${legs.length} legs)`);
@@ -471,15 +558,7 @@ if (arg === '--self-test') {
 }
 
 if (arg === '--all') {
-  const connectors = discoverConnectors();
-  let failed = 0;
-  for (const c of connectors) {
-    const { ok, message } = evaluateConnector(c);
-    console.log(message);
-    if (!ok) failed += 1;
-  }
-  console.log(`\ncheck-untrusted-coverage: swept ${connectors.length} connectors, ${failed} failing`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exit(sweepAll() > 0 ? 1 : 0);
 }
 
 const { ok, message } = evaluateConnector(arg);

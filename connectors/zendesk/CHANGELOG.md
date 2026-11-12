@@ -35,6 +35,7 @@ are maintained manually as part of the PR review checklist.
 
 - Renewed tokens are written atomically (0600 temp file in the same folder, then rename), and a token file removed during a refresh (a disconnect) is not recreated. No refresh failure deletes or truncates a token file.
 - Refresh failures log only the HTTP status and OAuth error code, never the response body or `error_description`; a corrupt token file's parse error is no longer logged, since it can quote file contents.
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ## [0.4.1] - 2026-08-09
 

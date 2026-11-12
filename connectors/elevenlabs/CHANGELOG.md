@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Added
 
 - Seven registered API tools for local discovery and 40 admitted agent, tool, knowledge and saved-Test operations, bringing the source tool count to 39 while preserving the existing 32 definitions. Paid read-only RAG retrieval and Test execution have separate tools and effect boundaries.

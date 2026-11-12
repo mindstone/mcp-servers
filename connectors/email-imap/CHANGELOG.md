@@ -16,6 +16,10 @@ to end the label early.
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Fixed
 
 - `email_send` counts recipients with the same address parser that sends the

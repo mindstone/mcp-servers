@@ -11,7 +11,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
+import { wrapUntrustedJsonControls } from "../utils/untrusted-controls.js";
 
 // Singleton instances - Initialize or inject as per project pattern
 let meetService: MeetService;

@@ -304,7 +304,7 @@ describe('argument ownership and serialization', () => {
     const result = await call('create', input);
     expect(result.isError, result.text).not.toBe(true);
     expect(result.json).toMatchObject({ ok: true, follow_up_operations: ['get_agent_route'] });
-    expect(sent).toEqual({ conversation_config: { agent: { prompt: { llm: 'gemini-3.5-flash', prompt: '<untrusted-content>keep-one-envelope</untrusted-content>' }, dynamic_variables: { dynamic_variable_placeholders: { llm_model: 'valid-map-value', [mapKey]: 'raw-value' } } } } });
+    expect(sent).toEqual({ conversation_config: { agent: { prompt: { llm: 'gemini-3.5-flash', prompt: '<untrusted-content source="inner">keep-one-envelope</untrusted-content>' }, dynamic_variables: { dynamic_variable_placeholders: { llm_model: 'valid-map-value', [mapKey]: 'raw-value' } } } } });
     expect(input).toEqual(original);
     expect(requests).toHaveLength(1);
   });

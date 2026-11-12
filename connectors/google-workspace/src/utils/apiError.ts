@@ -1,5 +1,5 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { wrapUntrustedContent } from './untrusted-content.js';
+import { wrapUntrustedContent } from './untrusted-controls.js';
 import { isGoogleRecoveryExhausted, isShortWindowRateLimit, preserveGoogleRetryDecision } from './google-retry.js';
 
 function isHttpStatus(value: unknown): value is number {

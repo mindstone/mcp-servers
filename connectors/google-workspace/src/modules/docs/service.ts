@@ -31,7 +31,7 @@ import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
 import { describeApiError, describeApiErrorUntrusted, extractHttpStatus, isAuthHandoffError, isPassthroughGoogleError } from '../../utils/apiError.js';
 import { preserveGoogleRetryDecision } from '../../utils/google-retry.js';
-import { wrapUntrustedJsonStrings } from '../../utils/untrusted-content.js';
+import { wrapUntrustedJsonValues } from '../../utils/untrusted-content.js';
 import {
   ALL_TEXT_KEYS,
   DocsInputError,
@@ -291,7 +291,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       };
       // Measure what the handler returns (strings enveloped with the same source).
       const size = JSON.stringify(
-        wrapUntrustedJsonStrings(payload, `google-workspace:docs:document/${documentId}`)
+        wrapUntrustedJsonValues(payload, `google-workspace:docs:document/${documentId}`)
       ).length;
       if (size > MAX_TAB_JSON_CHARS) {
         throw new DocsInputError(

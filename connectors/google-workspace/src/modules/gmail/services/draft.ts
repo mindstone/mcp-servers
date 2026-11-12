@@ -8,7 +8,7 @@ import {
 import { GmailAttachmentService } from './attachment.js';
 import { buildMimeMessage } from './mime-builder.js';
 import { describeApiError, describeApiErrorUntrusted, hasErrorDetails, isPassthroughGoogleError } from '../../../utils/apiError.js';
-import { wrapUntrustedContent } from '../../../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../../../utils/untrusted-controls.js';
 import logger from '../../../utils/logger.js';
 
 export type DraftAction = 'create' | 'read' | 'update' | 'delete' | 'send';

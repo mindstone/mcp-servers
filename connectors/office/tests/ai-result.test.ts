@@ -64,11 +64,13 @@ describe('one Office result shape', () => {
     expect(result.action).toBe('insert_text');
     expect(result.error.code).toBe('UNKNOWN_ERROR');
     expect(result.error.fix).not.toContain('payload');
-    expect(result.error.message).toContain('<\\/untrusted-content>');
+    expect(result.error.message).toMatch(/<\\\/untrusted-content/i);
+    expect(result.error.message.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(result.error.message.slice(0, -'</untrusted-content>'.length)).not.toMatch(/<\/untrusted-content\s*>/i);
     const success = format(stampUntrustedSource({ success: true, data: { nested: [hostile, 4, false] } }, 'word', 'read_document'));
     expect(success.result).toMatchObject({ ok: true, app: 'word', action: 'read_document' });
-    expect(success.result.data.nested[0]).toContain('<\\/untrusted-content>');
+    expect(success.result.data.nested[0]).toMatch(/<\\\/untrusted-content/i);
+    expect(success.result.data.nested[0].match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(success.result.data.nested.slice(1)).toEqual([4, false]);
     expect(success.mcp.isError).toBeUndefined();
   });
@@ -172,6 +174,7 @@ it('envelopes previous values without treating them as undo instructions', () =>
   expect(result.undo).not.toContain('hostile');
   for (const value of [result.data.previousText, result.data.previousNotes, result.data.previous.name]) {
     expect(value).toContain('<untrusted-content source="microsoft-office-powerpoint">');
-    expect(value).toContain('<\\/untrusted-content>');
+    expect(value).toMatch(/<\\\/untrusted-content/i);
+    expect(value.match(/<\/untrusted-content/gi)).toHaveLength(1);
   }
 });
