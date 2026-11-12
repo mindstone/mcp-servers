@@ -22,6 +22,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Connector-written messages quote a Wise value only after a type check: ids only when numeric, counts only from a checked list, and no status strings.
 - Profile auto-selection checks the profiles reply and requires the chosen id to be a positive integer before it goes into a URL.
 - The activities cursor is returned only when it uses an opaque-token alphabet; otherwise pagination stops. This limits its characters; it does not prove the cursor came from Wise.
+- The MCP SDK is pinned to 1.32.2, and its HTTP-server dependencies are updated to fixed versions. The connector runs over stdio only, so none of the advisories these fix were reachable from it.
 
 ## [0.1.1] - 2026-08-10
 
