@@ -50,3 +50,13 @@ export function withErrorHandling<T>(
     }
   };
 }
+
+/**
+ * Plain-text fallback for an HTML-only message: drop tags, collapse whitespace.
+ * Each "<" scans only up to the next "<" or ">": linear time, and a stray "<"
+ * in the text is kept, not swallowed. A rare quoted attribute holding "<"
+ * leaves part of that tag in the text; the message's own text is still kept.
+ */
+export function htmlToPlainText(html: string): string {
+  return html.replace(/<[^<>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}

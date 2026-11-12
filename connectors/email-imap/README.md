@@ -121,7 +121,8 @@ mass sends. Defaults are baked into the source so a host that sets none of
 these still gets safe behaviour. Hosts can tighten them per deployment.
 
 - `EMAIL_IMAP_MAX_RECIPIENTS` — maximum combined To+CC+BCC recipients per
-  `email_send` call (default: `25`). Exceeding this returns a structured
+  `email_send` call (default: `25`), counted as the sender parses the
+  addresses (commas, semicolons and groups). Exceeding this returns a structured
   error with `code: "RECIPIENT_LIMIT_EXCEEDED"`.
 - `EMAIL_IMAP_RATE_LIMIT_PER_HOUR` — maximum number of `email_send` calls per
   rolling window (default: `50`). Exceeding this returns a structured error

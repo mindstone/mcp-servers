@@ -352,6 +352,60 @@ describe('Send/draft tools', () => {
       expect(mockTransport.sendMail).not.toHaveBeenCalled();
     });
 
+    describe('recipient count matches the sender envelope', () => {
+      const cases: Array<{ name: string; args: Record<string, unknown>; count: number }> = [
+        { name: 'semicolon-separated string', args: { to: 'a@x.com; b@x.com; c@x.com' }, count: 3 },
+        { name: 'quoted display name with a comma', args: { to: '"Doe, Jane" <jane@x.com>' }, count: 1 },
+        {
+          name: 'group syntax',
+          args: { to: 'Team: a@x.com, b@x.com;', cc: ['c@x.com'] },
+          count: 3,
+        },
+        {
+          name: 'mixed separators across to/cc/bcc',
+          args: { to: ['"Roe, Pat" <pat@x.com>; b@x.com'], cc: 'c@x.com, d@x.com', bcc: 'e@x.com' },
+          count: 5,
+        },
+        {
+          name: 'the same address repeated across to/cc/bcc',
+          args: { to: ['a@x.com', 'a@x.com'], cc: 'a@x.com; b@x.com', bcc: 'Team: a@x.com;' },
+          count: 2,
+        },
+      ];
+
+      for (const c of cases) {
+        if (c.count > 1) {
+          it(`counts ${c.count} for ${c.name} and refuses it one below the cap`, async () => {
+            await setupClientWithEnv({ EMAIL_IMAP_MAX_RECIPIENTS: String(c.count - 1) });
+            const result = await testClient.callTool('email_send', {
+              ...c.args,
+              subject: `parser-count-${c.name}`,
+              text: 'body',
+            });
+            const json = result.json as Record<string, unknown>;
+            expect(json.ok).toBe(false);
+            expect(json.code).toBe('RECIPIENT_LIMIT_EXCEEDED');
+            expect(json.observed).toBe(c.count);
+            expect(mockTransport.sendMail).not.toHaveBeenCalled();
+          });
+        }
+
+        it(`allows ${c.name} when the cap equals its ${c.count} recipients`, async () => {
+          await setupClientWithEnv({ EMAIL_IMAP_MAX_RECIPIENTS: String(c.count) });
+          const result = await testClient.callTool('email_send', {
+            ...c.args,
+            subject: `parser-count-at-cap-${c.name}`,
+            text: 'body',
+          });
+          const json = result.json as Record<string, unknown>;
+          expect(json.ok).toBe(true);
+          expect(mockTransport.sendMail).toHaveBeenCalledTimes(1);
+          // The caller's value reaches the sender unchanged.
+          expect(mockTransport.sendMail.mock.calls[0]![0]).toMatchObject(c.args);
+        });
+      }
+    });
+
     describe('VAL-EMAIL-025 — recipient counting is shape-invariant', () => {
       const shapes: Array<{ name: string; args: Record<string, unknown> }> = [
         {

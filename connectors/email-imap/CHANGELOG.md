@@ -16,6 +16,15 @@ to end the label early.
 
 ## [Unreleased]
 
+### Fixed
+
+- `email_send` counts recipients with the same address parser that sends the
+  message, so semicolon-separated lists and groups count every address and a
+  quoted display name containing a comma counts once. The recipient cap itself
+  is unchanged.
+- The plain-text fallback for HTML-only messages strips tags in linear time and
+  keeps a stray `<` in the text instead of dropping what follows it.
+
 ## [0.3.3] - 2026-11-08
 
 ### Changed

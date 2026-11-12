@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SearchObject } from 'imapflow';
-import { withErrorHandling } from '../utils.js';
+import { htmlToPlainText, withErrorHandling } from '../utils.js';
 import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection, getMailboxLock } from '../imap-client.js';
 import {
@@ -286,7 +286,7 @@ export function registerMessageTools(server: McpServer): void {
 
         const fallbackTextBody =
           !textBody && htmlBody
-            ? htmlBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+            ? htmlToPlainText(htmlBody)
             : textBody;
 
         return JSON.stringify({

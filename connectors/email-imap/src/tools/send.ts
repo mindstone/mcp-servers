@@ -20,6 +20,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import nodemailer from 'nodemailer';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import { withErrorHandling } from '../utils.js';
 import { getConnection } from '../imap-client.js';
 import { getTransport } from '../smtp-client.js';
@@ -119,32 +120,18 @@ function resolveOutboundAttachments(
 }
 
 /**
- * Flatten a recipient field (string | string[] | undefined) into the list of
- * resolved addresses it carries, splitting any comma-delimited string entries
- * into individual addresses. This is the input to the recipient-cap check —
- * counting array length alone would let a single string like
- * `"a@x.com, b@x.com, c@x.com"` bypass the cap. The original `to`/`cc`/`bcc`
- * value is still passed through to nodemailer, which performs its own
- * downstream parsing.
+ * Count the recipients the way the sender will deliver them: the envelope
+ * Nodemailer builds from these exact To/CC/BCC values. That parser splits on
+ * commas and semicolons, keeps quoted display names whole, expands groups,
+ * skips entries without an address and drops repeats across all three fields.
+ * The original values still go to Nodemailer unchanged.
  */
-function toRecipientArray(value: string | string[] | undefined): string[] {
-  if (value === undefined) {
-    return [];
-  }
-  const entries = Array.isArray(value) ? value : [value];
-  const flattened: string[] = [];
-  for (const entry of entries) {
-    if (typeof entry !== 'string') {
-      continue;
-    }
-    for (const piece of entry.split(',')) {
-      const trimmed = piece.trim();
-      if (trimmed.length > 0) {
-        flattened.push(trimmed);
-      }
-    }
-  }
-  return flattened;
+function countRecipients(
+  to: string | string[],
+  cc: string | string[] | undefined,
+  bcc: string | string[] | undefined,
+): number {
+  return new MailComposer({ to, cc, bcc }).compile().getEnvelope().to.length;
 }
 
 /**
@@ -272,10 +259,7 @@ export function registerSendTools(server: McpServer): void {
       const { to, subject, text, html, cc, bcc, reply_to_message_id } = args;
 
       // ── Recipient cap (combined To + CC + BCC) ────────────────────
-      const recipientCount =
-        toRecipientArray(to).length +
-        toRecipientArray(cc).length +
-        toRecipientArray(bcc).length;
+      const recipientCount = countRecipients(to, cc, bcc);
       const maxRecipients = getMaxRecipients();
       if (recipientCount > maxRecipients) {
         return JSON.stringify({
