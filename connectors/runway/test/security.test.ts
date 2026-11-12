@@ -413,6 +413,8 @@ describe('Runway download_runway_output sandbox (VAL-RUNWAY-101..112)', () => {
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(false);
     expect(String(json.error || '')).toMatch(/exists|overwrite|EEXIST/i);
+    // Refused before any network request.
+    expect(calls.length).toBe(0);
     // Pre-existing file unchanged byte-for-byte.
     expect(fs.readFileSync(outputPath).equals(preExistingBytes)).toBe(true);
   });
@@ -447,6 +449,126 @@ describe('Runway download_runway_output sandbox (VAL-RUNWAY-101..112)', () => {
     const onDisk = fs.readFileSync(outputPath);
     expect(onDisk.length).toBe(REPLACEMENT_BODY.length);
     expect(onDisk.equals(REPLACEMENT_BODY)).toBe(true);
+    // The staging file was moved into place, not left beside the target.
+    expect(fs.readdirSync(downloadRoot)).toEqual(['clip.mp4']);
+  });
+
+  // ── VAL-RUNWAY-110b ───────────────────────────────────────────────────
+  // A failed overwrite download must leave the existing file untouched and
+  // leave no staging file behind.
+  describe('VAL-RUNWAY-110b — failed overwrite keeps the existing file', () => {
+    let sawPartialWrite = false;
+    const failures: Array<{
+      name: string;
+      handler: () => ReturnType<typeof http.get>;
+      partialWrite?: boolean;
+    }> = [
+      {
+        name: 'HTTP 410',
+        handler: () => http.get(REMOTE_URL, () => new HttpResponse(null, { status: 410 })),
+      },
+      {
+        name: 'HTTP 500',
+        handler: () => http.get(REMOTE_URL, () => new HttpResponse(null, { status: 500 })),
+      },
+      {
+        name: 'network error',
+        handler: () => http.get(REMOTE_URL, () => HttpResponse.error()),
+      },
+      {
+        name: 'refused redirect',
+        handler: () => http.get(REMOTE_URL, () => new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'http://127.0.0.1/secret' },
+        })),
+      },
+      {
+        name: 'body fails mid-stream',
+        // The body fails only once its first chunk has reached the staging
+        // file, so this covers cleanup after a partial write.
+        handler: () => {
+          let reads = 0;
+          return http.get(REMOTE_URL, () => new HttpResponse(new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              reads += 1;
+              if (reads === 1) {
+                controller.enqueue(new Uint8Array(16));
+                return;
+              }
+              const deadline = Date.now() + 5_000;
+              while (!sawPartialWrite && Date.now() < deadline) {
+                sawPartialWrite = fs.readdirSync(downloadRoot).some(
+                  (n) => n !== 'clip.mp4' && fs.statSync(path.join(downloadRoot, n)).size > 0,
+                );
+                if (!sawPartialWrite) await new Promise((r) => setTimeout(r, 10));
+              }
+              controller.error(new Error('connection reset'));
+            },
+          }), { status: 200, headers: { 'Content-Type': 'video/mp4' } }));
+        },
+        partialWrite: true,
+      },
+    ];
+
+    for (const { name, handler, partialWrite } of failures) {
+      it(`${name}: ok:false, existing bytes unchanged, no temp file left`, async () => {
+        sawPartialWrite = false;
+        const outputPath = path.join(downloadRoot, 'clip.mp4');
+        const preExistingBytes = Buffer.from('do not clobber me', 'utf8');
+        fs.writeFileSync(outputPath, preExistingBytes);
+
+        mswServer.use(...createRunwayHandlers(), handler());
+
+        testClient = await createTestClient({
+          env: {
+            RUNWAYML_API_SECRET: MOCK_API_KEY,
+            MCP_HOST_BRIDGE_STATE: '',
+            RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+          },
+        });
+
+        const result = await testClient.callTool('download_runway_output', {
+          url: REMOTE_URL,
+          output_path: outputPath,
+          overwrite: true,
+        });
+
+        const json = result.json as Record<string, unknown> | undefined;
+        expect(result.isError === true || json?.ok === false).toBe(true);
+        expect(fs.readFileSync(outputPath).equals(preExistingBytes)).toBe(true);
+        expect(fs.readdirSync(downloadRoot)).toEqual(['clip.mp4']);
+        if (partialWrite) expect(sawPartialWrite).toBe(true);
+      });
+    }
+
+    it('a long valid file name can still be overwritten', async () => {
+      // The staging name must not grow with the target's name, or a name
+      // near the filesystem's limit would newly be refused.
+      const longName = `${'a'.repeat(216)}.mp4`;
+      const outputPath = path.join(downloadRoot, longName);
+      fs.writeFileSync(outputPath, Buffer.from('old bytes', 'utf8'));
+
+      const { handler } = makeDownloadHandlers(REPLACEMENT_BODY);
+      mswServer.use(...createRunwayHandlers(), handler);
+
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: MOCK_API_KEY,
+          MCP_HOST_BRIDGE_STATE: '',
+          RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+        },
+      });
+
+      const result = await testClient.callTool('download_runway_output', {
+        url: REMOTE_URL,
+        output_path: outputPath,
+        overwrite: true,
+      });
+
+      expect((result.json as Record<string, unknown>).ok).toBe(true);
+      expect(fs.readFileSync(outputPath).equals(REPLACEMENT_BODY)).toBe(true);
+      expect(fs.readdirSync(downloadRoot)).toEqual([longName]);
+    });
   });
 
   // ── VAL-RUNWAY-111 ────────────────────────────────────────────────────

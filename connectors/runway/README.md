@@ -152,7 +152,7 @@ Video models: `generate_video_from_image` takes `gen4_turbo` (default), `gen4.5`
 - `check_runway_task` — Check the status of a generation task
 - `wait_for_runway_task` — Wait for a task to complete (auto-poll)
 - `cancel_runway_task` — Cancel or delete a task
-- `download_runway_output` — Download a Runway output to a local file
+- `download_runway_output` — Download a Runway output to a local file. It refuses to replace an existing file unless you pass `overwrite: true`; an overwrite only replaces the file once the download has succeeded, so a failed download keeps the existing file.
 - `upload_media` — Upload a local file to Runway's ephemeral storage
 
 ### Account

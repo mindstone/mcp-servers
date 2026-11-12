@@ -15,6 +15,10 @@ are maintained manually as part of the PR review checklist.
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
+### Fixed
+
+- A failed `download_runway_output` with `overwrite: true` now keeps the existing file instead of deleting it.
+
 ### Security
 
 - Keep task and voice IDs inside their own request path segment, and refuse `.` and `..`, so a crafted ID cannot point a status check, cancel or delete at another endpoint.
