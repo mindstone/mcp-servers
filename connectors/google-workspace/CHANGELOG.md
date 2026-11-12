@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Security
 
+- Chat space, contact, Meet conference record and transcript, and Slides presentation IDs must now be plain IDs (letters, digits, `-` and `_`). A malformed ID is refused before anything is sent to Google, so it can no longer point a request somewhere other than the named space, contact, transcript or presentation. The Slides read, list and get-slide tools now also accept a presentation URL, like the Slides update and thumbnail tools already did.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ### Fixed

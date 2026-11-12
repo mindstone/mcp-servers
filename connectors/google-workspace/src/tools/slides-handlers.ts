@@ -175,12 +175,27 @@ function formatSlideAsText(slide: SlideInfo): string {
 }
 
 /**
+ * Accept a Slides presentation ID or URL and return the plain ID, or refuse it.
+ * Every Slides call takes its presentation ID from here, so only a real ID reaches Google.
+ */
+function requirePresentationId(input: string | undefined): string {
+  const presentationId = input ? extractPresentationIdFromUrl(input) : null;
+  if (!presentationId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Invalid presentation ID or URL: "${input ?? ''}". Provide a valid Google Slides URL or presentation ID.`
+    );
+  }
+  return presentationId;
+}
+
+/**
  * Read a Google Slides presentation
  */
 export async function handleReadPresentation(args: ReadPresentationArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
-  const presentationId = readAliasedString(rawArgs, 'presentation_id', 'presentationId');
+  const presentationId = requirePresentationId(readAliasedString(rawArgs, 'presentation_id', 'presentationId'));
   const maxChars = readAliasedNumber(rawArgs, 'max_chars', 'maxChars');
   const includeNotes = readAliasedBoolean(rawArgs, 'include_notes', 'includeNotes');
   const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson');
@@ -197,7 +212,7 @@ export async function handleReadPresentation(args: ReadPresentationArgs): Promis
       returnJson,
     };
     
-    const result = await slidesService.getPresentation(email, presentationId as string, options);
+    const result = await slidesService.getPresentation(email, presentationId, options);
     
     if (!result.success || !result.data) {
       throw new McpError(ErrorCode.InternalError, result.error || 'Failed to read presentation');
@@ -246,7 +261,7 @@ export async function handleCreatePresentation(args: CreatePresentationArgs): Pr
 export async function handleListSlides(args: ListSlidesArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
-  const presentationId = readAliasedString(rawArgs, 'presentation_id', 'presentationId');
+  const presentationId = requirePresentationId(readAliasedString(rawArgs, 'presentation_id', 'presentationId'));
   const includeNotes = readAliasedBoolean(rawArgs, 'include_notes', 'includeNotes');
   
   // Resolve email - uses instance account if not provided, validates if provided
@@ -255,7 +270,7 @@ export async function handleListSlides(args: ListSlidesArgs): Promise<McpToolRes
   return await accountManager.withTokenRenewal(email, async () => {
     const slidesService = getSlidesService();
     
-    const result = await slidesService.listSlides(email, presentationId as string, includeNotes);
+    const result = await slidesService.listSlides(email, presentationId, includeNotes);
     
     if (!result.success || !result.data) {
       throw new McpError(ErrorCode.InternalError, result.error || 'Failed to list slides');
@@ -272,7 +287,7 @@ export async function handleListSlides(args: ListSlidesArgs): Promise<McpToolRes
 export async function handleGetSlide(args: GetSlideArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
-  const presentationId = readAliasedString(rawArgs, 'presentation_id', 'presentationId');
+  const presentationId = requirePresentationId(readAliasedString(rawArgs, 'presentation_id', 'presentationId'));
   const slideIndex = readAliasedNumber(rawArgs, 'slide_index', 'slideIndex');
   const maxChars = readAliasedNumber(rawArgs, 'max_chars', 'maxChars');
   const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson');
@@ -284,7 +299,7 @@ export async function handleGetSlide(args: GetSlideArgs): Promise<McpToolRespons
     const slidesService = getSlidesService();
     
     const options: GetSlideOptions = {
-      presentationId: presentationId as string,
+      presentationId: presentationId,
       slideIndex,
       maxChars,
       returnJson,
@@ -339,14 +354,7 @@ export async function handleBatchUpdatePresentation(args: BatchUpdatePresentatio
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
   
-  // Extract presentation ID from URL or use raw ID
-  const presentationId = extractPresentationIdFromUrl(presentationIdInput as string);
-  if (!presentationId) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      `Invalid presentation ID or URL: "${presentationIdInput}". Provide a valid Google Slides URL or presentation ID.`
-    );
-  }
+  const presentationId = requirePresentationId(presentationIdInput);
   
   return await accountManager.withTokenRenewal(email, async () => {
     const slidesService = getSlidesService();
@@ -400,14 +408,7 @@ export async function handleGetSlideThumbnail(args: GetSlideThumbnailArgs): Prom
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(args);
   
-  // Extract presentation ID from URL or use raw ID
-  const presentationId = extractPresentationIdFromUrl(presentationIdInput as string);
-  if (!presentationId) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      `Invalid presentation ID or URL: "${presentationIdInput}". Provide a valid Google Slides URL or presentation ID.`
-    );
-  }
+  const presentationId = requirePresentationId(presentationIdInput);
   
   return await accountManager.withTokenRenewal(email, async () => {
     const slidesService = getSlidesService();

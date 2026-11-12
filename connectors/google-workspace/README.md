@@ -260,6 +260,7 @@ A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a
 - The bundled callback server was removed; OAuth URLs and callback handling stay with the MCP host.
 - Attachment filenames are sanitised to prevent path traversal via crafted `upload_workspace_attachment` filename arguments.
 - `<untrusted-content>` envelopes cover Contacts, Calendar, Comments, Forms, Tasks, and JSON-return paths.
+- Chat space, contact, Meet conference record and transcript, and Slides presentation IDs must be plain IDs (letters, digits, `-` and `_`); Slides tools also take a presentation URL. A malformed ID is refused with an invalid-parameter error before anything is sent to Google.
 
 ## Licence
 

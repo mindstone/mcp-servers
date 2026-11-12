@@ -26,8 +26,8 @@ export function extractPresentationIdFromUrl(input: string): string | null {
 
   const trimmed = input.trim();
 
-  // If it looks like just an ID (alphanumeric with hyphens/underscores, ~44 chars)
-  if (/^[a-zA-Z0-9_-]{20,60}$/.test(trimmed)) {
+  // A bare ID: letters, digits, hyphens and underscores (usually 44 characters)
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
     return trimmed;
   }
 

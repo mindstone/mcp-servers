@@ -174,8 +174,9 @@ export interface ContactWriteToolParams {
   notes?: string;
 }
 
-// Contact resource names follow the documented "people/<id>" form.
-const CONTACT_RESOURCE_NAME_PATTERN = /^people\/[^/\s]+$/;
+// Contact resource names follow the documented "people/<id>" form, with a plain
+// ID (letters, digits, - and _); anything else is refused before a request is made.
+const CONTACT_RESOURCE_NAME_PATTERN = /^people\/[A-Za-z0-9_-]+$/;
 // Deliberately permissive email shape check — the People API is the authority;
 // this only catches clearly-malformed values before a network round-trip.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

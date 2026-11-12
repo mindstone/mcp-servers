@@ -305,3 +305,47 @@ describe('Chat handlers error handling', () => {
     });
   });
 });
+
+describe('Chat space request target', () => {
+  const CRAFTED_SPACES = [
+    'spaces/AAAA?x=1',
+    'spaces/AAAA#frag',
+    'spaces/AAAA&x=1',
+    'spaces/..',
+    'spaces/AAAA%2Fmembers',
+    'spaces/AAAA:messages',
+  ];
+
+  it.each(CRAFTED_SPACES)('rejects %s before any request is sent', async (space) => {
+    const urls: string[] = [];
+    const record = ({ request }: { request: Request }) => { urls.push(request.url); };
+    mswServer.events.on('request:start', record);
+    try {
+      const handlers = await loadHandlers();
+      await expect(handlers.handleSendChatMessage({ space, text: 'hi' }))
+        .rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+      await expect(handlers.handleListChatMessages({ space }))
+        .rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    } finally {
+      mswServer.events.removeListener('request:start', record);
+    }
+    expect(urls).toEqual([]);
+  });
+
+  it('sends a message to exactly the named space', async () => {
+    mswServer.use(
+      http.post('https://chat.googleapis.com/v1/spaces/AAAA-b_9/messages', () =>
+        HttpResponse.json({ name: 'spaces/AAAA-b_9/messages/m1', text: 'hi' })),
+    );
+    const urls: string[] = [];
+    const record = ({ request }: { request: Request }) => { urls.push(`${request.method} ${request.url}`); };
+    mswServer.events.on('request:start', record);
+    try {
+      const handlers = await loadHandlers();
+      await handlers.handleSendChatMessage({ space: 'spaces/AAAA-b_9', text: 'hi' });
+    } finally {
+      mswServer.events.removeListener('request:start', record);
+    }
+    expect(urls).toEqual(['POST https://chat.googleapis.com/v1/spaces/AAAA-b_9/messages']);
+  });
+});

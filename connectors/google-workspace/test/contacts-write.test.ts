@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { mswServer } from './fixtures/setup.js';
+import { recordRequests } from './fixtures/record-requests.js';
 
 const TEST_EMAIL = 'user@example.com';
 const CONTACT_RESOURCE = 'people/c1234567890';
@@ -266,5 +267,37 @@ describe('contacts write tools', () => {
     } catch (error) {
       expect((error as Error).message).toContain('Contacts');
     }
+  });
+});
+
+
+describe('contact resource_name request target', () => {
+  it.each([
+    'people/c123?x=1',
+    'people/c123#frag',
+    'people/c123&x=1',
+    'people/..',
+    'people/c123%2F..',
+    'people/c123:deleteContact',
+  ])('rejects %s before any request is sent', async (resourceName) => {
+    const handlers = await loadHandlers();
+    const sent = await recordRequests(() => expect(
+      handlers.handleUpdateContact({ email: TEST_EMAIL, resource_name: resourceName, phone_number: '+1 555 0100' }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams }));
+    expect(sent).toEqual([]);
+  });
+
+  it('updates exactly the named contact', async () => {
+    installPeopleApiMocks();
+    const handlers = await loadHandlers();
+    const sent = await recordRequests(() => handlers.handleUpdateContact({
+      email: TEST_EMAIL,
+      resource_name: CONTACT_RESOURCE,
+      phone_number: '+1 555 0100',
+    }));
+    expect(sent).toEqual([
+      `GET https://people.googleapis.com/v1/${CONTACT_RESOURCE}`,
+      `PATCH https://people.googleapis.com/v1/${CONTACT_RESOURCE}:updateContact`,
+    ]);
   });
 });

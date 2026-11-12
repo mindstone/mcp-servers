@@ -35,33 +35,48 @@ async function initializeServices() {
   }
 }
 
+// Meet IDs are plain (letters, digits, - and _); anything else is refused before
+// a request is made.
+const MEET_ID = '[A-Za-z0-9_-]+';
+const CONFERENCE_RECORD_PATTERN = new RegExp(`^(?:conferenceRecords/)?(${MEET_ID})$`);
+const TRANSCRIPT_PATTERN = new RegExp(`^(?:transcripts/)?(${MEET_ID})$`);
+const TRANSCRIPT_NAME_PATTERN = new RegExp(`^conferenceRecords/${MEET_ID}/transcripts/${MEET_ID}$`);
+
 /**
- * Normalizes a user-supplied conference record reference into the
- * 'conferenceRecords/{id}' parent format the Meet API expects. Accepts either
- * the bare ID or the full resource name.
+ * Normalizes a user-supplied conference record reference (bare ID or full
+ * resource name) into the 'conferenceRecords/{id}' parent the Meet API expects.
  */
-function toConferenceRecordName(conferenceRecord: string): string {
-  const trimmed = conferenceRecord.trim();
-  return trimmed.startsWith('conferenceRecords/')
-    ? trimmed
-    : `conferenceRecords/${trimmed}`;
+function toConferenceRecordName(conferenceRecord: string | undefined): string {
+  const id = CONFERENCE_RECORD_PATTERN.exec(conferenceRecord?.trim() ?? '')?.[1];
+  if (!id) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'conference_record must be a conference record ID (e.g. "conferenceRecords/abc-123" or just "abc-123")'
+    );
+  }
+  return `conferenceRecords/${id}`;
 }
 
 /**
  * Normalizes a conference record + transcript pair into the
- * 'conferenceRecords/{id}/transcripts/{tid}' parent format the Meet API
- * expects. The transcript may be given as a bare ID, a 'transcripts/{id}'
- * segment, or a full resource name (in which case it is used as-is).
+ * 'conferenceRecords/{id}/transcripts/{tid}' parent the Meet API expects. The
+ * transcript may be a bare ID, a 'transcripts/{id}' segment, or a full
+ * resource name (used as-is).
  */
-function toTranscriptName(conferenceRecord: string, transcript: string): string {
-  const trimmedTranscript = transcript.trim();
-  if (trimmedTranscript.startsWith('conferenceRecords/')) {
-    return trimmedTranscript;
-  }
+function toTranscriptName(conferenceRecord: string | undefined, transcript: string | undefined): string {
   const conferenceRecordName = toConferenceRecordName(conferenceRecord);
-  return trimmedTranscript.startsWith('transcripts/')
-    ? `${conferenceRecordName}/${trimmedTranscript}`
-    : `${conferenceRecordName}/transcripts/${trimmedTranscript}`;
+  const trimmed = transcript?.trim() ?? '';
+  if (TRANSCRIPT_NAME_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  const id = TRANSCRIPT_PATTERN.exec(trimmed)?.[1];
+  if (!id) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'transcript must be a transcript ID (e.g. "def-456", "transcripts/def-456", or a full resource name)'
+    );
+  }
+  return `${conferenceRecordName}/transcripts/${id}`;
 }
 
 interface ListMeetConferenceRecordsHandlerParams {
@@ -128,21 +143,16 @@ export async function handleListMeetTranscripts(
   const pageSize = readAliasedNumber(params, 'page_size', 'pageSize');
   const pageToken = readAliasedString(params, 'page_token', 'pageToken');
 
+  const parent = toConferenceRecordName(conferenceRecord);
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
-
-  if (!conferenceRecord) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'conference_record parameter is required (e.g. "conferenceRecords/abc-123" or just "abc-123")'
-    );
-  }
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const result = await meetService.listTranscripts({
         email,
-        parent: toConferenceRecordName(conferenceRecord),
+        parent,
         pageSize: pageSize !== undefined ? Math.min(pageSize, MEET_MAX_PAGE_SIZE) : undefined,
         pageToken
       });
@@ -177,27 +187,16 @@ export async function handleGetMeetTranscriptEntries(
   const pageSize = readAliasedNumber(params, 'page_size', 'pageSize');
   const pageToken = readAliasedString(params, 'page_token', 'pageToken');
 
+  const parent = toTranscriptName(conferenceRecord, transcript);
+
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
-
-  if (!conferenceRecord) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'conference_record parameter is required (e.g. "conferenceRecords/abc-123" or just "abc-123")'
-    );
-  }
-  if (!transcript) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'transcript parameter is required (e.g. "def-456", "transcripts/def-456", or a full resource name)'
-    );
-  }
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const result = await meetService.listTranscriptEntries({
         email,
-        parent: toTranscriptName(conferenceRecord, transcript),
+        parent,
         pageSize: pageSize !== undefined ? Math.min(pageSize, MEET_MAX_PAGE_SIZE) : undefined,
         pageToken
       });

@@ -21,8 +21,9 @@ const MAX_CHAT_PAGE_SIZE = 100;
 // text body — the only sizable field this tool sends.
 const MAX_CHAT_MESSAGE_TEXT_BYTES = 32_000;
 
-// Space resource names look like "spaces/AAAA..." — exactly one segment after the prefix.
-const SPACE_NAME_PATTERN = /^spaces\/[^/\s]+$/;
+// Space resource names look like "spaces/AAAA...": one plain ID (letters, digits,
+// - and _) after the prefix; anything else is refused before a request is made.
+const SPACE_NAME_PATTERN = /^spaces\/[A-Za-z0-9_-]+$/;
 
 // Singleton instances - Initialize or inject as per project pattern
 let chatService: ChatService;
