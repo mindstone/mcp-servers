@@ -1,0 +1,59 @@
+{
+  "name": "@mindstone/mcp-server-things",
+  "version": "0.1.0",
+  "mcpName": "io.github.mindstone/mcp-server-things",
+  "description": "MCP server for Things 3 on macOS: read your lists, projects and areas; optionally add, update, complete and trash to-dos",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-things": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "connectors/things"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/things",
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "darwin"
+  ],
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test && npm audit --omit=dev --audit-level=high",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:live": "THINGS_LIVE=1 vitest run test/live/reads.live.test.ts",
+    "test:live-writes": "THINGS_LIVE_WRITES=1 vitest run test/live/writes.live.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "sql.js": "1.15.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
+    "@types/node": "^22",
+    "@types/sql.js": "^1.4.9",
+    "@vitest/coverage-v8": "^4.1.3",
+    "msw": "^2.15.0",
+    "shx": "^0.3.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.10.0"
+}

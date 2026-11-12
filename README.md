@@ -46,6 +46,7 @@ Browse all 35 connectors with their version, auth model, and tool count at the [
 | [servicenow](connectors/servicenow/) | Manage incidents, change requests, users, and knowledge base articles in ServiceNow |
 | [slack](connectors/slack/) | Multi-workspace Slack — channels, messages, threads, reactions, users, files, bookmarks, and scheduled messages via the Slack Web API, with host-orchestrated OAuth |
 | [talentlms](connectors/talentlms/) | Manage users, courses, groups, branches, enrolments, and assessments in TalentLMS |
+| [things](connectors/things/) | Read your Things 3 lists, projects and areas on macOS, and, if you turn it on, add, change, complete and trash to-dos |
 | [vanta](connectors/vanta/) | Read and manage compliance posture in Vanta — vulnerabilities, tests, controls, evidence, resources, people, vendors, documents, and compliance summary |
 | [workday](connectors/workday/) | Query workers, profiles, and organizations in Workday HCM |
 | [zendesk](connectors/zendesk/) | Manage tickets, macros, users, and views in Zendesk Support |

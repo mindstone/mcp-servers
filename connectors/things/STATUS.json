@@ -1,0 +1,26 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 2,
+  "name": "things",
+  "package": "@mindstone/mcp-server-things",
+  "auth": {
+    "type": "none",
+    "envVars": []
+  },
+  "tools": {
+    "count": 9,
+    "domains": [
+      "lists",
+      "to-dos"
+    ]
+  },
+  "surface": "local-cli",
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-things",
+    "serverJson": "./server.json"
+  }
+}

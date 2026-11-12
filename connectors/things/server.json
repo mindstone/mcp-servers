@@ -1,0 +1,57 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-things",
+  "title": "Things 3",
+  "description": "Read Things 3 lists, projects and areas on macOS; optionally add, update and complete to-dos",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/things"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone/mcp-server-things",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "THINGS_ALLOW_WRITES",
+          "description": "Set to 1 to offer the tools that add, change and complete to-dos (off: read-only)",
+          "isRequired": false,
+          "default": "0",
+          "format": "string"
+        },
+        {
+          "name": "THINGS_ALLOW_TRASH",
+          "description": "Set to 1, with THINGS_ALLOW_WRITES, to offer moving a to-do to the Trash",
+          "isRequired": false,
+          "default": "0",
+          "format": "string"
+        },
+        {
+          "name": "THINGSDB",
+          "description": "Path to a Things main.sqlite to read instead of the one found automatically",
+          "isRequired": false,
+          "format": "filepath"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-things",
+        "provider": "rebel-oss",
+        "platforms": [
+          "darwin"
+        ]
+      }
+    }
+  }
+}
