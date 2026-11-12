@@ -11,6 +11,14 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Seven registered API tools for local discovery and 40 admitted agent, tool, knowledge and saved-Test operations, bringing the source tool count to 39 while preserving the existing 32 definitions. Paid read-only RAG retrieval and Test execution have separate tools and effect boundaries.
+- A pinned operation policy, generated request/response catalogue and complete coverage ledger with 40 admitted, 366 planned and 109 excluded operations. Ajv and ajv-formats are direct dependencies for strict, non-mutating provider-schema validation; Zod validates connector envelopes and consumed response fields.
+- Authorized multipart document creation and file replacement through the shared executor, with exact nested file operands, document MIME types, standalone containment and negotiated read-mode support. File/URL creation and attachment remain explicit caller-managed requests.
+- Independent SDK/MSW wire cases and mocked agent, webhook, knowledge, saved-Test and deletion workflows. These exercise connector behavior without live provider calls; release, host integration and live tool-selection acceptance are separate steps.
+- Reject `unevaluatedProperties` at schema nodes in the API catalogue generator and loader until a reviewed validator correction is available; preserve property names and opaque data. The keyword is absent from the 2026-11-08 provider pin.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.

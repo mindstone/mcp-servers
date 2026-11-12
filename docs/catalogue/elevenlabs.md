@@ -5,7 +5,7 @@ title: elevenlabs — mcp-servers catalogue
 
 # elevenlabs
 
-ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface.
+Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. Published 0.5.2 has 32 tools; unreleased source has 39, adding voice agents, agent tools, knowledge bases and saved tests.
 
 
 
@@ -15,7 +15,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 |-------|-------|
 | Version | 0.5.2 |
 | Auth | API key (`ELEVENLABS_API_KEY`) |
-| Tools | 32 (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries) |
+| Tools | 39 (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries, API discovery, agents, agent tools, knowledge bases, saved tests) |
 | Surface | cloud API |
 
 ## Evidence

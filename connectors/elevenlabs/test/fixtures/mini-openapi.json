@@ -1,0 +1,619 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fictional catalogue fixture",
+    "version": "1"
+  },
+  "paths": {
+    "/v1/convai/agents": {
+      "get": {
+        "operationId": "get_agents_route",
+        "summary": "List fictional agents",
+        "parameters": [
+          {
+            "name": "xi-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "a",
+                      "b"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/convai/agents/create": {
+      "post": {
+        "operationId": "create_agent_route",
+        "parameters": [
+          {
+            "name": "xi-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/convai/knowledge-base/file": {
+      "post": {
+        "operationId": "create_file_document_route",
+        "parameters": [
+          {
+            "name": "xi-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FileBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/convai/knowledge-base/{documentation_id}/update-file": {
+      "parameters": [
+        {
+          "name": "documentation_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "update_file_document_route",
+        "parameters": [
+          {
+            "name": "xi-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Empty"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Node": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "description": "Recursive open provider object."
+      },
+      "CreateBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "alpha",
+              "beta"
+            ],
+            "minLength": 3,
+            "maxLength": 8,
+            "pattern": "^[a-z]+$",
+            "example": {
+              "format": "opaque"
+            },
+            "optional": true,
+            "name": "provider-name",
+            "embed": false,
+            "max_items": 12,
+            "x-fern-enum": {
+              "alpha": {
+                "name": "Alpha"
+              }
+            },
+            "x-convai-client-override": true,
+            "x-fern-ignore": false,
+            "x-convai-soft-override-disallowed": false,
+            "x-convai-language-override": false,
+            "x-convai-runtime-override": true,
+            "x-convai-override-disallowed": false
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "active"
+            ],
+            "additionalProperties": false
+          },
+          "open": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "map": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z]+$"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "minProperties": 1
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Node"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "intersection": {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "level"
+                ]
+              }
+            ]
+          },
+          "union": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Alpha"
+              },
+              {
+                "$ref": "#/components/schemas/Beta"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "a": "#/components/schemas/Alpha",
+                "b": "#/components/schemas/Beta"
+              }
+            }
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true
+          },
+          "nullable": {
+            "type": "string",
+            "nullable": true
+          },
+          "forbidden": {
+            "type": "string",
+            "not": {
+              "enum": [
+                "bad"
+              ]
+            }
+          },
+          "literal": {
+            "type": "object",
+            "default": {
+              "format": "made-up-data-format",
+              "$ref": "#/components/schemas/NotASchemaReference",
+              "additionalProperties": {
+                "arbitrary": "data"
+              },
+              "x-invented": "data"
+            },
+            "example": {
+              "format": "made-up-data-format",
+              "$ref": "#/components/schemas/NotASchemaReference",
+              "additionalProperties": {
+                "arbitrary": "data"
+              },
+              "x-invented": "data"
+            },
+            "examples": [
+              {
+                "format": "made-up-data-format",
+                "$ref": "#/components/schemas/NotASchemaReference",
+                "additionalProperties": {
+                  "arbitrary": "data"
+                },
+                "x-invented": "data"
+              }
+            ],
+            "enum": [
+              {
+                "format": "made-up-data-format",
+                "$ref": "#/components/schemas/NotASchemaReference",
+                "additionalProperties": {
+                  "arbitrary": "data"
+                },
+                "x-invented": "data"
+              }
+            ]
+          },
+          "keywordMap": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "$ref": {
+                "type": "string"
+              },
+              "unknown_keyword": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          },
+          "falseSchema": false,
+          "formats": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "date-time": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "zoneinfo": {
+                "type": "string",
+                "format": "zoneinfo"
+              }
+            },
+            "additionalProperties": false
+          },
+          "condition": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "x",
+                  "y"
+                ]
+              },
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "x"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "x"
+              ],
+              "properties": {
+                "x": {
+                  "type": "integer"
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "y"
+              ],
+              "properties": {
+                "y": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "closedBySchema": {
+            "type": "object",
+            "properties": {
+              "fixed": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "config",
+          "map",
+          "choice",
+          "intersection",
+          "union",
+          "list"
+        ],
+        "description": "Required create fields and open body are intentional."
+      },
+      "Alpha": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "a"
+          },
+          "value": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "Beta": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "b"
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agents",
+          "next_cursor",
+          "has_more"
+        ],
+        "additionalProperties": false
+      },
+      "FileBody": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Document bytes, not audio."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notify": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "file",
+          "name"
+        ]
+      },
+      "UpdateBody": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Document bytes, not audio."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Unreachable": {
+        "type": "string",
+        "format": "unreviewed-but-unreachable"
+      }
+    }
+  }
+}

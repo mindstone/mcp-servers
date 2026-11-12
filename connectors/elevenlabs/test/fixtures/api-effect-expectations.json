@@ -1,0 +1,442 @@
+{
+  "add_tool_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "cancel_test_invocation_route": {
+    "profile": "tests",
+    "tool": "elevenlabs_run_agent_tests",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_agent_response_test_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_agent_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_file_document_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_folder_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_text_document_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_url_document_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "delete_agent_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_chat_response_test_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_knowledge_base_document": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_tool_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "duplicate_agent_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "get_agent_response_test_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_agent_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_agents_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_documentation_chunks_from_knowledge_base": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_documentation_from_knowledge_base": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_knowledge_base_content": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_knowledge_base_dependent_agents": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_knowledge_base_list_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_rag_indexes": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_test_invocation_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_tool_dependent_agents_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_tool_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_tools_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_available_llms": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_chat_response_tests_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_test_invocations_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "patch_agent_settings_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "query_agent_knowledge_base_rag_route": {
+    "profile": "query_knowledge",
+    "tool": "elevenlabs_query_knowledge",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "rag_index_status": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "refresh_url_document_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "resubmit_tests_route": {
+    "profile": "tests",
+    "tool": "elevenlabs_run_agent_tests",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "run_agent_test_suite_route": {
+    "profile": "tests",
+    "tool": "elevenlabs_run_agent_tests",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "search_knowledge_base_content_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "update_agent_response_test_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PUT"
+  },
+  "update_document_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_file_document_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_tool_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  }
+}

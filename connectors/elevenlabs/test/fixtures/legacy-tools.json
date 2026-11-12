@@ -1,0 +1,1808 @@
+[
+  {
+    "name": "add_pronunciation_dictionary",
+    "description": "Create a pronunciation dictionary from rules so TTS pronounces brand names, jargon, and acronyms correctly.\n\nWHEN TO USE:\n- A voiceover keeps mispronouncing a product or company name\n- Set up alias rules (\"Thailand\" → \"tie-land\") or IPA phoneme rules before a batch generation\n\nEXAMPLE: {\"name\": \"Brand terms\", \"rules\": [{\"string_to_replace\": \"Thailand\", \"type\": \"alias\", \"alias\": \"tie-land\"}]}\n\nRELATED TOOLS:\n- list_pronunciation_dictionaries / get_pronunciation_dictionary: manage existing dictionaries\n- archive_pronunciation_dictionary: retire a dictionary\n- generate_speech_with_timestamps: apply dictionaries via pronunciation_dictionary_locators\n\nRETURNS: id, version_id, version_rules_num of the new dictionary. Rules are immutable per version — add more by creating a new dictionary.\n\nCOST: FREE — metadata write only (no credits).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dictionary name (identification only)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description (identification only)."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "string_to_replace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The word or phrase to replace (e.g. a brand name)."
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "alias"
+                  },
+                  "alias": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Plain-text respelling used instead (e.g. \"tie-land\" for \"Thailand\")."
+                  },
+                  "case_sensitive": {
+                    "type": "boolean",
+                    "description": "Match case-sensitively. Default: true."
+                  },
+                  "word_boundaries": {
+                    "type": "boolean",
+                    "description": "Only match at word boundaries. Default: true."
+                  }
+                },
+                "required": [
+                  "string_to_replace",
+                  "type",
+                  "alias"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "string_to_replace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The word or phrase to replace."
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "phoneme"
+                  },
+                  "phoneme": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Phonemic transcription (e.g. \"/təˈmeɪtoʊ/\")."
+                  },
+                  "alphabet": {
+                    "type": "string",
+                    "enum": [
+                      "ipa",
+                      "arpabet"
+                    ],
+                    "description": "Alphabet of the phoneme string (\"ipa\" or \"arpabet\")."
+                  },
+                  "case_sensitive": {
+                    "type": "boolean",
+                    "description": "Match case-sensitively. Default: true."
+                  },
+                  "word_boundaries": {
+                    "type": "boolean",
+                    "description": "Only match at word boundaries. Default: true."
+                  }
+                },
+                "required": [
+                  "string_to_replace",
+                  "type",
+                  "phoneme",
+                  "alphabet"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "minItems": 1,
+          "description": "Pronunciation rules: alias rules (plain-text respelling) or phoneme rules (IPA)."
+        }
+      },
+      "required": [
+        "name",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "archive_pronunciation_dictionary",
+    "description": "Archive a pronunciation dictionary so it is no longer applied to generations.\n\nWHEN TO USE:\n- Retire an outdated or mistaken dictionary\n- Clean up test dictionaries\n\nEXAMPLE: {\"pronunciation_dictionary_id\": \"5xM3yVvZQKV0EfqQpLrJ\"}\n\nRELATED TOOLS:\n- list_pronunciation_dictionaries: find dictionary IDs (include_archived shows archived ones)\n- add_pronunciation_dictionary: create a replacement\n\nRETURNS: ok confirmation. Archiving hides the dictionary from use; it is reversible in the ElevenLabs dashboard.\n\nCOST: FREE — metadata write only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pronunciation_dictionary_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dictionary ID to archive."
+        }
+      },
+      "required": [
+        "pronunciation_dictionary_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "check_subscription",
+    "description": "Check ElevenLabs subscription tier and character credit usage.\n\nWHEN TO USE:\n- Before expensive generation calls (speech, music, sound effects) to confirm credits remain\n- When a tool returns quota or 403 errors — read remaining characters and next reset\n- To answer \"how much ElevenLabs credit do I have left?\"\n\nEXAMPLE: {} (no arguments)\n\nRELATED TOOLS:\n- generate_speech, generate_music, generate_sound_effect: credit-consuming generation\n- list_models: discover which models your tier can use\n\nRETURNS: tier, character_count, character_limit, characters_remaining, next_character_count_reset_unix (and ISO), status when present.\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "clone_voice",
+    "description": "Create an instant voice clone from one or more local audio samples.\n\nWHEN TO USE:\n- Clone a speaker from short audio samples the user provides\n- Add a custom voice to the account for generate_speech or speech_to_speech\n\nEXAMPLE: {\"name\": \"My Clone\", \"files\": [\"/path/to/sample.mp3\"], \"description\": \"Meeting voice\"}\n\nRELATED TOOLS:\n- delete_voice: remove a cloned voice when no longer needed (required for live-test cleanup)\n- generate_speech: synthesize speech with the new voice_id\n- list_voices: confirm the clone appears on the account\n\nRETURNS: voice_id and requires_verification flag. When connected to a host that authorizes file reads, its path permission decision applies to each files[] path. Standalone clients require each file inside MCP_WORKSPACE_PATH (or os.tmpdir()).\n\nCOST: Uses a voice slot; may consume credits depending on plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name for the cloned voice."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "One or more absolute audio file paths. When connected to a host that authorizes file reads, its path permission decision applies to each path; standalone clients require each file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional voice description stored on the account."
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Optional key/value labels for the voice."
+        },
+        "remove_background_noise": {
+          "type": "boolean",
+          "description": "When true, reduce background noise in samples. Default: false."
+        }
+      },
+      "required": [
+        "name",
+        "files"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "files",
+              "*"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "configure_elevenlabs_api_key",
+    "description": "Host-managed setup only. The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for or accept the key in chat.\n\nWHEN TO USE:\n- Only when the host supplies the key during connector setup\n\nEXAMPLE:\n- Host-managed setup supplies the key directly after the user saves it in Settings → Connectors\n\nRELATED TOOLS:\n- check_subscription: verify the key and see credits after configuring\n\nRETURNS: ok, message.\n\nCOST: FREE.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ElevenLabs API key (starts with \"sk_\")."
+        }
+      },
+      "required": [
+        "api_key"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "create_dubbing",
+    "description": "Submit an async dubbing job (v1 API). You MUST poll get_dubbing until status is dubbed, failed, or cancelled.\n\nWHEN TO USE:\n- Translate/dub existing audio or video into another language\n- Localize a short clip the user already has on disk\n\nEXAMPLE: {\"file_path\": \"/path/in/workspace/clip.mp3\", \"target_lang\": \"es\", \"name\": \"rebel-live-test-dub\"}\n\nRELATED TOOLS:\n- get_dubbing: poll job status (every ~10s; respect expected_duration_sec from this response)\n- download_dubbed_audio: fetch audio once status is dubbed\n- delete_dubbing: cleanup test jobs\n\nRETURNS: dubbing_id and expected_duration_sec. The job runs server-side — poll get_dubbing; do not assume instant completion.\n\nCOST: Dubbing credits per minute of source media.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target_lang": {
+          "type": "string",
+          "minLength": 2,
+          "description": "Target language code (e.g. es, fr, de). Required."
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Local audio/video file (multipart field file). When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Alternatively, a URL ElevenLabs fetches server-side (no local sandbox)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional job label (echoed by get_dubbing)."
+        },
+        "source_lang": {
+          "type": "string",
+          "description": "Source language code when known (auto-detect when omitted)."
+        },
+        "num_speakers": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of speakers when known."
+        },
+        "watermark": {
+          "type": "boolean",
+          "description": "Apply watermark when supported. Default: false."
+        }
+      },
+      "required": [
+        "target_lang"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "file_path"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ],
+            "when": [
+              {
+                "relativeTo": "root",
+                "selector": [
+                  "source_url"
+                ],
+                "test": "falsy"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "create_music_plan",
+    "description": "Create a composition plan for music generation.\n\nWHEN TO USE:\n- Structure a song with per-section lyrics and styles before paying for generation\n- Review or edit sections before calling generate_music_from_plan\n\nEXAMPLE: {\"prompt\": \"Acoustic folk ballad about the sea\", \"duration_seconds\": 45}\n\nRELATED TOOLS:\n- generate_music_from_plan: generate audio from the returned composition_plan\n- generate_music: faster one-shot generation without a plan\n\nRETURNS: composition_plan (sections with section_name, duration_ms, styles, lines), total_duration_seconds.\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Describe the music you want."
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 600,
+          "description": "Target duration in seconds (3-600). Default: 30."
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "create_voice_from_preview",
+    "description": "Save a voice-design preview as a permanent voice on the account.\n\nWHEN TO USE:\n- After design_voice, when the user picks a preview they want to keep\n- Promote a generated_voice_id into a reusable voice_id for generate_speech\n\nEXAMPLE: {\"voice_name\": \"rebel-live-test-stage4\", \"voice_description\": \"calm middle-aged narrator\", \"generated_voice_id\": \"abc123fromPreview\"}\n\nRELATED TOOLS:\n- design_voice: produces generated_voice_id + preview audio paths\n- delete_voice: remove test voices (use rebel-live-test-* names for cleanup)\n- generate_speech: synthesize with the new voice_id\n\nRETURNS: voice_id for the saved voice.\n\nCOST: Uses a voice slot; may consume credits depending on plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "voice_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name for the saved voice."
+        },
+        "voice_description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Voice description — should match or echo the design_voice voice_description."
+        },
+        "generated_voice_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "generated_voice_id from design_voice previews."
+        }
+      },
+      "required": [
+        "voice_name",
+        "voice_description",
+        "generated_voice_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "delete_dubbing",
+    "description": "Permanently delete a dubbing job and its outputs.\n\nWHEN TO USE:\n- Cleanup rebel-live-test-* dubbing jobs after live tests\n- Remove a failed or unwanted dub from the account\n\nEXAMPLE: {\"dubbing_id\": \"dub_abc123\"}\n\nRELATED TOOLS:\n- create_dubbing / get_dubbing / download_dubbed_audio: the dubbing lifecycle\n\nRETURNS: ok confirmation. Irreversible.\n\nCOST: FREE — no generation; permanently removes the dubbing job.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "dubbing_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dubbing job ID to delete."
+        }
+      },
+      "required": [
+        "dubbing_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "delete_voice",
+    "description": "Permanently delete a voice from the ElevenLabs account.\n\nWHEN TO USE:\n- Remove a test or temporary cloned voice (e.g. rebel-live-test-* names)\n- Free a voice slot after clone_voice\n\nEXAMPLE: {\"voice_id\": \"abc123voiceId\"}\n\nRELATED TOOLS:\n- clone_voice: creates voices that should be deleted after testing\n- list_voices: confirm the voice is gone\n\nRETURNS: ok confirmation. This action is irreversible.\n\nCOST: FREE — no generation credits; permanently removes the voice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "voice_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Voice ID to delete (from list_voices or clone_voice)."
+        }
+      },
+      "required": [
+        "voice_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "design_voice",
+    "description": "Generate voice-design previews from a text description (slow — up to ~2 minutes).\n\nWHEN TO USE:\n- Explore synthetic voice options before saving one to the account\n- Prototype a narrator tone from a short natural-language brief\n\nCOMMON MISTAKES:\n- Supplying short preview text — the API requires 100–1000 characters when text is sent; omit text to auto-generate sample lines instead\n\nEXAMPLE: {\"voice_description\": \"calm middle-aged British narrator\"}\n\nRELATED TOOLS:\n- create_voice_from_preview: save a preview's generated_voice_id as a permanent voice\n- delete_voice: remove test voices after create_voice_from_preview\n- list_voices: browse existing voices instead of designing new ones\n\nRETURNS: previews[] with generated_voice_id and preview_file_path (audio decoded to a file under MCP_WORKSPACE_PATH, or os.tmpdir() when unset — NEVER base64). Preview speech text is auto-generated unless you supply a 100+ character sample line.\n\nCOST: Uses voice-design credits per preview.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "voice_description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Natural-language voice description (e.g. \"calm middle-aged narrator\")."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 100,
+          "maxLength": 1000,
+          "description": "Optional sample line (100–1000 chars). Omit to auto-generate preview text."
+        },
+        "model_id": {
+          "type": "string",
+          "description": "Optional model override for the design endpoint."
+        },
+        "auto_generate_text": {
+          "type": "boolean",
+          "description": "Defaults to true when text is omitted; forwarded only when text is provided."
+        }
+      },
+      "required": [
+        "voice_description"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "download_dubbed_audio",
+    "description": "Download dubbed audio for a completed dubbing job.\n\nWHEN TO USE:\n- After get_dubbing reports status dubbed\n- Fetch the localized track for a target language\n\nEXAMPLE: {\"dubbing_id\": \"dub_abc123\", \"language_code\": \"es\"}\n\nRELATED TOOLS:\n- get_dubbing: confirm status is dubbed before downloading\n- delete_dubbing: cleanup after testing\n\nRETURNS: file_path and size_bytes (extension sniffed from Content-Type).\n\nCOST: FREE — download only (generation credits charged at submit).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "dubbing_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dubbing job ID."
+        },
+        "language_code": {
+          "type": "string",
+          "minLength": 2,
+          "description": "Target language code used when creating the dub (e.g. es)."
+        }
+      },
+      "required": [
+        "dubbing_id",
+        "language_code"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "forced_alignment",
+    "description": "Align a transcript to audio and return per-word timestamps.\n\nWHEN TO USE:\n- Build karaoke-style captions or precise edit markers from audio + transcript\n- Verify that spoken words match a provided script\n\nEXAMPLE: {\"file_path\": \"/path/to/clip.mp3\", \"text\": \"Hello world.\"}\n\nRELATED TOOLS:\n- transcribe_audio: generate transcript text from audio alone\n- generate_speech: create audio from text (inverse workflow)\n\nRETURNS: words[] with enveloped aligned text and start/end times, plus loss score. Input transcript text is caller-supplied and not echoed raw.\n\nCOST: Credits based on audio duration.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path to local audio. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Transcript text to align against the audio."
+        }
+      },
+      "required": [
+        "file_path",
+        "text"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "file_path"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "generate_music",
+    "description": "Generate music from a text prompt using ElevenLabs Music API.\n\nWHEN TO USE:\n- Quick music bed from a genre/mood description\n- Vocal songs when the prompt includes [Verse]/[Chorus] lyric markers (do not set force_instrumental: true)\n\nEXAMPLE: {\"prompt\": \"Upbeat jazz piano, 30 seconds\", \"duration_seconds\": 30}\n\nRELATED TOOLS:\n- create_music_plan / generate_music_from_plan: per-section lyrics and styles\n- check_subscription: confirm credits before long tracks\n\nRETURNS: file_path, size_bytes, duration_seconds, format; warnings[] when force_instrumental conflicts with lyric markers.\n\nCOST: Credits based on duration (3–600 seconds).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Describe the music: genre, mood, instruments, style. Include `[Verse]`/`[Chorus]`/`[Bridge]` blocks with lyrics if you want a vocal song."
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 600,
+          "description": "Duration in seconds (3-600). Default: 30."
+        },
+        "force_instrumental": {
+          "type": "boolean",
+          "description": "Force instrumental-only output (no vocals). Default: false. WARNING: setting this to true overrides any lyrics in the prompt — do not enable for vocal songs."
+        },
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "mp3_44100_128",
+            "mp3_44100_192",
+            "pcm_16000",
+            "pcm_22050",
+            "pcm_24000",
+            "pcm_44100",
+            "ulaw_8000"
+          ],
+          "description": "Audio output format. Default: mp3_44100_128."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Random seed for reproducibility."
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "generate_music_from_plan",
+    "description": "Generate music from a composition plan.\n\nWHEN TO USE:\n- After create_music_plan when you want per-section control over lyrics and styles\n- When generate_music's single prompt is not precise enough\n\nEXAMPLE: pass the composition_plan object from create_music_plan verbatim\n\nRELATED TOOLS:\n- create_music_plan: produces the plan shape this tool expects\n- check_subscription: confirm credits before generation\n\nRETURNS: file_path, size_bytes, duration_seconds, format.\n\nCOST: Credits based on total plan duration (3s–10min).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "composition_plan": {
+          "description": "Composition plan object from create_music_plan. Wrapped display text and raw manually edited text are both accepted; the plan is unwrapped and strictly validated before generation."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Random seed for reproducibility."
+        },
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "mp3_44100_128",
+            "mp3_44100_192",
+            "pcm_16000",
+            "pcm_22050",
+            "pcm_24000",
+            "pcm_44100",
+            "ulaw_8000"
+          ],
+          "description": "Audio output format. Default: mp3_44100_128."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "generate_sound_effect",
+    "description": "Generate sound effects from a text description.\n\nWHEN TO USE:\n- Short ambient or UI sounds from a natural-language prompt\n- Effects for video, games, or presentations\n\nEXAMPLE: {\"prompt\": \"Soft rain on a tin roof\", \"duration_seconds\": 3}\n\nRELATED TOOLS:\n- check_subscription: confirm credits before generation\n\nRETURNS: file_path, size_bytes, duration_seconds.\n\nCOST: Credits based on duration (0.5–22 seconds).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Describe the sound effect. Be specific about characteristics."
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 22,
+          "description": "Duration in seconds (0.5-22). Auto if omitted."
+        },
+        "prompt_influence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How closely to follow the prompt (0-1). Default: 0.3."
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "generate_speech",
+    "description": "Generate spoken audio from text using ElevenLabs text-to-speech.\n\nWHEN TO USE:\n- Turn user text into a playable speech file\n- Narration, voiceovers, or reading content aloud\n\nEXAMPLE: {\"text\": \"Hello world.\", \"voice_id\": \"21m00Tcm4TlvDq8ikWAM\", \"model_id\": \"eleven_v3\"}\n\nRELATED TOOLS:\n- list_voices / search_shared_voices / get_voice: find voice_id\n- list_models: pick model_id (default eleven_v3)\n- check_subscription: confirm credits before long text\n\nRETURNS: file_path, size_bytes, voice_id, model, format. API-resolved voice names are enveloped.\n\nCOST: ~1 credit per 100 characters.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Text to speak. Maximum ~5000 characters per request."
+        },
+        "voice_id": {
+          "type": "string",
+          "description": "Direct voice ID (from list_voices). Takes priority over voice_name. If both voice params are omitted, an arbitrary account default is used and its language may not match the text."
+        },
+        "voice_name": {
+          "type": "string",
+          "description": "Voice name for fuzzy search (e.g., \"Bella\", \"Sarah\"). Use list_voices first to find a name that exists on the account. If both voice params are omitted, an arbitrary account default is used and its language may not match the text."
+        },
+        "model_id": {
+          "type": "string",
+          "enum": [
+            "eleven_v3",
+            "eleven_multilingual_v2",
+            "eleven_flash_v2_5",
+            "eleven_turbo_v2_5",
+            "eleven_monolingual_v1"
+          ],
+          "description": "TTS model. Default: eleven_v3."
+        },
+        "stability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Voice stability 0-1. Default: 0.5."
+        },
+        "similarity_boost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Voice similarity 0-1. Default: 0.75."
+        },
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "mp3_44100_128",
+            "mp3_44100_192",
+            "pcm_16000",
+            "pcm_22050",
+            "pcm_24000",
+            "pcm_44100"
+          ],
+          "description": "Audio output format. Default: mp3_44100_128."
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "Best-effort deterministic sampling seed (0-4294967295). Omit for random."
+        },
+        "pronunciation_dictionary_locators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pronunciation_dictionary_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Dictionary ID from list_pronunciation_dictionaries."
+              },
+              "version_id": {
+                "type": "string",
+                "description": "Dictionary version ID. Defaults to the latest version."
+              }
+            },
+            "required": [
+              "pronunciation_dictionary_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 3,
+          "description": "Up to 3 pronunciation dictionaries applied in order (brand names, jargon)."
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "generate_speech_with_timestamps",
+    "description": "Generate spoken audio from text WITH character-level timing — for subtitles, captions, and karaoke-style highlighting.\n\nWHEN TO USE:\n- Produce an .srt subtitle file for a marketing or social video voiceover\n- Sync on-screen text highlights to generated narration\n\nEXAMPLE: {\"text\": \"Welcome to the launch.\", \"voice_id\": \"21m00Tcm4TlvDq8ikWAM\"}\n\nRELATED TOOLS:\n- generate_speech: plain audio without timing (slightly simpler output)\n- forced_alignment: align audio to an EXISTING transcript instead\n- list_voices / search_shared_voices: find voice_id\n\nRETURNS: file_path (audio), srt_path (SubRip subtitles built from word timing), alignment_path (raw character timing JSON), plus duration/cue counts. API-resolved voice names are enveloped.\n\nCOST: ~1 credit per 100 characters.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Text to speak. Maximum ~5000 characters per request."
+        },
+        "voice_id": {
+          "type": "string",
+          "description": "Direct voice ID (from list_voices). Takes priority over voice_name. If both voice params are omitted, an arbitrary account default is used and its language may not match the text."
+        },
+        "voice_name": {
+          "type": "string",
+          "description": "Voice name for fuzzy search (e.g., \"Bella\", \"Sarah\"). Use list_voices first to find a name that exists on the account. If both voice params are omitted, an arbitrary account default is used and its language may not match the text."
+        },
+        "model_id": {
+          "type": "string",
+          "enum": [
+            "eleven_v3",
+            "eleven_multilingual_v2",
+            "eleven_flash_v2_5",
+            "eleven_turbo_v2_5",
+            "eleven_monolingual_v1"
+          ],
+          "description": "TTS model. Default: eleven_v3."
+        },
+        "stability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Voice stability 0-1. Default: 0.5."
+        },
+        "similarity_boost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Voice similarity 0-1. Default: 0.75."
+        },
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "mp3_44100_128",
+            "mp3_44100_192",
+            "pcm_16000",
+            "pcm_22050",
+            "pcm_24000",
+            "pcm_44100"
+          ],
+          "description": "Audio output format. Default: mp3_44100_128."
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "Best-effort deterministic sampling seed (0-4294967295). Omit for random."
+        },
+        "pronunciation_dictionary_locators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pronunciation_dictionary_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Dictionary ID from list_pronunciation_dictionaries."
+              },
+              "version_id": {
+                "type": "string",
+                "description": "Dictionary version ID. Defaults to the latest version."
+              }
+            },
+            "required": [
+              "pronunciation_dictionary_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 3,
+          "description": "Up to 3 pronunciation dictionaries applied in order (brand names, jargon)."
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_dubbing",
+    "description": "Poll dubbing job status. Call repeatedly after create_dubbing until status is dubbed, failed, or cancelled.\n\nWHEN TO USE:\n- After create_dubbing — poll every ~10s (respect expected_duration_sec)\n- Check whether a dub failed before retrying\n\nEXAMPLE: {\"dubbing_id\": \"dub_abc123\"}\n\nRELATED TOOLS:\n- create_dubbing: submit the job\n- download_dubbed_audio: fetch audio when status is dubbed\n- delete_dubbing: remove test jobs\n\nRETURNS: enveloped status, name, target_languages, and error detail (all API-authored); is_terminal and next_step classify the lifecycle.\n\nCOST: FREE — status read only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "dubbing_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dubbing job ID from create_dubbing."
+        }
+      },
+      "required": [
+        "dubbing_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_history_item_audio",
+    "description": "Re-download the audio of a past generation by history_item_id.\n\nWHEN TO USE:\n- After list_history — fetch the audio file of an earlier generation again\n- Recover audio that was generated in a previous session\n\nEXAMPLE: {\"history_item_id\": \"ja9xsmfGhxYcymxGcOGB\"}\n\nRELATED TOOLS:\n- list_history: find history_item_id values\n\nRETURNS: file_path and size_bytes (extension sniffed from Content-Type).\n\nCOST: FREE — download only (credits were charged at generation time).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "history_item_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "History item ID from list_history."
+        }
+      },
+      "required": [
+        "history_item_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_pronunciation_dictionary",
+    "description": "Get one pronunciation dictionary's metadata and current rules.\n\nWHEN TO USE:\n- Inspect the rules of a dictionary before adding more or attaching it to a generation\n- Confirm a brand name is covered\n\nEXAMPLE: {\"pronunciation_dictionary_id\": \"5xM3yVvZQKV0EfqQpLrJ\"}\n\nRELATED TOOLS:\n- list_pronunciation_dictionaries: find dictionary IDs\n- add_pronunciation_dictionary: create a new dictionary\n\nRETURNS: id, enveloped name/description, version info, and rules[] (enveloped rule strings).\n\nCOST: FREE — read only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pronunciation_dictionary_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dictionary ID from list_pronunciation_dictionaries."
+        }
+      },
+      "required": [
+        "pronunciation_dictionary_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_usage_stats",
+    "description": "Report ElevenLabs credit usage over time, grouped by product (speech, music, dubbing, etc.).\n\nWHEN TO USE:\n- Answer \"how many ElevenLabs credits did we use this week/month?\"\n- Break down spend by product type, model, voice, or user before proposing large batch jobs\n\nEXAMPLE: {\"days_back\": 30, \"interval\": \"day\", \"group_by\": \"product_type\"}\n\nRELATED TOOLS:\n- check_subscription: current-period character balance and next reset (simpler point-in-time answer)\n- list_history: browse individual past generations instead of aggregate spend\n\nRETURNS: rows[] of column-keyed records plus totals_by_group and total_credits_used (the credits-denominated column is identified ONLY via the API's column_units, e.g. total_usage; external strings are enveloped). Fails closed with a structured error when no column — or several — is explicitly credits-denominated, or when rows are malformed. Uses the workspace analytics API (POST /v1/workspace/analytics/query/usage-by-product-over-time); requires an API key with usage-metrics permission.\n\nCOST: FREE — analytics read only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "days_back": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "description": "How many days of history to include, ending now. Default: 30."
+        },
+        "interval": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ],
+          "description": "Bucket size for the time series. Default: day."
+        },
+        "group_by": {
+          "type": "string",
+          "enum": [
+            "product_type",
+            "model",
+            "voice_id",
+            "user_id"
+          ],
+          "description": "Dimension to break usage down by. Default: product_type."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_voice",
+    "description": "Get full details for one voice by voice_id.\n\nWHEN TO USE:\n- Inspect labels, preview URL, and description before generate_speech\n- Verify a voice_id still exists after a generation error\n- Compare a voice from list_voices or search_shared_voices in detail\n\nEXAMPLE: {\"voice_id\": \"21m00Tcm4TlvDq8ikWAM\"}\n\nRELATED TOOLS:\n- list_voices: browse account voices when you do not have the voice_id yet\n- search_shared_voices: find public-library voice_id values\n- generate_speech: consumes voice_id\n\nRETURNS: voice object with enveloped name, description, and label values.\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "voice_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Voice ID from list_voices or search_shared_voices."
+        }
+      },
+      "required": [
+        "voice_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "isolate_audio",
+    "description": "Remove background noise from an audio file (audio isolation).\n\nWHEN TO USE:\n- Clean up meeting recordings or voice memos with background noise\n- Prepare a cleaner clip before transcription or voice cloning\n- Source audio is at least ~4.6 seconds long (shorter clips fail upstream)\n\nCOMMON MISTAKES:\n- Clips under ~4.6 seconds — the API rejects them; trim/merge or pick a longer sample first\n\nEXAMPLE: {\"audio_path\": \"/path/to/noisy.mp3\"}\n\nRELATED TOOLS:\n- transcribe_audio: transcribe the isolated clip\n- speech_to_speech: apply a different voice after isolation\n- clone_voice: clone from a cleaner sample\n\nRETURNS: file_path and size_bytes for the isolated audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).\n\nCOST: Credits based on audio duration.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "audio_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path to local audio. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        }
+      },
+      "required": [
+        "audio_path"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "audio_path"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "list_history",
+    "description": "List previously generated audio items (speech, sound effects, etc.) on this account.\n\nWHEN TO USE:\n- Find a past generation to re-use (\"that voiceover from last week\") instead of regenerating\n- Review what text/voice/model a previous generation used\n\nEXAMPLE: {\"page_size\": 10}\n\nRELATED TOOLS:\n- get_history_item_audio: re-download the audio of an item from this list\n- get_usage_stats: aggregate credit spend instead of individual items\n- generate_speech: create a new generation\n\nRETURNS: items[] with history_item_id, date, model, source, enveloped text and voice_name; plus has_more and last_history_item_id for pagination.\n\nCOST: FREE — read only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Items per page (1-1000). Default: 25."
+        },
+        "start_after_history_item_id": {
+          "type": "string",
+          "description": "Cursor from a previous response (last_history_item_id) to fetch the next page."
+        },
+        "voice_id": {
+          "type": "string",
+          "description": "Only items generated with this voice_id."
+        },
+        "search": {
+          "type": "string",
+          "description": "Case-insensitive substring match against the generated text."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_models",
+    "description": "List ElevenLabs models with languages and capability flags.\n\nWHEN TO USE:\n- Pick a TTS model_id for generate_speech (e.g. eleven_v3, eleven_multilingual_v2)\n- Verify a model supports the language or capability you need before calling generation tools\n- Discover model IDs after an invalid model_id error\n\nEXAMPLE: {} (no arguments)\n\nRELATED TOOLS:\n- generate_speech: consumes a model_id from this list\n- check_subscription: confirm credits before generation\n\nRETURNS: models[] with model_id (raw round-trip handle for generate_speech), enveloped name, languages[] with enveloped language_id/name, and capability booleans (TTS, voice conversion, finetuning).\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_pronunciation_dictionaries",
+    "description": "List pronunciation dictionaries on this account (brand names, jargon, acronyms the TTS voice should pronounce a specific way).\n\nWHEN TO USE:\n- Discover existing pronunciation_dictionary_id values before adding rules or attaching to speech\n- Check whether a dictionary for a brand or product already exists\n\nEXAMPLE: {\"page_size\": 20}\n\nRELATED TOOLS:\n- get_pronunciation_dictionary: inspect one dictionary's rules\n- add_pronunciation_dictionary: create a new one\n- generate_speech_with_timestamps / generate_speech: generation tools dictionaries improve\n\nRETURNS: dictionaries[] with id, enveloped name/description, version info, archived flag; plus next_cursor for pagination.\n\nCOST: FREE — read only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Dictionaries per page (1-100). Default: 30."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Pagination cursor from a previous response (next_cursor)."
+        },
+        "include_archived": {
+          "type": "boolean",
+          "description": "Include archived dictionaries. Default: true."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_voices",
+    "description": "Search and browse voices on your ElevenLabs account.\n\nWHEN TO USE:\n- Find voice_id values before generate_speech\n- Filter by category (premade, cloned, generated, professional)\n- Recover from VOICE_NOT_FOUND by listing what exists on the account\n\nEXAMPLE: {\"search\": \"Rachel\", \"page_size\": 5}\n\nRELATED TOOLS:\n- get_voice: full detail for one voice_id from this list\n- search_shared_voices: browse the public voice library (not limited to your account)\n- generate_speech: consumes voice_id from results\n\nRETURNS: voices[] (voice_id, enveloped name/description/labels), count, has_more.\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "search": {
+          "type": "string",
+          "description": "Search query to filter voices by name."
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "premade",
+            "cloned",
+            "generated",
+            "professional"
+          ],
+          "description": "Filter by voice category."
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Number of results (1-100). Default: 20."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "search_shared_voices",
+    "description": "Search the public ElevenLabs shared voice library.\n\nWHEN TO USE:\n- Discover voices beyond those on the user's account\n- Filter by language, gender, age, or category before cloning or TTS\n- Find a voice_id when list_voices returns no match\n\nEXAMPLE: {\"search\": \"british narrator\", \"language\": \"en\", \"page_size\": 10}\n\nRELATED TOOLS:\n- list_voices: voices already on the account (faster for owned voices)\n- get_voice: full detail for a voice_id from results\n- generate_speech: may use voice_id if the voice is accessible to the account\n\nRETURNS: voices[] with enveloped name, description, accent, and label text (third-party authored).\n\nCOST: FREE — no credits consumed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "search": {
+          "type": "string",
+          "description": "Free-text search across shared voice names and descriptions."
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "professional",
+            "famous",
+            "high_quality"
+          ],
+          "description": "Filter by shared-voice category."
+        },
+        "gender": {
+          "type": "string",
+          "description": "Filter by gender (e.g. male, female)."
+        },
+        "age": {
+          "type": "string",
+          "description": "Filter by age bracket (e.g. young, middle_aged)."
+        },
+        "accent": {
+          "type": "string",
+          "description": "Filter by accent (e.g. british, american)."
+        },
+        "language": {
+          "type": "string",
+          "description": "Filter by language code (e.g. en, es)."
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Results per page (1-100). Default: 20."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "speech_to_speech",
+    "description": "Convert an audio clip to sound like a different voice (voice conversion).\n\nWHEN TO USE:\n- Change the speaker voice of an existing recording while preserving timing\n- Apply a premade or cloned voice_id to source audio the user provides as a file\n\nEXAMPLE: {\"audio_path\": \"/path/to/source.mp3\", \"voice_id\": \"21m00Tcm4TlvDq8ikWAM\"}\n\nRELATED TOOLS:\n- list_voices / get_voice: resolve voice_id\n- generate_speech: synthesize new speech from text instead of converting audio\n- check_subscription: confirm credits before conversion\n\nRETURNS: file_path and size_bytes for the converted audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).\n\nCOST: Credits based on source audio duration.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "audio_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path to local source audio. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        },
+        "voice_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target voice ID from list_voices or search_shared_voices."
+        },
+        "model_id": {
+          "type": "string",
+          "description": "STS model ID. Omit to use the API default."
+        },
+        "remove_background_noise": {
+          "type": "boolean",
+          "description": "When true, reduce background noise during conversion. Default: false."
+        },
+        "voice_settings": {
+          "type": "object",
+          "properties": {
+            "stability": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "similarity_boost": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false,
+          "description": "Optional voice settings JSON object (stability, similarity_boost)."
+        }
+      },
+      "required": [
+        "audio_path",
+        "voice_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "audio_path"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "text_to_dialogue",
+    "description": "Generate multi-voice dialogue audio from a script with one voice per line.\n\nWHEN TO USE:\n- Produce a conversation or script with different speakers\n- Podcast-style back-and-forth with distinct voices per line\n\nEXAMPLE: {\"inputs\": [{\"text\": \"Hello there.\", \"voice_id\": \"21m00Tcm4TlvDq8ikWAM\"}, {\"text\": \"Hi!\", \"voice_id\": \"pNInz6obpgDQGcFmaJgB\"}], \"model_id\": \"eleven_v3\"}\n\nRELATED TOOLS:\n- list_voices: pick voice_id values for each speaker\n- generate_speech: single-voice TTS when you only need one narrator\n- check_subscription: confirm credits before long scripts\n\nRETURNS: file_path and size_bytes for the combined dialogue audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).\n\nCOST: ~1 credit per 100 characters across all lines.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Line of dialogue to speak."
+              },
+              "voice_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Voice ID for this line (from list_voices)."
+              }
+            },
+            "required": [
+              "text",
+              "voice_id"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "Ordered dialogue lines, each with text and voice_id."
+        },
+        "model_id": {
+          "type": "string",
+          "enum": [
+            "eleven_v3",
+            "eleven_multilingual_v2",
+            "eleven_flash_v2_5",
+            "eleven_turbo_v2_5"
+          ],
+          "description": "TTS model. Default: eleven_v3."
+        },
+        "language_code": {
+          "type": "string",
+          "description": "ISO 639-1 language code (e.g. en, es). Optional hint for pronunciation."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Optional seed for reproducible generation."
+        }
+      },
+      "required": [
+        "inputs"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "transcribe_audio",
+    "description": "Transcribe speech from a local audio file to text, with optional speaker diarization and word-level timestamps.\n\nWHEN TO USE:\n- Convert meeting recordings or voice memos to text\n- Extract quotes from audio the user provides as a file path\n- Transcribe a multi-speaker meeting and tell who said what (set diarize: true)\n\nEXAMPLE: {\"file_path\": \"/path/to/recording.mp3\", \"language_code\": \"en\", \"diarize\": true}\n\nRELATED TOOLS:\n- generate_speech: the inverse operation (text to audio)\n- forced_alignment: align a known transcript to audio instead of transcribing\n\nRETURNS: enveloped text, word_count, language (caller-supplied code echoed as-is; an API-detected code is enveloped as untrusted content). With diarize, also utterances[] (speaker_id, start/end seconds, enveloped text) and speaker_count. With include_word_timestamps, also words[] (enveloped text, start/end, speaker_id when diarized). When connected to a host that authorizes file reads, its path permission decision applies. Standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir()).\n\nCOST: Credits based on audio duration.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path to local audio file to transcribe. When connected to a host that authorizes file reads, its path permission decision applies; standalone clients require the file inside MCP_WORKSPACE_PATH (or os.tmpdir())."
+        },
+        "language_code": {
+          "type": "string",
+          "description": "Language code (e.g., \"en\", \"es\", \"fr\"). Auto-detected if omitted."
+        },
+        "model_id": {
+          "type": "string",
+          "enum": [
+            "scribe_v1",
+            "scribe_v2"
+          ],
+          "description": "STT model. Default: scribe_v1."
+        },
+        "tag_audio_events": {
+          "type": "boolean",
+          "description": "When true, include non-speech events like \"(laughter)\" in the transcript. Default: false."
+        },
+        "diarize": {
+          "type": "boolean",
+          "description": "When true, annotate which speaker is talking (adds utterances[] to the result). Default: false."
+        },
+        "num_speakers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "description": "Maximum number of speakers (1-32) when known. Only valid with diarize: true (rejected otherwise)."
+        },
+        "diarization_threshold": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 0.4,
+          "description": "Speaker-similarity threshold (0.1-0.4); higher predicts fewer distinct speakers. Only valid with diarize: true and no num_speakers (rejected otherwise)."
+        },
+        "timestamps_granularity": {
+          "type": "string",
+          "enum": [
+            "word",
+            "character",
+            "none"
+          ],
+          "description": "Timestamp granularity in the API response. Default: word."
+        },
+        "include_word_timestamps": {
+          "type": "boolean",
+          "description": "When true, include the words[] array with per-word start/end times in the result. Default: false."
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "files/readInputs": {
+        "version": 1,
+        "inputs": [
+          {
+            "selector": [
+              "file_path"
+            ],
+            "base": "connectorCwd",
+            "expandTilde": true,
+            "nonLocalPrefixes": [
+              "http://",
+              "httP://",
+              "htTp://",
+              "htTP://",
+              "hTtp://",
+              "hTtP://",
+              "hTTp://",
+              "hTTP://",
+              "Http://",
+              "HttP://",
+              "HtTp://",
+              "HtTP://",
+              "HTtp://",
+              "HTtP://",
+              "HTTp://",
+              "HTTP://",
+              "https://",
+              "httpS://",
+              "httPs://",
+              "httPS://",
+              "htTps://",
+              "htTpS://",
+              "htTPs://",
+              "htTPS://",
+              "hTtps://",
+              "hTtpS://",
+              "hTtPs://",
+              "hTtPS://",
+              "hTTps://",
+              "hTTpS://",
+              "hTTPs://",
+              "hTTPS://",
+              "Https://",
+              "HttpS://",
+              "HttPs://",
+              "HttPS://",
+              "HtTps://",
+              "HtTpS://",
+              "HtTPs://",
+              "HtTPS://",
+              "HTtps://",
+              "HTtpS://",
+              "HTtPs://",
+              "HTtPS://",
+              "HTTps://",
+              "HTTpS://",
+              "HTTPs://",
+              "HTTPS://"
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

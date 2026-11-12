@@ -16,7 +16,7 @@ Browse all 35 connectors with their version, auth model, and tool count at the [
 |-----------|-------------|
 | [apple-shortcuts](connectors/apple-shortcuts/) | Run and list Apple Shortcuts on macOS via the `shortcuts` CLI |
 | [browser-automation](connectors/browser-automation/) | Headless browser control via accessibility snapshots — navigate, fill forms, click, and screenshot pages via the agent-browser CLI |
-| [elevenlabs](connectors/elevenlabs/) | Generate speech, music, and sound effects, browse voices, and transcribe audio via the ElevenLabs API |
+| [elevenlabs](connectors/elevenlabs/) | Speech, music, sound effects, voices, transcription and audio processing; unreleased source adds voice agents, agent tools, knowledge bases and saved tests |
 | [email-imap](connectors/email-imap/) | Read, search, send, and manage emails through IMAP and SMTP |
 | [fathom](connectors/fathom/) | List and search meetings, view details, read transcripts, and manage teams via Fathom AI |
 | [freshdesk](connectors/freshdesk/) | Manage helpdesk tickets, search support requests, reply to customers, and add internal notes |

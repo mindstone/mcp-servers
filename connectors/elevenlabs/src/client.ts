@@ -33,6 +33,7 @@ export async function elevenLabsFetch(
   apiKey: string,
   urlPath: string,
   options: ElevenLabsFetchOptions = {},
+  logLabel?: string,
 ): Promise<Response> {
   if (!apiKey || apiKey.trim().length === 0) {
     throw new ElevenLabsError(
@@ -58,7 +59,9 @@ export async function elevenLabsFetch(
     headers['Content-Type'] = 'application/json';
   }
 
-  console.error(`[ElevenLabs API] ${fetchOptions.method || 'GET'} ${url}`);
+  console.error(logLabel === undefined
+    ? `[ElevenLabs API] ${fetchOptions.method || 'GET'} ${url}`
+    : `[ElevenLabs API] ${logLabel}`);
 
   let response: Response;
 
@@ -78,6 +81,8 @@ export async function elevenLabsFetch(
     }
     throw error;
   }
+
+  if (logLabel !== undefined) console.error(`[ElevenLabs API] ${logLabel} HTTP ${response.status}`);
 
   // Handle rate limiting
   if (response.status === 429) {

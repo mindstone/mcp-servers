@@ -17,6 +17,13 @@ const EXPECTED_TOOL_NAMES = [
   'delete_voice',
   'design_voice',
   'download_dubbed_audio',
+  'elevenlabs_change_resource',
+  'elevenlabs_create_resource',
+  'elevenlabs_delete_resource',
+  'elevenlabs_discover_api',
+  'elevenlabs_query_knowledge',
+  'elevenlabs_read_resource',
+  'elevenlabs_run_agent_tests',
   'forced_alignment',
   'generate_music',
   'generate_music_from_plan',
@@ -39,8 +46,8 @@ const EXPECTED_TOOL_NAMES = [
   'transcribe_audio',
 ].sort();
 
-/** Complete D-ANNOTATIONS table for all 32 tools. */
-const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean }> = {
+/** Complete D-ANNOTATIONS table for all 39 tools. */
+const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint?: boolean; openWorldHint?: boolean }> = {
   add_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
   archive_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
   check_subscription: { readOnlyHint: true, destructiveHint: false },
@@ -53,6 +60,13 @@ const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveH
   delete_voice: { readOnlyHint: false, destructiveHint: true },
   design_voice: { readOnlyHint: false, destructiveHint: false },
   download_dubbed_audio: { readOnlyHint: true, destructiveHint: false },
+  elevenlabs_change_resource: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  elevenlabs_create_resource: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  elevenlabs_delete_resource: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  elevenlabs_discover_api: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  elevenlabs_query_knowledge: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  elevenlabs_read_resource: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  elevenlabs_run_agent_tests: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   forced_alignment: { readOnlyHint: true, destructiveHint: false },
   generate_music: { readOnlyHint: false, destructiveHint: false },
   generate_music_from_plan: { readOnlyHint: false, destructiveHint: false },
@@ -86,7 +100,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 32 tools with correct names', async () => {
+  it('registers exactly 39 tools with correct names', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -99,7 +113,7 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(32);
+    expect(toolsResult.tools).toHaveLength(39);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -126,6 +140,7 @@ describe('Smoke test — tool registration', () => {
       expect(expected, `Missing EXPECTED_ANNOTATIONS entry for ${tool.name}`).toBeDefined();
       expect(tool.annotations!.readOnlyHint, `${tool.name} readOnlyHint`).toBe(expected.readOnlyHint);
       expect(tool.annotations!.destructiveHint, `${tool.name} destructiveHint`).toBe(expected.destructiveHint);
+      if (tool.name.startsWith('elevenlabs_')) expect(tool.annotations).toStrictEqual(expected);
     }
   });
 
@@ -151,7 +166,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 32 tools from built dist/index.js', async () => {
+  it('lists 39 tools with correct names from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -167,7 +182,8 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(32);
+      expect(toolsResult.tools).toHaveLength(39);
+      expect(toolsResult.tools.map(tool => tool.name).sort()).toEqual(EXPECTED_TOOL_NAMES);
     } finally {
       await client.close();
     }
