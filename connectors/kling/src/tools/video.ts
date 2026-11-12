@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
-import { withErrorHandling } from '../utils.js';
+import { pathSegment, withErrorHandling } from '../utils.js';
 import {
   TASK_TYPE_PATHS,
   taskCreatedResponseSchema,
@@ -285,7 +285,7 @@ export function registerVideoTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';
       // Accept IDs echoed back from this connector's own enveloped output.
-      const taskId = unwrapUntrusted(args.task_id);
+      const taskId = pathSegment(unwrapUntrusted(args.task_id));
 
       let result: TaskStatusResponse;
       try {

@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 
+- `check_kling_task` now sends the task ID as one encoded path segment and refuses `.` and `..`, so an ID can only ever reach its own task's status.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ### Changed

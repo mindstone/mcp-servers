@@ -219,5 +219,44 @@ describe('Napkin generation tools', () => {
       expect(result.isError).toBe(true);
       expect(requestMade).toBe(false);
     });
+
+    it('sends a request_id as one encoded path segment', async () => {
+      const urls: string[] = [];
+      mswServer.use(
+        http.all('https://api.napkin.ai/*', ({ request }) => {
+          urls.push(request.url);
+          return HttpResponse.json(makePendingStatus());
+        }),
+      );
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'a/../../b?c=1#d',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(urls).toEqual([`${BASE}/visual/a%2F..%2F..%2Fb%3Fc%3D1%23d/status`]);
+    });
+
+    it.each(['.', '..'])('refuses request_id %j without sending a request', async (requestId) => {
+      let requestMade = false;
+      mswServer.use(
+        http.all('https://api.napkin.ai/*', () => {
+          requestMade = true;
+          return HttpResponse.json(makePendingStatus());
+        }),
+      );
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', { request_id: requestId });
+
+      expect(result.isError).toBe(true);
+      expect((result.json as { code: string }).code).toBe('INVALID_ARGUMENTS');
+      expect(requestMade).toBe(false);
+    });
   });
 });

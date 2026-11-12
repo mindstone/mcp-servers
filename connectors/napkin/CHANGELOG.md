@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 
+- `napkin_check_status` now sends the request ID as one encoded path segment and refuses `.` and `..`, so an ID can only ever reach its own request's status.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ## [0.4.1] - 2026-08-10

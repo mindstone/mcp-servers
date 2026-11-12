@@ -263,6 +263,56 @@ describe('Kling video tools', () => {
       });
       expect(result.isError).toBe(true);
     });
+
+    it('sends a task_id as one encoded path segment, on the legacy fallback too', async () => {
+      const urls: string[] = [];
+      mswServer.use(
+        http.all('https://api-singapore.klingai.com/*', ({ request }) => {
+          urls.push(request.url);
+          if (request.url.includes('/text2video/')) {
+            return HttpResponse.json({ code: 1201, message: 'not found' }, { status: 404 });
+          }
+          return HttpResponse.json({
+            code: 0,
+            message: 'success',
+            data: { task_id: 't', task_status: 'processing' },
+          });
+        }),
+      );
+      testClient = await createTestClient({
+        env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('check_kling_task', {
+        task_id: 'a/../../b?c=1#d',
+        task_type: 'text2video',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(urls).toEqual([
+        'https://api-singapore.klingai.com/v1/videos/text2video/a%2F..%2F..%2Fb%3Fc%3D1%23d',
+        'https://api-singapore.klingai.com/v1/videos/image2video/a%2F..%2F..%2Fb%3Fc%3D1%23d',
+      ]);
+    });
+
+    it.each(['.', '..'])('refuses task_id %j without sending a request', async (taskId) => {
+      let requestMade = false;
+      mswServer.use(
+        http.all('https://api-singapore.klingai.com/*', () => {
+          requestMade = true;
+          return HttpResponse.json({ code: 0, message: 'success', data: {} });
+        }),
+      );
+      testClient = await createTestClient({
+        env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('check_kling_task', { task_id: taskId });
+
+      expect(result.isError).toBe(true);
+      expect((result.json as { code: string }).code).toBe('INVALID_ARGUMENTS');
+      expect(requestMade).toBe(false);
+    });
   });
 });
 
