@@ -22,6 +22,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - Keep task and voice IDs inside their own request path segment, and refuse `.` and `..`, so a crafted ID cannot point a status check, cancel or delete at another endpoint.
+- Files the connector saves (downloaded generated media) are now created readable only by their owner, including a file replaced with `overwrite`.
 
 ## [0.4.2] - 2026-11-02
 

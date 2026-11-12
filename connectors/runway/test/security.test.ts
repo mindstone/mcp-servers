@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, onTestFinished } from 'vitest';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -158,7 +158,24 @@ describe('Runway download_runway_output sandbox (VAL-RUNWAY-101..112)', () => {
     expect(calls.length).toBe(1);
   });
 
-  // ── VAL-RUNWAY-102 ────────────────────────────────────────────────────
+  it.skipIf(process.platform === 'win32')('VAL-RUNWAY-101 — a new download is created readable only by its owner', async () => {
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const { handler } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    const previousUmask = process.umask(0o022);
+    // Restored even if the test times out.
+    onTestFinished(() => {
+      process.umask(previousUmask);
+    });
+    testClient = await createTestClient({
+      env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', RUNWAY_DOWNLOAD_ROOT: downloadRoot },
+    });
+    const result = await testClient.callTool('download_runway_output', { url: REMOTE_URL, output_path: outputPath });
+    expect(result.isError).toBeFalsy();
+    expect(fs.statSync(outputPath).mode & 0o777).toBe(0o600);
+  });
+
+  // ── VAL-RUNWAY-102────────────────────────────────────────────────────
   it('VAL-RUNWAY-102 — default download root is ~/Downloads/runway-mcp when env unset (positive)', async () => {
     // Stub HOME so os.homedir() points at a tmp dir we control. The default
     // download root is then <stubbed-home>/Downloads/runway-mcp.
@@ -569,6 +586,31 @@ describe('Runway download_runway_output sandbox (VAL-RUNWAY-101..112)', () => {
       expect(fs.readFileSync(outputPath).equals(REPLACEMENT_BODY)).toBe(true);
       expect(fs.readdirSync(downloadRoot)).toEqual([longName]);
     });
+  });
+
+  it.skipIf(process.platform === 'win32')('VAL-RUNWAY-110 — an overwritten download ends up readable only by its owner', async () => {
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    fs.writeFileSync(outputPath, 'existing');
+    fs.chmodSync(outputPath, 0o644);
+
+    const { handler } = makeDownloadHandlers(REPLACEMENT_BODY);
+    mswServer.use(...createRunwayHandlers(), handler);
+    const previousUmask = process.umask(0o022);
+    // Restored even if the test times out.
+    onTestFinished(() => {
+      process.umask(previousUmask);
+    });
+    testClient = await createTestClient({
+      env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', RUNWAY_DOWNLOAD_ROOT: downloadRoot },
+    });
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+      overwrite: true,
+    });
+    expect(result.isError).toBeFalsy();
+    expect(fs.readFileSync(outputPath).equals(REPLACEMENT_BODY)).toBe(true);
+    expect(fs.statSync(outputPath).mode & 0o777).toBe(0o600);
   });
 
   // ── VAL-RUNWAY-111 ────────────────────────────────────────────────────

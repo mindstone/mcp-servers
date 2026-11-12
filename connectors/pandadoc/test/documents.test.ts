@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi, onTestFinished } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { promises as dnsPromises } from 'node:dns';
+import * as fs from 'node:fs';
 import { mswServer } from './helpers/setup.js';
 import { createPandaDocHandlers, createPandaDocUnauthorizedHandlers, createPandaDocTimeoutHandlers } from './helpers/pandadoc-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -467,6 +468,26 @@ describe('PandaDoc document tools', () => {
     expect(json.file_path).toContain('pandadoc_doc-1');
     expect(json.file_path).toContain('.pdf');
     expect(json.file_size).toBeTruthy();
+  });
+
+  it.skipIf(process.platform === 'win32')('download_document creates the PDF readable only by its owner', async () => {
+    mswServer.use(...createPandaDocHandlers());
+    const previousUmask = process.umask(0o022);
+    // Restored even if the test times out.
+    onTestFinished(() => {
+      process.umask(previousUmask);
+    });
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+    const result = await testClient.callTool('download_document', { document_id: 'doc-1' });
+    const json = result.json as { ok: boolean; file_path: string };
+    expect(json.ok).toBe(true);
+    try {
+      expect(fs.statSync(json.file_path).mode & 0o777).toBe(0o600);
+    } finally {
+      fs.rmSync(json.file_path, { force: true });
+    }
   });
 
   it('download_document on non-ready document returns error', async () => {

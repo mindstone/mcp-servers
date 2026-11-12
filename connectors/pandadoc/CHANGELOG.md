@@ -15,6 +15,10 @@ are maintained manually as part of the PR review checklist.
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
+### Security
+
+- Files the connector saves (downloaded document PDFs) are now created readable only by their owner.
+
 ## [0.3.0] - 2026-08-07
 
 ### Changed

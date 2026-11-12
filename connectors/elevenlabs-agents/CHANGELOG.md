@@ -15,6 +15,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
 
+### Security
+
+- Files the connector saves (downloaded conversation recordings) are now created readable only by their owner.
+
 ## [0.2.1] - 2026-08-10
 
 ### Changed

@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi, onTestFinished } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import { createElevenLabsAgentsHandlers, createConversationFeedbackCapturingHandler, MOCK_API_KEY } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -42,6 +42,25 @@ describe('conversation tools', () => {
     expect(audio.isError).toBeFalsy();
     expect(fs.existsSync(audio.json.file_path)).toBe(true);
     if (fs.existsSync(audio.json.file_path)) fs.unlinkSync(audio.json.file_path);
+  });
+
+  it.skipIf(process.platform === 'win32')('creates downloaded conversation audio readable only by its owner', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    const previousUmask = process.umask(0o022);
+    // Restored even if the test times out.
+    onTestFinished(() => {
+      process.umask(previousUmask);
+    });
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+    const audio = await testClient.callTool('get_conversation_audio', { conversation_id: 'conv_custom_456' });
+    expect(audio.isError).toBeFalsy();
+    try {
+      expect(fs.statSync(audio.json.file_path).mode & 0o777).toBe(0o600);
+    } finally {
+      if (fs.existsSync(audio.json.file_path)) fs.unlinkSync(audio.json.file_path);
+    }
   });
 
   it('submits like/dislike feedback for a conversation', async () => {

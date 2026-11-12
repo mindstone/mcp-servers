@@ -115,6 +115,17 @@ describe('workspace-output fence', () => {
       expect(fs.readFileSync(dest, 'utf8')).toBe('data');
     });
 
+    it.skipIf(process.platform === 'win32')('creates the artifact readable only by its owner', () => {
+      vi.stubEnv('MCP_WORKSPACE_PATH', workspaceDir);
+      const previousUmask = process.umask(0o022);
+      try {
+        const dest = writeWorkspaceArtifact('elevenlabs_mode-test.mp3', 'data');
+        expect(fs.statSync(dest).mode & 0o777).toBe(0o600);
+      } finally {
+        process.umask(previousUmask);
+      }
+    });
+
     it('rejects a pre-existing file instead of overwriting it', () => {
       vi.stubEnv('MCP_WORKSPACE_PATH', workspaceDir);
       const existing = path.join(workspaceDir, 'elevenlabs_collision.mp3');

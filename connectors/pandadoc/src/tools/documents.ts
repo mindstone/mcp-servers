@@ -885,7 +885,7 @@ RELATED TOOLS:
         }
         let outFd: number;
         try {
-          outFd = fs.openSync(candidate, 'wx');
+          outFd = fs.openSync(candidate, 'wx', 0o600); // owner-only: documents can be private
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
           throw err;

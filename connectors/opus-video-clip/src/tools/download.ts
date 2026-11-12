@@ -150,6 +150,7 @@ export function registerDownloadTools(server: McpServer): void {
         fd = fs.openSync(
           writePath,
           fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | nofollow,
+          0o600, // owner-only: clips can be private recordings
         );
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;

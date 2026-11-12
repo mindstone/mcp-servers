@@ -208,7 +208,8 @@ export function registerTaskTools(server: McpServer): void {
         : safe.resolved;
       let fd: number;
       try {
-        fd = fs.openSync(writePath, 'wx');
+        // Owner-only on creation; an overwrite's staged file carries this mode into place.
+        fd = fs.openSync(writePath, 'wx', 0o600);
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;
         if (e && e.code === 'EEXIST' && !overwrite) {
