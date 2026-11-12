@@ -145,8 +145,9 @@ export class ThingsWriter {
         checkTagsExist(r, input.tags ?? []);
         openContainer(r, input);
         before = new Set(sameTitled(r, input.title).map((t) => t.uuid));
+        // Only where this one would go: the same title elsewhere is a different to-do.
         return r.tasks({ type: 'to-do', status: 'incomplete', trashed: null, contextTrashed: null })
-          .find((t) => !inTrash(r, t) && sameTitle(t.title) === key);
+          .find((t) => !inTrash(r, t) && sameTitle(t.title) === key && sameDestination(r, t, input));
       });
       if (existing && !opts.allowDuplicate) return { outcome: 'existing', item: existing };
 
@@ -167,9 +168,13 @@ export class ThingsWriter {
       const found = await this.poll((r) => {
         const fresh = sameTitled(r, input.title).filter((t) => !before.has(t.uuid));
         const created = r.createdAt(fresh.map((t) => t.uuid));
+        const latest = this.now().getTime() / 1000 + 5;
         const matching = fresh
           .map((t) => r.task(t.uuid)!)
-          .filter((t) => (created.get(t.uuid) ?? 0) >= sentAt && newTodoProblems(t, input, today).length === 0);
+          .filter((t) => {
+            const at = created.get(t.uuid) ?? 0;
+            return at >= sentAt && at <= latest && !inTrash(r, t) && newTodoProblems(t, input, today).length === 0;
+          });
         if (matching.length > 1) {
           return { stop: `Sent, but ${matching.length} matching to-dos appeared at once, so which one is new can't be told. Look for "${quoted(input.title)}" in Things before adding again.` };
         }
@@ -291,7 +296,7 @@ export class ThingsWriter {
       });
       if (already) return { outcome: 'confirmed', item: before, unchanged: true };
       const out = await this.executor.appleScript(TRASH_SCRIPT, [uuid, before.title]);
-      if (out !== 'ok') throw new Error(`Things refused to trash it (${out}). Nothing was changed; re-read it and check it's the right one.`);
+      if (out !== 'ok') throw new Error(`Things refused to trash it (${quoted(out)}). Nothing was changed; re-read it and check it's the right one.`);
       return { ...(await this.waitFor(uuid, (t) => (t.trashed ? [] : ['not in the Trash yet']))), before };
     });
   }
@@ -327,7 +332,7 @@ export class ThingsWriter {
       await this.executor.openUrl(url);
     } catch (e) {
       // A failed `open` quotes its whole command, token included.
-      throw new Error(`Could not send the change to Things (${redact(String((e as Error).message ?? e), token)}). It probably wasn't made; re-read the item to check before retrying.`);
+      throw new Error(`Could not send the change to Things (${quoted(redact(String((e as Error).message ?? e), token))}). It probably wasn't made; re-read the item to check before retrying.`);
     }
   }
 
@@ -347,7 +352,14 @@ export class ThingsWriter {
     const started = Date.now();
     let last: string[] = [];
     for (;;) {
-      const res = await this.withReader(check);
+      // Something has been sent by now: a failed read must end as unconfirmed, never as an error
+      // that reads as "nothing happened" (a retried append would append twice).
+      let res: { item: Task } | { waiting: string[] } | { stop: string };
+      try {
+        res = await this.withReader(check);
+      } catch (e) {
+        res = { waiting: [`could not read Things to check (${e instanceof Error ? e.constructor.name : 'error'})`] };
+      }
       if ('item' in res) return { outcome: 'confirmed', item: res.item };
       if ('stop' in res) return { outcome: 'unconfirmed', reason: res.stop };
       last = res.waiting;
@@ -470,6 +482,14 @@ function sameTitle(title: string): string {
   return title.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
 }
 
+/** Whether `t` is where `input` would put a new to-do: the same project, the same area, or loose. */
+function sameDestination(r: ThingsReader, t: Task, input: NewTodo): boolean {
+  const project = t.project ?? (t.heading ? r.task(t.heading)?.project : undefined);
+  if (input.projectId) return project === input.projectId;
+  if (input.areaId) return !project && t.area === input.areaId;
+  return !project && !t.area;
+}
+
 /** To-dos with exactly this title, in any state. */
 function sameTitled(r: ThingsReader, title: string): Task[] {
   return r.tasks({ type: 'to-do', status: null, trashed: null, contextTrashed: null, search: title }).filter((t) => t.title === title);
@@ -548,7 +568,10 @@ function differences(t: Task, e: Expected): string[] {
     const want = k === 'notes' ? e.notes || null : (e[k] ?? null);
     if (have === want) continue;
     // Notes by length only: they can be long and private.
-    p.push(k === 'notes' ? `notes differ (${String(t.notes ?? '').length} characters, want ${String(e.notes ?? '').length})` : `${k} is ${JSON.stringify(have)}, want ${JSON.stringify(want)}`);
+    // Diagnostics name fields and dates only: never the user's text (titles, notes, ids of containers are fine).
+    if (k === 'notes') p.push(`notes differ (${String(t.notes ?? '').length} characters, want ${String(e.notes ?? '').length})`);
+    else if (k === 'title') p.push('title differs');
+    else p.push(`${k} is ${JSON.stringify(have)}, want ${JSON.stringify(want)}`);
   }
   if (e.tags && !sameSet(t.tags ?? [], e.tags)) p.push(`tags differ (${(t.tags ?? []).length}, want ${e.tags.length})`);
   if (e.checklist && JSON.stringify(checklistTitles(t)) !== JSON.stringify(e.checklist)) p.push('checklist differs');
@@ -561,14 +584,17 @@ function newTodoProblems(t: Task, input: NewTodo, today: string): string[] {
     ...differences(t, {
       title: input.title,
       notes: input.notes ?? '',
-      ...(input.when ? whenFields(input.when, today) : {}),
+      // With no when and nowhere to go, Things files it in the Inbox.
+      ...(input.when ? whenFields(input.when, today) : input.projectId || input.areaId ? {} : { start: 'Inbox' as const, start_date: null }),
       deadline: input.deadline ?? null,
       tags: input.tags ?? [],
-      ...(input.checklist && { checklist: input.checklist }),
-      ...(input.projectId && { project: input.projectId }),
-      ...(input.areaId && { area: input.areaId }),
+      checklist: input.checklist ?? [],
+      // Present even when not given: then it must be empty (`differences` compares absent as null).
+      project: input.projectId,
+      area: input.areaId,
       status: 'incomplete',
     }),
+    ...(t.heading ? ['under a heading'] : []),
   ];
 }
 

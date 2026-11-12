@@ -470,7 +470,8 @@ export class ThingsReader {
   upcoming(f: TaskFilters & { until?: string } = {}): Task[] {
     const { until, ...rest } = f;
     if (until !== undefined && !isValidIsoDate(until)) throw new Error(`Invalid until date: ${JSON.stringify(until)}`);
-    const all = this.tasks({ ...rest, startDate: 'future', start: 'Someday' });
+    // Soonest first, as the app shows it; the user's own order within a day. (things.py leaves it in index order.)
+    const all = stableSortBy(this.tasks({ ...rest, startDate: 'future', start: 'Someday' }), (t) => t.start_date, 'asc');
     return until === undefined ? all : all.filter((t) => t.start_date !== null && t.start_date <= until);
   }
 

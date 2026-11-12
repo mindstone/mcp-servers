@@ -38,6 +38,9 @@ export const INSTRUCTIONS = `Things 3 is the user's to-do app on this Mac. These
 - A to-do marked repeating is one copy: changing it leaves the repeat in place, and another copy will still come.
 - A change result says confirmed (done and checked) or unconfirmed (sent, not yet seen: re-read before retrying).`;
 
+/** Added to the instructions when changes are off, so a model can tell the user how to turn them on. */
+export const READ_ONLY_NOTE = 'Changes are off: this server only reads. If the user wants to add or change to-dos, tell them to set THINGS_ALLOW_WRITES=1 in this server\'s settings in their app.';
+
 // --- Arguments, forgiving of how models fill optional fields ---
 
 /** Models send "", [] or null to mean "not given": treat them so, before validating. */
@@ -50,9 +53,12 @@ const thingsDate = z.string().refine(isStorableDate, `Use a real date, YYYY-MM-D
 const WHEN_WORDS = ['today', 'evening', 'tomorrow', 'anytime', 'someday'] as const;
 const when = z
   .string()
-  .transform((s) => s.trim().toLowerCase())
+  .transform((s) => {
+    const w = s.trim().toLowerCase();
+    return w === 'tonight' || w === 'this evening' ? 'evening' : w;
+  })
   .refine((s) => (WHEN_WORDS as readonly string[]).includes(s) || isStorableDate(s), `Use today, evening, tomorrow, anytime, someday, or a date YYYY-MM-DD (no later than ${LAST_THINGS_DATE}).`)
-  .describe('today, evening (This Evening), tomorrow, anytime, someday, or a date YYYY-MM-DD.');
+  .describe('today, evening (This Evening; also "tonight"), tomorrow, anytime, someday, or a date YYYY-MM-DD.');
 const id = z.string().regex(/^[A-Za-z0-9-]{10,40}$/, 'That is not a Things id; ids come from earlier results.').describe('The item\'s id, from an earlier result.');
 const currentTitle = z.string().min(1).describe('The item\'s title exactly as you last read it. If it has changed, nothing is changed, so the wrong item is never touched.');
 const projectRef = z.string().describe('A project\'s id, or its name (an exact title, or a part of one that matches only one open project).');
@@ -65,14 +71,17 @@ const LISTS = ['today', 'inbox', 'upcoming', 'anytime', 'someday', 'deadlines', 
 
 export function createServer(deps: ServerDeps = {}): McpServer {
   const env = deps.env ?? process.env;
-  const writes = on(env.THINGS_ALLOW_WRITES);
+  // A THINGSDB copy can be checked, but changes would go to the real Things app: never both.
+  const copy = Boolean(env.THINGSDB?.trim());
+  const writes = on(env.THINGS_ALLOW_WRITES) && !copy;
   const trash = writes && on(env.THINGS_ALLOW_TRASH);
+  if (copy && on(env.THINGS_ALLOW_WRITES)) console.error('Things MCP: THINGSDB is set, so changes are off (they would go to the real Things, not the copy).');
   const openReader = deps.openReader ?? (() => ThingsReader.open());
   const now = deps.now ?? (() => new Date());
   let writer = deps.writer;
   const getWriter = () => (writer ??= new ThingsWriter({ openReader, now }));
 
-  const server = new McpServer({ name: 'things', version: pkg.version }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'things', version: pkg.version }, { instructions: writes ? INSTRUCTIONS : `${INSTRUCTIONS}\n${READ_ONLY_NOTE}` });
 
   /** A fresh snapshot for `f`, closed afterwards; every failure becomes an error result. */
   const reading = (f: (r: ThingsReader, today: string) => CallToolResult) => async (): Promise<CallToolResult> => {
@@ -95,7 +104,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       title: 'Things: get a list',
       description:
         "One of Things' lists, in the order the app shows it. today: Today, then This Evening. inbox: captured, not yet sorted. upcoming: scheduled after today, soonest first. anytime: everything open that is not scheduled for later or Someday (it includes Today). someday: parked for later. deadlines: open items with a deadline, soonest first. logbook: completed and cancelled, most recent first, between from and to (default the last 7 days). Optionally narrowed to a tag (the item carries it itself), a project (including to-dos under its headings) or an area (including its projects' to-dos). Notes are cut short; things_get_item has them whole.",
-      inputSchema: {
+      inputSchema: z.object({
         list: z.enum(LISTS).describe('Which list.'),
         tag: optional(z.string().describe('Only items with this tag.')),
         project: optional(projectRef),
@@ -106,7 +115,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         to: optional(isoDate.describe('logbook only: to this date, inclusive (default today).')),
         limit: limit(50, 200),
         offset,
-      },
+      }).strict(),
       annotations: { title: 'Things: get a list', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -125,20 +134,22 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     {
       title: 'Things: search',
       description:
-        'Find to-dos and projects by words, in any order, in the title, notes, project or area: "Peter call" finds "Call Peter about Friday". Best matches first. Open items only, unless include_completed.',
-      inputSchema: {
+        'Find to-dos and projects by words, in any order, in the title, notes, project or area: "Peter call" finds "Call Peter about Friday". Items with every word come first (with none, those with some, and the result says so); among closed items, the most recent first. Open items only, unless include_completed.',
+      inputSchema: z.object({
         query: z.string().min(1).describe('A few words from the item, e.g. "dentist appointment".'),
         include_completed: optional(z.boolean().describe('Also completed and cancelled items.')),
         limit: limit(25, 100),
         offset,
-      },
+      }).strict(),
       annotations: { title: 'Things: search', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
       reading((r, today) => {
-        const { shown, meta } = page(rankedSearch(r, a.query, a.include_completed ?? false), a.limit, a.offset);
+        const found = rankedSearch(r, a.query, a.include_completed ?? false);
+        const { shown, meta } = page(found.items, a.limit, a.offset);
         const project = projectOf(r);
-        return result({ query: a.query, ...meta }, shown.map((t) => brief(t, today, project)), r, now());
+        const partial = found.partial && found.items.length ? { note: 'Nothing has every word; these match some of them.' } : {};
+        return result({ query: a.query, ...meta, ...partial }, shown.map((t) => brief(t, today, project)), r, now());
       })(),
   );
 
@@ -147,7 +158,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     {
       title: 'Things: get an item',
       description: 'Everything about one to-do or project: whole notes, checklist, dates and a things:/// link that opens it. For what is inside a project, use things_get_project.',
-      inputSchema: { id },
+      inputSchema: z.object({ id }).strict(),
       annotations: { title: 'Things: get an item', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -162,19 +173,31 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     'things_get_project',
     {
       title: 'Things: get a project',
-      description: "A project and its open to-dos, as the app lays it out: to-dos without a heading first, then each heading with its to-dos. Find it by name or id.",
-      inputSchema: { project: projectRef, include_completed: optional(z.boolean().describe('Also its completed and cancelled to-dos.')) },
+      description: "A project and its open to-dos, as the app lays it out: to-dos without a heading first, then each heading with its to-dos. Find it by name or id. Long projects are paged (limit, offset).",
+      inputSchema: z.object({ project: projectRef, include_completed: optional(z.boolean().describe('Also its completed and cancelled to-dos.')), limit: limit(100, 300), offset }).strict(),
       annotations: { title: 'Things: get a project', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
       reading((r, today) => {
         const c = r.projectContents(a.project, { status: a.include_completed ? null : 'incomplete' });
-        const project = () => c.project.title;
-        const b = (t: Task) => brief(t, today, project);
-        const count = c.todos.length + c.headings.reduce((n, h) => n + h.todos.length, 0);
+        // The items inside all share the project: leave it out of each.
+        const b = (t: Task) => brief(t, today, () => undefined);
+        const flat = [...c.todos.map((t) => ({ t, heading: undefined as string | undefined })), ...c.headings.flatMap((h) => h.todos.map((t) => ({ t, heading: h.heading.title })))];
+        const { shown, meta } = page(flat, a.limit, a.offset);
+        // Under its heading, an item needn't repeat the heading's name either.
+        const underHeading = (t: Task) => {
+          const { heading: _h, ...rest } = b(t);
+          return rest;
+        };
+        const headings = new Map<string, Record<string, unknown>[]>(c.headings.map((h) => [h.heading.title, []]));
+        for (const x of shown) if (x.heading !== undefined) headings.get(x.heading)!.push(underHeading(x.t));
         return result(
-          { to_dos: count },
-          { project: brief(c.project, today, () => undefined, true), todos: c.todos.map(b), headings: c.headings.map((h) => ({ heading: h.heading.title, todos: h.todos.map(b) })) },
+          meta,
+          {
+            project: brief(c.project, today, () => undefined, true),
+            todos: shown.filter((x) => x.heading === undefined).map((x) => b(x.t)),
+            headings: [...headings].filter(([, todos]) => todos.length).map(([heading, todos]) => ({ heading, todos })),
+          },
           r,
           now(),
         );
@@ -186,7 +209,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     {
       title: 'Things: overview',
       description: 'How Things is organised: areas with their open projects, projects outside any area, every tag (adding a tag needs one that exists), and how many to-dos are in the Inbox and Today. Use it to find a project, area or tag name.',
-      inputSchema: {},
+      inputSchema: z.object({}).strict(),
       annotations: { title: 'Things: overview', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () =>
@@ -233,8 +256,8 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     {
       title: 'Things: add a to-do',
       description:
-        "Add a to-do. With no project, area or when, it goes to the Inbox. If an open to-do already has this title, nothing is added and that one comes back (outcome existing): a repeated request is usually a retry. Pass allow_duplicate only when the user wants a second one. Tags must already exist in Things.",
-      inputSchema: {
+        "Add a to-do. With no project, area or when, it goes to the Inbox. If an open to-do with this title is already where it would go (the same project, area, or the Inbox), nothing is added and that one comes back (outcome existing): a repeated request is usually a retry. Pass allow_duplicate only when the user wants a second one. Tags must already exist in Things.",
+      inputSchema: z.object({
         title: z.string().min(1).describe('The to-do, in the user\'s words. One line.'),
         notes: optional(z.string().describe('Notes for it.')),
         when: optional(when),
@@ -244,7 +267,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         project: optional(projectRef),
         area: optional(areaRef),
         allow_duplicate: optional(z.boolean().describe('Add it even though an open to-do has this title.')),
-      },
+      }).strict(),
       annotations: { title: 'Things: add a to-do', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (a) =>
@@ -264,7 +287,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       title: 'Things: change a to-do',
       description:
         "Change a to-do: reschedule it (when), set a deadline or clear it (deadline null), rename it, add to its notes (append or prepend; notes are never replaced), add tags, add checklist items, or move it to a project or area. Only the fields given change. A to-do under a heading can't be moved from here. A repeating copy can only be moved to today, this evening or a later day, or given a deadline.",
-      inputSchema: {
+      inputSchema: z.object({
         id,
         current_title: currentTitle,
         title: optional(z.string().describe('A new title.')),
@@ -278,7 +301,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         append_checklist: optional(strings.describe('Checklist items to add at the end.')),
         project: optional(projectRef),
         area: optional(areaRef),
-      },
+      }).strict(),
       annotations: { title: 'Things: change a to-do', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     async (a) =>
@@ -302,7 +325,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     {
       title: 'Things: complete, cancel or reopen',
       description: 'Mark a to-do or project completed (done), canceled, or incomplete (open again). A project is closed only once its to-dos are. Asking for the status it already has changes nothing.',
-      inputSchema: { id, current_title: currentTitle, status: z.enum(['completed', 'canceled', 'incomplete']).describe('completed means done.') },
+      inputSchema: z.object({ id, current_title: currentTitle, status: z.enum(['completed', 'canceled', 'incomplete']).describe('completed means done.') }).strict(),
       annotations: { title: 'Things: complete, cancel or reopen', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (a) => writing(async (w) => receiptResult(await w.setStatus(a.id, a.status, a.current_title), now()))(),
@@ -315,7 +338,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         title: 'Things: move a to-do to the Trash',
         description:
           "Move one to-do to Things' Trash, only when the user has asked to delete that to-do. It stays in the Trash, where the user can restore it, until they empty it. Projects can't be trashed from here. On a repeating copy, only that copy goes; the repeat carries on.",
-        inputSchema: { id, current_title: currentTitle },
+        inputSchema: z.object({ id, current_title: currentTitle }).strict(),
         annotations: { title: 'Things: move a to-do to the Trash', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       },
       async (a) => writing(async (w) => receiptResult(await w.trash(a.id, a.current_title), now()))(),
@@ -392,7 +415,12 @@ function receiptResult(receipt: Receipt | AddReceipt | (Receipt & { unchanged?: 
   const today = localIsoDate(now);
   const project = (t: Task) => t.project_title;
   if (receipt.outcome === 'existing') {
-    return result({ outcome: 'existing', note: 'An open to-do with this title is already in Things, so nothing was added. Use allow_duplicate only if the user wants a second one.' }, { item: brief(receipt.item, today, project) }, undefined, now);
+    return result(
+      { outcome: 'existing', note: 'An open to-do with this title is already there (the same project, area or Inbox), so nothing was added: shown below. If the user wants a second one, call again with allow_duplicate.' },
+      { item: brief(receipt.item, today, project) },
+      undefined,
+      now,
+    );
   }
   const before = receipt.before ? { before: brief(receipt.before, today, project) } : {};
   if (receipt.outcome === 'unconfirmed') {

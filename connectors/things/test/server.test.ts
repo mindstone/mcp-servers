@@ -132,7 +132,7 @@ describe('reading', () => {
     const { client } = await connect();
     const p = parse((await client.callTool('things_get_project', { project: 'house' })).text).data;
     expect(p.todos.map((t: { title: string }) => t.title)).toEqual(['Book the van']);
-    expect(p.headings).toEqual([{ heading: 'Packing', todos: [expect.objectContaining({ title: 'Buy boxes', project: 'House move' })] }]);
+    expect(p.headings).toEqual([{ heading: 'Packing', todos: [{ id: 'todo-house-001', title: 'Buy boxes', when: 'anytime', tags: ['Errand'] }] }]);
     const item = parse((await client.callTool('things_get_item', { id: 'todo-today-001' })).text).data;
     expect(item.notes).toHaveLength(500);
     expect(item.link).toBe('things:///show?id=todo-today-001');
@@ -177,7 +177,7 @@ describe('writing, over the protocol', () => {
     const a = parse((await client.callTool('things_add_todo', { title: 'Order a sofa', project: 'house', when: 'today', tags: [], notes: '' })).text);
     expect(a.meta.outcome).toBe('confirmed');
     expect(a.data.item).toMatchObject({ title: 'Order a sofa', project: 'House move', when: 'today' });
-    const b = parse((await client.callTool('things_add_todo', { title: 'Order a sofa' })).text);
+    const b = parse((await client.callTool('things_add_todo', { title: 'Order a sofa', project: 'house', when: 'today' })).text);
     expect(b.meta.outcome).toBe('existing');
     expect(sim.calls).toHaveLength(1);
     expect(sim.modals).toEqual([]);

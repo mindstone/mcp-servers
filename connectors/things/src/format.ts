@@ -70,7 +70,8 @@ export function briefArea(a: Area): Record<string, unknown> {
 /** A successful result: metadata in the clear, the user's data enveloped. */
 export function result(meta: Record<string, unknown>, data: unknown, r?: ThingsReader, now = new Date()): CallToolResult {
   const warning = r ? schemaWarning(r.trust) : undefined;
-  const head = { todays_date: localIsoDate(now), ...meta, ...(warning && { warning }) };
+  const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
+  const head = { todays_date: localIsoDate(now), weekday, ...meta, ...(warning && { warning }) };
   return { content: [{ type: 'text', text: `${JSON.stringify(head)}\n${wrapUntrusted(JSON.stringify(data), 'things')}` }] };
 }
 

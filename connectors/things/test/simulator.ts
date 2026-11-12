@@ -50,9 +50,9 @@ export class ThingsSimulator implements ThingsExecutor {
   async openUrl(url: string): Promise<void> {
     this.calls.push({ kind: 'url', value: url });
     if (!(this.opts.urlsEnabled ?? true)) this.modals.push('Things URLs are disabled.');
-    else if (!this.opts.ignoreCommands) await mutate(this.dbPath, (db) => {
+    else await mutate(this.dbPath, (db) => {
       this.opts.beforeApply?.(db);
-      this.applyUrl(db, url);
+      if (!this.opts.ignoreCommands) this.applyUrl(db, url);
     });
   }
 

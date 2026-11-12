@@ -21,9 +21,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "os": [
-    "darwin"
-  ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/index.js",
     "prepare": "npm run build",

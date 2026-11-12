@@ -85,6 +85,8 @@ Response (trimmed):
 
 - macOS with [Things 3](https://culturedcode.com/things/) installed and opened at least once.
 - Node.js 20 or later (Claude Desktop and Rebel bring their own).
+- The app the server runs in may need **Full Disk Access** to read Things' data (see
+  [macOS permissions](#macos-permissions)).
 - To make changes: in Things, **Settings > General > Enable Things URLs** turned on.
 
 ## Quick Start
@@ -93,8 +95,9 @@ Response (trimmed):
 npx -y @mindstone/mcp-server-things
 ```
 
-That starts the server on stdio, read-only. Point your host at it (below). The first time it reads
-Things, macOS may ask whether the host app may access data from other apps: allow it.
+That starts the server on stdio, read-only. Point your host at it (below), then check it works by
+asking "What's on my Today list in Things?". The first time it reads Things, macOS may ask whether
+the host app may access data from other apps: allow it.
 
 ## Configuration
 
@@ -102,7 +105,10 @@ Things, macOS may ask whether the host app may access data from other apps: allo
 |---|---|---|
 | `THINGS_ALLOW_WRITES` | off | `1` offers `things_add_todo`, `things_update_todo` and `things_set_status`. |
 | `THINGS_ALLOW_TRASH` | off | `1`, together with `THINGS_ALLOW_WRITES=1`, also offers `things_trash`. |
-| `THINGSDB` | found automatically | Path to a Things `main.sqlite`, for testing against a copy. |
+| `THINGSDB` | found automatically | Path to a Things `main.sqlite`, for reading a copy. Changes are always off while it is set: they would go to the real Things app, not the copy. |
+
+When changes are off, the server tells the assistant so, and how they are turned on, so it can say
+that rather than guess.
 
 Deleting has its own switch because a host's "allow this tool?" prompt is not the same as deciding
 to delete a particular to-do. Turn it on only if you want an assistant to be able to trash to-dos
@@ -172,14 +178,14 @@ so hosts can prompt before changes and run reads in parallel.
 | `things_get_list` | One list, in the app's order: `today` (then This Evening), `inbox`, `upcoming`, `anytime`, `someday`, `deadlines`, or `logbook` (between two dates). Narrow it by `tag`, `project` (its headings included) or `area` (its projects included). Paged with `limit` and `offset`. |
 | `things_search` | To-dos and projects by words in any order, in title, notes, project or area; best matches first. |
 | `things_get_item` | One to-do or project in full: whole notes, checklist, dates, and a `things:///` link that opens it. |
-| `things_get_project` | A project laid out as the app shows it: to-dos without a heading, then each heading with its to-dos. |
+| `things_get_project` | A project laid out as the app shows it: to-dos without a heading, then each heading with its to-dos. Paged with `limit` and `offset`. |
 | `things_get_overview` | Areas with their projects, projects outside any area, every tag, and Inbox and Today counts. |
 
 ### Changes (with `THINGS_ALLOW_WRITES=1`)
 
 | Tool | What it does |
 |---|---|
-| `things_add_todo` | Add a to-do: notes, `when`, deadline, existing tags, checklist, project or area. An open to-do with the same title comes back instead (`outcome: existing`), since a repeat is usually a retry; `allow_duplicate` adds a second. |
+| `things_add_todo` | Add a to-do: notes, `when`, deadline, existing tags, checklist, project or area. An open to-do with the same title in the same place comes back instead (`outcome: existing`); `allow_duplicate` adds a second. |
 | `things_update_todo` | Reschedule, set or clear a deadline, rename, append or prepend notes, add tags, add checklist items, move to a project or area. Needs `id` and `current_title`. Destructive. |
 | `things_set_status` | Complete, cancel or reopen a to-do or a project (a project once its to-dos are closed). Needs `id` and `current_title`. Destructive. |
 
@@ -189,12 +195,24 @@ so hosts can prompt before changes and run reads in parallel.
 |---|---|
 | `things_trash` | Move one to-do to Things' Trash, where you can restore it until you empty it. Not projects. Destructive. |
 
-`when` takes `today`, `evening`, `tomorrow`, `anytime`, `someday` or a date. Dates are `YYYY-MM-DD`,
-and no later than 2047-12-31, the last date Things can store.
+`when` takes `today`, `evening` (or `tonight`), `tomorrow`, `anytime`, `someday` or a date. Dates are
+`YYYY-MM-DD`, and no later than 2047-12-31, the last date Things can store. A tool given an argument
+it doesn't take refuses the whole call rather than ignoring it.
+
+Some things to know:
+
+- **Search** looks for every word, in any order; only if nothing has them all does it return items
+  with some, and say so.
+- **The `tag` filter** matches tags on the item itself, not tags it inherits from its project or area.
+- **Changes are one item at a time.** "Move these five to tomorrow" is five calls, each checked and
+  read back (about a second each), and each may ask for your approval in hosts that prompt.
+- **Adding a to-do whose title is already where it would go** (the same project, area, or the
+  Inbox) returns that one instead, since a repeat is usually a retry. The same title elsewhere is a
+  different to-do and is added.
 
 ### What a result looks like
 
-The first line is plain JSON about the result: today's date, counts, paging (`more` says how to get
+The first line is plain JSON about the result: today's date and weekday, counts, paging (`more` says how to get
 the rest), the outcome of a change, and any warning. The rest is the data, inside one
 `<untrusted-content source="things">` envelope: to-do titles and notes are your own, but often hold
 text pasted from email or the web, so a host should read them as data, never as instructions. List
@@ -230,8 +248,9 @@ retried append appends twice). Anything refused is an error result saying why, a
   there; changes are refused until the server is updated.
 - **Changes.** Through the Things URL scheme (`things:///json` to add, `things:///update` to change,
   with the token Things stores, read fresh each time and never shown or logged), and AppleScript for
-  the Trash, which re-checks the title in the same call that deletes. A lock shared across processes
-  means two hosts' copies of the server never change Things at the same moment.
+  the Trash, which re-checks the title in the same call that deletes. A lock shared by every host
+  (in `~/Library/Caches/mcp-server-things`) means two hosts' copies of the server never change
+  Things at the same moment; a copy that crashed holding it is taken over, a live one never is.
 - **Finding a new to-do.** Things doesn't say which id it gave a new to-do, so the server looks for
   one that wasn't there before, has every field it sent, and was made in the last few seconds. If
   it can't tell which one is new, it says `unconfirmed` rather than guess.

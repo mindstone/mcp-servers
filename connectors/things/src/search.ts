@@ -44,20 +44,36 @@ function overlap(query: Set<string>, text: string): number {
   return n;
 }
 
-/** To-dos and projects matching `query`, best first. Open ones only unless `includeCompleted`. */
-export function rankedSearch(r: ThingsReader, query: string, includeCompleted: boolean): Task[] {
+/**
+ * To-dos and projects matching `query`, best first. Items with every word (or the whole query as a
+ * phrase) win; only when there are none do items with some of the words come back, `partial`.
+ * Ties go to the title, then the rest of the text, then the most recently closed, then the app's order.
+ */
+export function rankedSearch(r: ThingsReader, query: string, includeCompleted: boolean): { items: Task[]; partial: boolean } {
   const words = searchWords(query);
   const q = query.trim().toLowerCase();
   const pool = r.tasks(includeCompleted ? { status: null } : {}).filter((t) => t.type !== 'heading');
   const scored = pool
     .map((t, i) => {
+      const text = `${t.title} ${t.notes ?? ''} ${t.project_title ?? ''} ${t.area_title ?? ''}`;
       const title = overlap(words, t.title);
-      const context = overlap(words, `${t.title} ${t.notes ?? ''} ${t.project_title ?? ''} ${t.area_title ?? ''}`) - title;
-      const exact = t.title.toLowerCase() === q ? 2 : q !== '' && t.title.toLowerCase().includes(q) ? 1 : 0;
-      const inNotes = exact === 0 && q !== '' && `${t.notes ?? ''} ${t.area_title ?? ''}`.toLowerCase().includes(q) ? 1 : 0;
-      return { t, i, key: [exact, title, context + inNotes] as const };
+      const all = overlap(words, text);
+      // The whole query as a phrase: in the title, or (for a query with a real word, not just "the") anywhere.
+      const phrase = q === '' ? 0 : t.title.toLowerCase() === q ? 3 : t.title.toLowerCase().includes(q) ? 2 : words.size > 0 && text.toLowerCase().includes(q) ? 1 : 0;
+      const every = phrase > 0 || (words.size > 0 && all === words.size);
+      return { t, i, every, key: [phrase, title, all - title] as const };
     })
-    .filter((x) => x.key.some((n) => n > 0));
-  scored.sort((a, b) => b.key[0] - a.key[0] || b.key[1] - a.key[1] || b.key[2] - a.key[2] || a.i - b.i);
-  return scored.map((x) => x.t);
+    .filter((x) => x.every || x.key[1] + x.key[2] > 0);
+  const complete = scored.filter((x) => x.every);
+  const chosen = complete.length ? complete : scored;
+  chosen.sort((a, b) => b.key[0] - a.key[0] || b.key[1] - a.key[1] || b.key[2] - a.key[2] || cmpDesc(a.t.stop_date, b.t.stop_date) || a.i - b.i);
+  return { items: chosen.map((x) => x.t), partial: complete.length === 0 };
+}
+
+/** Most recent first; items never closed (null) after closed ones. */
+function cmpDesc(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a < b ? 1 : -1;
 }

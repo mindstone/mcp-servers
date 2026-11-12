@@ -54,9 +54,9 @@ precious data.
    - writes: `things_add_todo`, `things_update_todo`, `things_set_status`, `things_trash`.
    - Results are compact JSON in a text block (no client we checked reads `structuredContent`);
      lists cap at a limit and say how many more there are and how to narrow.
-10. **Distribution.** npm (`npx -y @mindstone/mcp-server-things`) for Rebel, Claude Code and Codex,
-    and an `.mcpb` bundle for Claude Desktop with a "Allow changes" toggle. Adding it to Rebel's
-    catalog is a separate change in the Rebel repo.
+10. **Distribution.** npm (`npx -y @mindstone/mcp-server-things`) for every host: Rebel, Claude
+    Desktop, Claude Code and Codex. An `.mcpb` bundle for Claude Desktop is deferred (see below).
+    Adding it to Rebel's catalog is a separate change in the Rebel repo.
 
 ## After review (two independent reviews of this plan, one from each model family)
 
@@ -102,6 +102,26 @@ What changed:
   area). Lists and search take `offset` for paging. Every write is `destructiveHint` except add, and
   adds and appends are not idempotent. Results carry today's local date.
 - **Deferred**: the `.mcpb` bundle (no precedent in this repo's release tooling yet).
+
+## After the code reviews (the same two reviewers, on the finished code)
+
+- **`THINGSDB` turns changes off.** Both found that a copy could pass the checks for a change that
+  then went to the real Things.
+- **The lock lives in `~/Library/Caches/mcp-server-things`**, not the temp folder, which differs
+  from host to host (so it locked nothing across hosts). A live holder is never displaced; a dead
+  one's lock is taken over by writing our owner and checking it stuck; release removes only our own.
+- **Finding a new to-do** now expects every default too (the Inbox, no checklist, no project or
+  area unless given, not in the Trash, made no later than now).
+- **After sending, every failure is `unconfirmed`**, including a failed read while checking, so a
+  model never reads "error" as "nothing happened".
+- **Unknown arguments refuse the call** (strict schemas), instead of being dropped.
+- **No user text outside an envelope**, in diagnostics or executor errors.
+- **For models**: the duplicate check is scoped to where the to-do would go; search prefers items
+  with every word and says when it falls back; Upcoming is soonest first; the weekday comes with the
+  date; `tonight` is accepted; `things_get_project` is paged; read-only instructions say how changes
+  are turned on.
+- Each of these has a test, shown failing on the code before the fix
+  (`test/review-fixes.test.ts`).
 
 ## Tests
 

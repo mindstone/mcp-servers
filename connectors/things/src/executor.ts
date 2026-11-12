@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const run = promisify(execFile);
 
@@ -56,7 +57,8 @@ export const macExecutor: ThingsExecutor = {
           'macOS did not allow this app to control Things. Allow it in System Settings > Privacy & Security > Automation (the app this server runs in > Things3), then retry.',
         );
       }
-      throw new Error(`AppleScript failed: ${stderr.trim() || (e as Error).message}`);
+      // stderr can quote the item; it is the user's text.
+      throw new Error(`AppleScript failed: ${wrapUntrusted(stderr.trim() || (e as Error).message, 'things')}`);
     }
   },
   async urlSchemeEnabled() {
