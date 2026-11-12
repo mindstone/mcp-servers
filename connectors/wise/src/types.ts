@@ -156,29 +156,6 @@ export interface WiseRecipientPage {
   size?: number;
 }
 
-/** A requirement group as returned by the quote-scoped account-requirements API. */
-export interface WiseRequirementGroup {
-  type?: string;
-  title?: string;
-  usageInfo?: string | null;
-  fields?: Array<{
-    name?: string;
-    group?: Array<{
-      key?: string;
-      name?: string;
-      type?: string;
-      refreshRequirementsOnChange?: boolean;
-      required?: boolean;
-      displayFormat?: string | null;
-      example?: string;
-      minLength?: number | null;
-      maxLength?: number | null;
-      validationRegexp?: string | null;
-      valuesAllowed?: Array<{ key?: string; name?: string }> | null;
-    }>;
-  }>;
-}
-
 export interface WiseQuote {
   id: string;
   sourceCurrency: string;

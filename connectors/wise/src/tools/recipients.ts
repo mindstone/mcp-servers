@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wiseFetch } from '../client.js';
-import type { WiseRecipient, WiseRecipientPage, WiseRequirementGroup } from '../types.js';
+import type { WiseRecipient, WiseRecipientPage } from '../types.js';
 import { WiseError } from '../types.js';
 import {
   withErrorHandling,
@@ -10,8 +10,11 @@ import {
   resolveProfileId,
   validateCurrency,
   validateNumericId,
+  idInMessage,
 } from '../utils.js';
 import { wrapRecipient, wrapRequirementsPayload } from '../formatters.js';
+
+const requirementsReplySchema = z.array(z.unknown());
 
 /** Recipient ids and quote ids appear in URL paths; constrain their shape. */
 function validateQuoteId(value: string): string {
@@ -59,7 +62,7 @@ export function registerRecipientTools(server: McpServer): void {
       const profileId = await resolveProfileId(credentials, args.profile_id);
       const currency = args.currency ? validateCurrency(args.currency) : undefined;
 
-      const page = await wiseFetch<WiseRecipientPage>(credentials.apiToken, '/v2/accounts', {
+      const page = await wiseFetch<WiseRecipientPage>(credentials, '/v2/accounts', {
         params: {
           profileId,
           currency,
@@ -103,7 +106,7 @@ export function registerRecipientTools(server: McpServer): void {
 
       const recipientId = validateNumericId(args.recipient_id, 'recipient_id');
       const recipient = await wiseFetch<WiseRecipient>(
-        credentials.apiToken,
+        credentials,
         `/v2/accounts/${recipientId}`,
       );
 
@@ -134,13 +137,26 @@ export function registerRecipientTools(server: McpServer): void {
       if (!isCredentials(credentials)) return credentials;
 
       const quoteId = validateQuoteId(args.quote_id);
-      const groups = await wiseFetch<WiseRequirementGroup[]>(
-        credentials.apiToken,
-        `/v1/quotes/${quoteId}/account-requirements`,
-        // Accept-Minor-Version: 1 enables the v1.1 dynamic name/email fields,
-        // recommended by Wise for new integrations.
-        { headers: { 'Accept-Minor-Version': '1' } },
+      const reply = requirementsReplySchema.safeParse(
+        await wiseFetch<unknown>(
+          credentials,
+          `/v1/quotes/${quoteId}/account-requirements`,
+          // Accept-Minor-Version: 1 enables the v1.1 dynamic name/email fields,
+          // recommended by Wise for new integrations.
+          { headers: { 'Accept-Minor-Version': '1' } },
+        ),
       );
+      if (!reply.success) {
+        console.error('[wise] recipient requirements reply did not have the expected shape');
+        throw new WiseError(
+          'Wise sent a recipient requirements reply that could not be read.',
+          'API_ERROR',
+          'Try again, or create a new quote with create_wise_quote and use its id.',
+        );
+      }
+      // Only the list shape is checked, because `count` is read from it; the
+      // groups themselves are returned enveloped.
+      const groups = reply.data;
 
       return JSON.stringify({
         ok: true,
@@ -196,7 +212,7 @@ export function registerRecipientTools(server: McpServer): void {
         );
       }
 
-      const recipient = await wiseFetch<WiseRecipient>(credentials.apiToken, '/v1/accounts', {
+      const recipient = await wiseFetch<WiseRecipient>(credentials, '/v1/accounts', {
         method: 'POST',
         body: JSON.stringify({
           currency,
@@ -210,7 +226,7 @@ export function registerRecipientTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        message: `Recipient created (id ${recipient.id}).`,
+        message: `Recipient created${idInMessage(recipient.id)}.`,
         recipient: wrapRecipient(recipient),
       });
     }),

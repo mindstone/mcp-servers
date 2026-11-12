@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wiseFetch } from '../client.js';
 import type { WiseRate } from '../types.js';
 import { withErrorHandling, requireCredentials, isCredentials, validateCurrency } from '../utils.js';
+import { wrapRates } from '../formatters.js';
 
 export function registerRateTools(server: McpServer): void {
   // ── get_wise_exchange_rate ──────────────────────────────────────
@@ -40,11 +41,12 @@ export function registerRateTools(server: McpServer): void {
         time = new Date(args.time).toISOString();
       }
 
-      const rates = await wiseFetch<WiseRate[]>(credentials.apiToken, '/v1/rates', {
+      const rates = await wiseFetch<WiseRate[]>(credentials, '/v1/rates', {
         params: { source, target, time },
       });
 
-      return JSON.stringify({ ok: true, rates, count: rates.length });
+      const wrapped = wrapRates(rates);
+      return JSON.stringify({ ok: true, rates: wrapped, count: wrapped.length });
     }),
   );
 }

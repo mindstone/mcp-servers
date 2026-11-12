@@ -44,7 +44,7 @@ export function registerBalanceTools(server: McpServer): void {
       const types = (args.types ?? ['STANDARD']).join(',');
 
       const balances = await wiseFetch<WiseBalance[]>(
-        credentials.apiToken,
+        credentials,
         `/v4/profiles/${profileId}/balances`,
         { params: { types } },
       );
@@ -106,7 +106,7 @@ export function registerBalanceTools(server: McpServer): void {
       const profileId = await resolveProfileId(credentials, args.profile_id);
 
       const statement = await wiseFetch<WiseStatement>(
-        credentials.apiToken,
+        credentials,
         `/v1/profiles/${profileId}/balance-statements/${balanceId}/statement.json`,
         {
           params: {

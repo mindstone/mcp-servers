@@ -5,7 +5,7 @@ title: wise — mcp-servers catalogue
 
 # wise
 
-Wise &#40;formerly TransferWise&#41; MCP server for Model Context Protocol hosts. Check multi-currency balances and exchange rates, review transactions and activity, manage recipients, price transfers with quotes — and, with an explicit opt-in, create, fund, and cancel transfers — all through a standardised MCP interface.
+Wise &#40;formerly TransferWise&#41; MCP server for Model Context Protocol hosts. Check multi-currency balances and exchange rates, review transactions and activity, manage recipients, price transfers with quotes — and create, fund, and cancel transfers, with your host app's tool approval deciding when to ask you first — all through a standardised MCP interface.
 
 
 

@@ -24,7 +24,7 @@ export function registerProfileTools(server: McpServer): void {
       const credentials = requireCredentials();
       if (!isCredentials(credentials)) return credentials;
 
-      const profiles = await wiseFetch<WiseProfile[]>(credentials.apiToken, '/v2/profiles');
+      const profiles = await wiseFetch<WiseProfile[]>(credentials, '/v2/profiles');
 
       return JSON.stringify({
         ok: true,

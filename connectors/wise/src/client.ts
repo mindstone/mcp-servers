@@ -14,7 +14,7 @@
  * Base URL: https://api.wise.com (production) or https://api.wise-sandbox.com
  */
 
-import { WiseError, getRequestTimeoutMs } from './types.js';
+import { WiseError, getRequestTimeoutMs, type WiseCredentials } from './types.js';
 import { getApiBaseUrl } from './auth.js';
 
 export interface WiseFetchOptions extends RequestInit {
@@ -22,6 +22,25 @@ export interface WiseFetchOptions extends RequestInit {
 }
 
 const MAX_RATE_LIMIT_RETRIES = 2;
+
+/**
+ * A log-safe label for an unexpected error: its `code` (e.g. `EACCES`,
+ * `ECONNREFUSED`) or else its `name`, only when that is a plain identifier.
+ * Never the message, which can quote paths, hosts or vendor bytes.
+ */
+export function errorKind(error: unknown): string {
+  const candidates = [
+    (error as { code?: unknown } | null)?.code,
+    (error as { cause?: { code?: unknown } } | null)?.cause?.code,
+    error instanceof Error ? error.name : undefined,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(candidate)) {
+      return candidate;
+    }
+  }
+  return 'unknown error';
+}
 
 /**
  * Parse a Retry-After header into milliseconds, capped at 30s so a hostile
@@ -44,19 +63,20 @@ function parseRetryAfterMs(header: string | null): number {
 /**
  * Make an authenticated request to the Wise API.
  *
- * @param apiToken Wise API token
- * @param endpoint Path with version prefix, e.g. '/v2/profiles'
- * @param options  Additional fetch options (method, body, headers, params)
+ * @param credentials Token plus the environment it belongs to; the request
+ *                    goes to that environment's Wise host
+ * @param endpoint    Path with version prefix, e.g. '/v2/profiles'
+ * @param options     Additional fetch options (method, body, headers, params)
  * @returns Parsed JSON response
  */
 export async function wiseFetch<T>(
-  apiToken: string,
+  credentials: WiseCredentials,
   endpoint: string,
   options: WiseFetchOptions = {},
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
 
-  let url = `${getApiBaseUrl()}${endpoint}`;
+  let url = `${getApiBaseUrl(credentials.environment)}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
@@ -84,11 +104,14 @@ export async function wiseFetch<T>(
         ...fetchOptions,
         signal: fetchOptions.signal ?? AbortSignal.timeout(getRequestTimeoutMs()),
         headers: {
-          Authorization: `Bearer ${apiToken}`,
+          Authorization: `Bearer ${credentials.apiToken}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
           ...(fetchOptions.headers as Record<string, string>),
         },
+        // Never follow a redirect, so only the Wise host is ever contacted.
+        // Set after the spread so a caller cannot override it.
+        redirect: 'error',
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'TimeoutError') {
@@ -98,7 +121,14 @@ export async function wiseFetch<T>(
           'The request took too long. Try again or check if the Wise API is available.',
         );
       }
-      throw error;
+      // The native error text can quote hosts, addresses or socket detail;
+      // only its code, if it has a plain one, goes to stderr.
+      console.error(`[Wise API] Network error for ${method} ${endpoint} (${errorKind(error)})`);
+      throw new WiseError(
+        'Could not reach the Wise API.',
+        'NETWORK_ERROR',
+        'Check your network connection and try again. If the problem persists, check the Wise status page.',
+      );
     }
 
     // Handle rate limiting: retry idempotent GETs in place, honouring
@@ -178,7 +208,9 @@ export async function wiseFetch<T>(
 
     // A successful status with a non-JSON body is still a vendor-controlled
     // response: the native JSON parse error can quote fragments of that body,
-    // so convert it to a fixed, connector-authored error instead.
+    // so convert it to a fixed, connector-authored error instead. A write that
+    // got a success status may already have acted (moved money, created a
+    // record), so it is never advised to simply try again.
     try {
       return (await response.json()) as T;
     } catch {
@@ -186,7 +218,9 @@ export async function wiseFetch<T>(
       throw new WiseError(
         `Wise API error (${response.status}): response body could not be parsed`,
         'API_ERROR',
-        'Try the request again. If the problem persists, reconnect your Wise account.',
+        method === 'GET'
+          ? 'Try the request again. If the problem persists, reconnect your Wise account.'
+          : 'Wise may have acted on this request. Check with the matching get or list tool, or in your Wise account, before trying again.',
       );
     }
   }

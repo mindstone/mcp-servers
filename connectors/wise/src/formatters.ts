@@ -3,12 +3,14 @@
  *
  * Strings returned by Wise that are authored by external parties (recipient
  * names and bank details, transfer references, statement descriptions and
- * merchant names, activity titles, savings-jar names, quote notices) are
- * wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes
- * via the canonical shared helper (vendored at `./untrusted-content.ts`) so
- * the host LLM treats them as data, not instructions. Connector-controlled
- * metadata (ids, numeric amounts, currency codes, statuses, timestamps) is
- * left raw.
+ * merchant names, activity titles, savings-jar names, quote notices and their
+ * links, exchange rates, funding replies) are wrapped in
+ * `<untrusted-content source="…">…</untrusted-content>` envelopes via the
+ * canonical shared helper (vendored at `./untrusted-content.ts`) so the host
+ * LLM treats them as data, not instructions. Other metadata on the records
+ * spread here (ids, numeric amounts, currency codes, statuses, timestamps) is
+ * passed through raw, so connector-written message text never quotes it
+ * without a type check.
  */
 
 import type {
@@ -20,6 +22,8 @@ import type {
   WiseStatement,
   WiseStatementTransaction,
   WiseActivity,
+  WiseRate,
+  WiseTransferPayment,
 } from './types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
@@ -30,6 +34,7 @@ const QUOTE_SOURCE = 'wise:quote';
 const TRANSFER_SOURCE = 'wise:transfer';
 const STATEMENT_SOURCE = 'wise:statement';
 const ACTIVITY_SOURCE = 'wise:activity';
+const RATE_SOURCE = 'wise:rate';
 
 /**
  * Wrap an optional external-text field in an `<untrusted-content>` envelope.
@@ -145,6 +150,7 @@ export function wrapQuote(quote: WiseQuote): WiseQuote {
     notices: quote.notices?.map((notice) => ({
       ...notice,
       text: wrapField(notice.text, QUOTE_SOURCE),
+      link: wrapField(notice.link, QUOTE_SOURCE),
     })),
   };
 }
@@ -229,4 +235,26 @@ export function wrapActivity(activity: WiseActivity): WiseActivity {
 /** Deep-wrap arbitrary vendor payloads (e.g. requirement-group examples). */
 export function wrapRequirementsPayload<T>(payload: T): T {
   return wrapValuesDeep(payload, RECIPIENT_SOURCE);
+}
+
+/**
+ * Exchange rates are vendor numbers, currency codes and timestamps. Every
+ * string in them is still Wise-supplied, so each is enveloped; the rate
+ * itself stays a number.
+ */
+export function wrapRates(rates: WiseRate[]): WiseRate[] {
+  return rates.map((rate) => wrapValuesDeep(rate, RATE_SOURCE));
+}
+
+/**
+ * A funding reply's `type`, `status` and `errorCode` are free-form Wise
+ * strings. Callers branch on the raw values first, then return this copy.
+ */
+export function wrapTransferPayment(payment: WiseTransferPayment): WiseTransferPayment {
+  return {
+    // wrapField skips only an empty string, which carries no text to envelope.
+    type: wrapField(payment.type, TRANSFER_SOURCE) ?? payment.type,
+    status: wrapField(payment.status, TRANSFER_SOURCE) ?? payment.status,
+    errorCode: wrapField(payment.errorCode, TRANSFER_SOURCE) ?? null,
+  };
 }

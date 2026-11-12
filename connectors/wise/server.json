@@ -40,6 +40,27 @@
           "isRequired": false,
           "isSecret": false,
           "format": "string"
+        },
+        {
+          "name": "WISE_CONFIG_PATH",
+          "description": "Directory for the locally stored credentials file (default ~/.mcp/wise).",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "MCP_HOST_BRIDGE_STATE",
+          "description": "Path to the host app bridge state file. Set by the host app.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "MINDSTONE_REBEL_BRIDGE_STATE",
+          "description": "Legacy name for MCP_HOST_BRIDGE_STATE. Set by the host app.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
         }
       ]
     }

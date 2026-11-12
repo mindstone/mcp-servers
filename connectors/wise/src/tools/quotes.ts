@@ -62,7 +62,7 @@ export function registerQuoteTools(server: McpServer): void {
       const targetCurrency = validateCurrency(args.target_currency, 'target_currency');
 
       const quote = await wiseFetch<WiseQuote>(
-        credentials.apiToken,
+        credentials,
         `/v3/profiles/${profileId}/quotes`,
         {
           method: 'POST',
@@ -81,7 +81,7 @@ export function registerQuoteTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        message: `Quote created (id ${quote.id}). Rate locks typically expire after ~30 minutes.`,
+        message: 'Quote created. Rate locks typically expire after ~30 minutes.',
         quote: wrapQuote(quote),
       });
     }),
