@@ -3,7 +3,7 @@ import { DriveService } from '../modules/drive/service.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { toMcpError } from '../utils/apiError.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
-import { EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
+import { EventResponse, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 
@@ -18,29 +18,13 @@ const DEFAULT_TIME_WINDOW_DAYS = 14;
 const DEFAULT_MAX_RESULTS = 250;
 const MAX_RESULTS_CAP = 500;
 
-const CALENDAR_CONFIG = {
-  maxAttachmentSize: 10 * 1024 * 1024, // 10MB
-  allowedAttachmentTypes: [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'image/jpeg',
-    'image/png',
-    'text/plain'
-  ]
-};
-
 // Initialize services lazily
 async function initializeServices() {
   if (!driveService) {
     driveService = new DriveService();
   }
   if (!calendarService) {
-    calendarService = new CalendarService(CALENDAR_CONFIG);
+    calendarService = new CalendarService();
     await calendarService.ensureInitialized();
   }
   if (!accountManager) {

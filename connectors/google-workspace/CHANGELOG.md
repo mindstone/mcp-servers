@@ -11,6 +11,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - `list_workspace_drafts` names each draft it could not read and why, in a new `unreadableDrafts` result field, instead of silently leaving it out of the list.
 - Corrected the `batch_update_workspace_document` examples to use Google Docs' native nested request keys.
+- Calendar event attachments are now returned and attached as Drive files, with new content uploaded to Drive; Sheets anchor continuation tokens from spreadsheet and batch reads can be passed back as given.
 
 ## [0.5.5] - 2026-11-06
 

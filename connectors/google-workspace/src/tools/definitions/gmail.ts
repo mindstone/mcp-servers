@@ -7,7 +7,7 @@ export const gmailTools: ToolMetadata[] = [
   {
     name: 'download_workspace_attachment',
     category: 'Gmail/Messages',
-    description: `Download an attachment from a Gmail message or Calendar event to local storage. Returns attachment metadata including the local file path.`,
+    description: `Download an attachment from a Gmail message to local storage, or find one saved locally with upload_workspace_attachment. Returns attachment metadata including the local file path. Calendar event attachments are Drive files: open them with download_drive_file, passing the attachment's fileId as file_id.`,
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: 'object',

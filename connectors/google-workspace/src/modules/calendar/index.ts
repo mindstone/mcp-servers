@@ -29,8 +29,7 @@ import {
   CreateEventParams,
   EventResponse,
   CreateEventResponse,
-  CalendarError,
-  CalendarModuleConfig
+  CalendarError
 } from './types.js';
 
 // Create singleton instance
@@ -40,15 +39,14 @@ let calendarService: CalendarService | null = null;
  * Initialize the Calendar module
  * This must be called before using any calendar operations
  * 
- * @param config - Optional configuration including OAuth scope overrides
  * @returns Initialized CalendarService instance
- * 
+ *
  * Note: This function ensures only one instance of the service exists,
  * following the singleton pattern for consistent state management.
  */
-export async function initializeCalendarModule(config?: CalendarModuleConfig): Promise<CalendarService> {
+export async function initializeCalendarModule(): Promise<CalendarService> {
   if (!calendarService) {
-    calendarService = new CalendarService(config);
+    calendarService = new CalendarService();
     await calendarService.initialize();
   }
   return calendarService;
@@ -79,6 +77,5 @@ export {
   CreateEventParams,
   EventResponse,
   CreateEventResponse,
-  CalendarError,
-  CalendarModuleConfig
+  CalendarError
 };

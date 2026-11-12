@@ -478,6 +478,31 @@ Usage examples:
           },
           description: 'Optional list of event attendees'
         },
+        attachments: {
+          type: 'array',
+          description: 'Optional files to attach. Each is an existing Drive file (driveFileId) or base64 content, which is uploaded to the user\'s Drive first. If any attachment fails, no event is created.',
+          items: {
+            type: 'object',
+            properties: {
+              driveFileId: {
+                type: 'string',
+                description: 'ID of an existing Drive file to attach'
+              },
+              content: {
+                type: 'string',
+                description: 'Base64 file content to upload to the user\'s Drive and attach (use instead of driveFileId)'
+              },
+              name: {
+                type: 'string',
+                description: 'Attachment title shown on the event'
+              },
+              mimeType: {
+                type: 'string',
+                description: 'MIME type of the file (e.g., application/pdf)'
+              }
+            }
+          }
+        },
         recurrence: {
           type: 'array',
           items: { type: 'string' },

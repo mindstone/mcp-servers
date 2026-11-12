@@ -34,13 +34,12 @@ export interface AttachmentValidationResult {
 }
 
 // Folder structure constants
-export type AttachmentFolderType = 'attachments' | 'email' | 'calendar' | 'incoming' | 'outgoing' | 'event-files';
+export type AttachmentFolderType = 'attachments' | 'email' | 'calendar' | 'incoming' | 'outgoing';
 
 export const ATTACHMENT_FOLDERS: Record<string, AttachmentFolderType> = {
   ROOT: 'attachments',
   EMAIL: 'email',
   CALENDAR: 'calendar',
   INCOMING: 'incoming',
-  OUTGOING: 'outgoing',
-  EVENT_FILES: 'event-files'
+  OUTGOING: 'outgoing'
 };

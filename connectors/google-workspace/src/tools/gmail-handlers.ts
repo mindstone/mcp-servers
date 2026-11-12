@@ -1322,6 +1322,13 @@ export async function handleManageWorkspaceAttachment(params: ManageAttachmentPa
             };
           }
 
+          if (source === 'calendar') {
+            throw new McpError(
+              ErrorCode.InvalidRequest,
+              'Attachment not found in local storage. Calendar event attachments are Drive files: open them with download_drive_file, passing the attachment\'s fileId as file_id.'
+            );
+          }
+
           // Fall back to Gmail API for real Gmail attachments
           const gmailAttachment = await gmailService.getAttachment(email, messageId, filename);
 

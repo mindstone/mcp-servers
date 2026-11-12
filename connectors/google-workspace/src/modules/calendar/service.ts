@@ -1,7 +1,6 @@
 import { isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../../utils/google-retry.js';
 import { google, calendar_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import path from 'path';
 import { getAccountManager } from '../accounts/index.js';
 import {
   GetEventsParams,
@@ -9,39 +8,44 @@ import {
   EventResponse,
   CreateEventResponse,
   CalendarError,
-  CalendarModuleConfig,
   ManageEventParams,
   ManageEventResponse,
-  CalendarAttachment,
+  CalendarAttachmentReference,
   CalendarListItem
 } from './types.js';
-import { AttachmentService } from '../attachments/service.js';
 import { DriveService } from '../drive/service.js';
-import { ATTACHMENT_FOLDERS, AttachmentSource, AttachmentMetadata } from '../attachments/types.js';
 import { AccountError } from '../accounts/types.js';
 import { isUnauthorizedError } from '../accounts/unauthorized.js';
 import { isPassthroughGoogleError } from '../../utils/apiError.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
 
 type CalendarEvent = calendar_v3.Schema$Event;
 type GoogleEventAttachment = calendar_v3.Schema$EventAttachment;
+type CreateEventAttachment = NonNullable<CreateEventParams['attachments']>[number];
 
-// Convert Google Calendar attachment to our format
-function convertToCalendarAttachment(attachment: GoogleEventAttachment): CalendarAttachment {
-  return {
-    content: attachment.fileUrl || '', // Use fileUrl as content for now
-    title: attachment.title || 'untitled',
-    mimeType: attachment.mimeType || 'application/octet-stream',
-    size: 0 // Size not available from Calendar API
-  };
+function toAttachmentReferences(attachments: GoogleEventAttachment[] | undefined): CalendarAttachmentReference[] | undefined {
+  const references = (attachments ?? [])
+    .filter(attachment => attachment.fileId || attachment.fileUrl)
+    .map(attachment => ({
+      name: attachment.title || 'untitled',
+      ...(attachment.fileId ? { fileId: attachment.fileId } : {}),
+      ...(attachment.fileUrl ? { fileUrl: attachment.fileUrl } : {}),
+      ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+    }));
+  return references.length > 0 ? references : undefined;
 }
 
-// Convert our attachment format to Google Calendar format
-function convertToGoogleAttachment(attachment: CalendarAttachment): GoogleEventAttachment {
-  return {
-    title: attachment.title,
-    mimeType: attachment.mimeType,
-    fileUrl: attachment.content // Store content in fileUrl
-  };
+function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const data = error && typeof error === 'object' && 'data' in error
+    ? (error as { data?: unknown }).data
+    : undefined;
+  const details = data && typeof data === 'object' && 'details' in data
+    ? (data as { details?: unknown }).details
+    : undefined;
+  return typeof details === 'string'
+    ? `${message}: ${wrapUntrustedContent(details, 'google-workspace:calendar:attachment-error')}`
+    : message;
 }
 
 /**
@@ -49,14 +53,8 @@ function convertToGoogleAttachment(attachment: CalendarAttachment): GoogleEventA
  */
 export class CalendarService {
   private oauth2Client!: OAuth2Client;
-  private attachmentService?: AttachmentService;
   private driveService?: DriveService;
   private initialized = false;
-  private config?: CalendarModuleConfig;
-
-  constructor(config?: CalendarModuleConfig) {
-    this.config = config;
-  }
 
   /**
    * Initialize the Calendar service and all dependencies
@@ -67,10 +65,6 @@ export class CalendarService {
       this.oauth2Client = await accountManager.getAuthClient();
       this.driveService = new DriveService();
       await this.driveService.ensureInitialized();
-      this.attachmentService = AttachmentService.getInstance({
-        maxSizeBytes: this.config?.maxAttachmentSize,
-        allowedMimeTypes: this.config?.allowedAttachmentTypes
-      });
       this.initialized = true;
     } catch (error) {
       if (isPassthroughGoogleError(error)) throw error;
@@ -88,19 +82,6 @@ export class CalendarService {
   public async ensureInitialized(): Promise<void> {
     if (!this.initialized) {
       await this.initialize();
-    }
-  }
-
-  /**
-   * Check if the service is initialized
-   */
-  private checkInitialized(): void {
-    if (!this.initialized) {
-      throw new CalendarError(
-        'Calendar service not initialized',
-        'INIT_ERROR',
-        'Please ensure the service is initialized before use'
-      );
     }
   }
 
@@ -236,62 +217,74 @@ export class CalendarService {
   }
 
   /**
-   * Process event attachments directly like Gmail
+   * Turn each requested attachment into a Drive link Calendar can attach.
+   * Any failure throws before the event is created, naming the attachment.
    */
-  private async processEventAttachments(
+  private async resolveAttachmentsForInsert(
     email: string,
-    attachments: GoogleEventAttachment[]
-  ): Promise<AttachmentMetadata[]> {
-    if (!this.attachmentService) {
+    attachments: CreateEventAttachment[]
+  ): Promise<GoogleEventAttachment[]> {
+    if (attachments.length === 0) return [];
+    if (!this.driveService) {
       throw new CalendarError(
         'Calendar service not initialized',
         'SERVICE_ERROR',
-        'Please ensure the service is initialized before processing attachments'
+        'Please ensure the service is initialized before adding attachments'
       );
     }
-    const processedAttachments: AttachmentMetadata[] = [];
+    const driveService = this.driveService;
 
-    for (const googleAttachment of attachments) {
-      // Convert Google attachment to our format
-      const attachment = convertToCalendarAttachment(googleAttachment);
-
-      const result = await this.attachmentService.processAttachment(
-        email,
-        {
-          content: attachment.content,
-          metadata: {
-            name: attachment.title,
-            mimeType: attachment.mimeType,
-            size: attachment.size
-          }
-        },
-        ATTACHMENT_FOLDERS.EVENT_FILES
-      );
-
-      if (result.success && result.attachment) {
-        processedAttachments.push(result.attachment);
+    const resolved: GoogleEventAttachment[] = [];
+    for (const attachment of attachments) {
+      const label = attachment.name || attachment.driveFileId || 'attachment';
+      if (!attachment.driveFileId && !attachment.content) {
+        throw new CalendarError(
+          `Attachment "${label}" needs either a Drive file ID (driveFileId) or base64 content`,
+          'INVALID_REQUEST',
+          'No event was created'
+        );
       }
-    }
 
-    return processedAttachments;
+      let file: { id?: string | null; name?: string | null; mimeType?: string | null; webViewLink?: string | null };
+      try {
+        const result = attachment.driveFileId
+          ? await driveService.getFileMetadata(email, attachment.driveFileId)
+          : await driveService.uploadFile(email, {
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            content: Buffer.from(attachment.content!, 'base64'),
+          });
+        file = result.data ?? {};
+      } catch (error) {
+        if (isPassthroughGoogleError(error)) throw error;
+        throw new CalendarError(
+          `Could not ${attachment.driveFileId ? 'find the Drive file for' : 'upload'} attachment "${label}": ${describeError(error)}`,
+          'ATTACHMENT_ERROR',
+          'No event was created'
+        );
+      }
+
+      if (!file.webViewLink) {
+        throw new CalendarError(
+          `Drive returned no link for attachment "${label}"`,
+          'ATTACHMENT_ERROR',
+          'No event was created'
+        );
+      }
+      resolved.push({
+        fileUrl: file.webViewLink,
+        title: attachment.name || file.name || 'untitled',
+        mimeType: file.mimeType || attachment.mimeType,
+      });
+    }
+    return resolved;
   }
 
   /**
    * Map Calendar event to EventResponse
    */
-  private async mapEventResponse(email: string, event: CalendarEvent): Promise<EventResponse> {
-    // Process attachments if present
-    let attachments: { name: string }[] | undefined;
-    
-    if (event.attachments && event.attachments.length > 0) {
-      // First process and store full metadata
-      const processedAttachments = await this.processEventAttachments(email, event.attachments);
-      
-      // Then return simplified format for AI
-      attachments = processedAttachments.map(att => ({
-        name: att.name
-      }));
-    }
+  private mapEventResponse(event: CalendarEvent): EventResponse {
+    const attachments = toAttachmentReferences(event.attachments);
 
     // Properly map all-day events (date only) vs timed events (dateTime)
     const isAllDay = !event.start?.dateTime;
@@ -410,7 +403,7 @@ export class CalendarService {
           return [];
         }
 
-        return Promise.all(trimmedEvents.map(event => this.mapEventResponse(email, event)));
+        return trimmedEvents.map(event => this.mapEventResponse(event));
       } catch (error: any) {
         if (isGoogleRecoveryExhausted(error)) throw error;
         if (isShortWindowRateLimit(error)) throw error;
@@ -453,7 +446,7 @@ export class CalendarService {
           );
         }
 
-        return this.mapEventResponse(email, event);
+        return this.mapEventResponse(event);
       } catch (error: any) {
         if (isPassthroughGoogleError(error)) throw error;
         // Handle not found errors with helpful hint for primary calendar
@@ -488,43 +481,10 @@ export class CalendarService {
     const calendar = await this.getCalendarClient(email);
     const targetCalendarId = calendarId || 'primary';
 
+    // Resolved once, outside the insert's auth retry, so a retry never uploads twice.
+    const eventAttachments = await this.resolveAttachmentsForInsert(email, attachments);
+
     return this.handleCalendarOperation(email, async () => {
-      // Process attachments first
-      const processedAttachments: GoogleEventAttachment[] = [];
-      for (const attachment of attachments) {
-        const source: AttachmentSource = {
-          content: attachment.content || '',
-          metadata: {
-            name: attachment.name,
-            mimeType: attachment.mimeType,
-            size: attachment.size
-          }
-        };
-
-        if (!this.attachmentService) {
-          throw new CalendarError(
-            'Calendar service not initialized',
-            'SERVICE_ERROR',
-            'Please ensure the service is initialized before processing attachments'
-          );
-        }
-        const result = await this.attachmentService.processAttachment(
-          email,
-          source,
-          ATTACHMENT_FOLDERS.EVENT_FILES
-        );
-
-        if (result.success && result.attachment) {
-          // Convert back to Google format
-          processedAttachments.push(convertToGoogleAttachment({
-            content: result.attachment.id, // Use ID as content
-            title: result.attachment.name,
-            mimeType: result.attachment.mimeType,
-            size: result.attachment.size
-          }));
-        }
-      }
-
       const eventData: calendar_v3.Schema$Event = {
         summary,
         description,
@@ -532,7 +492,7 @@ export class CalendarService {
         start,
         end,
         attendees: attendees?.map(attendee => ({ email: attendee.email })),
-        attachments: processedAttachments.length > 0 ? processedAttachments : undefined,
+        attachments: eventAttachments.length > 0 ? eventAttachments : undefined,
         recurrence,
         reminders,
         colorId,
@@ -543,7 +503,9 @@ export class CalendarService {
         const { data: event } = await calendar.events.insert({
           calendarId: targetCalendarId,
           requestBody: eventData,
-          sendUpdates: 'all'
+          sendUpdates: 'all',
+          // Calendar drops attachments from the request without this.
+          ...(eventAttachments.length > 0 ? { supportsAttachments: true } : {})
         });
 
         if (!event.id || !event.summary) {
@@ -553,17 +515,6 @@ export class CalendarService {
             'Event creation response was incomplete'
           );
         }
-
-        // Convert processed attachments to AttachmentMetadata format
-        const attachmentMetadata = processedAttachments.length > 0 ? 
-          processedAttachments.map(a => ({
-            id: a.fileId!,
-            name: a.title!,
-            mimeType: a.mimeType!,
-            size: 0, // Size not available from Calendar API
-            path: path.join(this.attachmentService!.getAttachmentPath(ATTACHMENT_FOLDERS.EVENT_FILES), `${a.fileId}_${a.title}`)
-          })) : 
-          undefined;
 
         // Format human-readable confirmation with day-of-week to help LLM verify correct date
         const eventStart = event.start?.dateTime || event.start?.date;
@@ -611,7 +562,7 @@ export class CalendarService {
           summary: event.summary,
           htmlLink: event.htmlLink || '',
           scheduledFor,
-          attachments: attachmentMetadata
+          attachments: toAttachmentReferences(event.attachments)
         };
       } catch (error: any) {
         if (isGoogleRecoveryExhausted(error)) throw error;

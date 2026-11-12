@@ -195,8 +195,9 @@ export abstract class BaseGoogleService<TClient> {
    * For example, 'drive' (full access) satisfies 'drive.file' or 'drive.readonly'.
    * 
    * If scopes are missing, throws an error with user-friendly guidance to re-authenticate.
+   * With `anyOf`, one satisfied scope is enough (for calls Google accepts under any of several scopes).
    */
-  protected async validateScopes(email: string, requiredScopes: string[]): Promise<void> {
+  protected async validateScopes(email: string, requiredScopes: string[], { anyOf = false } = {}): Promise<void> {
     try {
       const accountManager = getAccountManager();
       const tokenInfo = await accountManager.validateToken(email);
@@ -233,8 +234,9 @@ export abstract class BaseGoogleService<TClient> {
 
       // Use hierarchy-aware check (e.g., 'drive' satisfies 'drive.file')
       const missingScopes = findMissingScopes(grantedScopes, requiredScopes);
+      const satisfied = anyOf ? missingScopes.length < requiredScopes.length : missingScopes.length === 0;
 
-      if (missingScopes.length > 0) {
+      if (!satisfied) {
         const serviceNames = getServiceNamesForScopes(missingScopes);
         const servicesText = serviceNames.join(', ');
         

@@ -400,7 +400,7 @@ export async function handleReadSpreadsheet(args: ReadSpreadsheetArgs): Promise<
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:spreadsheet/${spreadsheetId}`, ['spreadsheetId', 'continuationToken', 'data.continuationToken']);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:spreadsheet/${spreadsheetId}`, ['spreadsheetId', 'anchorValues.continuationToken']);
     }
     
     // Format as human-readable text
@@ -474,7 +474,7 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:values/${spreadsheetId}`, ['spreadsheetId', 'continuationToken', 'data.continuationToken']);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:values/${spreadsheetId}`, ['spreadsheetId', 'continuationToken']);
     }
 
     if (isAnchorReadResponse(result.data)) {
@@ -948,7 +948,7 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:batch/${spreadsheetId}`, ['*.data.continuationToken']);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:sheets:batch/${spreadsheetId}`, ['*.anchor.continuationToken']);
     }
 
     if (valueView === 'shaped') {

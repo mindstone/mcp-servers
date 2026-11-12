@@ -191,6 +191,12 @@ Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting h
 
 Anchor envelopes keep their first/last windows, summary and continuation token unchanged. Limits apply when reading a continuation page, but truncation creates no new token and does not advance the original token. To retrieve omitted cells, re-read an explicit range or repeat the token read with larger limits (or without limits).
 
+An anchor read returns its `continuationToken` at `anchorValues.continuationToken` for a whole spreadsheet, and at `anchor.continuationToken` in each range's entry of a batch read. Pass it back exactly as given, as the read tool's `continuation_token` argument.
+
+### Calendar attachments
+
+Event attachments are returned as Drive references: the file's `fileId` and its link, each when Google provides it. When an attachment has a `fileId`, open it with `download_drive_file`, passing that ID. When creating an event, each attachment is either an existing Drive file (`driveFileId`, the same Drive ID a read returns as `fileId`) or `content`, a base64-encoded string, which is uploaded to your Drive first. If any attachment fails, the event is not created; files already uploaded for it stay in your Drive.
+
 ### Shared drives
 
 All Drive file, permission, and comment tools work on shared-drive files (the `files.*` and `permissions.*` calls pass `supportsAllDrives`; the Comments API addresses files by ID and defines no such flag). Listing and search default to the user's own corpus plus files shared with them, so shared-drive content the user has access to but has never opened may not surface by default. To work with shared drives explicitly:

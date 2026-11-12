@@ -246,6 +246,31 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
     }
   }
 
+  async getFileMetadata(email: string, fileId: string): Promise<DriveOperationResult> {
+    try {
+      await this.ensureInitialized();
+      // Google's files.get also accepts drive.file, for files the app can open; Google enforces which.
+      await this.validateScopes(email, [DRIVE_SCOPES.READONLY, DRIVE_SCOPES.FILE], { anyOf: true });
+      const client = await this.getAuthenticatedClient(
+        email,
+        (auth) => google.drive({ version: 'v3', auth })
+      );
+
+      const response = await client.files.get({
+        fileId,
+        fields: 'id, name, mimeType, webViewLink',
+        supportsAllDrives: true,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to read Drive file metadata');
+    }
+  }
+
   async downloadFile(email: string, options: FileDownloadOptions): Promise<DriveOperationResult> {
     try {
       await this.ensureInitialized();
