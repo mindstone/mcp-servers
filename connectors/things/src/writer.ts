@@ -163,7 +163,8 @@ export class ThingsWriter {
       const url = thingsUrl('json', { data: JSON.stringify([{ type: 'to-do', attributes }]) });
       // Creation times are stored in whole-ish seconds and the clock may lag a little: allow 2 s.
       const sentAt = this.now().getTime() / 1000 - 2;
-      await this.sendUrl(url);
+      const failed = await this.sendUrl(url);
+      if (failed) return { outcome: 'unconfirmed', reason: failed, created: 'unknown' };
       const today = this.todayIso();
       const found = await this.poll((r) => {
         const fresh = sameTitled(r, input.title).filter((t) => !before.has(t.uuid));
@@ -231,7 +232,8 @@ export class ThingsWriter {
         'append-checklist-items': patch.appendChecklist?.join('\n'),
         'list-id': patch.projectId ?? patch.areaId,
       });
-      await this.sendUrl(url, token);
+      const failed = await this.sendUrl(url, token);
+      if (failed) return { outcome: 'unconfirmed', reason: failed, before };
       return { ...(await this.waitFor(uuid, (t) => differences(t, expected))), before };
     });
   }
@@ -267,7 +269,8 @@ export class ThingsWriter {
         completed: status === 'completed' ? 'true' : reopening ? 'false' : undefined,
         canceled: status === 'canceled' ? 'true' : reopening && before.status === 'canceled' ? 'false' : undefined,
       });
-      await this.sendUrl(url, token);
+      const failed = await this.sendUrl(url, token);
+      if (failed) return { outcome: 'unconfirmed', reason: failed, before };
       return { ...(await this.waitFor(uuid, (t) => (t.status === status ? [] : [`status is ${t.status}`]))), before };
     });
   }
@@ -295,7 +298,14 @@ export class ThingsWriter {
         }
       });
       if (already) return { outcome: 'confirmed', item: before, unchanged: true };
-      const out = await this.executor.appleScript(TRASH_SCRIPT, [uuid, before.title]);
+      let out: string;
+      try {
+        out = await this.executor.appleScript(TRASH_SCRIPT, [uuid, before.title]);
+      } catch (e) {
+        // A permission refusal means nothing ran; anything else (a timeout, say) may have trashed it.
+        if (e instanceof SetupError) throw e;
+        return { outcome: 'unconfirmed', reason: `Asking Things to trash it failed (${quoted(String((e as Error).message ?? e))}), so it may or may not be in the Trash. Re-read it before retrying.`, before };
+      }
       if (out !== 'ok') throw new Error(`Things refused to trash it (${quoted(out)}). Nothing was changed; re-read it and check it's the right one.`);
       return { ...(await this.waitFor(uuid, (t) => (t.trashed ? [] : ['not in the Trash yet']))), before };
     });
@@ -323,16 +333,21 @@ export class ThingsWriter {
     }
   }
 
-  /** Send a URL command, once Things is sure to accept URL commands at all (else it shows an alert). */
-  private async sendUrl(url: string, token?: string): Promise<void> {
+  /**
+   * Send a URL command, once Things is sure to accept URL commands at all (else it shows an alert;
+   * that refusal means nothing was sent). A failure of the send itself is returned, not thrown: by
+   * then the change may or may not have reached Things, so it ends as `unconfirmed`.
+   */
+  private async sendUrl(url: string, token?: string): Promise<string | undefined> {
     if (!(await this.executor.urlSchemeEnabled())) {
       throw new SetupError('"Enable Things URLs" is off in Things > Settings > General, so Things would show an alert. Turn it on, then retry. Nothing was changed.');
     }
     try {
       await this.executor.openUrl(url);
+      return undefined;
     } catch (e) {
       // A failed `open` quotes its whole command, token included.
-      throw new Error(`Could not send the change to Things (${quoted(redact(String((e as Error).message ?? e), token))}). It probably wasn't made; re-read the item to check before retrying.`);
+      return `Sending the change to Things failed (${quoted(redact(String((e as Error).message ?? e), token))}), so it may or may not have been made. Re-read the item before retrying.`;
     }
   }
 
@@ -348,7 +363,8 @@ export class ThingsWriter {
   /** Re-read fresh snapshots until `check` finds the item; `unconfirmed` on `stop` or timeout. */
   private async poll(check: (r: ThingsReader) => { item: Task } | { waiting: string[] } | { stop: string }): Promise<Receipt> {
     // A command to a Things that was closed waits for it to start: allow longer.
-    const timeoutMs = (await this.executor.thingsRunning()) ? this.timeoutMs : this.timeoutMs * 3;
+    const running = await this.executor.thingsRunning().catch(() => false);
+    const timeoutMs = running ? this.timeoutMs : this.timeoutMs * 3;
     const started = Date.now();
     let last: string[] = [];
     for (;;) {
@@ -487,7 +503,8 @@ function sameDestination(r: ThingsReader, t: Task, input: NewTodo): boolean {
   const project = t.project ?? (t.heading ? r.task(t.heading)?.project : undefined);
   if (input.projectId) return project === input.projectId;
   if (input.areaId) return !project && t.area === input.areaId;
-  return !project && !t.area;
+  // With no `when`, a new loose to-do goes to the Inbox; with one, wherever it says.
+  return !project && !t.area && (input.when !== undefined || t.start === 'Inbox');
 }
 
 /** To-dos with exactly this title, in any state. */
@@ -585,7 +602,8 @@ function newTodoProblems(t: Task, input: NewTodo, today: string): string[] {
       title: input.title,
       notes: input.notes ?? '',
       // With no when and nowhere to go, Things files it in the Inbox.
-      ...(input.when ? whenFields(input.when, today) : input.projectId || input.areaId ? {} : { start: 'Inbox' as const, start_date: null }),
+      // With no when, Things files it in the Inbox, or (given a project or area) unscheduled there.
+      ...(input.when ? whenFields(input.when, today) : input.projectId || input.areaId ? { start_date: null, evening: false } : { start: 'Inbox' as const, start_date: null }),
       deadline: input.deadline ?? null,
       tags: input.tags ?? [],
       checklist: input.checklist ?? [],

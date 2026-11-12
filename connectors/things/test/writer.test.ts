@@ -220,11 +220,13 @@ describe('changing a to-do', () => {
     expect(none.s.calls).toHaveLength(0);
   });
 
-  it('keeps the token out of an error from a failed send', async () => {
+  it('keeps the token out of the reason a failed send gives', async () => {
     const { w } = await setup(base, {}, (s) => ({ ...s, urlSchemeEnabled: () => s.urlSchemeEnabled(), thingsRunning: () => s.thingsRunning(), appleScript: (a, b) => s.appleScript(a, b), openUrl: async (url) => { throw new Error(`Command failed: open -g ${url}`); } }));
-    const e = await w.updateTodo('todo-milk-0001', { when: 'today' }, 'Buy milk').catch((x: Error) => x);
-    expect(String(e)).toMatch(/auth-token=<token>/);
-    expect(String(e)).not.toContain(FIXTURE_TOKEN);
+    // After sending, a failure is unconfirmed (it may have reached Things), and its reason is scrubbed.
+    const r = await w.updateTodo('todo-milk-0001', { when: 'today' }, 'Buy milk');
+    expect(r.outcome).toBe('unconfirmed');
+    expect(JSON.stringify(r)).toMatch(/auth-token=<token>/);
+    expect(JSON.stringify(r)).not.toContain(FIXTURE_TOKEN);
   });
 
   it('says unconfirmed, with the state before, when the change never reads back', async () => {

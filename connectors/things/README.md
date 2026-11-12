@@ -248,9 +248,10 @@ retried append appends twice). Anything refused is an error result saying why, a
   there; changes are refused until the server is updated.
 - **Changes.** Through the Things URL scheme (`things:///json` to add, `things:///update` to change,
   with the token Things stores, read fresh each time and never shown or logged), and AppleScript for
-  the Trash, which re-checks the title in the same call that deletes. A lock shared by every host
-  (in `~/Library/Caches/mcp-server-things`) means two hosts' copies of the server never change
-  Things at the same moment; a copy that crashed holding it is taken over, a live one never is.
+  the Trash, which re-checks the title in the same call that deletes. A kernel file lock shared by
+  every host (taken with macOS's own `/usr/bin/lockf`, on a file in
+  `~/Library/Caches/mcp-server-things`) means two hosts' copies of the server never change Things at
+  the same moment; the system frees it the instant its holder exits, so a crash leaves nothing stale.
 - **Finding a new to-do.** Things doesn't say which id it gave a new to-do, so the server looks for
   one that wasn't there before, has every field it sent, and was made in the last few seconds. If
   it can't tell which one is new, it says `unconfirmed` rather than guess.

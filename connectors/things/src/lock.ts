@@ -4,30 +4,26 @@
  * queue isn't enough: without this, two could both pass the duplicate check and both add, or both
  * validate a change against the same state.
  *
- * The lock is a directory in one fixed per-user folder (not the temp folder, which differs from host
- * to host), holding an `owner` file: the holder's pid and a random token. It is taken from
- * validation through dispatch to verification.
+ * It is a kernel file lock (flock), taken by the system's own tool (`/usr/bin/lockf` on macOS,
+ * `flock` on Linux) in a child process that holds it until we close its stdin. The kernel lets in
+ * one holder at a time, and frees the lock the moment the holder exits, crashes or is killed (if
+ * this server dies, the child sees its stdin close and exits too). So there is no stale lock to
+ * detect, and no live holder can ever be displaced.
  *
- * - Taking it: `mkdir`, which is atomic, then writing `owner`.
- * - A live holder is never displaced, however long it takes; a waiter gives up after `waitMs`.
- * - A dead holder's lock (its pid gone, or no `owner` written after `orphanMs`) is taken over by
- *   writing our own `owner` over it (an atomic rename) and checking a moment later that ours is
- *   still the one there; if two take it over at once, the last write wins and the other waits again.
- * - Releasing it removes the directory only if `owner` is still ours.
+ * The lock file lives in one fixed per-user folder, not the temp folder, which differs from host to
+ * host. It is taken from validation through dispatch to verification.
  */
-import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export interface LockOptions {
-  /** Where lock directories go. Defaults to `defaultLockDir()`. */
+  /** Where lock files go. Defaults to `defaultLockDir()`. */
   dir?: string;
   /** How long to wait for another writer before giving up. */
   waitMs?: number;
-  /** A lock directory with no owner written after this long is treated as abandoned. */
-  orphanMs?: number;
 }
 
 /** The same folder for every host the user runs, so they all see one lock. */
@@ -35,84 +31,39 @@ export function defaultLockDir(): string {
   return join(homedir(), 'Library', 'Caches', 'mcp-server-things');
 }
 
-interface Owner {
-  pid: number;
-  token: string;
+/** The command that takes the lock on `file`, waits at most `seconds`, then runs a shell that says so and holds it. */
+function lockCommand(file: string, seconds: number): [string, string[]] {
+  const hold = ['/bin/sh', '-c', 'echo locked; exec cat'];
+  return process.platform === 'darwin'
+    ? ['/usr/bin/lockf', ['-k', '-s', '-t', String(seconds), file, ...hold]]
+    : ['flock', ['-w', String(seconds), file, ...hold]];
 }
 
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
-function readOwner(path: string): Owner | undefined {
-  try {
-    const [pid, token] = readFileSync(join(path, 'owner'), 'utf8').trim().split(' ');
-    return pid && token ? { pid: Number(pid), token } : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Write `owner` atomically, so a reader sees the old owner or the new one, never half of one. */
-function writeOwner(path: string, me: Owner): void {
-  const tmp = join(path, `owner.${me.token}`);
-  writeFileSync(tmp, `${me.pid} ${me.token}`, { mode: 0o600 });
-  renameSync(tmp, join(path, 'owner'));
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const BUSY = 'Another copy of the Things MCP server has been changing Things for a while. Nothing was changed; try again shortly.';
 
 /** Run `fn` holding the lock for `key` (the live database's path). */
 export async function withLock<T>(key: string, fn: () => Promise<T>, opts: LockOptions = {}): Promise<T> {
   const dir = opts.dir ?? defaultLockDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const path = join(dir, `${createHash('sha256').update(key).digest('hex').slice(0, 16)}.lock`);
-  const me: Owner = { pid: process.pid, token: randomBytes(12).toString('hex') };
-  const waitMs = opts.waitMs ?? 60_000;
-  const orphanMs = opts.orphanMs ?? 10_000;
-  const started = Date.now();
-  for (;;) {
-    try {
-      mkdirSync(path, { mode: 0o700 });
-      writeOwner(path, me);
-      break;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-    }
-    const owner = readOwner(path);
-    const abandoned = owner ? !alive(owner.pid) : ageMs(path) > orphanMs;
-    if (abandoned) {
-      try {
-        writeOwner(path, me);
-      } catch {
-        // Released while we looked; try again from the top.
-        continue;
-      }
-      await sleep(50);
-      if (readOwner(path)?.token === me.token) break;
-      continue;
-    }
-    if (Date.now() - started > waitMs) {
-      throw new Error('Another copy of the Things MCP server has been changing Things for over a minute. Nothing was changed; try again shortly.');
-    }
-    await sleep(100);
-  }
+  const file = join(dir, `${createHash('sha256').update(key).digest('hex').slice(0, 16)}.lock`);
+  closeSync(openSync(file, 'a', 0o600));
+  const [cmd, args] = lockCommand(file, Math.max(1, Math.ceil((opts.waitMs ?? 60_000) / 1000)));
+  const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  await new Promise<void>((resolve, reject) => {
+    let out = '';
+    child.stdout.on('data', (d: Buffer) => {
+      out += d.toString();
+      if (out.includes('locked')) resolve();
+    });
+    // Exiting before saying "locked" means it timed out waiting (or could not run at all).
+    child.once('close', (code) => reject(new Error(code === 75 || code === 1 ? BUSY : `Could not take the write lock (${cmd} exited ${code}). Nothing was changed.`)));
+    child.once('error', (e) => reject(new Error(`Could not take the write lock (${e.message}). Nothing was changed.`)));
+  });
   try {
     return await fn();
   } finally {
-    if (readOwner(path)?.token === me.token) rmSync(path, { recursive: true, force: true });
-  }
-}
-
-function ageMs(path: string): number {
-  try {
-    return Date.now() - statSync(path).mtimeMs;
-  } catch {
-    return 0;
+    child.stdin.end();
+    await exited;
   }
 }

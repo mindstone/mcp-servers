@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { SetupError } from './db.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 const run = promisify(execFile);
@@ -53,7 +54,7 @@ export const macExecutor: ThingsExecutor = {
     } catch (e) {
       const stderr = String((e as { stderr?: unknown }).stderr ?? '');
       if (/-1743|not authori[sz]ed to send apple events/i.test(stderr)) {
-        throw new Error(
+        throw new SetupError(
           'macOS did not allow this app to control Things. Allow it in System Settings > Privacy & Security > Automation (the app this server runs in > Things3), then retry.',
         );
       }

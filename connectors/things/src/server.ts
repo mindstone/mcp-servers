@@ -82,6 +82,18 @@ export function createServer(deps: ServerDeps = {}): McpServer {
   const getWriter = () => (writer ??= new ThingsWriter({ openReader, now }));
 
   const server = new McpServer({ name: 'things', version: pkg.version }, { instructions: writes ? INSTRUCTIONS : `${INSTRUCTIONS}\n${READ_ONLY_NOTE}` });
+  // Every tool refuses an argument it doesn't take, rather than dropping it. Checked here, not by
+  // the SDK's strict schema, so the unknown name (the model's text) is quoted inside an envelope.
+  const register: McpServer['registerTool'] = ((name: string, config: { inputSchema: z.ZodObject }, handler: (a: Record<string, unknown>, extra: unknown) => Promise<CallToolResult>) => {
+    const known = new Set(Object.keys(config.inputSchema.shape));
+    return server.registerTool(name, config as never, (async (a: Record<string, unknown>, extra: unknown) => {
+      const unknown = Object.keys(a).filter((k) => !known.has(k));
+      if (unknown.length) {
+        return errorResult(`${name} doesn't take ${unknown.map((k) => wrapUntrusted(k, 'things')).join(', ')}, so nothing was done. It takes: ${[...known].join(', ')}.`);
+      }
+      return handler(a, extra);
+    }) as never);
+  }) as never;
 
   /** A fresh snapshot for `f`, closed afterwards; every failure becomes an error result. */
   const reading = (f: (r: ThingsReader, today: string) => CallToolResult) => async (): Promise<CallToolResult> => {
@@ -98,7 +110,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
 
   // --- Reads ---
 
-  server.registerTool(
+  register(
     'things_get_list',
     {
       title: 'Things: get a list',
@@ -115,7 +127,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         to: optional(isoDate.describe('logbook only: to this date, inclusive (default today).')),
         limit: limit(50, 200),
         offset,
-      }).strict(),
+      }).catchall(z.unknown()),
       annotations: { title: 'Things: get a list', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -129,7 +141,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_search',
     {
       title: 'Things: search',
@@ -140,7 +152,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         include_completed: optional(z.boolean().describe('Also completed and cancelled items.')),
         limit: limit(25, 100),
         offset,
-      }).strict(),
+      }).catchall(z.unknown()),
       annotations: { title: 'Things: search', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -153,12 +165,12 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_get_item',
     {
       title: 'Things: get an item',
       description: 'Everything about one to-do or project: whole notes, checklist, dates and a things:/// link that opens it. For what is inside a project, use things_get_project.',
-      inputSchema: z.object({ id }).strict(),
+      inputSchema: z.object({ id }).catchall(z.unknown()),
       annotations: { title: 'Things: get an item', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -169,12 +181,12 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_get_project',
     {
       title: 'Things: get a project',
       description: "A project and its open to-dos, as the app lays it out: to-dos without a heading first, then each heading with its to-dos. Find it by name or id. Long projects are paged (limit, offset).",
-      inputSchema: z.object({ project: projectRef, include_completed: optional(z.boolean().describe('Also its completed and cancelled to-dos.')), limit: limit(100, 300), offset }).strict(),
+      inputSchema: z.object({ project: projectRef, include_completed: optional(z.boolean().describe('Also its completed and cancelled to-dos.')), limit: limit(100, 300), offset }).catchall(z.unknown()),
       annotations: { title: 'Things: get a project', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (a) =>
@@ -182,21 +194,22 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         const c = r.projectContents(a.project, { status: a.include_completed ? null : 'incomplete' });
         // The items inside all share the project: leave it out of each.
         const b = (t: Task) => brief(t, today, () => undefined);
-        const flat = [...c.todos.map((t) => ({ t, heading: undefined as string | undefined })), ...c.headings.flatMap((h) => h.todos.map((t) => ({ t, heading: h.heading.title })))];
+        const flat = [...c.todos.map((t) => ({ t, heading: undefined as string | undefined })), ...c.headings.flatMap((h) => h.todos.map((t) => ({ t, heading: h.heading.uuid })))];
         const { shown, meta } = page(flat, a.limit, a.offset);
         // Under its heading, an item needn't repeat the heading's name either.
         const underHeading = (t: Task) => {
           const { heading: _h, ...rest } = b(t);
           return rest;
         };
-        const headings = new Map<string, Record<string, unknown>[]>(c.headings.map((h) => [h.heading.title, []]));
-        for (const x of shown) if (x.heading !== undefined) headings.get(x.heading)!.push(underHeading(x.t));
+        // By id: two headings can share a name.
+        const headings = new Map<string, { heading: string; todos: Record<string, unknown>[] }>(c.headings.map((h) => [h.heading.uuid, { heading: h.heading.title, todos: [] }]));
+        for (const x of shown) if (x.heading !== undefined) headings.get(x.heading)!.todos.push(underHeading(x.t));
         return result(
           meta,
           {
             project: brief(c.project, today, () => undefined, true),
             todos: shown.filter((x) => x.heading === undefined).map((x) => b(x.t)),
-            headings: [...headings].filter(([, todos]) => todos.length).map(([heading, todos]) => ({ heading, todos })),
+            headings: [...headings.values()].filter((h) => h.todos.length),
           },
           r,
           now(),
@@ -204,12 +217,12 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_get_overview',
     {
       title: 'Things: overview',
       description: 'How Things is organised: areas with their open projects, projects outside any area, every tag (adding a tag needs one that exists), and how many to-dos are in the Inbox and Today. Use it to find a project, area or tag name.',
-      inputSchema: z.object({}).strict(),
+      inputSchema: z.object({}).catchall(z.unknown()),
       annotations: { title: 'Things: overview', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () =>
@@ -251,7 +264,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
     }
   };
 
-  server.registerTool(
+  register(
     'things_add_todo',
     {
       title: 'Things: add a to-do',
@@ -267,7 +280,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         project: optional(projectRef),
         area: optional(areaRef),
         allow_duplicate: optional(z.boolean().describe('Add it even though an open to-do has this title.')),
-      }).strict(),
+      }).catchall(z.unknown()),
       annotations: { title: 'Things: add a to-do', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (a) =>
@@ -281,7 +294,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_update_todo',
     {
       title: 'Things: change a to-do',
@@ -301,7 +314,7 @@ export function createServer(deps: ServerDeps = {}): McpServer {
         append_checklist: optional(strings.describe('Checklist items to add at the end.')),
         project: optional(projectRef),
         area: optional(areaRef),
-      }).strict(),
+      }).catchall(z.unknown()),
       annotations: { title: 'Things: change a to-do', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     async (a) =>
@@ -320,25 +333,25 @@ export function createServer(deps: ServerDeps = {}): McpServer {
       })(),
   );
 
-  server.registerTool(
+  register(
     'things_set_status',
     {
       title: 'Things: complete, cancel or reopen',
       description: 'Mark a to-do or project completed (done), canceled, or incomplete (open again). A project is closed only once its to-dos are. Asking for the status it already has changes nothing.',
-      inputSchema: z.object({ id, current_title: currentTitle, status: z.enum(['completed', 'canceled', 'incomplete']).describe('completed means done.') }).strict(),
+      inputSchema: z.object({ id, current_title: currentTitle, status: z.enum(['completed', 'canceled', 'incomplete']).describe('completed means done.') }).catchall(z.unknown()),
       annotations: { title: 'Things: complete, cancel or reopen', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (a) => writing(async (w) => receiptResult(await w.setStatus(a.id, a.status, a.current_title), now()))(),
   );
 
   if (trash) {
-    server.registerTool(
+    register(
       'things_trash',
       {
         title: 'Things: move a to-do to the Trash',
         description:
           "Move one to-do to Things' Trash, only when the user has asked to delete that to-do. It stays in the Trash, where the user can restore it, until they empty it. Projects can't be trashed from here. On a repeating copy, only that copy goes; the repeat carries on.",
-        inputSchema: z.object({ id, current_title: currentTitle }).strict(),
+        inputSchema: z.object({ id, current_title: currentTitle }).catchall(z.unknown()),
         annotations: { title: 'Things: move a to-do to the Trash', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       },
       async (a) => writing(async (w) => receiptResult(await w.trash(a.id, a.current_title), now()))(),

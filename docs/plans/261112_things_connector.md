@@ -107,16 +107,22 @@ What changed:
 
 - **`THINGSDB` turns changes off.** Both found that a copy could pass the checks for a change that
   then went to the real Things.
-- **The lock lives in `~/Library/Caches/mcp-server-things`**, not the temp folder, which differs
-  from host to host (so it locked nothing across hosts). A live holder is never displaced; a dead
-  one's lock is taken over by writing our owner and checking it stuck; release removes only our own.
+- **The lock is a kernel file lock** (flock, taken by `/usr/bin/lockf` in a child process that
+  holds it until we let go) on a file in `~/Library/Caches/mcp-server-things`, not the temp folder,
+  which differs from host to host. The first fix, a lock directory with stale-owner takeover, still
+  let two writers in (a confirming review reproduced it); with the kernel lock there is no takeover
+  to get wrong: the system frees it the instant its holder exits, and never displaces a live one.
 - **Finding a new to-do** now expects every default too (the Inbox, no checklist, no project or
   area unless given, not in the Trash, made no later than now).
 - **After sending, every failure is `unconfirmed`**, including a failed read while checking, so a
   model never reads "error" as "nothing happened".
-- **Unknown arguments refuse the call** (strict schemas), instead of being dropped.
+- **Unknown arguments refuse the call**, instead of being dropped; the server checks them itself,
+  so an unknown name is quoted inside an envelope.
+- **A failed send or AppleScript call is `unconfirmed`** (it may have reached Things), except a
+  macOS permission refusal, which means nothing ran.
 - **No user text outside an envelope**, in diagnostics or executor errors.
-- **For models**: the duplicate check is scoped to where the to-do would go; search prefers items
+- **For models**: the duplicate check is scoped to where the to-do would go (the Inbox only for an
+  Inbox add); headings in a project are kept apart by id, not name; search prefers items
   with every word and says when it falls back; Upcoming is soonest first; the weekday comes with the
   date; `tonight` is accepted; `things_get_project` is paged; read-only instructions say how changes
   are turned on.
