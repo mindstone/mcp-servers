@@ -32,7 +32,7 @@ export function registerAccountTools(server: McpServer): void {
       // (/account/costs), not under /v1 — hence the absolute URL.
       const origin = new URL(KLING_API_BASE).origin;
       const data = await klingFetch(
-        `${origin}/account/costs?start_time=${args.start_time}&end_time=${args.end_time}`,
+        `${origin}/account/costs?${new URLSearchParams({ start_time: String(args.start_time), end_time: String(args.end_time) })}`,
         accountCostsResponseSchema,
       );
 

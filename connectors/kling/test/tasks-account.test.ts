@@ -75,8 +75,7 @@ describe('list_kling_tasks', () => {
     expect(json.task_type).toBe('text2video');
     expect(json.page).toBe(2);
     expect(json.count).toBe(2);
-    expect(capturedUrl).toContain('pageNum=2');
-    expect(capturedUrl).toContain('pageSize=10');
+    expect(capturedUrl).toBe(`${BASE}/videos/text2video?pageNum=2&pageSize=10`);
 
     const succeeded = json.tasks[0];
     expect(succeeded.task_id).toBe(enveloped(mockTaskId));
