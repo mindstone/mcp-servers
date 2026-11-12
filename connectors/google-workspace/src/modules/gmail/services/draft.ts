@@ -7,7 +7,8 @@ import {
 } from '../types.js';
 import { GmailAttachmentService } from './attachment.js';
 import { buildMimeMessage } from './mime-builder.js';
-import { describeApiError, isPassthroughGoogleError } from '../../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, hasErrorDetails, isPassthroughGoogleError } from '../../../utils/apiError.js';
+import { wrapUntrustedContent } from '../../../utils/untrusted-content.js';
 import logger from '../../../utils/logger.js';
 
 export type DraftAction = 'create' | 'read' | 'update' | 'delete' | 'send';
@@ -119,25 +120,29 @@ export class DraftService {
         userId: 'me'
       });
 
-      // Get full details for each draft
+      // Get full details for each draft; one that cannot be read is named, not dropped silently.
+      const unreadableDrafts: Array<{ id: string; error: string }> = [];
       const drafts = await Promise.all((data.drafts || [])
         .filter((draft): draft is { id: string } => typeof draft.id === 'string')
         .map(async draft => {
           try {
             return await this.getDraft(email, draft.id);
           } catch (error) {
-            // Log error but continue with other drafts
             logger.warn(`Failed to get draft ${draft.id}:`, error);
+            unreadableDrafts.push({
+              id: draft.id,
+              error: hasErrorDetails(error)
+                ? `${error.message}: ${wrapUntrustedContent(error.details, 'gmail:draft-error')}`
+                : describeApiErrorUntrusted(error, 'gmail:draft-error'),
+            });
             return null;
           }
         })
       );
 
-      // Filter out any failed draft fetches
-      const successfulDrafts = drafts.filter((draft): draft is NonNullable<typeof draft> => draft !== null);
-
       return {
-        drafts: successfulDrafts,
+        drafts: drafts.filter((draft): draft is NonNullable<typeof draft> => draft !== null),
+        ...(unreadableDrafts.length > 0 ? { unreadableDrafts } : {}),
         nextPageToken: data.nextPageToken || undefined,
         resultSizeEstimate: data.resultSizeEstimate || 0
       };

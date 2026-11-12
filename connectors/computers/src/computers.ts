@@ -329,17 +329,56 @@ export class Computers {
     return { computer: located.computer.name, tool: name, path: `${folder}/${name}` };
   }
 
-  async tools(located: Located): Promise<Array<{ name: string; description: string }>> {
-    const result = await this.root(located, `cat ${located.provider.home}/tools/*.json 2>/dev/null | python3 -c 'import sys,json; print(json.dumps([json.loads(l) for l in sys.stdin.read().replace("}{","}\\n{").splitlines() if l.strip()]))'`);
-    try {
-      // The tool files can be edited by anything on the computer: only plain names are shown.
-      return (JSON.parse(result.stdout || '[]') as Array<{ name: string; description: string }>).filter((tool) => typeof tool.name === 'string' && NAME_PATTERN.test(tool.name)).map((tool) => ({
+  /** The saved tools, plus the names of tool files that could not be read, so a broken file is never mistaken for no tools. */
+  async tools(located: Located): Promise<{ tools: Array<{ name: string; description: string }>; unreadable: string[] }> {
+    const result = await this.root(located, `python3 -c ${shellQuote(TOOLS_LIST_SCRIPT)} ${shellQuote(`${located.provider.home}/tools`)}`);
+    const parsed = result.exitCode === 0 ? TOOLS_REPLY.safeParse(safeJson(result.stdout)) : undefined;
+    if (!parsed?.success)
+      throw new ConnectorError('The computer could not list its saved tools.', 'BAD_RESPONSE', 'Run computer_setup on this computer, then try again.');
+    // The tool files can be edited by anything on the computer: only plain names are shown.
+    return {
+      tools: parsed.data.tools.filter((tool) => NAME_PATTERN.test(tool.name)).map((tool) => ({
         name: tool.name,
-        description: wrapUntrusted(tool.description, 'computers:saved-tool') ?? '',
-      }));
-    } catch {
-      return [];
-    }
+        description: typeof tool.description === 'string' ? (wrapUntrusted(tool.description, 'computers:saved-tool') ?? '') : '',
+      })),
+      unreadable: parsed.data.unreadable.filter((name) => NAME_PATTERN.test(name)),
+    };
+  }
+}
+
+/**
+ * Lists saved tools on the computer: each tool file is read on its own, so one broken file is named in
+ * `unreadable` and the rest still list. Only a missing tools folder means no tools; any other failure
+ * to read the folder exits non-zero. Only name and description are kept; a file whose values are not
+ * plain JSON (NaN, Infinity, a number too big to hold) counts as unreadable.
+ */
+export const TOOLS_LIST_SCRIPT = `import json,os,sys
+d=sys.argv[1]
+def refuse(c): raise ValueError(c)
+try: names=sorted(n for n in os.listdir(d) if n.endswith(".json"))
+except FileNotFoundError: names=[]
+ok=[];bad=[]
+for n in names:
+  try:
+    with open(os.path.join(d,n)) as f: t=json.load(f,parse_constant=refuse)
+    if not (isinstance(t,dict) and isinstance(t.get("name"),str)): raise ValueError(n)
+    t={"name":t["name"],"description":t.get("description")}
+    json.dumps(t,allow_nan=False)
+    ok.append(t)
+  except Exception:
+    bad.append(n[:-5])
+print(json.dumps({"tools":ok,"unreadable":bad}))`;
+
+const TOOLS_REPLY = z.object({
+  tools: z.array(z.object({ name: z.string(), description: z.unknown() })),
+  unreadable: z.array(z.string()),
+});
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 

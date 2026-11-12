@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `computer_tools` (which lists the scripts saved on a computer with `computer_save_tool`) names any saved tool whose file could not be read, in a new `unreadable` result field, instead of hiding it, and reports a failed listing as an error rather than an empty list.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.

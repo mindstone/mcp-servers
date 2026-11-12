@@ -103,8 +103,15 @@ function resolveKnowledgeBaseDocumentMode(args: Record<string, unknown>): Knowle
   }
 }
 
-/** GET /knowledge-base/{id}/content returns raw document text (not JSON). */
-async function fetchKbDocContent(apiKey: string, documentationId: string): Promise<string | undefined> {
+/**
+ * GET /knowledge-base/{id}/content returns raw document text (not JSON). An
+ * empty body is an empty document; a failed fetch is reported as `error`, so
+ * the caller can say the text is missing rather than imply there is none.
+ */
+async function fetchKbDocContent(
+  apiKey: string,
+  documentationId: string,
+): Promise<{ text?: string; error?: string }> {
   try {
     const response = await elevenLabsFetch(
       apiKey,
@@ -112,10 +119,10 @@ async function fetchKbDocContent(apiKey: string, documentationId: string): Promi
       { method: 'GET' },
     );
     const text = await response.text();
-    return text.trim().length > 0 ? text : undefined;
-  } catch {
-    // Non-200 or transport failure: metadata-only result, no throw.
-    return undefined;
+    return text.trim().length > 0 ? { text } : {};
+  } catch (error) {
+    // ElevenLabsError messages already envelope any API-supplied detail.
+    return { error: error instanceof ElevenLabsError ? error.message : 'The request for the body text failed.' };
   }
 }
 
@@ -187,7 +194,7 @@ RELATED TOOLS:
 - list_knowledge_base_docs: discover valid documentation_id values
 - get_agent: inspect which agents reference this knowledge base
 
-RETURNS: document metadata. Body text is fetched from the separate /content endpoint, enveloped, and capped to about 50KB with truncation metadata. URL documents may also include enveloped extracted_inner_html on the metadata response.
+RETURNS: document metadata. Body text is fetched from the separate /content endpoint, enveloped, and capped to about 50KB with truncation metadata. URL documents may also include enveloped extracted_inner_html on the metadata response. If the body text could not be fetched, content_error says why and the metadata is still returned; no content and no content_error means the document is empty.
 
 FREE.`,
       inputSchema: z.object({
@@ -207,16 +214,17 @@ FREE.`,
         ENDPOINTS.knowledgeBaseDoc(args.documentation_id),
         { method: 'GET' },
       );
-      const contentText = await fetchKbDocContent(apiKey, args.documentation_id);
+      const content = await fetchKbDocContent(apiKey, args.documentation_id);
       const merged = isObj(metadata)
         ? {
             ...metadata,
-            ...(contentText !== undefined ? { content: contentText } : {}),
+            ...(content.text !== undefined ? { content: content.text } : {}),
           }
         : metadata;
       return JSON.stringify({
         ok: true,
         document: sanitizeKbDoc(merged, 'elevenlabs-agents:get_knowledge_base_doc'),
+        ...(content.error !== undefined ? { content_error: `Body text not included: ${content.error}` } : {}),
       });
     }),
   );

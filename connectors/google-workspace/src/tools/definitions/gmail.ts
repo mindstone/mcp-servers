@@ -844,7 +844,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
   {
     name: 'list_workspace_drafts',
     category: 'Gmail/Drafts',
-    description: `List all Gmail drafts for the account. Returns draft IDs and message snippets for each draft.`,
+    description: `List all Gmail drafts for the account. Returns draft IDs and message snippets for each draft. If a draft could not be read, unreadableDrafts names it and says why; the list is then incomplete.`,
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: 'object',
