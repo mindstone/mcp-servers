@@ -151,7 +151,7 @@ it, give the full path (`which npx`).
 
 ```bash
 claude mcp add --scope user things -- npx -y @mindstone/mcp-server-things
-# with changes: claude mcp add --scope user --env THINGS_ALLOW_WRITES=1 things -- npx -y @mindstone/mcp-server-things
+# with changes: claude mcp add --scope user things --env THINGS_ALLOW_WRITES=1 -- npx -y @mindstone/mcp-server-things
 ```
 
 **Codex** (`~/.codex/config.toml`):
