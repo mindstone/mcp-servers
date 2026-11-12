@@ -204,6 +204,10 @@ export async function handleListKbArticles(args: ListKbArticlesArgs): Promise<{
     const client = await getHubSpotClientAsync();
     const limit = args.limit ?? 10;
     const offset = args.offset ?? 0;
+    // Both are written into the GraphQL text, so only plain integers may pass.
+    if (!Number.isInteger(limit) || limit < 0 || !Number.isInteger(offset) || offset < 0) {
+      throw new Error('INVALID_ARGUMENTS: limit and offset must be whole numbers, 0 or more');
+    }
 
     const query = `{
   KB {
@@ -267,14 +271,13 @@ export async function handleGetKbArticle(args: GetKbArticleArgs): Promise<Record
   try {
     const client = await getHubSpotClientAsync();
 
-    // Escape backslashes first, then quotes — to prevent GraphQL string-injection
-    // via inputs that end in or contain a backslash (e.g. `bad\` would otherwise
-    // let the trailing backslash escape the closing quote in the template literal).
-    const safeArticleId = args.articleId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // A JSON string literal is a valid GraphQL string literal (same escapes),
+    // so the ID stays data whatever characters it holds.
+    const articleIdLiteral = JSON.stringify(String(args.articleId));
 
     const query = `{
   KB {
-    knowledge_article(uniqueIdentifier: "hs_id", uniqueIdentifierValue: "${safeArticleId}") {
+    knowledge_article(uniqueIdentifier: "hs_id", uniqueIdentifierValue: ${articleIdLiteral}) {
       hs_id
       hs_name
       hs_body

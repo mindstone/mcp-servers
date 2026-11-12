@@ -49,12 +49,27 @@ const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 // reaching path interpolation. These validators enforce the safe shape at
 // the API-client boundary so a tool input with embedded path or query
 // characters can no longer re-route the authenticated request.
-// Pair every validator with encodeURIComponent on the same segment — both
+// Pair every validator with pathSegment on the same segment — both
 // the assertion (semantic safety) and the encoding (escape-channel safety)
 // are required for defense in depth.
 const HUBSPOT_OBJECT_TYPE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const HUBSPOT_OBJECT_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const HUBSPOT_ASSOCIATION_TYPE_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
+/**
+ * Encodes one value as a single URL path segment, so an ID can never change
+ * which endpoint or record a request reaches. encodeURIComponent alone is not
+ * enough: URL parsing still treats `.` and `..` (and their %2E forms) as
+ * directory steps, so those and the empty string are refused. Every value
+ * interpolated into a request path goes through this.
+ */
+export function pathSegment(value: string | number): string {
+  const text = String(value);
+  if (text === '' || text === '.' || text === '..') {
+    throw new Error(`INVALID_ARGUMENTS: HubSpot path value ${JSON.stringify(text)} is not a valid ID`);
+  }
+  return encodeURIComponent(text);
+}
 
 export function assertHubSpotObjectType(value: unknown, field: string): asserts value is string {
   if (typeof value !== 'string' || !HUBSPOT_OBJECT_TYPE_RE.test(value)) {
@@ -534,7 +549,7 @@ export class HubSpotClient {
   // the segment (same assertion+encoding pairing as the association methods).
   async createObject(objectType: string, properties: Record<string, string>): Promise<CrmObject> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}`, { properties });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, { properties });
   }
 
   async getObject(
@@ -550,19 +565,19 @@ export class HubSpotClient {
     if (associations && associations.length > 0) search.set('associations', associations.join(','));
     const qs = search.toString();
     const suffix = qs ? `?${qs}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}${suffix}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}${suffix}`);
   }
 
   async updateObject(objectType: string, objectId: string, properties: Record<string, string>): Promise<CrmObject> {
     assertHubSpotObjectType(objectType, 'objectType');
     assertHubSpotObjectId(objectId, 'objectId');
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}`, { properties });
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`, { properties });
   }
 
   async deleteObject(objectType: string, objectId: string): Promise<void> {
     assertHubSpotObjectType(objectType, 'objectType');
     assertHubSpotObjectId(objectId, 'objectId');
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`);
   }
 
   async listObjects(objectType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -572,23 +587,23 @@ export class HubSpotClient {
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
 
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}?${params.toString()}`);
   }
 
   async searchObjects(objectType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/search`, searchRequest);
   }
 
   // Batch operations
   async batchCreateObjects(objectType: string, inputs: Array<{ properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/batch/create`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/create`, { inputs });
   }
 
   async batchUpdateObjects(objectType: string, inputs: Array<{ id: string; properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/batch/update`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/update`, { inputs });
   }
 
   // Associations
@@ -606,7 +621,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'PUT',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`
     );
   }
 
@@ -620,7 +635,7 @@ export class HubSpotClient {
     assertHubSpotObjectType(toObjectType, 'toObjectType');
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}`
     );
   }
 
@@ -638,7 +653,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'DELETE',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`
     );
   }
 
@@ -649,7 +664,7 @@ export class HubSpotClient {
   ): Promise<{ results: AssociationLabel[] }> {
     assertHubSpotObjectType(fromObjectType, 'fromObjectType');
     assertHubSpotObjectType(toObjectType, 'toObjectType');
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmAssociationsV4}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(toObjectType)}/labels`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmAssociationsV4}/${pathSegment(fromObjectType)}/${pathSegment(toObjectType)}/labels`);
   }
 
   async createLabeledAssociation(
@@ -665,7 +680,7 @@ export class HubSpotClient {
     assertHubSpotObjectId(toObjectId, 'toObjectId');
     return this.request(
       'PUT',
-      `${HUBSPOT_API_PREFIXES.crmObjectsV4}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}`,
+      `${HUBSPOT_API_PREFIXES.crmObjectsV4}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}`,
       associations
     );
   }
@@ -679,7 +694,7 @@ export class HubSpotClient {
   }
 
   async getWorkflow(flowId: string): Promise<WorkflowDetail> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`);
   }
 
   async createWorkflow(data: CreateWorkflowRequest): Promise<WorkflowDetail> {
@@ -687,17 +702,17 @@ export class HubSpotClient {
   }
 
   async updateWorkflow(flowId: string, data: UpdateWorkflowRequest): Promise<WorkflowDetail> {
-    return this.request('PUT', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`, data);
+    return this.request('PUT', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`, data);
   }
 
   async deleteWorkflow(flowId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`);
   }
 
   async enrollInWorkflow(flowId: string, objectIds: string[], objectType = 'contacts'): Promise<unknown> {
     return this.request(
       'POST',
-      `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}/enrollments/${encodeURIComponent(objectType)}`,
+      `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}/enrollments/${pathSegment(objectType)}`,
       {
         inputs: objectIds.map(id => ({ id }))
       }
@@ -706,31 +721,31 @@ export class HubSpotClient {
 
   // Properties
   async listProperties(objectType: string): Promise<{ results: PropertyResponse[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`);
   }
 
   async getProperty(objectType: string, propertyName: string): Promise<PropertyResponse> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`);
   }
 
   async createProperty(objectType: string, data: CreatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`, data);
   }
 
   async updateProperty(objectType: string, propertyName: string, data: UpdatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`, data);
   }
 
   async deleteProperty(objectType: string, propertyName: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`);
   }
 
   async listPropertyGroups(objectType: string): Promise<{ results: PropertyGroup[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/groups`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`);
   }
 
   async createPropertyGroup(objectType: string, data: CreatePropertyGroupRequest): Promise<PropertyGroup> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/groups`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`, data);
   }
 
   // Owners
@@ -743,29 +758,31 @@ export class HubSpotClient {
   }
 
   async getOwner(ownerId: string): Promise<{ id: string; email: string; firstName: string; lastName: string; userId: number; teams: Array<{ id: string; name: string }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}/${ownerId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}/${pathSegment(ownerId)}`);
   }
 
   // Pipelines
   async listPipelines(objectType: string): Promise<{ results: Array<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${objectType}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}`);
   }
 
   async getPipeline(objectType: string, pipelineId: string): Promise<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${objectType}/${pipelineId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}/${pathSegment(pipelineId)}`);
   }
 
   // Engagements (calls, emails, meetings). engagementType is always an
   // internal constant, but engagementId is tool input — validate and encode it
   // like every other caller-controlled path segment.
   async searchEngagements(engagementType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/search`, searchRequest);
   }
 
   async getEngagement(engagementType: string, engagementId: string, properties?: string[]): Promise<CrmObject> {
     assertHubSpotObjectId(engagementId, 'engagementId');
-    const params = properties ? `?properties=${properties.join(',')}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}/${encodeURIComponent(engagementId)}${params}`);
+    const params = new URLSearchParams();
+    if (properties) params.set('properties', properties.join(','));
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/${pathSegment(engagementId)}${query}`);
   }
 
   async createEngagement(engagementType: string, properties: Record<string, string>, associations?: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }>): Promise<CrmObject> {
@@ -773,7 +790,7 @@ export class HubSpotClient {
     if (associations) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}`, body);
   }
 
   async listEngagements(engagementType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -781,7 +798,7 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}?${params.toString()}`);
   }
 
   // Create object with associations (for line items → deals)
@@ -795,7 +812,7 @@ export class HubSpotClient {
     if (associations && associations.length > 0) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, body);
   }
 
   // Forms API - Marketing v3
@@ -808,14 +825,14 @@ export class HubSpotClient {
   }
 
   async getForm(formId: string): Promise<{ id: string; name: string; formType: string; createdAt: string; updatedAt: string; configuration: Record<string, unknown>; fieldGroups: unknown[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}/${formId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}/${pathSegment(formId)}`);
   }
 
   async getFormSubmissions(formGuid: string, limit = 20, after?: string): Promise<{ results: Array<{ submittedAt: string; values: Array<{ name: string; value: string }>; pageUrl?: string }>; paging?: { next?: { after: string } } }> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.formSubmissions}/${formGuid}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.formSubmissions}/${pathSegment(formGuid)}?${params.toString()}`);
   }
 
   // Analytics API v2 - Requires Marketing Hub
@@ -830,7 +847,7 @@ export class HubSpotClient {
     params.set('start', startDate);
     params.set('end', endDate);
     if (limit) params.set('limit', String(limit));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.analyticsReports}/${breakdownBy}/${timePeriod}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.analyticsReports}/${pathSegment(breakdownBy)}/${pathSegment(timePeriod)}?${params.toString()}`);
   }
 
   // Marketing Emails API v3
@@ -842,7 +859,7 @@ export class HubSpotClient {
   }
 
   async getMarketingEmail(emailId: string): Promise<{ id: string; name: string; subject: string; previewText?: string; state: string; type: string; templatePath?: string; createdAt: string; updatedAt: string; stats?: Record<string, number> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/${emailId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/${pathSegment(emailId)}`);
   }
 
   async getEmailStatistics(
@@ -868,14 +885,14 @@ export class HubSpotClient {
   }
 
   async getList(listId: string): Promise<{ listId: string; name: string; processingType: string; objectTypeId: string; filterBranch?: Record<string, unknown>; size?: number; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${listId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}`);
   }
 
   async getListMembers(listId: string, limit = 100, after?: string): Promise<{ results: Array<{ recordId: string; membershipTimestamp?: string }>; paging?: { next?: { after: string } } }> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${listId}/memberships?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships?${params.toString()}`);
   }
 
   // List membership writes. Only MANUAL and SNAPSHOT lists accept membership
@@ -884,13 +901,13 @@ export class HubSpotClient {
   async addListMembers(listId: string, recordIds: string[]): Promise<void> {
     assertHubSpotObjectId(listId, 'listId');
     for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
-    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${encodeURIComponent(listId)}/memberships/add`, recordIds);
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/add`, recordIds);
   }
 
   async removeListMembers(listId: string, recordIds: string[]): Promise<void> {
     assertHubSpotObjectId(listId, 'listId');
     for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
-    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${encodeURIComponent(listId)}/memberships/remove`, recordIds);
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/remove`, recordIds);
   }
 
   // CMS Blog / Knowledge Base APIs
@@ -918,7 +935,7 @@ export class HubSpotClient {
   }
 
   async getBlogPost(postId: string): Promise<BlogPost> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`);
   }
 
   async createBlogPost(data: CreateBlogPostRequest): Promise<BlogPost> {
@@ -926,11 +943,11 @@ export class HubSpotClient {
   }
 
   async updateBlogPost(postId: string, data: UpdateBlogPostRequest): Promise<BlogPost> {
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`, data);
   }
 
   async deleteBlogPost(postId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`);
   }
 
   // GraphQL API (used for Knowledge Base article queries)
@@ -1040,7 +1057,7 @@ export class HubSpotClient {
     result?: { id: string; name: string; path: string; url: string; size: number };
     errors?: unknown[];
   }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async/tasks/${taskId}/status`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async/tasks/${pathSegment(taskId)}/status`);
   }
 
   async importFileFromUrlAndWait(
@@ -1070,15 +1087,15 @@ export class HubSpotClient {
   }
 
   async getFile(fileId: string): Promise<{ id: string; name: string; path: string; url: string; size: number; type: string; access: string; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${fileId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`);
   }
 
   async getFileSignedUrl(fileId: string): Promise<{ url: string; name: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${fileId}/signed-url`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}/signed-url`);
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.files}/${fileId}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`);
   }
 
   // Batch Read API (for hydrating list member IDs into full contact records)
@@ -1122,7 +1139,7 @@ export class HubSpotClient {
     const qs = search.toString();
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.conversationThreads}/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages${qs ? `?${qs}` : ''}`
     );
   }
 
@@ -1132,7 +1149,7 @@ export class HubSpotClient {
   ): Promise<Record<string, unknown>> {
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.conversationThreads}/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/original-content`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages/${pathSegment(messageId)}/original-content`
     );
   }
 }
