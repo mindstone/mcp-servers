@@ -139,7 +139,7 @@ export function registerMailboxTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        mailbox,
+        mailbox: wrapEmailField(mailbox),
         total: status.messages ?? 0,
         unread: status.unseen ?? 0,
         ...(latestUnread ? { latestUnread } : {}),
@@ -174,7 +174,7 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to create mailbox "${name}"`);
       }
 
-      return JSON.stringify({ ok: true, created: name });
+      return JSON.stringify({ ok: true, created: wrapEmailField(name) });
     }),
   );
 
@@ -208,7 +208,10 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to rename mailbox "${oldName}" to "${newName}"`);
       }
 
-      return JSON.stringify({ ok: true, renamed: { from: oldName, to: newName } });
+      return JSON.stringify({
+        ok: true,
+        renamed: { from: wrapEmailField(oldName), to: wrapEmailField(newName) },
+      });
     }),
   );
 
@@ -240,7 +243,7 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to delete mailbox "${name}"`);
       }
 
-      return JSON.stringify({ ok: true, deleted: name });
+      return JSON.stringify({ ok: true, deleted: wrapEmailField(name) });
     }),
   );
 }

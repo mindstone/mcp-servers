@@ -131,6 +131,25 @@ these still gets safe behaviour. Hosts can tighten them per deployment.
 - `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS` — sliding-window length, in milliseconds,
   for the rate limit (default: `3600000` — one hour).
 
+### Reset on reconfigure
+
+`configure_email_imap` can switch accounts inside a running server.
+Each protocol client resets its connection state when its own resolved
+settings change; switching accounts resets both. Clients whose settings are
+unchanged are kept. Anything new that caches per-account state must
+join this list and the same-process test in `test/reconfiguration.test.ts`:
+
+- [ ] Credentials (`EMAIL_IMAP_EMAIL`, `EMAIL_IMAP_PASSWORD`, `EMAIL_IMAP_PROVIDER`)
+      are replaced by the configured values.
+- [ ] The resolved client configuration is replaced.
+- [ ] The active IMAP connection is logged out (or closed) and the pending
+      connection reference is dropped, so the next call connects with the new
+      settings.
+- [ ] The per-mailbox UID-validity map is cleared, so the new account's
+      mailboxes are not compared against the old account's.
+- [ ] The SMTP transport is closed and dropped, so the next send verifies a new
+      one.
+
 ## Host configuration examples
 
 ### Claude Desktop / Cursor

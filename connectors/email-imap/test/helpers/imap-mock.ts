@@ -98,6 +98,8 @@ export function createImapMock(options: ImapMockOptions = {}) {
   const flagsCalls: string[][] = [];
   /** Mailbox paths seen by getMailboxLock, in order. */
   const mailboxLocks: string[] = [];
+  /** Operands seen by status/mailboxCreate/mailboxRename/mailboxDelete, in order. */
+  const mailboxOps: Array<{ op: string; args: string[] }> = [];
 
   class MockImapFlow {
     usable = true;
@@ -132,6 +134,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async status(mailboxPath: string, _opts?: unknown) {
+      mailboxOps.push({ op: 'status', args: [mailboxPath] });
       const mb = mailboxes.find(
         (m) => m.path.toLowerCase() === mailboxPath.toLowerCase(),
       );
@@ -287,18 +290,21 @@ export function createImapMock(options: ImapMockOptions = {}) {
       return { uid: 999 };
     }
 
-    async mailboxCreate(_mailbox: string) {
+    async mailboxCreate(mailbox: string) {
       calls.mailboxCreate += 1;
+      mailboxOps.push({ op: 'create', args: [mailbox] });
       return true;
     }
 
-    async mailboxRename(_oldPath: string, _newPath: string) {
+    async mailboxRename(oldPath: string, newPath: string) {
       calls.mailboxRename += 1;
+      mailboxOps.push({ op: 'rename', args: [oldPath, newPath] });
       return true;
     }
 
-    async mailboxDelete(_mailbox: string) {
+    async mailboxDelete(mailbox: string) {
       calls.mailboxDelete += 1;
+      mailboxOps.push({ op: 'delete', args: [mailbox] });
       return true;
     }
 
@@ -307,5 +313,13 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks, behavior };
+  return {
+    MockImapFlow,
+    constructorCalls,
+    calls,
+    flagsCalls,
+    mailboxLocks,
+    mailboxOps,
+    behavior,
+  };
 }

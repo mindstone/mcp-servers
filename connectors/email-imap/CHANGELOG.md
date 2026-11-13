@@ -19,6 +19,19 @@ to end the label early.
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Mailbox names returned by `email_get_mailbox_status`, `email_create_mailbox`,
+  `email_rename_mailbox` and `email_delete_mailbox` are now wrapped in
+  untrusted-content envelopes, like every other mailbox name the connector
+  returns; passing them back to another tool still works.
+- `configure_email_imap` checks the shape of the host bridge's reply and
+  rejects a malformed one with `BRIDGE_ERROR`; warning, error and
+  request-failure text from the bridge is now enveloped.
+
+### Changed
+
+- Unexpected errors now carry `code: "INTERNAL_ERROR"` and a `resolution`,
+  like the connector's other errors. The resolution asks the caller to check
+  whether the operation partly completed before retrying.
 
 ### Fixed
 
