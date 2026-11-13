@@ -16,6 +16,12 @@ to end the label early.
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-13
+
+### Changed
+
+- Values passed back exactly as the connector returned them are now unwrapped, so replies thread and recipients are real. Mailbox names and bridge text are enveloped; errors say what to do next.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
