@@ -384,6 +384,37 @@ jobs:
         working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm test --if-present
 
+      - name: Bundle the tested dependency tree
+        # Ship the exact production tree that `npm ci` installed from the
+        # lockfile and the tests just ran against, inside the tarball, so a
+        # user's `npx` cannot resolve a newer (possibly poisoned) transitive
+        # release. Skipped, with a notice, for a tree that needs install
+        # scripts or holds platform-specific packages: bundling those from this
+        # Linux runner would ship a build that breaks elsewhere, so they keep
+        # resolving from their declared ranges.
+        working-directory: ${{ steps.resolve.outputs.dir }}
+        run: |
+          set -euo pipefail
+          unbundleable=$(jq -r '[.packages | to_entries[] | select(.key != "" and .value.dev != true and (.value.hasInstallScript == true or .value.os != null or .value.cpu != null)) | .key] | join(", ")' package-lock.json)
+          if [ -n "${unbundleable}" ]; then
+            echo "::notice::Not bundling dependencies: install scripts or platform-specific packages in ${unbundleable}"
+            exit 0
+          fi
+          # npm bundles only `dependencies`: optional and peer ones would still resolve at install.
+          if jq -e '(.optionalDependencies // {}) + (.peerDependencies // {}) | length > 0' package.json > /dev/null; then
+            echo "::notice::Not bundling dependencies: optional or peer dependencies would not be bundled"
+            exit 0
+          fi
+          npm prune --omit=dev --ignore-scripts
+          # A production local link would copy its target's files into the tarball.
+          links=$(find node_modules -maxdepth 2 -type l -not -path 'node_modules/.bin/*' | tr '\n' ' ')
+          if [ -n "${links}" ]; then
+            echo "::notice::Not bundling dependencies: local links in production: ${links}"
+            exit 0
+          fi
+          npm pkg set bundleDependencies=true --json
+          echo "Bundling $(jq '[.packages | to_entries[] | select(.key != "" and .value.dev != true)] | length' package-lock.json) production packages"
+
       - name: Pack tarball
         working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm pack --ignore-scripts
@@ -425,8 +456,12 @@ jobs:
           tgz=$(ls *.tgz | head -1)
           [ -n "${tgz}" ] || { echo "::error::npm pack produced no tarball"; exit 1; }
           # Reject sensitive / source-leaking files in the tarball. Expanded
-          # vs the original list per the recent security review.
-          forbidden=$(tar -tzf "${tgz}" | grep -E '\.map$|\.test\.|__tests__/|\.env|\.npmrc|\.yarnrc|\.git[^.]|\.pem$|\.key$|(^|/)(src|test|tests)/.*\.(ts|tsx|mts|cts)$' || true)
+          # vs the original list per the recent security review. Bundled
+          # dependencies (package/node_modules/) are what npm ci installed from
+          # the lockfile, as their authors published them, and legitimately
+          # carry sources, maps and tests, so only our own files get the full
+          # scan; every file is still checked for npm and env config files.
+          forbidden=$( { tar -tzf "${tgz}" | grep -v '^package/node_modules/' | grep -E '\.map$|\.test\.|__tests__/|\.env|\.npmrc|\.yarnrc|\.git[^.]|\.pem$|\.key$|(^|/)(src|test|tests)/.*\.(ts|tsx|mts|cts)$'; tar -tzf "${tgz}" | grep -E '(^|/)(\.npmrc|\.env)$'; } | sort -u || true)
           if [ -n "${forbidden}" ]; then
             echo "::error::Forbidden files in tarball:"
             echo "${forbidden}"
