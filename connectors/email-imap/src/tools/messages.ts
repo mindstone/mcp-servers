@@ -6,7 +6,6 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SearchObject } from 'imapflow';
 import { htmlToPlainText, withErrorHandling } from '../utils.js';
-import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection, getMailboxLock } from '../imap-client.js';
 import {
   ensureInitialized,
@@ -15,7 +14,7 @@ import {
   downloadPartAsText,
   collectMessageParts,
   ensureMailboxExists,
-  unwrapMailboxName,
+  requireMailboxName,
   wrapEmailField,
   wrapEmailFieldList,
   resolveTrashMailbox,
@@ -55,13 +54,12 @@ function parseDateFilter(value: string | undefined, field: string): Date | undef
 const FLAG_KEYWORD_PATTERN = /^\\?[A-Za-z0-9_$.-]+$/;
 
 /**
- * Normalise a caller-supplied flag keyword: strip one envelope layer (flags
- * are returned enveloped by email_search_messages, and the connector's
- * round-trip contract lets enveloped values be passed back as-is), then
+ * Normalise a caller-supplied flag keyword (withErrorHandling has already
+ * stripped the envelope email_search_messages returns it in): trim, then
  * enforce the keyword charset allowlist above.
  */
 function normalizeFlagInput(flag: string): string {
-  const value = unwrapUntrusted(flag).trim();
+  const value = flag.trim();
   if (!FLAG_KEYWORD_PATTERN.test(value)) {
     throw new Error(
       `Invalid flag keyword: "${value}". Use letters, digits, and "_", "$", ".", "-" ` +
@@ -134,7 +132,7 @@ export function registerMessageTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const mailbox = unwrapMailboxName(args.mailbox, 'mailbox');
+      const mailbox = requireMailboxName(args.mailbox, 'mailbox');
       const from = args.from?.trim() || undefined;
       const subject = args.subject?.trim() || undefined;
       const unread = args.unread ?? false;
@@ -253,7 +251,7 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { mailbox: rawMailbox, uid } = args;
-      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
+      const mailbox = requireMailboxName(rawMailbox, 'mailbox');
 
       const lock = await getMailboxLock(mailbox);
 
@@ -354,8 +352,8 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { uids, mailbox: rawMailbox, destination: rawDestination } = args;
-      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
-      const destination = unwrapMailboxName(rawDestination, 'destination');
+      const mailbox = requireMailboxName(rawMailbox, 'mailbox');
+      const destination = requireMailboxName(rawDestination, 'destination');
 
       await ensureMailboxExists(destination);
 
@@ -440,7 +438,7 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { uids, mailbox: rawMailbox } = args;
-      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
+      const mailbox = requireMailboxName(rawMailbox, 'mailbox');
 
       const lock = await getMailboxLock(mailbox);
       try {
@@ -528,7 +526,7 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { uids, action } = args;
-      const mailbox = unwrapMailboxName(args.mailbox, 'mailbox');
+      const mailbox = requireMailboxName(args.mailbox, 'mailbox');
       const flags = args.flags.map((flag) => normalizeFlagInput(flag));
 
       const lock = await getMailboxLock(mailbox);

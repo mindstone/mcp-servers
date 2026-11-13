@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { EmailImapError } from './types.js';
-import { wrapUntrusted } from './untrusted-content.js';
+import { unwrapUntrusted, wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -12,8 +12,37 @@ const GENERIC_ERROR_RESOLUTION =
   'account settings in your MCP host.';
 
 /**
+ * Strip one envelope from every string in a tool's arguments that is wholly one
+ * envelope, ignoring whitespace around it. Other strings, and keys (the tools'
+ * own field names), are left unchanged.
+ */
+function unwrapArgs<T>(value: T): T {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const unwrapped = unwrapUntrusted(trimmed);
+    return (unwrapped === trimmed ? value : unwrapped) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => unwrapArgs(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, unwrapArgs(item)]),
+    ) as T;
+  }
+  return value;
+}
+
+/**
  * Wraps a tool handler with standard error handling.
  *
+ * - Before the call: strips one untrusted-content envelope from every string
+ *   argument that is wholly one envelope. The connector returns server text
+ *   (message IDs, addresses, mailbox names, flags, attachment parts) enveloped,
+ *   and callers pass those values back as they are; sent on unchanged, an
+ *   enveloped Message-ID breaks reply threading and an enveloped address
+ *   becomes a garbage recipient. Surrounding whitespace around the envelope
+ *   is ignored; text that only contains an envelope is left as it is.
  * - On success: returns the string result as a text content block.
  * - On EmailImapError: returns a structured JSON error with code and resolution.
  * - On any other error: the message may carry IMAP/SMTP server response text,
@@ -29,7 +58,7 @@ export function withErrorHandling<T>(
 ): ToolHandler<T> {
   return async (args, extra) => {
     try {
-      const result = await fn(args, extra);
+      const result = await fn(unwrapArgs(args), extra);
       return { content: [{ type: 'text', text: result }] };
     } catch (error) {
       if (error instanceof EmailImapError) {

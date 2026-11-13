@@ -11,7 +11,7 @@ import {
   ensureInitialized,
   formatAddresses,
   formatDate,
-  unwrapMailboxName,
+  requireMailboxName,
   wrapEmailField,
 } from './shared.js';
 
@@ -92,7 +92,9 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const mailbox = unwrapMailboxName(args.mailbox?.trim() || 'INBOX', 'mailbox');
+      // An omitted or blank mailbox (an empty envelope included, once
+      // withErrorHandling has unwrapped it) reads INBOX; the result names it.
+      const mailbox = args.mailbox?.trim() || 'INBOX';
       const includeLatest = args.includeLatest ?? false;
       const client = await getConnection();
 
@@ -163,7 +165,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapMailboxName(args.name, 'name');
+      const name = requireMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX always exists and cannot be created');
       }
@@ -196,8 +198,8 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const oldName = unwrapMailboxName(args.old_name, 'old_name');
-      const newName = unwrapMailboxName(args.new_name, 'new_name');
+      const oldName = requireMailboxName(args.old_name, 'old_name');
+      const newName = requireMailboxName(args.new_name, 'new_name');
       if (oldName.toUpperCase() === 'INBOX' || newName.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be renamed or used as a rename target');
       }
@@ -232,7 +234,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapMailboxName(args.name, 'name');
+      const name = requireMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be deleted');
       }

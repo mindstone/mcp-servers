@@ -35,6 +35,12 @@ to end the label early.
 
 ### Fixed
 
+- Values the connector returns inside untrusted-content envelopes, such as a
+  message's `messageId` and addresses, can be passed back to any tool as they
+  are: every argument that is wholly one envelope (whitespace around it
+  ignored) is unwrapped before the tool runs. A reply sent with an enveloped `reply_to_message_id` used to carry the
+  envelope in its `In-Reply-To` and `References` headers, so it did not thread,
+  and an enveloped address became a garbage recipient.
 - `email_send` counts recipients with the same address parser that sends the
   message, so semicolon-separated lists and groups count every address and a
   quoted display name containing a comma counts once. The recipient cap itself
