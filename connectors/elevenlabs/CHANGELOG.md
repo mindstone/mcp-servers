@@ -14,6 +14,9 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Files the connector saves (generated audio and timing data) are now created readable only by their owner.
+- Raised the MCP SDK dependency to 1.32.2 and refreshed compatible dependencies for security fixes.
+- If ElevenLabs sends your API key back inside a successful reply, the API tools now replace it with `[REDACTED]` before the assistant sees it, as they already did for errors.
 
 ### Added
 
@@ -26,10 +29,9 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
-
-### Security
-
-- Files the connector saves (generated audio and timing data) are now created readable only by their owner.
+- Successful creation responses now include a `next_step` naming the read operation, prompting the assistant to check the created resource before using it.
+- Checking an uploaded document or reading test results may still need a follow-up read. A successful upload or test submission alone does not confirm the document's contents or the test outcome.
+- Known limitation: when ElevenLabs content contains instructions aimed at the assistant (a prompt injection), the assistant may repeat that injected text in its answer while explaining it. Our tests caught this more often with this version than with 0.5.2.
 
 ## [0.5.2] - 2026-08-18
 

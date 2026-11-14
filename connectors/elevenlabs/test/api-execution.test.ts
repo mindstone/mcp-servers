@@ -450,6 +450,35 @@ describe('declared response formats and checked pagination', () => {
     expect(requests).toHaveLength(2);
   });
 
+  it('redacts a key the provider echoes back in a success body or page cursor', async () => {
+    const specialKey = 'synthetic/key?"scope"=guide & demo#';
+    const encodedKey = encodeURIComponent(specialKey);
+    auth.setApiKey(specialKey);
+    handle({ ...agentList, response: { agents: [{ agent_id: 'agent_example', name: `Guide ${specialKey}`, note: encodedKey }], has_more: true, next_cursor: `page ${specialKey}` } });
+    const result = await call('read', { operation_id: agentList.id });
+    expect(result.json).toMatchObject({ ok: true, status: 200 });
+    expect(String(result.json.data)).toContain('Guide [REDACTED]');
+    expect(String(result.json.data)).toContain('page [REDACTED]');
+    expect(result.json.has_more).toBe(true);
+    for (const secret of [specialKey, encodedKey, JSON.stringify(specialKey).slice(1, -1)]) expect(result.text).not.toContain(secret);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('redacts a key the provider already escaped, in values and property names, and keeps the data parseable', async () => {
+    for (const specialKey of ['synthetic/key?"scope"=guide & demo#', 'synthetic-key-ending\\']) {
+      auth.setApiKey(specialKey);
+      const escaped = JSON.stringify(specialKey).slice(1, -1);
+      handle({ ...agentList, response: { agents: [{ agent_id: 'agent_example', name: `Guide ${escaped}`, note: `raw ${specialKey}` }], has_more: false, [`field ${escaped}`]: true } });
+      const result = await call('read', { operation_id: agentList.id });
+      expect(result.json).toMatchObject({ ok: true, status: 200 });
+      const parsed = JSON.parse(unwrapUntrusted(String(result.json.data)));
+      expect(parsed.agents[0]).toMatchObject({ name: 'Guide [REDACTED]', note: 'raw [REDACTED]' });
+      expect(parsed).toHaveProperty(['field [REDACTED]'], true);
+      const decoded = JSON.stringify(parsed) + result.text;
+      for (const secret of [specialKey, escaped]) expect(decoded).not.toContain(secret);
+    }
+  });
+
   it('does not parse an explicitly empty 204 or empty 200', async () => {
     const json = vi.spyOn(Response.prototype, 'json');
     for (const status of [204, 200]) {

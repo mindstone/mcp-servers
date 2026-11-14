@@ -1,7 +1,7 @@
 {
   "id": "bundled-elevenlabs",
   "name": "ElevenLabs",
-  "description": "Generate music, speech and sound effects, browse and create voices, transcribe audio, and process audio with ElevenLabs. Unreleased source adds voice-agent configuration, agent tools, knowledge bases and saved tests. Published 0.5.2 includes the original 32 audio tools.",
+  "description": "Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.",
   "category": "media",
   "icon": "music",
   "maturity": "stable",

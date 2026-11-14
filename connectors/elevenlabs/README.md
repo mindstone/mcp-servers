@@ -3,13 +3,15 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-elevenlabs.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. Published 0.5.2 has 32 tools; unreleased source has 39, adding voice agents, agent tools, knowledge bases and saved tests.
+Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.
+
+Use it when you want your assistant to produce narration, voiceovers or transcripts, or to set up and test an ElevenLabs voice agent, without leaving the conversation.
 
 ## Status
 
-- **Published version:** [0.5.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
+- **Version:** [0.5.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Source tools:** [39](./src/tools/) (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries, API discovery, agents, agent tools, knowledge bases, saved tests). Published 0.5.2 has 32 tools; the seven API discovery and agent-management additions are [Unreleased](./CHANGELOG.md).
+- **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -52,15 +54,10 @@ After clicking the button, your host will prompt you to fill: `ELEVENLABS_API_KE
 
 ## Quick Start
 
-The published npm package is **0.5.2 with 32 tools** for audio workflows. The
-one-click install links above and the `npx` command below install that published
-package; they do not include the seven unreleased additions.
-
-For voice-agent configuration, webhook tools, knowledge bases or saved tests,
-build and run this source tree using the **Install & build** and **Local** steps
-below. It has **39 tools**, including seven additions for API discovery and agent
-management. These additions are in [Unreleased](./CHANGELOG.md), pending a
-separate package release.
+Use the one-click install links above or the `npx` command below to install the
+connector. The API tools cover the first supported operations for voice-agent
+configuration, webhook tools, knowledge documents and saved tests, not every
+ElevenLabs API operation.
 
 ### Install & build
 

@@ -60,7 +60,19 @@ async function responseFailure(op: ApiOperation, message: string): Promise<ApiBo
 
 function redact(text: string, key: string): string {
   if (!key) return text;
-  return [...new Set([key, encodeURIComponent(key)])].reduce((result, secret) => result.split(secret).join('[REDACTED]'), text);
+  // Longest spelling first, so a raw key that is a prefix of its escaped form leaves no residue.
+  const spellings = [...new Set([key, encodeURIComponent(key), JSON.stringify(key).slice(1, -1)])].sort((a, b) => b.length - a.length);
+  return spellings.reduce((result, secret) => result.split(secret).join('[REDACTED]'), text);
+}
+
+// A provider can echo the key inside a successful body (for example in a stored tool description). The parsed body is
+// scrubbed, property names included, before validation and serialization: scrubbing serialized text would miss a key
+// the provider had already escaped and could corrupt the enclosed JSON.
+function redactParsed(value: unknown, key: string): unknown {
+  if (typeof value === 'string') return redact(value, key);
+  if (Array.isArray(value)) return value.map((item) => redactParsed(item, key));
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([field, item]) => [redact(field, key), redactParsed(item, key)]));
+  return value;
 }
 
 async function fetchFailure(error: unknown, op: ApiOperation, key: string, signal: AbortSignal): Promise<ElevenLabsError> {
@@ -144,7 +156,7 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
     }
   }
   try {
-    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, data);
+    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, redactParsed(data, key));
   } catch (error) {
     if (error instanceof ElevenLabsError && error.code === 'INVALID_RESPONSE') throw await responseFailure(op, 'The provider response has invalid fields required by the connector.');
     throw error;
