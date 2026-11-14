@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-14
+
+### Changed
+
+- Setup errors now name exactly which Xero scopes are missing; envelope helper re-synced.
+
 ### Changed
 
 - When Xero refuses the token because the Custom Connection lacks a scope, the error now names exactly the missing scopes instead of listing all 19, by asking Xero for each scope on its own.
