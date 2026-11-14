@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-11-14
+
+### Changed
+
+- Direct messages go only to the person named, and a refused send no longer reveals who a conversation belongs to.
+
 ### Security
 
 - Direct messages go only to the person named: `post_slack_message`, `schedule_slack_message`, `upload_slack_file` and the compose card take the person's user ID or email and open their DM themselves. A DM channel ID on its own is refused; with `intended_recipient` it is used only if it is that person's DM.
