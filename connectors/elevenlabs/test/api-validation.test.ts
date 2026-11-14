@@ -328,6 +328,17 @@ describe('response advisory validation, consumed projection, and receipt boundar
     expect(JSON.stringify(error.toJSON())).not.toContain('private-response-content');
   });
 
+  it('adds a next step for every follow-up operation and omits it otherwise', async () => {
+    const create = await createSuccessReceipt('create_agent_route', 200, 'application/json', { agent_id: 'agent_example' });
+    expect(create.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route and the ID returned in data, then check the result.');
+    const upload = await createSuccessReceipt('create_file_document_route', 200, 'application/json', { id: 'doc_example', name: 'Guide' });
+    expect(upload.next_step).toContain('operation_id get_documentation_from_knowledge_base');
+    const tests = await createSuccessReceipt('run_agent_test_suite_route', 200, 'application/json', { id: 'invocation_example', test_runs: [] });
+    expect(tests.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: list_test_invocations_route, get_test_invocation_route; pass the ID returned in data to the one that takes an ID, then check the result.');
+    const read = await createSuccessReceipt('get_agents_route', 200, 'application/json', { agents: [], has_more: false, next_cursor: null });
+    expect(read.next_step).toBeUndefined();
+  });
+
   it('fails the Zod receipt boundary for raw data, arbitrary next instructions, and raw header strings', () => {
     const base = { ok: true, operation_id: 'get_agents_route', status: 200, content_type: 'application/json', data: 'raw', response_contract: 'matched', effects: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, message: 'The provider returned a success response.' };
     expect(successReceiptSchema.safeParse(base).success).toBe(false);
@@ -337,5 +348,9 @@ describe('response advisory validation, consumed projection, and receipt boundar
     expect(successReceiptSchema.safeParse(valid).success).toBe(true);
     expect(successReceiptSchema.safeParse({ ...valid, content_type: 'application/json; charset=utf-8' }).success).toBe(false);
     expect(successReceiptSchema.safeParse({ ...valid, next: 'provider instruction' }).success).toBe(false);
+    expect(successReceiptSchema.safeParse({ ...valid, next_step: 'read first' }).success).toBe(false);
+    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: ['get_agent_route'] }).success).toBe(false);
+    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: ['get_agent_route'], next_step: 'read first' }).success).toBe(false);
+    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: [], next_step: 'read first' }).success).toBe(false);
   });
 });

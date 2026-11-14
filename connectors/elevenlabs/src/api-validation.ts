@@ -231,12 +231,19 @@ export function projectPagination(op: ApiOperation, data: unknown) {
 
 const envelopeText = z.string().regex(/^<untrusted-content source="elevenlabs:api:[a-zA-Z0-9_]+">[\s\S]*<\/untrusted-content>$/);
 const responseContractSchema = z.union([z.literal('matched'), z.object({ mismatch: envelopeText }).strict()]);
+function nextStepFor(followUps: readonly string[]): string {
+  if (followUps.length === 1) {
+    const [id] = followUps;
+    return `Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id ${id} and the ID returned in data, then check the result.`;
+  }
+  return `Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: ${followUps.join(', ')}; pass the ID returned in data to the one that takes an ID, then check the result.`;
+}
 export type ResponseContract = z.infer<typeof responseContractSchema>;
 export const successReceiptSchema = z.object({
   ok: z.literal(true), operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), status: z.number().int().min(200).max(299),
   content_type: z.enum(['application/json', 'text/plain', 'text/html']).nullable(), data: envelopeText.nullable(),
   response_contract: responseContractSchema, has_more: z.boolean().optional(), next: z.literal(NEXT_PAGE_INSTRUCTION).optional(),
-  follow_up_operations: z.array(z.string().regex(/^[a-zA-Z0-9_]+$/)).optional(), effects: effectsSchema, message: z.literal('The provider returned a success response.'),
+  follow_up_operations: z.array(z.string().regex(/^[a-zA-Z0-9_]+$/)).optional(), next_step: z.string().min(1).optional(), effects: effectsSchema, message: z.literal('The provider returned a success response.'),
 }).strict().superRefine((value, ctx) => {
   const source = `elevenlabs:api:${value.operation_id}`;
   for (const [path, text] of [['data', value.data], ['response_contract', typeof value.response_contract === 'object' ? value.response_contract.mismatch : null]] as const) {
@@ -244,6 +251,9 @@ export const successReceiptSchema = z.object({
   }
   if ((value.content_type === null) !== (value.data === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['data'], message: 'Empty responses require null data.' });
   if (value.has_more === true && value.next === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next'], message: 'A continuing page requires the static next instruction.' });
+  const followUps = value.follow_up_operations ?? [];
+  if (followUps.length > 0 && value.next_step !== nextStepFor(followUps)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction must match the static follow-up guidance.' });
+  if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
 });
 export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown) {
   const op = await getOperation(operationId);
@@ -253,7 +263,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const pagination = projectPagination(op, parsedData);
   const data = descriptor.media_type === null ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   return parseApiResponse(successReceiptSchema, { ok: true, operation_id: op.operation_id, status, content_type: descriptor.media_type,
-    data, response_contract, ...pagination, follow_up_operations: op.follow_ups, effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
+    data, response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(op.follow_ups.length > 0 ? { next_step: nextStepFor(op.follow_ups) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
 }
 
 /** Connector-authored examples, checked against the same request refinement before discovery. */

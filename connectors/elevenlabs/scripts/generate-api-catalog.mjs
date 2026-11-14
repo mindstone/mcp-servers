@@ -190,7 +190,9 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (!Object.hasOwn(policy.operations, replacement)) refuse('replacement reference', `${id}: ${replacement}`);
     }
     for (const followUp of row.follow_ups ?? []) {
-      if (policy.operations[followUp]?.status !== 'admitted') refuse('follow_up must be admitted', `${id}: ${followUp}`);
+      const followUpPolicy = policy.operations[followUp];
+      if (followUpPolicy?.status !== 'admitted') refuse('follow_up must be admitted', `${id}: ${followUp}`);
+      if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
     if (row.status === 'admitted') {
       if (row.milestone !== 1 || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);

@@ -16,7 +16,7 @@ RELATED TOOLS: elevenlabs_discover_api, elevenlabs_create_resource, elevenlabs_c
 EXAMPLE: {"operation_id":"get_agent_route","path_params":{"agent_id":"agent_example"}}
 COST: FREE — resource reads do not generate audio or run Tests; provider limits apply.`,
   create: `Create agents, tools, knowledge documents, folders, indexes or saved Tests using an admitted operation_id.
-WHEN TO USE: create a new resource. URL document creation asks the provider to fetch the URL. Local document operands belong only in files, never hidden body paths. Inspect the contract before creating; no retry or polling is automatic.
+WHEN TO USE: create a new resource. URL document creation asks the provider to fetch the URL. Local document operands belong only in files, never hidden body paths. Inspect the contract before creating; no retry or polling is automatic. After a successful create, do the read named in the receipt's next_step before using the new resource elsewhere.
 Create operation_ids: add_tool_route, create_agent_response_test_route, create_agent_route, create_file_document_route, create_folder_route, create_text_document_route, create_url_document_route, duplicate_agent_route, rag_index_status.
 RELATED TOOLS: elevenlabs_discover_api, elevenlabs_read_resource, elevenlabs_change_resource.
 EXAMPLE: {"operation_id":"create_text_document_route","body":{"name":"Guide","text":"Acme guide text"}}

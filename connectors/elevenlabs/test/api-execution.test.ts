@@ -212,7 +212,10 @@ describe('literal provider wire contracts through the real SDK registration', ()
       effects: { readOnlyHint: false, destructiveHint: wire.profile === 'change', idempotentHint: false, openWorldHint: true }, message: 'The provider returned a success response.' });
     expect(result.json.data).toEqual(expect.stringMatching(new RegExp(`^<untrusted-content source="elevenlabs:api:${wire.id}">`)));
     expect(JSON.parse(unwrapUntrusted(String(result.json.data)))).toEqual(wire.response);
-    if (wire.id === 'create_file_document_route') expect(result.json.follow_up_operations).toEqual(['get_documentation_from_knowledge_base']);
+    if (wire.id === 'create_file_document_route') {
+      expect(result.json.follow_up_operations).toEqual(['get_documentation_from_knowledge_base']);
+      expect(result.json.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_documentation_from_knowledge_base and the ID returned in data, then check the result.');
+    } else expect(result.json.next_step).toBeUndefined();
   });
 });
 
@@ -303,7 +306,7 @@ describe('argument ownership and serialization', () => {
     handle(createAgent, async request => { sent = await request.json(); });
     const result = await call('create', input);
     expect(result.isError, result.text).not.toBe(true);
-    expect(result.json).toMatchObject({ ok: true, follow_up_operations: ['get_agent_route'] });
+    expect(result.json).toMatchObject({ ok: true, follow_up_operations: ['get_agent_route'], next_step: 'Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route and the ID returned in data, then check the result.' });
     expect(sent).toEqual({ conversation_config: { agent: { prompt: { llm: 'gemini-3.5-flash', prompt: '<untrusted-content source="inner">keep-one-envelope</untrusted-content>' }, dynamic_variables: { dynamic_variable_placeholders: { llm_model: 'valid-map-value', [mapKey]: 'raw-value' } } } } });
     expect(input).toEqual(original);
     expect(requests).toHaveLength(1);

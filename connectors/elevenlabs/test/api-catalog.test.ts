@@ -296,6 +296,12 @@ describe('pinned operation policy and public artifacts', () => {
     for (const row of apiCatalog.operations) for (const ref of row.follow_ups) expect(apiCatalog.operations.some(op => op.operation_id === ref)).toBe(true);
   });
 
+  it('rejects admitted follow-ups that are not read operations', () => {
+    const followup = structuredClone(policyInput);
+    followup.operations.create_agent_route.follow_ups = ['patch_agent_settings_route'];
+    expect(() => validatePolicy(followup, rosters)).toThrow('follow_up must be a read operation');
+  });
+
   it('keeps the exact own-property alias policy distinct from discovery aliases', () => {
     const overlay = apiCatalog.compatibility_overlay;
     expect(overlay.forbidden_aliases.map(rule => ({ ids: rule.operation_ids, path: rule.prompt_path, own: rule.own_properties }))).toEqual([
