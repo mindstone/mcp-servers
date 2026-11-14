@@ -9,7 +9,7 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 
 ## Status
 
-- **Version:** [0.5.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
+- **Version:** [0.6.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
 - **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests)
 - **Surface:** cloud-api

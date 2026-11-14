@@ -13,7 +13,7 @@ Generate speech, music and sound effects, browse and create voices, and transcri
 
 | Field | Value |
 |-------|-------|
-| Version | 0.5.2 |
+| Version | 0.6.0 |
 | Auth | API key (`ELEVENLABS_API_KEY`) |
 | Tools | 39 (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests) |
 | Surface | cloud API |

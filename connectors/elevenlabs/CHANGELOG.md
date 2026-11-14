@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
+### Changed
+
+- Adds 39 agent-first tools generated from the ElevenLabs API to manage agents, knowledge bases, tools and tests, with a fixed API origin, request and response schema checks, and key redaction.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
