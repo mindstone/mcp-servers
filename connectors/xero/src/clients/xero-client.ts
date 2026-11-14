@@ -8,7 +8,14 @@ import {
 } from "xero-node";
 
 import { formatError } from "../helpers/format-error.js";
-import { formatTokenRequestError } from "../helpers/format-token-error.js";
+import {
+  findMissingScopes,
+  isInvalidScopeError,
+} from "../helpers/find-missing-scopes.js";
+import {
+  formatMissingScopesMessage,
+  formatTokenRequestError,
+} from "../helpers/format-token-error.js";
 import { XERO_CUSTOM_CONNECTION_SCOPE } from "./xero-scopes.js";
 
 dotenv.config();
@@ -98,25 +105,27 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
     return elapsed < this.tokenExpiresInMs - CustomConnectionsXeroClient.REFRESH_BUFFER_MS;
   }
 
-  public async getClientCredentialsToken(): Promise<TokenSet> {
+  private requestToken(scope: string, signal?: AbortSignal) {
     const credentials = Buffer.from(
       `${this.clientId}:${this.clientSecret}`,
     ).toString("base64");
-
-    try {
-      const response = await axios.post(
-        "https://identity.xero.com/connect/token",
-        `grant_type=client_credentials&scope=${encodeURIComponent(
-          XERO_CUSTOM_CONNECTION_SCOPE,
-        )}`,
-        {
-          headers: {
-            Authorization: `Basic ${credentials}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-            Accept: "application/json",
-          },
+    return axios.post(
+      "https://identity.xero.com/connect/token",
+      `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`,
+      {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
-      );
+        signal,
+      },
+    );
+  }
+
+  public async getClientCredentialsToken(): Promise<TokenSet> {
+    try {
+      const response = await this.requestToken(XERO_CUSTOM_CONNECTION_SCOPE);
 
       // Get the tenant ID from the connections endpoint
       const token = response.data.access_token;
@@ -136,6 +145,12 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
 
       return response.data;
     } catch (error) {
+      if (isInvalidScopeError(error)) {
+        const missing = await findMissingScopes((scope, signal) =>
+          this.requestToken(scope, signal),
+        );
+        if (missing) throw new Error(formatMissingScopesMessage(missing));
+      }
       throw new Error(formatTokenRequestError(error));
     }
   }

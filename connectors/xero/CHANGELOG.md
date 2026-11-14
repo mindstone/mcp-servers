@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- When Xero refuses the token because the Custom Connection lacks a scope, the error now names exactly the missing scopes instead of listing all 19, by asking Xero for each scope on its own.
+
 ### Security
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.
