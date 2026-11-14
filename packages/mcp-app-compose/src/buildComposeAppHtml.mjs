@@ -173,15 +173,16 @@ function buildEmailRenderSentViewBody(f, gmail) {
   );
 }
 
+// A DM draft shows the person's name in To but is bound to the person id the
+// connector resolved. The name is only a label: while To still reads exactly
+// that name the bound id is sent; once edited, To is sent as typed and the
+// connector resolves it afresh.
 const SLACK_READ_FORM_PAYLOAD_BODY =
-  "        var channel = String(toInput.value || '').trim();\n" +
+  "        var typed = String(toInput.value || '').trim();\n" +
   '        var payload = {\n' +
-  '          channel: channel,\n' +
+  '          channel: isBoundRecipientShown() ? boundRecipientTarget : typed,\n' +
   "          text: String(bodyInput.value || '')\n" +
   '        };\n' +
-  '        if (intendedRecipient) {\n' +
-  '          payload.intended_recipient = intendedRecipient;\n' +
-  '        }\n' +
   '        return payload;\n';
 
 const TEAMS_READ_FORM_PAYLOAD_BODY =
@@ -212,16 +213,13 @@ const TEAMS_VALIDATE_BODY =
 
 const SLACK_APPLY_DRAFT_BODY =
   "        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};\n" +
-  "        toInput.value = String(draft.target || '');\n" +
+  "        var target = String(draft.target || '').trim();\n" +
+  "        var label = typeof draft.recipient_label === 'string' ? unwrapUntrustedLabel(draft.recipient_label).trim() : '';\n" +
+  "        boundRecipientTarget = target && label ? target : '';\n" +
+  "        boundRecipientLabel = target && label ? label : '';\n" +
+  '        toInput.value = boundRecipientLabel || target;\n' +
   "        bodyInput.value = String(draft.text || '');\n" +
-  "        intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';\n" +
-  '        if (intendedRecipient) {\n' +
-  "          recipientNotice.textContent = 'This will be sent as a direct message to the person you asked to contact.';\n" +
-  "          recipientNotice.classList.remove('hidden');\n" +
-  '        } else {\n' +
-  "          recipientNotice.textContent = '';\n" +
-  "          recipientNotice.classList.add('hidden');\n" +
-  '        }\n' +
+  '        syncRecipientNotice();\n' +
   '        clearError();\n' +
   '        clearSuccess();\n' +
   '        postResize();\n';
@@ -234,9 +232,46 @@ const TEAMS_APPLY_DRAFT_BODY =
   '        clearSuccess();\n' +
   '        postResize();\n';
 
-const CHAT_RENDER_SENT_VIEW_BODY =
-  "        sentTo.textContent = String(payload.channel || payload.chatId || '');\n" +
-  "        sentBody.textContent = String(payload.text || payload.content || '');\n";
+const SLACK_RENDER_SENT_VIEW_BODY =
+  "        var sentChannel = String(payload.channel || '');\n" +
+  '        sentTo.textContent = boundRecipientLabel && sentChannel === boundRecipientTarget ? boundRecipientLabel : sentChannel;\n' +
+  "        sentBody.textContent = String(payload.text || '');\n";
+
+const TEAMS_RENDER_SENT_VIEW_BODY =
+  "        sentTo.textContent = String(payload.chatId || '');\n" +
+  "        sentBody.textContent = String(payload.content || '');\n";
+
+const SLACK_EXTRA_STATE_VARS = "      var boundRecipientTarget = '';\n      var boundRecipientLabel = '';\n";
+
+// The connector sends the person's name in its untrusted-content envelope,
+// because the same structured content reaches the model. The form shows it as
+// plain text, so it strips one envelope and its tag escaping (the inverse of
+// the connectors' wrapUntrusted), and only here, at render time.
+const SLACK_UNWRAP_LABEL_FUNCTION = String.raw`      function unwrapUntrustedLabel(value) {
+        var match = /^<untrusted-content source="[^"]*">([\s\S]*)<\/untrusted-content>$/.exec(value);
+        if (!match) return value;
+        return match[1].replace(/<\\(\\*)(\/?untrusted-content)(?=[\s\/>])/gi, '<$1$2');
+      }
+`;
+
+const SLACK_EXTRA_LISTENERS =
+  SLACK_UNWRAP_LABEL_FUNCTION +
+  '\n' +
+  '      function isBoundRecipientShown() {\n' +
+  "        return Boolean(boundRecipientLabel) && String(toInput.value || '').trim() === boundRecipientLabel;\n" +
+  '      }\n' +
+  '\n' +
+  '      function syncRecipientNotice() {\n' +
+  '        if (isBoundRecipientShown()) {\n' +
+  "          recipientNotice.textContent = 'Direct message to ' + boundRecipientLabel + ' (' + boundRecipientTarget + ').';\n" +
+  "          recipientNotice.classList.remove('hidden');\n" +
+  '        } else {\n' +
+  "          recipientNotice.textContent = '';\n" +
+  "          recipientNotice.classList.add('hidden');\n" +
+  '        }\n' +
+  '      }\n' +
+  '\n' +
+  "      toInput.addEventListener('input', syncRecipientNotice);\n";
 
 /**
  * Resolve the mode-specific descriptor spliced into the shared template.
@@ -279,6 +314,7 @@ function resolveMode(config) {
         '      </div>\n\n',
       extraStateVars: '',
       extraDomVars: '',
+      extraListeners: '',
       fromMissingHelperTextLiteral: quoteJsString(config.fromMissingHelperText),
       setSendingFields: '        subjectInput.disabled = nextSending;\n',
       readFormPayloadBody: buildEmailReadFormPayloadBody(f),
@@ -307,8 +343,9 @@ function resolveMode(config) {
   }
 
   // Chat: slack / teams. Single target + message, no subject/cc/bcc/From/deep
-  // link. Slack additionally carries a locked intended-recipient (for DM sends)
-  // and its notice; Teams routes by chatId and has neither.
+  // link. Slack additionally binds a DM draft's shown name to the person id it
+  // was resolved to, with a notice naming them; Teams routes by chatId and has
+  // neither.
   const isSlack = mode === 'slack';
   return {
     title: 'Compose message',
@@ -317,7 +354,7 @@ function resolveMode(config) {
       '      <div class="field">\n' +
       '        <span id="workspaceLine" class="from-helper hidden"></span>\n' +
       '      </div>',
-    toPlaceholder: isSlack ? '#general or a channel ID' : 'Chat ID',
+    toPlaceholder: isSlack ? '#general, a channel ID, or a person\'s email' : 'Chat ID',
     subjectFieldHtml: '',
     bodyLabel: 'Message',
     bodyPlaceholder: 'Write your message',
@@ -327,15 +364,16 @@ function resolveMode(config) {
     sendLabelText: 'Send message',
     sentIdentityFieldHtml: '',
     sentSubjectFieldHtml: '',
-    extraStateVars: isSlack ? "      var intendedRecipient = '';\n" : '',
+    extraStateVars: isSlack ? SLACK_EXTRA_STATE_VARS : '',
     extraDomVars: isSlack ? "      var recipientNotice = document.getElementById('recipientNotice');\n" : '',
     fromMissingHelperTextLiteral: "''",
     setSendingFields: '',
     readFormPayloadBody: isSlack ? SLACK_READ_FORM_PAYLOAD_BODY : TEAMS_READ_FORM_PAYLOAD_BODY,
     validatePayloadBody: isSlack ? SLACK_VALIDATE_BODY : TEAMS_VALIDATE_BODY,
     applyDraftDataBody: isSlack ? SLACK_APPLY_DRAFT_BODY : TEAMS_APPLY_DRAFT_BODY,
-    renderSentViewBody: CHAT_RENDER_SENT_VIEW_BODY,
+    renderSentViewBody: isSlack ? SLACK_RENDER_SENT_VIEW_BODY : TEAMS_RENDER_SENT_VIEW_BODY,
     inputListenerElements: '[toInput, bodyInput]',
+    extraListeners: isSlack ? SLACK_EXTRA_LISTENERS : '',
     sendFailedText: 'Failed to send message.',
     sentCollapseDefault: 'Message sent.',
     sentCollapseStamped: 'Message sent · ',
@@ -1584,7 +1622,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           postResize();
         });
       });
-
+${m.extraListeners}
       window.addEventListener('message', function (event) {
         // Honest scope (origin-independent): the iframe sandbox origin is 'null',
         // so validating event.origin is unreliable across dev/prod/custom-scheme

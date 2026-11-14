@@ -314,10 +314,10 @@ export function getWorkspaces(): SlackWorkspace[] {
   let parsed: { workspaces?: unknown };
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch {
+    // The parser's message quotes the file's contents, so it never goes out.
     throw new ConnectorError(
-      `Slack workspace config is not valid JSON: ${sanitizeErrorMessage(msg)}`,
+      'Slack workspace config is not valid JSON.',
       'WORKSPACE_DIR_ALL_CORRUPT',
       'The workspace config is corrupt. Re-authenticate the Slack workspace via your MCP host application to rewrite it.',
       { path: configPath },
@@ -355,9 +355,13 @@ export function getWorkspaces(): SlackWorkspace[] {
       readable.push(ws);
     } catch (err) {
       corruptCount++;
-      const msg = err instanceof Error ? err.message : String(err);
+      // A read failure's message names the file; a parse failure's quotes its
+      // contents, so it is replaced with fixed text.
+      const reason = err instanceof SyntaxError
+        ? 'not valid JSON'
+        : sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
       console.error(
-        `[slack-mcp] Skipping unreadable workspace token file for team=${ws.teamId}: ${sanitizeErrorMessage(msg)}`,
+        `[slack-mcp] Skipping unreadable workspace token file for team=${ws.teamId}: ${reason}`,
       );
     }
   }

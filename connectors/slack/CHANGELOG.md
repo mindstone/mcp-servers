@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Security
+
+- Direct messages go only to the person named: `post_slack_message`, `schedule_slack_message`, `upload_slack_file` and the compose card take the person's user ID or email and open their DM themselves. A DM channel ID on its own is refused; with `intended_recipient` it is used only if it is that person's DM.
+- A recipient mismatch no longer names or profiles the other person.
+- A token file or workspace config that is not valid JSON is reported without repeating any of its contents.
+
+### Fixed
+
+- The compose card shows the recipient's name and sends to that person; a recipient typed in by hand is sent as typed.
+- `schedule_slack_message` and `upload_slack_file` check a DM's recipient before sending, and accept `intended_recipient`.
+
 ## [0.3.7] - 2026-11-06
 
 ### Changed

@@ -1,13 +1,14 @@
 /**
- * Slack helper utilities — user/channel resolution, user-id cache, DM
- * recipient verification. Extracted from the original index.ts so each tool
+ * Slack helper utilities — user/channel resolution, user-id cache, send
+ * target resolution. Extracted from the original index.ts so each tool
  * file is small and testable.
  */
 
 import type { WebClient } from '@slack/web-api';
+import { z } from 'zod';
 import { getSlackReaderClient, getSlackUserClient, getTokenProvider, runSlackRead } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
-import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage } from './utils.js';
+import { AUTH_REQUIRED_CODES, errorJson, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage } from './utils.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /** Shape of a projected Slack file attachment surfaced in tool responses. */
@@ -373,34 +374,165 @@ export async function resolveUserId(client: WebClient, input: string): Promise<s
   return matches[0].id;
 }
 
-/**
- * Resolve a DM channel ID to the recipient's identity. Returns null if the
- * channel is not a 1:1 DM or resolution fails.
- */
-export async function resolveDmRecipient(
+const PERSON_ID_PATTERN = /^[UW][A-Z0-9]+$/;
+const PERSON_MENTION_PATTERN = /^<@([UW][A-Z0-9]+)(?:\|[^>]*)?>$/;
+const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+/** True for a target that names a person: a U…/W… user ID, `<@U…>`, or an email. */
+export function isPersonTarget(target: string): boolean {
+  const t = target.trim();
+  return PERSON_ID_PATTERN.test(t) || PERSON_MENTION_PATTERN.test(t) || EMAIL_PATTERN.test(t);
+}
+
+/** Tool-description text shared by every tool that sends through resolveSendTarget. */
+export const DM_SAFETY_GUIDANCE = `DIRECT MESSAGES: name the person, not the DM. Pass their Slack user ID (U…) or
+email as channel; their DM is opened with the account that sends, so it cannot
+reach anyone else. Find a user ID with lookup_user_by_email. A DM channel ID
+(D…) on its own is refused, because it does not say who it is for; if you only
+have one, add intended_recipient and it is used only if it is that person's DM.`;
+
+export const SEND_TARGET_DESCRIPTION =
+  'Where to send — channel ID (e.g., C1234567890), #channel-name (e.g., #general), or for a direct message the person\'s user ID (U…) or email';
+
+export const INTENDED_RECIPIENT_SCHEMA = z
+  .string()
+  .optional()
+  .describe(
+    'Only with a DM channel ID (D…): the person (user ID or email) it should belong to. If it is not their DM, nothing is sent.',
+  );
+
+/** Where a send goes, or a ready-to-return refusal saying why nothing was sent. */
+type SendRefusal = { ok: false; refusal: string };
+export type SendTargetResolution = { ok: true; channelId: string; person?: DmRecipient } | SendRefusal;
+
+function slackErrorCode(error: unknown): string | undefined {
+  return (error as { data?: { error?: string } })?.data?.error;
+}
+
+function personNotFoundRefusal(): SendRefusal {
+  return {
+    ok: false,
+    refusal: errorJson({
+      error: 'Nothing was sent — no Slack user matches that person.',
+      action_required:
+        'Use lookup_user_by_email (exact match) or list_slack_users to find the person, then pass their user ID or email.',
+      next_step: 'lookup_user_by_email',
+    }),
+  };
+}
+
+function recipientMismatchRefusal(channel: string): SendRefusal {
+  // Deliberately does not say who the DM belongs to: that would disclose a
+  // person the caller did not name.
+  return {
+    ok: false,
+    refusal: errorJson({
+      error: 'RECIPIENT MISMATCH — nothing was sent.',
+      action_required:
+        'That DM does not belong to the person in intended_recipient. Pass the person\'s user ID or email as the channel instead of a DM channel ID.',
+      next_step: 'lookup_user_by_email',
+      channel,
+    }),
+  };
+}
+
+/** Look up who a person target (user ID, mention or email) is. */
+async function lookupPerson(
   client: WebClient,
-  channelId: string,
-): Promise<DmRecipient | null> {
+  input: string,
+): Promise<{ ok: true; person: DmRecipient } | SendRefusal> {
+  const t = input.trim();
+  const mention = t.match(PERSON_MENTION_PATTERN);
+  const requestedId = mention ? mention[1] : PERSON_ID_PATTERN.test(t) ? t : undefined;
+  if (!requestedId && !EMAIL_PATTERN.test(t)) return personNotFoundRefusal();
   try {
-    const convInfo = await client.conversations.info({ channel: channelId });
-    const channel = convInfo.channel;
-    if (!channel?.is_im) return null;
-    const partnerId = (channel as unknown as { user?: string }).user;
-    if (!partnerId) return null;
-    const userInfo = await client.users.info({ user: partnerId });
-    if (!userInfo.ok || !userInfo.user) return null;
-    const u = userInfo.user;
+    const result = requestedId
+      ? await client.users.info({ user: requestedId })
+      : await client.users.lookupByEmail({ email: t });
+    const u = result.user;
+    const userId = requestedId ?? u?.id;
+    if (!u || !userId) return personNotFoundRefusal();
     return {
-      user_id: u.id!,
-      real_name: u.real_name || u.name || partnerId,
-      display_name: u.profile?.display_name || u.real_name || u.name || partnerId,
-      email: u.profile?.email,
+      ok: true,
+      person: {
+        user_id: userId,
+        real_name: u.real_name || u.name || userId,
+        display_name: u.profile?.display_name || u.real_name || u.name || userId,
+        email: u.profile?.email,
+      },
     };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[slack-mcp] resolveDmRecipient failed for channel ${channelId}: ${sanitizeErrorMessage(msg)}`,
-    );
-    return null;
+  } catch (error) {
+    const code = slackErrorCode(error);
+    if (code === 'user_not_found' || code === 'users_not_found') {
+      return personNotFoundRefusal();
+    }
+    throw error;
   }
+}
+
+async function openDmChannel(client: WebClient, userId: string): Promise<string> {
+  const result = await client.conversations.open({ users: userId });
+  const channelId = result.channel?.id;
+  if (!channelId) {
+    throw new ConnectorError(
+      'Slack did not return a direct message channel for that person.',
+      'DM_OPEN_FAILED',
+      'Try again, or check the person is still active in this Slack workspace.',
+    );
+  }
+  return channelId;
+}
+
+/**
+ * The one place a send target becomes a Slack channel. A direct message is
+ * only ever sent to a person the caller named: their DM is opened with the
+ * same client that will send, so the channel cannot belong to anyone else.
+ *
+ *   - Person (user ID, `<@U…>` or email): open their DM.
+ *   - DM channel ID with intended_recipient: accepted only if opening the named
+ *     person's DM returns that same channel.
+ *   - DM channel ID alone: refused; who is in it is never derived.
+ *   - Anything else (C…, G…, #name): resolved as a channel, as before.
+ */
+export async function resolveSendTarget(
+  client: WebClient,
+  target: string,
+  intendedRecipient?: string,
+): Promise<SendTargetResolution> {
+  const t = target.trim();
+  const intended = intendedRecipient?.trim() || undefined;
+
+  if (isPersonTarget(t)) {
+    const found = await lookupPerson(client, t);
+    if (!found.ok) return found;
+    if (intended) {
+      const named = await lookupPerson(client, intended);
+      if (!named.ok) return named;
+      if (named.person.user_id.toUpperCase() !== found.person.user_id.toUpperCase()) {
+        return recipientMismatchRefusal(t);
+      }
+    }
+    return { ok: true, channelId: await openDmChannel(client, found.person.user_id), person: found.person };
+  }
+
+  const channelId = await resolveChannelId(t);
+  if (!channelId.startsWith('D')) return { ok: true, channelId };
+
+  if (!intended) {
+    return {
+      ok: false,
+      refusal: errorJson({
+        error: 'DM NOT sent — a direct message must name the person it is for.',
+        action_required:
+          'Pass the person\'s Slack user ID or email as the channel (their DM is opened for you), or keep the DM channel and add intended_recipient. Find a user ID with lookup_user_by_email.',
+        next_step: 'lookup_user_by_email',
+        channel: channelId,
+      }),
+    };
+  }
+  const named = await lookupPerson(client, intended);
+  if (!named.ok) return named;
+  const theirDm = await openDmChannel(client, named.person.user_id);
+  if (theirDm.toUpperCase() !== channelId.toUpperCase()) return recipientMismatchRefusal(channelId);
+  return { ok: true, channelId, person: named.person };
 }

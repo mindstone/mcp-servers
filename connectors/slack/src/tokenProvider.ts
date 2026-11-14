@@ -215,10 +215,10 @@ export class SlackTokenProvider {
         this.cachedTokens = { ...tokens, ...connectionCredentials(this.cachedTokens) };
       }
       return this.cachedTokens;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch {
+      // The parser's message quotes the file's contents, so it never goes out.
       throw new ConnectorError(
-        `Slack token file is not valid JSON: ${sanitizeErrorMessage(msg)}`,
+        'Slack token file is not valid JSON.',
         'TOKEN_FILE_CORRUPT',
         'The token file is corrupt or partially written. Re-authenticate the Slack workspace via your MCP host application to rewrite it.',
         { path: tokenPath },

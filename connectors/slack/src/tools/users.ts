@@ -183,8 +183,7 @@ when you have the user's email. It returns an exact match.
 
 WORKFLOW for sending DMs:
   1. lookup_user_by_email({ email: "alice@company.com" }) → get user.id
-  2. open_slack_dm({ user: "<user_id>" }) → get DM channel
-  3. post_slack_message({ channel: "<dm_channel>", text: "...", intended_recipient: "<user_id>" })
+  2. post_slack_message({ channel: "<user_id>", text: "..." }) → their DM is opened and the message sent there
 
 Requires users:read.email scope (may need admin approval).`,
       inputSchema: z.object({
@@ -243,13 +242,11 @@ REQUIRES a Slack User ID (U... or W...) — does NOT accept names or usernames.
 Use lookup_user_by_email (preferred, exact match) or list_slack_users to get
 the User ID first.
 
-Returns the DM channel ID (D...) plus verified recipient identity for use with
-post_slack_message. Does NOT send a notification.
+Returns the DM channel ID (D...) plus verified recipient identity, for reading
+the DM's history. Does NOT send a notification.
 
-WORKFLOW:
-  1. lookup_user_by_email({ email: "alice@company.com" }) → get user.id
-  2. open_slack_dm({ user: "U1234567890" }) → get DM channel + verified recipient
-  3. post_slack_message({ channel: "D...", text: "...", intended_recipient: "U1234567890" })`,
+To SEND a direct message you do not need this tool: pass the person's User ID
+or email as post_slack_message's channel and their DM is opened for you.`,
       inputSchema: z.object({
         user: z
           .string()
@@ -294,7 +291,6 @@ WORKFLOW:
           example_workflow: [
             '1. lookup_user_by_email({ email: "alice@company.com" }) → get user.id',
             '2. open_slack_dm({ user: "<user_id>" }) → get DM channel',
-            '3. post_slack_message({ channel: "<dm_channel>", text: "...", intended_recipient: "<user_id>" })',
           ],
         });
       }

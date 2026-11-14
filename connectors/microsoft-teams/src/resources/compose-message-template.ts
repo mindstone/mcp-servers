@@ -858,8 +858,8 @@ export const COMPOSE_MESSAGE_HTML = `
       function renderSentView(payload, meta, stamp) {
         payload = payload && typeof payload === 'object' ? payload : {};
         sentTimestamp.textContent = stamp ? 'Sent ' + stamp : 'Sent';
-        sentTo.textContent = String(payload.channel || payload.chatId || '');
-        sentBody.textContent = String(payload.text || payload.content || '');
+        sentTo.textContent = String(payload.chatId || '');
+        sentBody.textContent = String(payload.content || '');
       }
 
       function handleSendRequest() {

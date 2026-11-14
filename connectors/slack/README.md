@@ -222,7 +222,7 @@ After a successful refresh, the provider re-reads the token file to check that t
 - `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`). Same search-backend reporting as `search_slack_messages`.
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
 - `compose_slack_message` — Open an inline editable compose form before sending; the form posts via `post_slack_message` when the user clicks Send.
-- `post_slack_message` — Post a message; DM recipient verification baked in. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).
+- `post_slack_message` — Post a message. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).
 - `reply_to_slack_thread` — Reply to an existing thread.
 - `schedule_slack_message` — Schedule a message for the future. Self-DMs are blocked (scheduled self-notes are not supported yet).
 - `list_scheduled_slack_messages` — List pending scheduled messages (optionally per channel), with the IDs needed to cancel them.
@@ -230,6 +230,8 @@ After a successful refresh, the provider re-reads the token file to check that t
 - `update_slack_message` — Edit a message you posted.
 - `delete_slack_message` — Permanently delete a message you posted.
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
+
+Direct messages name the person, not the DM: `post_slack_message`, `schedule_slack_message`, `upload_slack_file` (`channel`) and `compose_slack_message` (`target`) take the recipient's user ID or email and open their DM with the account that sends. A DM channel ID (`D…`) on its own is refused (compose always refuses one); the send tools accept it with `intended_recipient` only if it is that person's DM, and a mismatch names nobody.
 
 Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack_message`, `update_slack_message`, and the `upload_slack_file` comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for your mentions of its bot is not retriggered by its own replies. Other users' mentions are sent unchanged.
 

@@ -10,7 +10,13 @@ import {
   withErrorHandling,
 } from '../utils.js';
 import { getSlackClient, getSlackUserClient } from '../client.js';
-import { resolveChannelId, withOwnBotMentionsAsPlainText } from '../helpers.js';
+import {
+  DM_SAFETY_GUIDANCE,
+  INTENDED_RECIPIENT_SCHEMA,
+  resolveSendTarget,
+  SEND_TARGET_DESCRIPTION,
+  withOwnBotMentionsAsPlainText,
+} from '../helpers.js';
 import { readUploadSourceFile } from '../upload-path-safety.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -208,7 +214,9 @@ sunset by Slack in November 2025.
 When connected to a host that authorizes file reads, its path permission
 decision applies. Standalone clients require file_path to resolve inside the
 workspace directory (MCP_WORKSPACE_PATH, or the system temp dir when unset).
-Max file size: 50MB.`,
+Max file size: 50MB.
+
+${DM_SAFETY_GUIDANCE}`,
       _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['file_path'], base: 'connectorCwd', expandTilde: false }] } },
       inputSchema: z
         .object({
@@ -219,7 +227,8 @@ Max file size: 50MB.`,
           channel: z
             .string()
             .optional()
-            .describe('Channel to share the file into — channel ID or #channel-name. Omit to upload privately without sharing.'),
+            .describe(`${SEND_TARGET_DESCRIPTION}. Omit to upload privately without sharing.`),
+          intended_recipient: INTENDED_RECIPIENT_SCHEMA,
           filename: z
             .string()
             .optional()
@@ -288,6 +297,14 @@ Max file size: 50MB.`,
         });
       }
 
+      // Decide where the file goes before any bytes leave the machine.
+      let channelId: string | undefined;
+      if (args.channel) {
+        const resolution = await resolveSendTarget(userClient, args.channel, args.intended_recipient);
+        if (!resolution.ok) return resolution.refusal;
+        channelId = resolution.channelId;
+      }
+
       const filename = args.filename || path.basename(source.path);
       const buffer = source.buffer;
 
@@ -325,7 +342,6 @@ Max file size: 50MB.`,
       }
 
       // Step 3: complete the upload (and optionally share it).
-      const channelId = args.channel ? await resolveChannelId(args.channel) : undefined;
       const initialComment = await withOwnBotMentionsAsPlainText(args.initial_comment);
       const filesPayload = [{ id: fileId, ...(args.title ? { title: args.title } : {}) }] as [
         { id: string; title?: string },
