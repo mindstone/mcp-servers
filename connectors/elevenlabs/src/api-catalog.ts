@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -52,8 +53,8 @@ const fileBinding = z.object({ field: text, kind: z.literal('document'), require
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: z.enum(['application/json', 'text/plain', 'text/html']).nullable(), schema: schemaValue.optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
-  path: z.string().startsWith('/'), family: z.enum(['agents', 'llm', 'tools', 'knowledge-base', 'agent-testing', 'test-invocations']),
-  milestone: z.literal(1), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text,
+  path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
+  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(),
   summary: z.string(), description: z.string(), deprecated: z.boolean(),
   parameters: z.object({ path: parameterRecord, query: parameterRecord, query_serialization: dictionary(z.literal('form-explode')) }).strict(),
   request: z.object({ media_type: z.enum(['application/json', 'multipart/form-data']).nullable(), required: z.boolean(), schema: schemaValue.optional(), files: z.array(fileBinding).optional() }).strict(),
@@ -62,6 +63,16 @@ const operationSchema = z.object({
   search_aliases: z.array(text), rank: z.number().int(), follow_ups: z.array(text), examples: z.array(dictionary(z.unknown())),
 }).strict();
 export type ApiOperation = z.infer<typeof operationSchema>;
+export function operationReference(op: ApiOperation, source?: ApiOperation): string {
+  const parameters = [
+    ...[...op.path.matchAll(/\{([^{}]+)\}/g)].map(([, name]) => `path_params.${name}`),
+    ...op.parameters.query.required.map(name => `query_params.${name}`),
+    ...Object.keys(op.parameters.query.properties)
+      .filter(name => source?.parameters.path.required.includes(name) && !op.parameters.query.required.includes(name))
+      .map(name => `query_params.${name} optional`),
+  ];
+  return `${op.operation_id}${parameters.length ? ` (${parameters.join(', ')})` : ''}`;
+}
 export type ApiResponseDescriptor = z.infer<typeof responseSchema>;
 interface PaginationFields { hasMoreRequired: boolean; cursorRequired: boolean }
 const paginationFields = new WeakMap<ApiOperation, PaginationFields>();
@@ -165,7 +176,10 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (op.tool !== API_TOOLS[op.profile]) invalid('Operation profile/tool mismatch.');
     const expected = { readOnlyHint: ['read', 'query_knowledge'].includes(op.profile), destructiveHint: ['change', 'delete', 'tests'].includes(op.profile), idempotentHint: op.profile === 'read', openWorldHint: true };
     if (Object.keys(expected).some(key => op.effects[key as keyof typeof expected] !== expected[key as keyof typeof expected])) invalid('Operation profile/effect mismatch.');
-    if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change') || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read')) invalid('Method/effect mismatch.');
+    if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change') || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
+    if (op.reviewed_post_read !== undefined && (op.method !== 'POST' || op.profile !== 'read')) invalid('Misplaced reviewed POST read.');
+    const retryOperation = byId.get(op.check_before_retry);
+    if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
     if (/[?#\u0000-\u0020\u007f]/.test(op.path) || op.path.startsWith('//') || op.path.split('/').some(part => part === '.' || part === '..')) invalid('Invalid operation path.');
     const placeholders = [...op.path.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]).sort();
     const keys = Object.keys(op.parameters.path.properties).sort();
@@ -228,18 +242,20 @@ export async function getOperation(operationId: string, profile?: ApiProfile): P
 }
 
 export const discoveryInputSchema = z.object({
-  query: z.string().optional(), family: z.enum(['agents', 'tools', 'knowledge', 'tests']).optional(),
+  query: z.string().optional(), family: z.enum(discoveryFamilies).optional(),
   operation_id: text.optional(), definition: z.string().min(1).optional(),
   cursor: z.string().regex(/^(0|[1-9][0-9]*)$/, 'Use next_cursor from the previous discovery result.').refine(value => Number.isSafeInteger(Number(value)), 'Use next_cursor from the previous discovery result.').optional(),
   limit: z.number().int().min(1).max(25).default(10),
 }).strict().superRefine((value, ctx) => {
   if (value.definition && !value.operation_id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['definition'], message: 'definition requires operation_id.' });
 });
-const discoveryInstructions = 'Start with elevenlabs_discover_api({query:"agents"}). family accepts agents, tools, knowledge or tests; cursor is the previous discovery result\'s next_cursor; limit is 1–25. For a request contract, call elevenlabs_discover_api({operation_id:"create_agent_route"}); for a named definition, call elevenlabs_discover_api({operation_id:"create_agent_route",definition:"KnowledgeBaseLocator"}). Replace create_agent_route in both examples with the operation_id you intend to use. Use bare names from contract.definitions, without the #/$defs/ prefix.';
-function family(op: ApiOperation): 'agents' | 'tools' | 'knowledge' | 'tests' {
+export const discoveryFamilyDescription = discoveryFamilies.join(', ');
+export const operationContractGuidance = 'Operation IDs listed here or in receipts are names only. Before the first call to each operation in this conversation, call elevenlabs_discover_api with that operation_id to read its contract, unless a tool description or receipt already supplies the exact parameter names and locations. Never infer path_params, query_params or body fields from an operation name.';
+const discoveryInstructions = operationContractGuidance + ' Start with elevenlabs_discover_api({query:"agents"}). family accepts ' + discoveryFamilyDescription + '; cursor is the previous discovery result\'s next_cursor; limit is 1–25. For a request contract, call elevenlabs_discover_api({operation_id:"create_agent_route"}); for a named definition, call elevenlabs_discover_api({operation_id:"create_agent_route",definition:"KnowledgeBaseLocator"}). Replace create_agent_route in both examples with the operation_id you intend to use. Use bare names from contract.definitions, without the #/$defs/ prefix.';
+function family(op: ApiOperation): typeof discoveryFamilies[number] {
   if (op.profile === 'tests') return 'tests';
   if (op.profile === 'query_knowledge') return 'knowledge';
-  return op.family === 'knowledge-base' ? 'knowledge' : ['agent-testing', 'test-invocations'].includes(op.family) ? 'tests' : op.family === 'tools' ? 'tools' : 'agents';
+  return apiFamilies[op.family as keyof typeof apiFamilies];
 }
 function envelope(value: unknown, id: string): string {
   return wrapUntrusted(JSON.stringify(value), `elevenlabs:api:${id}`)!;
@@ -297,7 +313,8 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
     try { await validateRequest(op.profile, example); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
   const files = ['create', 'change'].includes(op.profile) ? op.request.files : undefined;
-  const result = { ...listing(op), instructions: `${profileInstructions[op.profile]} ${discoveryInstructions}`,
+  const workspaceNote = ['update_settings_route', 'update_dashboard_settings_route'].includes(op.operation_id) ? ' This operation changes settings for the whole workspace.' : '';
+  const result = { ...listing(op), instructions: `${profileInstructions[op.profile]} ${discoveryInstructions}${workspaceNote}`,
     contract: envelope({ summary: op.summary, description: op.description, method: op.method, path: op.path,
       request: { path_params: expandSchema(op.parameters.path, catalog), query_params: expandSchema(op.parameters.query, catalog), body: op.request.schema === undefined ? undefined : expandSchema(op.request.schema, catalog), ...(files?.length ? { files } : {}) },
       ...(definition === undefined ? {} : { definition: { name: definition, schema: expandSchema(catalog.$defs[definition], catalog) } }),

@@ -135,25 +135,34 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven tools added after 0.5.2 cover **40 admitted operations** from the
+The seven API tools cover **74 admitted operations in source** (40 in the published 0.6.0 release) from the
 2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
 this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 40 admitted, 366 planned and 109 excluded, with reasons and
-existing package coverage tracked separately.
+515 operations: 74 admitted, 332 planned and 109 excluded, with reasons and
+existing package coverage tracked separately. Source additions include tags, analysis items,
+settings, environments, test folders and summaries, invocation names, conversation users,
+live counts, tool executions, LLM usage estimates and agent knowledge-base size.
+The usage calculators and test-summary lookup use reviewed read-only POST requests;
+they do not run tests or generate audio. Deletion stays in the delete profile.
 
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 17 resource reads | Read only |
-| `elevenlabs_create_resource` | 9 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 6 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 4 deletes | Destructive |
+| `elevenlabs_read_resource` | 34 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 14 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 14 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 8 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 
+Receipt follow-ups name required path and query parameters; optional filters matching
+known request IDs are marked optional. Other listed operation IDs are names only. Before the
+first call to each operation in a conversation, discover its contract unless a
+tool description or receipt already gives the exact parameter names and locations.
+Do not infer path parameters, query parameters or body fields from operation names.
 Start with local discovery, then send the operation to its declared tool:
 
 ```json
@@ -227,6 +236,8 @@ whether to retry.
 
 Each execution makes one provider request and returns a checked receipt with
 operation, status, declared content type, effect annotations and enveloped data.
+Discovery notes that `update_settings_route` and `update_dashboard_settings_route`
+change settings for the whole workspace.
 If response fields the connector does not use differ from the pinned schema,
 their data is retained with a `response_contract` warning; check the affected
 fields before relying on them. Malformed fields the connector actually uses

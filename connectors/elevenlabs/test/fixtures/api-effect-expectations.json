@@ -10,12 +10,34 @@
     },
     "method": "POST"
   },
+  "agent_testing_bulk_move_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
   "cancel_test_invocation_route": {
     "profile": "tests",
     "tool": "elevenlabs_run_agent_tests",
     "effects": {
       "readOnlyHint": false,
       "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "copy_analysis_item_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": true
     },
@@ -33,6 +55,50 @@
     "method": "POST"
   },
   "create_agent_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_agent_test_folder_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_analysis_item_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_conversation_tag_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_environment": {
     "profile": "create",
     "tool": "elevenlabs_create_resource",
     "effects": {
@@ -98,7 +164,51 @@
     },
     "method": "DELETE"
   },
+  "delete_agent_test_folder_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_analysis_item_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
   "delete_chat_response_test_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_conversation_tag_route": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "delete_environment": {
     "profile": "delete",
     "tool": "elevenlabs_delete_resource",
     "effects": {
@@ -142,6 +252,28 @@
     },
     "method": "POST"
   },
+  "get_agent_knowledge_base_size": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_agent_llm_expected_cost_calculation": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
   "get_agent_response_test_route": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
@@ -152,6 +284,17 @@
       "openWorldHint": true
     },
     "method": "GET"
+  },
+  "get_agent_response_tests_summaries_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "POST"
   },
   "get_agent_route": {
     "profile": "read",
@@ -164,7 +307,73 @@
     },
     "method": "GET"
   },
+  "get_agent_test_folder_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
   "get_agents_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_analysis_item_dependent_agents_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_analysis_item_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_conversation_tag_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_conversation_users_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_dashboard_settings_route": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
     "effects": {
@@ -230,7 +439,40 @@
     },
     "method": "GET"
   },
+  "get_live_count": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_public_llm_expected_cost_calculation": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
   "get_rag_indexes": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_settings_route": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
     "effects": {
@@ -263,6 +505,17 @@
     },
     "method": "GET"
   },
+  "get_tool_executions_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
   "get_tool_route": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
@@ -285,6 +538,28 @@
     },
     "method": "GET"
   },
+  "list_analysis_item_versions_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_analysis_items_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
   "list_available_llms": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
@@ -297,6 +572,28 @@
     "method": "GET"
   },
   "list_chat_response_tests_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_conversation_tags_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "list_environments": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
     "effects": {
@@ -406,6 +703,61 @@
     },
     "method": "PUT"
   },
+  "update_agent_test_folder_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_analysis_item_attachments_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_analysis_item_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_conversation_tag_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_dashboard_settings_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
   "update_document_route": {
     "profile": "change",
     "tool": "elevenlabs_change_resource",
@@ -418,6 +770,28 @@
     "method": "PATCH"
   },
   "update_file_document_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_settings_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "PATCH"
+  },
+  "update_test_invocation_route": {
     "profile": "change",
     "tool": "elevenlabs_change_resource",
     "effects": {

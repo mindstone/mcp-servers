@@ -11,7 +11,7 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(40);
+    expect(catalog.operations).toHaveLength(74);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
@@ -68,8 +68,18 @@ describe('discovery', () => {
     for (const op of catalog.operations) {
       const description = await describeOperation(op.operation_id);
       const contract = JSON.parse(unwrapUntrusted(description.contract));
+      expect(description.instructions).toContain('Operation IDs listed here or in receipts are names only.');
+      expect(description.instructions).toContain('Before the first call to each operation in this conversation, call elevenlabs_discover_api with that operation_id to read its contract');
+      expect(description.instructions).toContain('unless a tool description or receipt already supplies the exact parameter names and locations.');
+      expect(description.instructions).toContain('Never infer path_params, query_params or body fields from an operation name.');
       for (const token of description.instructions.match(/elevenlabs_[a-z_]+|list_voices/g) ?? []) expect(tools.has(token), token).toBe(true);
       for (const match of description.instructions.matchAll(/operation_id:"([a-z_]+)"/g)) expect(ids.has(match[1]), match[1]).toBe(true);
+      const exampleId = description.instructions.match(/EXAMPLE: elevenlabs_discover_api\(\{operation_id:"([a-z_]+)"\}/)![1];
+      const example = await getOperation(exampleId);
+      for (const [, location, name] of description.instructions.matchAll(/\b(path_params|query_params)\.([a-z_]+)\b/g)) {
+        const schema = location === 'path_params' ? example.parameters.path : example.parameters.query;
+        expect(typeof schema === 'object' && schema.properties, `${exampleId}: ${location}.${name}`).toHaveProperty(name);
+      }
       expect(contract.validation.snapshot_date).toBe(catalog.compatibility_overlay.enum_snapshot_date);
     }
   });
@@ -95,7 +105,7 @@ describe('discovery', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiBoundaryError);
       const failure = error as ApiBoundaryError;
-      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests.' });
+      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, environments, llm-usage, settings, tags, users.' });
       expect(failure.resolution).toContain('elevenlabs_discover_api({query:"agents"})');
       expect(failure.resolution).toContain("previous discovery result's next_cursor");
       expect(failure.resolution).toContain('Replace create_agent_route in both examples with the operation_id you intend to use.');

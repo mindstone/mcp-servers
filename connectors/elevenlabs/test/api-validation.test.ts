@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { apiCatalog as generated } from '../src/generated/api-catalog.js';
-import { ApiBoundaryError, getOperation, validateApiCatalog, type ApiOperation, type JsonSchema } from '../src/api-catalog.js';
+import { ApiBoundaryError, getOperation, operationReference, validateApiCatalog, type ApiOperation, type JsonSchema } from '../src/api-catalog.js';
 import {
   ApiValidator, createSuccessReceipt, executionInputSchema, loadApiValidator,
   NEXT_PAGE_INSTRUCTION, projectPagination, successReceiptSchema, validateRequest,
@@ -20,9 +20,10 @@ async function errorFrom(work: Promise<unknown>): Promise<ApiBoundaryError> {
 function fixtureValidator(body: JsonSchema, response?: JsonSchema) {
   const raw = structuredClone(generated) as { operations: ApiOperation[]; $defs: Record<string, unknown> };
   const op = raw.operations.find(candidate => candidate.operation_id === 'create_agent_route')!;
+  const retryRead = raw.operations.find(candidate => candidate.operation_id === 'get_agents_route')!;
   raw.operations = [{ ...op, follow_ups: [], request: { media_type: 'application/json', required: true, schema: body },
     ...(response === undefined ? {} : { responses: [{ status: 200, media_type: 'application/json' as const, schema: response }] }),
-  }];
+  }, retryRead];
   const catalog = validateApiCatalog(raw);
   return { validator: new ApiValidator(catalog), op: catalog.operations[0] };
 }
@@ -173,8 +174,9 @@ describe('API request validation over the preserved provider graph', () => {
   it('supports a legitimate __proto__ component name and recursive refs', () => {
     const raw = structuredClone(generated) as { operations: ApiOperation[]; $defs: Record<string, unknown> };
     const op = raw.operations.find(candidate => candidate.operation_id === 'create_agent_route')!;
-    raw.$defs = JSON.parse('{"__proto__":{"type":"object","properties":{"name":{"type":"string"},"children":{"type":"array","items":{"$ref":"#/$defs/__proto__"}}},"required":["name"]}}');
-    raw.operations = [{ ...op, follow_ups: [], request: { media_type: 'application/json', required: true, schema: { $ref: '#/$defs/__proto__' } }, responses: [{ status: 200, media_type: 'application/json' }] }];
+    raw.$defs = { ...raw.$defs, ...JSON.parse('{"__proto__":{"type":"object","properties":{"name":{"type":"string"},"children":{"type":"array","items":{"$ref":"#/$defs/__proto__"}}},"required":["name"]}}') };
+    const retryRead = raw.operations.find(candidate => candidate.operation_id === 'get_agents_route')!;
+    raw.operations = [{ ...op, follow_ups: [], request: { media_type: 'application/json', required: true, schema: { $ref: '#/$defs/__proto__' } }, responses: [{ status: 200, media_type: 'application/json' }] }, retryRead];
     const catalog = validateApiCatalog(raw);
     expect(Object.hasOwn(catalog.$defs, '__proto__')).toBe(true);
     const validator = new ApiValidator(catalog);
@@ -330,27 +332,72 @@ describe('response advisory validation, consumed projection, and receipt boundar
 
   it('adds a next step for every follow-up operation and omits it otherwise', async () => {
     const create = await createSuccessReceipt('create_agent_route', 200, 'application/json', { agent_id: 'agent_example' });
-    expect(create.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route and the ID returned in data, then check the result.');
+    expect(create.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route (path_params.agent_id); use IDs from data or the request where needed, then check the result.');
     const upload = await createSuccessReceipt('create_file_document_route', 200, 'application/json', { id: 'doc_example', name: 'Guide' });
     expect(upload.next_step).toContain('operation_id get_documentation_from_knowledge_base');
     const tests = await createSuccessReceipt('run_agent_test_suite_route', 200, 'application/json', { id: 'invocation_example', test_runs: [] });
-    expect(tests.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: list_test_invocations_route, get_test_invocation_route; pass the ID returned in data to the one that takes an ID, then check the result.');
+    expect(tests.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: list_test_invocations_route (query_params.agent_id optional), get_test_invocation_route (path_params.test_invocation_id); use IDs from data or the request where needed, then check the result.');
     const read = await createSuccessReceipt('get_agents_route', 200, 'application/json', { agents: [], has_more: false, next_cursor: null });
     expect(read.next_step).toBeUndefined();
   });
 
+  it.each(validateApiCatalog(generated).operations.filter(op => op.follow_ups.length > 0))(
+    '$operation_id names exactly the follow-up path operands and required query parameters', async op => {
+      const response = op.responses[0];
+      const receipt = await createSuccessReceipt(op.operation_id, response.status, response.media_type,
+        response.media_type === null ? null : { has_more: false, next_cursor: null });
+      const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
+      expect(receipt.follow_up_operations).toEqual(op.follow_ups);
+      expect(successReceiptSchema(followUps, op).safeParse(receipt).success).toBe(true);
+      for (const read of followUps) {
+        const reference = receipt.next_step!.match(new RegExp(`\\b${read.operation_id}\\b(?: \\(([^)]+)\\))?`));
+        expect(reference).not.toBeNull();
+        const named = reference![1]?.split(', ') ?? [];
+        expect(named.filter(name => name.startsWith('path_params.')).map(name => name.slice('path_params.'.length)).sort())
+          .toEqual(Object.keys(read.parameters.path.properties).sort());
+        expect(named.filter(name => name.startsWith('query_params.') && !name.endsWith(' optional')).map(name => name.slice('query_params.'.length)).sort())
+          .toEqual([...read.parameters.query.required].sort());
+        for (const name of named.filter(name => name.endsWith(' optional'))) {
+          const key = name.slice('query_params.'.length, -' optional'.length);
+          expect(read.parameters.query.properties).toHaveProperty(key);
+          expect(read.parameters.query.required).not.toContain(key);
+          expect(op.parameters.path.required).toContain(key);
+        }
+      }
+    },
+  );
+
+  it('derives required query guidance and never invents an agent path operand for a saved Test', async () => {
+    const list = await getOperation('list_test_invocations_route');
+    expect(operationReference({ ...list, parameters: { ...list.parameters, query: { ...list.parameters.query, required: ['agent_id'] } } }))
+      .toBe('list_test_invocations_route (query_params.agent_id)');
+    expect(operationReference(await getOperation('get_agent_response_test_route')))
+      .toBe('get_agent_response_test_route (path_params.test_id)');
+  });
+
+  it('rejects altered follow-up instructions and parameter names at the receipt boundary', async () => {
+    const op = await getOperation('run_agent_test_suite_route');
+    const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
+    const receipt = await createSuccessReceipt(op.operation_id, 200, 'application/json', { id: 'invocation_example', test_runs: [] });
+    const schema = successReceiptSchema(followUps, op);
+    for (const next_step of [undefined, 'read first', receipt.next_step!.replace('path_params.test_invocation_id', 'path_params.invocation_id'), receipt.next_step!.replace('query_params.agent_id', 'path_params.agent_id')]) {
+      expect(schema.safeParse({ ...receipt, next_step }).success).toBe(false);
+    }
+    expect(schema.safeParse({ ...receipt, follow_up_operations: [] }).success).toBe(false);
+  });
+
   it('fails the Zod receipt boundary for raw data, arbitrary next instructions, and raw header strings', () => {
     const base = { ok: true, operation_id: 'get_agents_route', status: 200, content_type: 'application/json', data: 'raw', response_contract: 'matched', effects: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, message: 'The provider returned a success response.' };
-    expect(successReceiptSchema.safeParse(base).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...base, content_type: 'application/json; charset=utf-8' }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...base, next: 'provider instruction' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse(base).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...base, content_type: 'application/json; charset=utf-8' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...base, next: 'provider instruction' }).success).toBe(false);
     const valid = { ...base, data: '<untrusted-content source="elevenlabs:api:get_agents_route">{"agents":[],"has_more":false,"next_cursor":null}</untrusted-content>' };
-    expect(successReceiptSchema.safeParse(valid).success).toBe(true);
-    expect(successReceiptSchema.safeParse({ ...valid, content_type: 'application/json; charset=utf-8' }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...valid, next: 'provider instruction' }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...valid, next_step: 'read first' }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: ['get_agent_route'] }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: ['get_agent_route'], next_step: 'read first' }).success).toBe(false);
-    expect(successReceiptSchema.safeParse({ ...valid, follow_up_operations: [], next_step: 'read first' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse(valid).success).toBe(true);
+    expect(successReceiptSchema([]).safeParse({ ...valid, content_type: 'application/json; charset=utf-8' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...valid, next: 'provider instruction' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...valid, next_step: 'read first' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...valid, follow_up_operations: ['get_agent_route'] }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...valid, follow_up_operations: ['get_agent_route'], next_step: 'read first' }).success).toBe(false);
+    expect(successReceiptSchema([]).safeParse({ ...valid, follow_up_operations: [], next_step: 'read first' }).success).toBe(false);
   });
 });

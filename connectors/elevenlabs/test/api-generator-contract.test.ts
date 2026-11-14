@@ -20,6 +20,7 @@ const miniIds = ['get_agents_route', 'create_agent_route', 'create_file_document
 function miniPolicy() {
   return {
     ...structuredClone(policyInput), source: miniSource,
+    family_retry_checks: { agents: { read: 'get_agents_route' }, 'knowledge-base': { read: 'get_agents_route' } },
     operations: Object.fromEntries(miniIds.map(id => [id, { ...structuredClone(policyInput.operations[id]), follow_ups: [] }])),
   };
 }

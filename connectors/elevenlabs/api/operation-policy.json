@@ -146,6 +146,22 @@
       "reason": "Reserved for actual calls; unregistered."
     }
   ],
+  "family_retry_checks": {
+    "agent": {"read": "get_agents_route"},
+    "agent-testing": {"read": "list_chat_response_tests_route"},
+    "agents": {"read": "get_agents_route", "tests": "get_test_invocation_route"},
+    "analysis-items": {"read": "list_analysis_items_route"},
+    "analytics": {"read": "get_live_count"},
+    "environments": {"read": "list_environments"},
+    "knowledge-base": {"read": "get_knowledge_base_list_route"},
+    "llm": {"read": "list_available_llms"},
+    "llm-usage": {"read": "list_available_llms"},
+    "settings": {"read": "get_settings_route"},
+    "tags": {"read": "list_conversation_tags_route"},
+    "test-invocations": {"read": "list_test_invocations_route", "tests": "get_test_invocation_route"},
+    "tools": {"read": "get_tools_route"},
+    "users": {"read": "get_conversation_users_route"}
+  },
   "operations": {
     "accept_merge_proposal_route": {
       "method": "POST",
@@ -504,19 +520,21 @@
     "agent_testing_bulk_move_route": {
       "method": "POST",
       "path": "/v1/convai/agent-testing/bulk-move",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Moves multiple tests or folders from one folder to another.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_chat_response_tests_route"],
+      "examples": [{"operation_id": "agent_testing_bulk_move_route", "body": {"entity_ids": ["test_example"], "move_to": "folder_example"}}]
     },
     "assign_conversation_tags_route": {
       "method": "POST",
@@ -815,19 +833,21 @@
     "copy_analysis_item_route": {
       "method": "POST",
       "path": "/v1/convai/analysis-items/{analysis_item_id}/copy",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Create a new analysis item from this item's current definition.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_analysis_items_route"],
+      "examples": [{"operation_id": "copy_analysis_item_route", "path_params": {"analysis_item_id": "analysis_item_example"}}]
     },
     "create_agent_conversation_ticket_route": {
       "method": "POST",
@@ -943,36 +963,40 @@
     "create_agent_test_folder_route": {
       "method": "POST",
       "path": "/v1/convai/agent-testing/folders",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Creates a folder for organizing agent tests.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_test_folder_route"],
+      "examples": [{"operation_id": "create_agent_test_folder_route", "body": {"name": "Guide tests"}}]
     },
     "create_analysis_item_route": {
       "method": "POST",
       "path": "/v1/convai/analysis-items",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Create a new analysis item (evaluation criterion or data collection) in the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_analysis_item_route"],
+      "examples": [{"operation_id": "create_analysis_item_route", "body": {"kind": "evaluation", "name": "Helpful answer", "conversation_goal_prompt": "Did the answer help?"}}]
     },
     "create_audio_native_project": {
       "method": "POST",
@@ -1083,19 +1107,21 @@
     "create_conversation_tag_route": {
       "method": "POST",
       "path": "/v1/convai/tags",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tags",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Create a new conversation tag for the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_tag_route"],
+      "examples": [{"operation_id": "create_conversation_tag_route", "body": {"title": "Follow up", "description": "Needs a reply."}}]
     },
     "create_crawl_job_route": {
       "method": "POST",
@@ -1138,19 +1164,21 @@
     "create_environment": {
       "method": "POST",
       "path": "/v1/convai/environments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environments",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Create a workspace environment. Variables without a value for it fall back to their production value.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_environments"],
+      "examples": [{"operation_id": "create_environment", "body": {"name": "staging"}}]
     },
     "create_environment_variable": {
       "method": "POST",
@@ -1756,36 +1784,40 @@
     "delete_agent_test_folder_route": {
       "method": "DELETE",
       "path": "/v1/convai/agent-testing/folders/{folder_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes an agent test folder by ID. Use force=true to delete a non-empty folder and all its contents.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_chat_response_tests_route"],
+      "examples": [{"operation_id": "delete_agent_test_folder_route", "path_params": {"folder_id": "folder_example"}, "query_params": {"force": false}}]
     },
     "delete_analysis_item_route": {
       "method": "DELETE",
       "path": "/v1/convai/analysis-items/{analysis_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Delete an analysis item and all of its versions from the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_analysis_items_route"],
+      "examples": [{"operation_id": "delete_analysis_item_route", "path_params": {"analysis_item_id": "analysis_item_example"}, "query_params": {"force": false}}]
     },
     "delete_asset_endpoint": {
       "method": "DELETE",
@@ -1936,19 +1968,21 @@
     "delete_conversation_tag_route": {
       "method": "DELETE",
       "path": "/v1/convai/tags/{tag_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tags",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Delete a conversation tag. Restricted to the tag owner or a workspace admin.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_conversation_tags_route"],
+      "examples": [{"operation_id": "delete_conversation_tag_route", "path_params": {"tag_id": "tag_example"}}]
     },
     "delete_dubbing": {
       "method": "DELETE",
@@ -1974,19 +2008,21 @@
     "delete_environment": {
       "method": "DELETE",
       "path": "/v1/convai/environments/{environment}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environments",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Delete a workspace environment and remove its values from all environment variables. 'production' cannot be deleted.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_environments"],
+      "examples": [{"operation_id": "delete_environment", "path_params": {"environment": "staging"}}]
     },
     "delete_environment_variable": {
       "method": "DELETE",
@@ -3043,19 +3079,21 @@
     "get_agent_knowledge_base_size": {
       "method": "GET",
       "path": "/v1/convai/agent/{agent_id}/knowledge-base/size",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Returns the number of pages in the agent's knowledge base.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agents_route"],
+      "examples": [{"operation_id": "get_agent_knowledge_base_size", "path_params": {"agent_id": "agent_example"}}]
     },
     "get_agent_knowledge_base_summaries_route": {
       "method": "GET",
@@ -3094,19 +3132,22 @@
     "get_agent_llm_expected_cost_calculation": {
       "method": "POST",
       "path": "/v1/convai/agent/{agent_id}/llm-usage/calculate",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Calculates expected number of LLM tokens needed for the specified agent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "reviewed_post_read": "Calculates expected number of LLM tokens needed for the specified agent. This calculation or lookup does not create, change, delete or run a resource.",
+      "follow_ups": ["get_agents_route"],
+      "examples": [{"operation_id": "get_agent_llm_expected_cost_calculation", "path_params": {"agent_id": "agent_example"}, "body": {"prompt_length": 120, "number_of_pages": 2, "rag_enabled": true}}]
     },
     "get_agent_response_test_route": {
       "method": "GET",
@@ -3138,19 +3179,22 @@
     "get_agent_response_tests_summaries_route": {
       "method": "POST",
       "path": "/v1/convai/agent-testing/summaries",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Gets agent response test summaries for the requested test IDs.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "reviewed_post_read": "Gets agent response test summaries for the requested test IDs. This calculation or lookup does not create, change, delete or run a resource.",
+      "follow_ups": ["list_chat_response_tests_route"],
+      "examples": [{"operation_id": "get_agent_response_tests_summaries_route", "body": {"test_ids": ["test_example"]}}]
     },
     "get_agent_route": {
       "method": "GET",
@@ -3203,19 +3247,21 @@
     "get_agent_test_folder_route": {
       "method": "GET",
       "path": "/v1/convai/agent-testing/folders/{folder_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Gets an agent test folder by ID, including its folder path.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_chat_response_tests_route"],
+      "examples": [{"operation_id": "get_agent_test_folder_route", "path_params": {"folder_id": "folder_example"}}]
     },
     "get_agent_topics_route": {
       "method": "GET",
@@ -3285,36 +3331,40 @@
     "get_analysis_item_dependent_agents_route": {
       "method": "GET",
       "path": "/v1/convai/analysis-items/{analysis_item_id}/dependent-agents",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get a list of agents (and branches) that reference this analysis item.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_analysis_items_route"],
+      "examples": [{"operation_id": "get_analysis_item_dependent_agents_route", "path_params": {"analysis_item_id": "analysis_item_example"}}]
     },
     "get_analysis_item_route": {
       "method": "GET",
       "path": "/v1/convai/analysis-items/{analysis_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get an analysis item available in the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_analysis_items_route"],
+      "examples": [{"operation_id": "get_analysis_item_route", "path_params": {"analysis_item_id": "analysis_item_example"}}]
     },
     "get_asset": {
       "method": "GET",
@@ -3696,36 +3746,40 @@
     "get_conversation_tag_route": {
       "method": "GET",
       "path": "/v1/convai/tags/{tag_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tags",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get a conversation tag by ID.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_conversation_tags_route"],
+      "examples": [{"operation_id": "get_conversation_tag_route", "path_params": {"tag_id": "tag_example"}}]
     },
     "get_conversation_users_route": {
       "method": "GET",
       "path": "/v1/convai/users",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "users",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get distinct users from conversations with pagination.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_conversation_users_route"}]
     },
     "get_crawl_job_route": {
       "method": "GET",
@@ -3747,19 +3801,21 @@
     "get_dashboard_settings_route": {
       "method": "GET",
       "path": "/v1/convai/settings/dashboard",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "settings",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Retrieve Convai dashboard settings for the workspace",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_settings_route"],
+      "examples": [{"operation_id": "get_dashboard_settings_route"}]
     },
     "get_documentation_chunk_from_knowledge_base": {
       "method": "GET",
@@ -4168,19 +4224,21 @@
     "get_live_count": {
       "method": "GET",
       "path": "/v1/convai/analytics/live-count",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analytics",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get the live count of the ongoing conversations.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_live_count"}]
     },
     "get_livekit_token": {
       "method": "GET",
@@ -4490,19 +4548,22 @@
     "get_public_llm_expected_cost_calculation": {
       "method": "POST",
       "path": "/v1/convai/llm-usage/calculate",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "llm-usage",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Returns a list of LLM models and the expected cost for using them based on the provided values.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "reviewed_post_read": "Returns a list of LLM models and the expected cost for using them based on the provided values. This calculation or lookup does not create, change, delete or run a resource.",
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_public_llm_expected_cost_calculation", "body": {"prompt_length": 120, "number_of_pages": 2, "rag_enabled": true}}]
     },
     "get_public_template": {
       "method": "GET",
@@ -4745,19 +4806,21 @@
     "get_settings_route": {
       "method": "GET",
       "path": "/v1/convai/settings",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "settings",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Retrieve Convai settings for the workspace",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_settings_route"}]
     },
     "get_signed_url_deprecated": {
       "method": "GET",
@@ -4973,19 +5036,21 @@
     "get_tool_executions_route": {
       "method": "GET",
       "path": "/v1/convai/tools/{tool_id}/executions",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tools",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get paginated list of tool executions for a specific tool.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_tools_route"],
+      "examples": [{"operation_id": "get_tool_executions_route", "path_params": {"tool_id": "tool_example"}}]
     },
     "get_tool_route": {
       "method": "GET",
@@ -5522,36 +5587,40 @@
     "list_analysis_item_versions_route": {
       "method": "GET",
       "path": "/v1/convai/analysis-items/{analysis_item_id}/versions",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List the published versions of an analysis item, newest first.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_analysis_items_route"],
+      "examples": [{"operation_id": "list_analysis_item_versions_route", "path_params": {"analysis_item_id": "analysis_item_example"}}]
     },
     "list_analysis_items_route": {
       "method": "GET",
       "path": "/v1/convai/analysis-items",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List analysis items available in the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "list_analysis_items_route"}]
     },
     "list_assets": {
       "method": "GET",
@@ -5661,19 +5730,21 @@
     "list_conversation_tags_route": {
       "method": "GET",
       "path": "/v1/convai/tags",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tags",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List conversation tags for the workspace, ordered by most recently created first.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "list_conversation_tags_route"}]
     },
     "list_crawl_jobs_route": {
       "method": "GET",
@@ -5729,19 +5800,21 @@
     "list_environments": {
       "method": "GET",
       "path": "/v1/convai/environments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environments",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List the workspace environments, including 'production'.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "list_environments"}]
     },
     "list_image_generations": {
       "method": "GET",
@@ -9099,53 +9172,59 @@
     "update_agent_test_folder_route": {
       "method": "PATCH",
       "path": "/v1/convai/agent-testing/folders/{folder_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agent-testing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Updates an agent test folder. Currently only supports updating the folder name.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_test_folder_route"],
+      "examples": [{"operation_id": "update_agent_test_folder_route", "path_params": {"folder_id": "folder_example"}, "body": {"name": "Updated guide tests"}}]
     },
     "update_analysis_item_attachments_route": {
       "method": "PATCH",
       "path": "/v1/convai/analysis-items/{analysis_item_id}/attachments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Attach or detach one analysis item on multiple agent branches.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_analysis_item_dependent_agents_route"],
+      "examples": [{"operation_id": "update_analysis_item_attachments_route", "path_params": {"analysis_item_id": "analysis_item_example"}, "body": {"source": "user", "attach": [{"agent_id": "agent_example", "branch_id": "branch_example"}], "detach": []}}]
     },
     "update_analysis_item_route": {
       "method": "PATCH",
       "path": "/v1/convai/analysis-items/{analysis_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "analysis-items",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Update an analysis item. Publishes a new version when the content changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_analysis_item_route"],
+      "examples": [{"operation_id": "update_analysis_item_route", "path_params": {"analysis_item_id": "analysis_item_example"}, "body": {"kind": "evaluation", "name": "Clear answer", "conversation_goal_prompt": "Was the answer clear?"}}]
     },
     "update_auth_connection": {
       "method": "PATCH",
@@ -9201,36 +9280,40 @@
     "update_conversation_tag_route": {
       "method": "PATCH",
       "path": "/v1/convai/tags/{tag_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "tags",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Update a conversation tag's title and/or description. Restricted to the tag owner or a workspace admin.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_tag_route"],
+      "examples": [{"operation_id": "update_conversation_tag_route", "path_params": {"tag_id": "tag_example"}, "body": {"title": "Resolved", "description": null}}]
     },
     "update_dashboard_settings_route": {
       "method": "PATCH",
       "path": "/v1/convai/settings/dashboard",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "settings",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Update Convai dashboard settings for the workspace",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_dashboard_settings_route"],
+      "examples": [{"operation_id": "update_dashboard_settings_route", "body": {"charts": []}}]
     },
     "update_document_route": {
       "method": "PATCH",
@@ -9488,19 +9571,21 @@
     "update_settings_route": {
       "method": "PATCH",
       "path": "/v1/convai/settings",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "settings",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Update Convai settings for the workspace",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_settings_route"],
+      "examples": [{"operation_id": "update_settings_route", "body": {"rag_retention_period_days": 15}}]
     },
     "update_speaker": {
       "method": "PATCH",
@@ -9539,19 +9624,21 @@
     "update_test_invocation_route": {
       "method": "PATCH",
       "path": "/v1/convai/test-invocations/{test_invocation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "test-invocations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Updates the user-provided name of a test invocation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_test_invocation_route"],
+      "examples": [{"operation_id": "update_test_invocation_route", "path_params": {"test_invocation_id": "test_invocation_example"}, "body": {"name": "Guide check"}}]
     },
     "update_tool_route": {
       "method": "PATCH",

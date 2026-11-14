@@ -1,5 +1,6 @@
+import jsonFamilyCases from './api-json-family-wire-cases.json' with { type: 'json' };
 // Literal expectations transcribed from the 2026-11-08 provider snapshot, not the generated catalogue.
-// All 40 expectations are literal; multipart cases carry their own file bytes and receipts.
+// Original and additional JSON family expectations are literal; multipart cases carry their own file bytes and receipts.
 export type WireProfile = 'read' | 'create' | 'change' | 'delete' | 'tests' | 'query_knowledge';
 export interface WireCase {
   id: string;
@@ -23,6 +24,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...jsonFamilyCases as WireCase[],
   {
     id: 'get_agents_route', profile: 'read', args: { query_params: { search: 'Acme & guide', page_size: 2, archived: false, tags: ['help desk', 'a&b'], cursor: null } },
     method: 'GET', path: '/v1/convai/agents', query: [['search', 'Acme & guide'], ['page_size', '2'], ['archived', 'false'], ['tags', 'help desk'], ['tags', 'a&b']],

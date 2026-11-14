@@ -86,6 +86,10 @@ describe('actual SDK definitions and independent admission census', () => {
     for (const [name, readOnlyHint, destructiveHint, idempotentHint, openWorldHint] of expected) {
       const definition = definitions.find(tool => tool.name === name)!;
       expect(definition.annotations).toEqual({ readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
+      expect(definition.description).toContain('Operation IDs listed here or in receipts are names only.');
+      expect(definition.description).toContain('Before the first call to each operation in this conversation, call elevenlabs_discover_api with that operation_id to read its contract');
+      expect(definition.description).toContain('unless a tool description or receipt already supplies the exact parameter names and locations.');
+      expect(definition.description).toContain('Never infer path_params, query_params or body fields from an operation name.');
       for (const heading of ['COST:', 'WHEN TO USE:', 'RELATED TOOLS:', 'EXAMPLE:']) expect(definition.description).toContain(heading);
       const references = definition.description!.match(/elevenlabs_[a-z_]+|list_voices/g) ?? [];
       expect(references.length).toBeGreaterThan(0);
@@ -106,8 +110,10 @@ describe('actual SDK definitions and independent admission census', () => {
     }
     expect(definitions.find(tool => tool.name === 'elevenlabs_discover_api')!.description).toContain('2026-11-08');
     expect(definitions.find(tool => tool.name === tools.tests)!.description).toContain('real integrations');
-    const createIds = definitions.find(tool => tool.name === tools.create)!.description!.match(/^Create operation_ids: (.+)\.$/m)![1].split(', ');
-    expect(createIds).toEqual((await loadApiCatalog()).operations.filter(op => op.profile === 'create').map(op => op.operation_id).sort());
+    for (const profile of profiles) {
+      const ids = definitions.find(tool => tool.name === tools[profile])!.description!.match(/^\w+ operation_ids: (.+)\.$/m)![1].split(', ');
+      expect(ids).toEqual((await loadApiCatalog()).operations.filter(op => op.profile === profile).map(op => op.operation_id).sort());
+    }
     expect(definitions.map(tool => tool.name)).not.toContain('elevenlabs_run_job');
     expect(definitions.map(tool => tool.name)).not.toContain('elevenlabs_place_call');
     const discovery = definitions.find(tool => tool.name === 'elevenlabs_discover_api')!;
@@ -127,11 +133,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 38 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(38);
+  it('has independent cases for every admission, with exactly 72 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(72);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(40);
+    expect(new Set(expectedIds).size).toBe(74);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
@@ -214,7 +220,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(JSON.parse(unwrapUntrusted(String(result.json.data)))).toEqual(wire.response);
     if (wire.id === 'create_file_document_route') {
       expect(result.json.follow_up_operations).toEqual(['get_documentation_from_knowledge_base']);
-      expect(result.json.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_documentation_from_knowledge_base and the ID returned in data, then check the result.');
+      expect(result.json.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_documentation_from_knowledge_base (path_params.documentation_id); use IDs from data or the request where needed, then check the result.');
     } else expect(result.json.next_step).toBeUndefined();
   });
 });
@@ -306,7 +312,7 @@ describe('argument ownership and serialization', () => {
     handle(createAgent, async request => { sent = await request.json(); });
     const result = await call('create', input);
     expect(result.isError, result.text).not.toBe(true);
-    expect(result.json).toMatchObject({ ok: true, follow_up_operations: ['get_agent_route'], next_step: 'Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route and the ID returned in data, then check the result.' });
+    expect(result.json).toMatchObject({ ok: true, follow_up_operations: ['get_agent_route'], next_step: 'Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_agent_route (path_params.agent_id); use IDs from data or the request where needed, then check the result.' });
     expect(sent).toEqual({ conversation_config: { agent: { prompt: { llm: 'gemini-3.5-flash', prompt: '<untrusted-content source="inner">keep-one-envelope</untrusted-content>' }, dynamic_variables: { dynamic_variable_placeholders: { llm_model: 'valid-map-value', [mapKey]: 'raw-value' } } } } });
     expect(input).toEqual(original);
     expect(requests).toHaveLength(1);
@@ -431,7 +437,7 @@ describe('declared response formats and checked pagination', () => {
     const result = await call('create', { operation_id: 'create_agent_route', body: { conversation_config: {} } });
     expect(result.json).toMatchObject({ ok: false, code: 'INVALID_RESPONSE' });
     expect(result.text).not.toContain('raw-provider-secret');
-    expect(result.json.resolution).toBe('A 2xx request may have completed even though its response is invalid. Check the result with get_agents_route through elevenlabs_read_resource before retrying. Report the operation_id, status and media type to the connector maintainer; keep raw response content private.');
+    expect(result.json.resolution).toBe('A 2xx request may have completed even though its response is invalid. Check the result with get_agents_route through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs. Report the operation_id, status and media type to the connector maintainer; keep raw response content private.');
     expect(requests).toHaveLength(1);
   });
 
@@ -593,7 +599,7 @@ describe('phase-accurate errors, secret handling and bounded transport', () => {
       return HttpResponse.json({ agent_id: 'possibly-created' });
     }));
     const result = await call('create', { operation_id: 'create_agent_route', body: { conversation_config: {} } });
-    expect(result.json).toMatchObject({ ok: false, code: 'TIMEOUT', error: expect.stringContaining('may have completed'), resolution: 'Check the result with get_agents_route through elevenlabs_read_resource before retrying. A timeout does not undo provider effects. No automatic retry was made.' });
+    expect(result.json).toMatchObject({ ok: false, code: 'TIMEOUT', error: expect.stringContaining('may have completed'), resolution: 'Check the result with get_agents_route through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs. A timeout does not undo provider effects. No automatic retry was made.' });
     expect(timeout).toHaveBeenCalledWith(30_000);
     expect(requests).toHaveLength(1);
   });
@@ -623,9 +629,8 @@ describe('phase-accurate errors, secret handling and bounded transport', () => {
     const result = await call('tests', { operation_id: 'run_agent_test_suite_route', path_params: { agent_id: 'agent_example' }, body: { tests: [{ test_id: 'test_example' }] } });
     expect(result.json).toMatchObject({ code: 'TIMEOUT' });
     const resolution = String(result.json.resolution);
-    expect(resolution).toContain('list_test_invocations_route or get_test_invocation_route');
-    expect(resolution).toContain('known agent_id in query_params');
-    expect(resolution).toContain('invocation ID from that result');
+    expect(resolution).toContain('list_test_invocations_route (query_params.agent_id optional) or get_test_invocation_route (path_params.test_invocation_id)');
+    expect(resolution).toContain('Use known IDs, or list first to find missing IDs.');
     expect(requests).toHaveLength(1);
   });
 
@@ -635,7 +640,7 @@ describe('phase-accurate errors, secret handling and bounded transport', () => {
       stream.error(new DOMException(`private-provider-body ${key}`, 'TimeoutError'));
     } }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
     const result = await call('create', { operation_id: 'create_agent_route', body: { conversation_config: {} } });
-    expect(result.json).toMatchObject({ ok: false, code: 'TIMEOUT', error: expect.stringContaining('may have completed'), resolution: 'Check the result with get_agents_route through elevenlabs_read_resource before retrying. A timeout does not undo provider effects. No automatic retry was made.' });
+    expect(result.json).toMatchObject({ ok: false, code: 'TIMEOUT', error: expect.stringContaining('may have completed'), resolution: 'Check the result with get_agents_route through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs. A timeout does not undo provider effects. No automatic retry was made.' });
     expect(result.text).not.toContain(key);
     expect(result.text).not.toContain('private-provider-body');
     expect(requests).toHaveLength(1);
@@ -650,6 +655,32 @@ describe('phase-accurate errors, secret handling and bounded transport', () => {
     const result = await call('read', { operation_id: 'get_agents_route' });
     expect(result.json).toMatchObject({ ok: false, code: 'HTTP_302', resolution: expect.stringContaining('not followed') });
     expect(secondHost).toBe(0);
+    expect(requests).toHaveLength(1);
+  });
+});
+
+
+describe('policy-derived retry checks for additional families', () => {
+  it.each([
+    ['create_conversation_tag_route', 'list_conversation_tags_route'],
+    ['copy_analysis_item_route', 'list_analysis_items_route'],
+    ['create_environment', 'list_environments'],
+    ['create_agent_test_folder_route', 'list_chat_response_tests_route'],
+    ['agent_testing_bulk_move_route', 'list_chat_response_tests_route'],
+    ['update_settings_route', 'get_settings_route'],
+    ['update_dashboard_settings_route', 'get_dashboard_settings_route'],
+    ['update_test_invocation_route', 'get_test_invocation_route'],
+    ['get_live_count', 'get_live_count'],
+    ['get_conversation_users_route', 'get_conversation_users_route'],
+    ['get_tool_executions_route', 'get_tools_route'],
+    ['get_agent_knowledge_base_size', 'get_agents_route'],
+    ['get_public_llm_expected_cost_calculation', 'get_public_llm_expected_cost_calculation'],
+    ['get_agent_llm_expected_cost_calculation', 'get_agents_route'],
+  ])('%s reports %s after a server failure, without retrying', async (id, check) => {
+    const wire = apiWireCases.find(wire => wire.id === id)!;
+    mswServer.use(http.all('https://api.elevenlabs.io/*', () => HttpResponse.json({ detail: 'Unavailable' }, { status: 503 })));
+    const result = await call(wire.profile, { operation_id: id, ...wire.args });
+    expect(result.json).toMatchObject({ code: 'HTTP_503', resolution: expect.stringContaining(check) });
     expect(requests).toHaveLength(1);
   });
 });

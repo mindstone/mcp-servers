@@ -1,6 +1,6 @@
 import { getApiKey } from './auth.js';
 import { z } from 'zod';
-import { ApiBoundaryError, getOperation, isRecord, loadApiCatalog, type ApiOperation, type ApiProfile } from './api-catalog.js';
+import { ApiBoundaryError, getOperation, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
 import { createSuccessReceipt, validateRequest } from './api-validation.js';
 import { elevenLabsFetch } from './client.js';
 import { ElevenLabsError, LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, getErrorResolution } from './types.js';
@@ -30,20 +30,15 @@ async function checkBeforeRetry(op: ApiOperation): Promise<string> {
   for (const id of op.follow_ups) {
     const read = await getOperation(id);
     if (read.profile !== 'read') continue;
-    reads.push(id);
+    reads.push(operationReference(read, op));
     if ([...read.path.matchAll(/\{([^{}]+)\}/g)].every(([, name]) => op.path.includes(`{${name}}`))) callable = true;
   }
   if (!callable) {
     reads.length = 0;
     const sameResource = (await loadApiCatalog()).operations.find(candidate => candidate.profile === 'read' && candidate.path === op.path);
-    const fallback = op.profile === 'tests' ? 'get_test_invocation_route'
-      : op.family === 'tools' ? 'get_tools_route'
-      : op.family === 'knowledge-base' ? 'get_knowledge_base_list_route'
-      : op.family === 'agent-testing' ? 'list_chat_response_tests_route'
-      : op.family === 'test-invocations' ? 'list_test_invocations_route' : 'get_agents_route';
-    reads.push((await getOperation(sameResource?.operation_id ?? fallback, 'read')).operation_id);
+    reads.push(operationReference(await getOperation(sameResource?.operation_id ?? op.check_before_retry, 'read'), op));
   }
-  return `Check the result with ${reads.join(' or ')} through elevenlabs_read_resource before retrying.${op.operation_id === 'run_agent_test_suite_route' ? ' If the run response was lost, list_test_invocations_route accepts the known agent_id in query_params; use an invocation ID from that result for get_test_invocation_route.' : ''}`;
+  return `Check the result with ${reads.join(' or ')} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
 }
 
 async function timeoutFailure(op: ApiOperation): Promise<ApiBoundaryError> {

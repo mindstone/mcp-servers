@@ -1,0 +1,970 @@
+[
+  {
+    "id": "agent_testing_bulk_move_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "entity_ids": [
+          "test_example"
+        ],
+        "move_to": "folder_example"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agent-testing/bulk-move",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {
+      "entity_ids": [
+        "test_example"
+      ],
+      "move_to": "folder_example"
+    }
+  },
+  {
+    "id": "copy_analysis_item_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23/copy",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "analysis_example",
+      "definition": {
+        "kind": "evaluation",
+        "name": "Helpful answer",
+        "conversation_goal_prompt": "Did the answer help?"
+      },
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin"
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2,
+      "current_version_id": "version_example"
+    }
+  },
+  {
+    "id": "create_agent_test_folder_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "Guide tests"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agent-testing/folders",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "folder_example",
+      "name": "Guide tests"
+    },
+    "body": {
+      "name": "Guide tests"
+    }
+  },
+  {
+    "id": "create_analysis_item_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "kind": "evaluation",
+        "name": "Helpful answer",
+        "conversation_goal_prompt": "Did the answer help?"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/analysis-items",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "analysis_example",
+      "definition": {
+        "kind": "evaluation",
+        "name": "Helpful answer",
+        "conversation_goal_prompt": "Did the answer help?"
+      },
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin"
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2,
+      "current_version_id": "version_example"
+    },
+    "body": {
+      "kind": "evaluation",
+      "name": "Helpful answer",
+      "conversation_goal_prompt": "Did the answer help?"
+    }
+  },
+  {
+    "id": "create_conversation_tag_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "title": "Follow up",
+        "description": "Needs a reply."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/tags",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tag_id": "tag_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "title": "Follow up",
+      "description": "Needs a reply.",
+      "created_at_unix_secs": 1
+    },
+    "body": {
+      "title": "Follow up",
+      "description": "Needs a reply."
+    }
+  },
+  {
+    "id": "create_environment",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "staging"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/environments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "name": "staging"
+    },
+    "body": {
+      "name": "staging"
+    }
+  },
+  {
+    "id": "delete_agent_test_folder_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "folder_id": "folder/a ?#"
+      },
+      "query_params": {
+        "force": false
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/agent-testing/folders/folder%2Fa%20%3F%23",
+    "query": [
+      [
+        "force",
+        "false"
+      ]
+    ],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "delete_analysis_item_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      },
+      "query_params": {
+        "force": false
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23",
+    "query": [
+      [
+        "force",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "delete_conversation_tag_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "tag_id": "tag/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/tags/tag%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "delete_environment",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "environment": "staging & demo"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/environments/staging%20%26%20demo",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "get_agent_knowledge_base_size",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agent/agent%2Fa%20%3F%23/knowledge-base/size",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "number_of_pages": 2
+    }
+  },
+  {
+    "id": "get_agent_llm_expected_cost_calculation",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "body": {
+        "prompt_length": 120,
+        "number_of_pages": 2,
+        "rag_enabled": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agent/agent%2Fa%20%3F%23/llm-usage/calculate",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "llm_prices": []
+    },
+    "body": {
+      "prompt_length": 120,
+      "number_of_pages": 2,
+      "rag_enabled": true
+    }
+  },
+  {
+    "id": "get_agent_response_tests_summaries_route",
+    "profile": "read",
+    "args": {
+      "body": {
+        "test_ids": [
+          "test_example"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agent-testing/summaries",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tests": {}
+    },
+    "body": {
+      "test_ids": [
+        "test_example"
+      ]
+    }
+  },
+  {
+    "id": "get_agent_test_folder_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "folder_id": "folder/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agent-testing/folders/folder%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "folder_example",
+      "name": "Guide tests",
+      "folder_path": []
+    }
+  },
+  {
+    "id": "get_analysis_item_dependent_agents_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      },
+      "query_params": {
+        "page_size": 2,
+        "cursor": "agents & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23/dependent-agents",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "agents & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agents": [],
+      "branches": [],
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "get_analysis_item_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "analysis_example",
+      "definition": {
+        "kind": "evaluation",
+        "name": "Helpful answer",
+        "conversation_goal_prompt": "Did the answer help?"
+      },
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin"
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2,
+      "current_version_id": "version_example"
+    }
+  },
+  {
+    "id": "get_conversation_tag_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "tag_id": "tag/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/tags/tag%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tag_id": "tag_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "title": "Follow up",
+      "description": "Needs a reply.",
+      "created_at_unix_secs": 1
+    }
+  },
+  {
+    "id": "get_conversation_users_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "agent_id": "agent_example",
+        "branch_id": null,
+        "call_start_before_unix": 200,
+        "call_start_after_unix": 100,
+        "search": "user_example",
+        "page_size": 2,
+        "sort_by": "last_contact_unix_secs",
+        "sort_direction": "desc",
+        "cursor": "users & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/users",
+    "query": [
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "call_start_before_unix",
+        "200"
+      ],
+      [
+        "call_start_after_unix",
+        "100"
+      ],
+      [
+        "search",
+        "user_example"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "sort_by",
+        "last_contact_unix_secs"
+      ],
+      [
+        "sort_direction",
+        "desc"
+      ],
+      [
+        "cursor",
+        "users & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "users": [],
+      "has_more": true,
+      "next_cursor": "users & 2"
+    }
+  },
+  {
+    "id": "get_dashboard_settings_route",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/convai/settings/dashboard",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "charts": []
+    }
+  },
+  {
+    "id": "get_live_count",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "agent_id": null,
+        "agent_ids": [
+          "agent & 1",
+          "agent/2"
+        ]
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/analytics/live-count",
+    "query": [
+      [
+        "agent_ids",
+        "agent & 1"
+      ],
+      [
+        "agent_ids",
+        "agent/2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "count": 3
+    }
+  },
+  {
+    "id": "get_public_llm_expected_cost_calculation",
+    "profile": "read",
+    "args": {
+      "body": {
+        "prompt_length": 120,
+        "number_of_pages": 2,
+        "rag_enabled": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/llm-usage/calculate",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "llm_prices": []
+    },
+    "body": {
+      "prompt_length": 120,
+      "number_of_pages": 2,
+      "rag_enabled": true
+    }
+  },
+  {
+    "id": "get_settings_route",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/convai/settings",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "get_tool_executions_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "tool_id": "tool/a ?#"
+      },
+      "query_params": {
+        "cursor": "exec & 2",
+        "page_size": 2,
+        "is_error": false,
+        "agent_id": "agent_example",
+        "branch_id": "branch_example",
+        "start_time": 1.5,
+        "end_time": 3.5
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/tools/tool%2Fa%20%3F%23/executions",
+    "query": [
+      [
+        "cursor",
+        "exec & 2"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "is_error",
+        "false"
+      ],
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "branch_id",
+        "branch_example"
+      ],
+      [
+        "start_time",
+        "1.5"
+      ],
+      [
+        "end_time",
+        "3.5"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "executions": [],
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "list_analysis_item_versions_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      },
+      "query_params": {
+        "page_size": 2,
+        "cursor": "versions & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23/versions",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "versions & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "versions": [],
+      "current_version_id": "version_example",
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "list_analysis_items_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "search": "Helpful & clear",
+        "page_size": 2,
+        "kind": "evaluation",
+        "analysis_item_ids": [
+          "analysis & 1",
+          "analysis/2"
+        ],
+        "created_by_user_id": "@me",
+        "sort_direction": "asc",
+        "cursor": null
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/analysis-items",
+    "query": [
+      [
+        "search",
+        "Helpful & clear"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "kind",
+        "evaluation"
+      ],
+      [
+        "analysis_item_ids",
+        "analysis & 1"
+      ],
+      [
+        "analysis_item_ids",
+        "analysis/2"
+      ],
+      [
+        "created_by_user_id",
+        "@me"
+      ],
+      [
+        "sort_direction",
+        "asc"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "analysis_items": [
+        {
+          "id": "analysis_example",
+          "definition": {
+            "kind": "evaluation",
+            "name": "Helpful answer",
+            "conversation_goal_prompt": "Did the answer help?"
+          },
+          "access_info": {
+            "is_creator": true,
+            "creator_name": "Jane Example",
+            "creator_email": "jane@example.com",
+            "role": "admin"
+          },
+          "created_at_unix_secs": 1,
+          "updated_at_unix_secs": 2,
+          "current_version_id": "version_example"
+        }
+      ],
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "list_conversation_tags_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "page_size": 2,
+        "cursor": "tags & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/tags",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "tags & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "conversation_tags": [
+        {
+          "tag_id": "tag_example",
+          "workspace_id": "workspace_example",
+          "owner_user_id": "user_example",
+          "title": "Follow up",
+          "description": "Needs a reply.",
+          "created_at_unix_secs": 1
+        }
+      ],
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "list_environments",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/convai/environments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "environments": [
+        {
+          "name": "production"
+        },
+        {
+          "name": "staging"
+        }
+      ]
+    }
+  },
+  {
+    "id": "update_agent_test_folder_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "folder_id": "folder/a ?#"
+      },
+      "body": {
+        "name": "Updated guide tests"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/agent-testing/folders/folder%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "folder_example",
+      "name": "Updated guide tests"
+    },
+    "body": {
+      "name": "Updated guide tests"
+    }
+  },
+  {
+    "id": "update_analysis_item_attachments_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      },
+      "body": {
+        "source": "user",
+        "attach": [
+          {
+            "agent_id": "agent_example",
+            "branch_id": "branch_example"
+          }
+        ],
+        "detach": []
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23/attachments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": []
+    },
+    "body": {
+      "source": "user",
+      "attach": [
+        {
+          "agent_id": "agent_example",
+          "branch_id": "branch_example"
+        }
+      ],
+      "detach": []
+    }
+  },
+  {
+    "id": "update_analysis_item_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "analysis_item_id": "analysis_item/a ?#"
+      },
+      "body": {
+        "kind": "evaluation",
+        "name": "Clear answer",
+        "conversation_goal_prompt": "Was the answer clear?"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/analysis-items/analysis_item%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "analysis_example",
+      "definition": {
+        "kind": "evaluation",
+        "name": "Helpful answer",
+        "conversation_goal_prompt": "Did the answer help?"
+      },
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin"
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2,
+      "current_version_id": "version_example"
+    },
+    "body": {
+      "kind": "evaluation",
+      "name": "Clear answer",
+      "conversation_goal_prompt": "Was the answer clear?"
+    }
+  },
+  {
+    "id": "update_conversation_tag_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "tag_id": "tag/a ?#"
+      },
+      "body": {
+        "title": "Resolved",
+        "description": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/tags/tag%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tag_id": "tag_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "title": "Resolved",
+      "description": null,
+      "created_at_unix_secs": 1
+    },
+    "body": {
+      "title": "Resolved",
+      "description": null
+    }
+  },
+  {
+    "id": "update_dashboard_settings_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "charts": []
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/settings/dashboard",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "charts": []
+    },
+    "body": {
+      "charts": []
+    }
+  },
+  {
+    "id": "update_settings_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "rag_retention_period_days": 15
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/settings",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "rag_retention_period_days": 15
+    },
+    "body": {
+      "rag_retention_period_days": 15
+    }
+  },
+  {
+    "id": "update_test_invocation_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "test_invocation_id": "test_invocation/a ?#"
+      },
+      "body": {
+        "name": "Guide check"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/test-invocations/test_invocation%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "test_invocation_example",
+      "name": "Guide check",
+      "test_runs": []
+    },
+    "body": {
+      "name": "Guide check"
+    }
+  }
+]

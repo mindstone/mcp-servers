@@ -35,6 +35,12 @@ const idsByProfile = {
   tests: 'run_agent_test_suite_route cancel_test_invocation_route resubmit_tests_route',
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
+const stage7Profiles = {
+  read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments',
+  create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment',
+  change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route',
+  delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment'
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -48,8 +54,8 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge',
 });
-const reviewedProfiles = Object.fromEntries(Object.entries(idsByProfile)
-  .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile])));
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles].flatMap(groups => Object.entries(groups)
+  .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
   account_and_keys: { prefixes: ['/v1/service-accounts', '/v1/workspaces/api-keys'], count: 9 },
@@ -101,7 +107,7 @@ const operationSchema = z.object({
     tools: z.array(text), reason: text, evidence: z.array(text),
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
-  timeout: z.enum(['standard', 'long']).optional(),
+  timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.literal('document') }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
   follow_ups: z.array(text).optional(), examples: z.array(z.record(z.unknown())).optional(),
@@ -118,6 +124,7 @@ export const policySchema = z.object({
   reserved_profiles: z.array(z.object({
     profile: z.enum(['run_job', 'place_call']), tool: text, milestone: z.number().int().positive(), effects: effectsSchema, reason: text,
   }).strict()),
+  family_retry_checks: z.record(z.object({ read: text, tests: text.optional() }).strict()),
   operations: z.record(operationSchema),
 }).strict();
 
@@ -152,7 +159,7 @@ export function matchesPrefix(path, prefix) {
   return path === prefix || path.startsWith(prefix + '/');
 }
 function classify(id, path) {
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: Object.values(stage7Profiles).some(ids => ids.split(' ').includes(id)) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -195,16 +202,20 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
     if (row.status === 'admitted') {
-      if (row.milestone !== 1 || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
+      if (![1, 7].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
       const reviewedProfile = reviewedProfiles[id];
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
       const floor = { GET: 'read', DELETE: 'delete', PUT: 'change', PATCH: 'change' }[row.method];
       if (floor && floor !== row.profile) refuse('method effect floor', `${id}: ${row.method} requires ${floor}`);
       if (row.method !== 'POST' && floor === undefined) refuse('unsupported method', `${id}: ${row.method}`);
-      if (row.method === 'POST' && row.profile === 'read') refuse('unreviewed POST read', id);
+      if (row.method === 'POST' && row.profile === 'read' && !row.reviewed_post_read) refuse('unreviewed POST read', id);
+      if (row.reviewed_post_read !== undefined && (row.method !== 'POST' || row.profile !== 'read')) refuse('misplaced reviewed POST read', id);
+      const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
+      const retryOperation = policy.operations[retryCheck];
+      if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null) refuse('non-admitted transport metadata', id);
+      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -222,7 +233,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 40, planned: 366, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 74, planned: 332, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -512,6 +523,8 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     descriptors.push({
       operation_id: id, method: row.method, path: row.path, family: row.family, milestone: row.milestone,
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
+      check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
+      ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
       summary: operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,
       parameters: records, request, responses,
       pagination: paginationDescriptor(operation, parameters, responses, spec, id),
@@ -530,6 +543,16 @@ export function renderCatalog(catalog) {
     + '// Only admitted operations and their reachable provider schemas are included.\n'
     + 'export const apiCatalog: unknown = JSON.parse(' + JSON.stringify(stableJson(catalog).trimEnd()) + ');\n';
 }
+export function renderMetadata(catalog) {
+  const aliases = { 'knowledge-base': 'knowledge', 'agent-testing': 'tests', 'test-invocations': 'tests', llm: 'agents', agent: 'agents' };
+  const families = Object.fromEntries([...new Set(catalog.operations.map(op => op.family))].sort().map(name => [name, aliases[name] ?? name]));
+  const discoveryFamilies = [...new Set(['agents', 'tools', 'knowledge', 'tests', ...Object.values(families)])];
+  const profileOperationIds = Object.fromEntries(Object.keys(PROFILE_TOOLS).map(profile => [profile, catalog.operations.filter(op => op.profile === profile).map(op => op.operation_id).sort()]));
+  return '// Generated by scripts/generate-api-catalog.mjs; do not edit.\n'
+    + `export const apiFamilies = ${JSON.stringify(families, null, 2)} as const;\n`
+    + `export const discoveryFamilies = ${JSON.stringify(discoveryFamilies)} as const;\n`
+    + `export const profileOperationIds = ${JSON.stringify(profileOperationIds, null, 2)} as const;\n`;
+}
 function cell(value) { return String(value).replaceAll('|', '\\|').replaceAll('\n', ' '); }
 export function renderCoverage(rawPolicy, rosters) {
   const policy = validatePolicy(rawPolicy, rosters);
@@ -541,8 +564,8 @@ export function renderCoverage(rawPolicy, rosters) {
     `Source: ${policy.source.url}`, `Retrieved: ${policy.source.retrieved_at}`, `SHA-256 (original decompressed bytes): \`${policy.source.sha256}\``,
     `Source census: ${policy.source.paths} paths; ${policy.source.operations} HTTP operation IDs; ${policy.source.bytes.toLocaleString('en-US')} bytes.`, '',
     `Partition: **${counts.admitted} admitted + ${counts.planned} planned + ${counts.excluded} excluded = ${rows.length}**.`, '',
-    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). Version 0.6.0 is proposed for the first interface only; no release is authorized and later versions are unset.', '',
-    'Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the 40 admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.', '',
+    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; additional admitted operations are available in source until the next release. Later versions are unset.', '',
+    `Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.`, '',
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',
     'Provider constraints (including enums, required fields, maps and open objects) are preserved. Only synthesized path/query records are closed. Forbidden aliases are exact anchored own-property checks described in the compatibility overlay, separate from discovery search aliases. Enum errors refer to the 2026-11-08 snapshot and recommend a reviewed catalogue refresh.', '',
@@ -569,6 +592,7 @@ export async function generateArtifacts(connectorRoot, specPath, check = false) 
   const catalog = compileCatalog(await readFile(specPath), policy, PINNED_SOURCE, rosters);
   const outputs = new Map([
     ['src/generated/api-catalog.ts', renderCatalog(catalog)],
+    ['src/generated/api-metadata.ts', renderMetadata(catalog)],
     ['API_COVERAGE.md', renderCoverage(policy, rosters)],
   ]);
   for (const [relativePath, content] of outputs) {

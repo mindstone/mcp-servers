@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- 34 more API operations for conversation tags, analysis items, workspace and dashboard settings, environments, test folders and summaries, invocation names, conversation users, live counts, tool executions, usage estimates and knowledge-base size. The same seven API tools handle them; delete operations stay behind the delete tool.
+
+### Fixed
+
+- Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
+- API tool guidance now requires discovering each operation's contract before its first call unless exact parameter names and locations are already supplied, including for receipt follow-ups.
+
 ## [0.6.0] - 2026-11-14
 
 ### Changed
