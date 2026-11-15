@@ -22,6 +22,9 @@ const { createHandler, updateHandler, deleteHandler, addNoteHandler, getHistoryH
     }),
   }));
 
+const { registerSignInTool } = vi.hoisted(() => ({ registerSignInTool: vi.fn() }));
+vi.mock("../src/tools/sign-in.tool.js", () => ({ registerSignInTool }));
+
 vi.mock("../src/tools/create/index.js", () => ({
   CreateTools: [
     () => ({
@@ -95,6 +98,14 @@ function registerTools(): Map<string, RegisteredTool> {
   ToolFactory(fakeServer as never);
   return registered;
 }
+
+describe("ToolFactory sign-in", () => {
+  it("registers xero_sign_in on the same server", () => {
+    registerSignInTool.mockClear();
+    registerTools();
+    expect(registerSignInTool).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("ToolFactory write tools", () => {
   it("runs write tools by default, with no opt-in environment variable", async () => {

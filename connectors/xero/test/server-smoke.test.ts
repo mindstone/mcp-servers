@@ -54,6 +54,7 @@ describe("Xero MCP server smoke", () => {
       expect(names).toContain("get-invoice-attachment-content");
       expect(names).toContain("get-invoice-history");
       expect(names).toContain("add-invoice-note");
+      expect(names).toContain("xero_sign_in");
 
       const createInvoice = tools.find((tool) => tool.name === "create-invoice");
       const currencySchema = createInvoice?.inputSchema.properties?.currencyCode;
