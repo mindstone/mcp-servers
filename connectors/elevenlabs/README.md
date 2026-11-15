@@ -139,13 +139,13 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven API tools cover **146 admitted operations in source** (40 in the published 0.6.0 release) from the
+The seven API tools cover **170 admitted operations in source** (40 in the published 0.6.0 release) from the
 2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
 this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 146 admitted, 260 planned and 109 excluded, with reasons and
+515 operations: 170 admitted, 236 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
@@ -275,6 +275,10 @@ operation first; avoid blind duplicate writes. Callback errors use structured
 the SDK's native errors. Discovery contracts and external response text are
 untrusted content, not instructions. RAG retrieval has its own read-only tool
 and credit disclosure; it does not create conversations or place calls.
+
+Secrets, environment variables and MCP server configurations are also available through discovery.
+Submitted secret values and MCP credentials are write-only: receipts and errors redact them, including provider echoes.
+MCP approval changes use the change profile; removals, including environment-value removal by update, use delete.
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key

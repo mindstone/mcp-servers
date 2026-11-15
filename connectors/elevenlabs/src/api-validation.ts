@@ -1,3 +1,4 @@
+import { redactAtPaths, redactSensitive } from './api-sensitive.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import formats = require('ajv-formats');
@@ -261,8 +262,10 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
   });
 }
-export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown) {
+export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, submittedSecrets: readonly string[] = []) {
   const op = await getOperation(operationId);
+  // Submitted values and the key may be echoed anywhere; declared response fields are replaced only where they sit.
+  parsedData = redactSensitive(redactAtPaths(parsedData, op.sensitive_response_fields ?? []), submittedSecrets);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media);
   const binary = isBinaryResponseMedia(descriptor.media_type);

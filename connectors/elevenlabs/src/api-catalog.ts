@@ -60,7 +60,9 @@ const responseSchema = z.object({ status: z.number().int().min(200).max(299), me
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
-  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
+  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(),
+  sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
+  sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),
   summary: z.string(), description: z.string(), deprecated: z.boolean(),
   parameters: z.object({ path: parameterRecord, query: parameterRecord, query_serialization: dictionary(z.literal('form-explode')) }).strict(),
   request: z.object({ media_type: z.enum(['application/json', 'multipart/form-data']).nullable(), required: z.boolean(), schema: schemaValue.optional(), files: z.array(fileBinding).optional() }).strict(),
@@ -127,6 +129,18 @@ const nodeSchema = z.object({
 function invalid(detail: string): never {
   throw new ApiBoundaryError('CATALOG_INVALID', 'The local API catalogue is invalid.', 'Ask the connector maintainer to rebuild the connector from a consistent, reviewed catalogue. If unsure who that is, contact whoever manages your connector installation.', [{ path: [], keyword: 'catalogue', message: detail }]);
 }
+function sensitivePathExists(schema: JsonSchema | undefined, path: readonly string[], catalog: ApiCatalog, seen = new Set<string>()): boolean {
+  if (!isRecord(schema)) return false;
+  if (!path.length) return true;
+  if (typeof schema.$ref === 'string' && !seen.has(schema.$ref)) {
+    const next = new Set(seen); next.add(schema.$ref);
+    if (sensitivePathExists(catalog.$defs[definitionName(schema.$ref)], path, catalog, next)) return true;
+  }
+  if (['allOf', 'anyOf', 'oneOf'].some(key => Array.isArray(schema[key]) && schema[key].some(branch => sensitivePathExists(branch as JsonSchema, path, catalog, new Set(seen))))) return true;
+  const [field, ...rest] = path;
+  if (field === '*') return [schema.items, schema.additionalProperties].some(child => sensitivePathExists(child as JsonSchema, rest, catalog));
+  return isRecord(schema.properties) && Object.hasOwn(schema.properties, field) && sensitivePathExists(schema.properties[field] as JsonSchema, rest, catalog);
+}
 export function enumGuidance(catalog: ApiCatalog): string {
   return `Use an allowed value for this enum in the ${catalog.compatibility_overlay.enum_snapshot_date} snapshot. Inspect the field schema or a named definition through elevenlabs_discover_api. Ask the connector maintainer to refresh the reviewed API catalogue if the provider added a value. If unsure who that is, contact whoever manages your connector installation.`;
 }
@@ -182,7 +196,8 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (op.tool !== API_TOOLS[op.profile]) invalid('Operation profile/tool mismatch.');
     const expected = { readOnlyHint: ['read', 'query_knowledge'].includes(op.profile), destructiveHint: ['change', 'delete', 'tests'].includes(op.profile), idempotentHint: op.profile === 'read', openWorldHint: true };
     if (Object.keys(expected).some(key => op.effects[key as keyof typeof expected] !== expected[key as keyof typeof expected])) invalid('Operation profile/effect mismatch.');
-    if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change') || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
+    if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change' && !(op.method === 'PATCH' && op.profile === 'delete' && op.reviewed_patch_delete)) || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
+    if (op.reviewed_patch_delete !== undefined && (op.method !== 'PATCH' || op.profile !== 'delete')) invalid('Misplaced reviewed PATCH delete.');
     if (op.reviewed_post_read !== undefined && (op.method !== 'POST' || op.profile !== 'read')) invalid('Misplaced reviewed POST read.');
     if (op.manual_pagination !== undefined && (op.method !== 'GET' || op.profile !== 'read' || op.pagination !== null
       || !['page', 'limit'].some(name => Object.hasOwn(op.parameters.query.properties, name))
@@ -211,6 +226,13 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
       if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`);
     });
+    for (const [paths, schemas] of [
+      [op.sensitive_request_fields, [op.request.schema]],
+      [op.sensitive_response_fields, op.responses.map(response => response.schema)],
+    ] as const) {
+      if (new Set(paths?.map(path => JSON.stringify(path))).size !== (paths?.length ?? 0)) invalid('Duplicate sensitive field.');
+      for (const path of paths ?? []) if (!schemas.some(schema => sensitivePathExists(schema, path, catalog))) invalid('Unbound sensitive field.');
+    }
     if (op.pagination) {
       if (!Object.hasOwn(op.parameters.query.properties, op.pagination.request)) invalid('Pagination operand missing.');
       if (op.responses.length !== 1 || op.responses[0].media_type !== 'application/json') invalid('Unsupported pagination response projection.');

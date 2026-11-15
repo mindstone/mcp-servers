@@ -1,3 +1,4 @@
+import sensitiveCases from './api-sensitive-wire-cases.json' with { type: 'json' };
 import conversationCases from './api-conversations-wire-cases.json' with { type: 'json' };
 import knowledgeBaseCases from './api-knowledge-base-wire-cases.json' with { type: 'json' };
 import lifecycleCases from './api-agent-lifecycle-wire-cases.json' with { type: 'json' };
@@ -27,6 +28,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...sensitiveCases as WireCase[],
   ...jsonFamilyCases as WireCase[],
   ...lifecycleCases as WireCase[],
   ...knowledgeBaseCases as WireCase[],

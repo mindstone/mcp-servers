@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Workspace secrets, environment variables and MCP server management through the existing API tools. Approval changes are explicit; removals use the delete tool.
+
 - 26 conversation and triage operations: find references, read summaries and transcripts, save recordings, manage tags and review tickets. Merging keeps source tickets marked as merged. Conversation file upload remains planned until its image, PDF and text types are supported together.
 
 - 14 knowledge-base operations for crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl cancellation also deletes its documents and folders; it is not an undo button.
@@ -27,6 +29,10 @@ are maintained manually as part of the PR review checklist.
 
 - Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
 - API tool guidance now requires discovering each operation's contract before its first call unless exact parameter names and locations are already supplied, including for receipt follow-ups.
+
+### Security
+
+- Secret values and MCP credentials stay out of receipts and errors, even when the provider repeats them back. Credentials stored in MCP server settings are hidden when those settings are read.
 
 ## [0.6.0] - 2026-11-14
 

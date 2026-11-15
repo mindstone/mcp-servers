@@ -133,11 +133,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 144 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(144);
+  it('has independent cases for every admission, with exactly 168 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(168);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(146);
+    expect(new Set(expectedIds).size).toBe(170);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);

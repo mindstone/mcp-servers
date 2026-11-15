@@ -162,7 +162,10 @@
     "tools": {"read": "get_tools_route"},
     "users": {"read": "get_conversation_users_route"},
     "conversations": {"read": "get_conversation_histories_route"},
-    "triage-tickets": {"read": "list_workspace_conversation_tickets_route"}
+    "triage-tickets": {"read": "list_workspace_conversation_tickets_route"},
+    "secrets": {"read": "get_secrets_route"},
+    "environment-variables": {"read": "list_environment_variables"},
+    "mcp-servers": {"read": "list_mcp_servers_route"}
   },
   "operations": {
     "accept_merge_proposal_route": {
@@ -290,36 +293,53 @@
     "add_mcp_server_tool_approval_route": {
       "method": "POST",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-approvals",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Changes which tools run without approval by recording a per-tool approval policy.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Approve body.tool_name and its definition for path_params.mcp_server_id, with a tool-level approval policy.",
+      "effect_note": "Changes which tools run without approval by recording a per-tool approval policy.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "add_mcp_tool_config_override_route": {
       "method": "POST",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-configs",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Creates per-tool configuration overrides.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Create overrides for body.tool_name on path_params.mcp_server_id; optional query_params.environment.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "add_member": {
       "method": "POST",
@@ -1345,19 +1365,26 @@
     "create_environment_variable": {
       "method": "POST",
       "path": "/v1/convai/environment-variables",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environment-variables",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Creates an environment variable with per-environment strings or secret/auth connection references.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Create a workspace environment variable from body.type, label and environment-specific values.",
+      "follow_ups": ["get_environment_variable"]
     },
     "create_file_document_route": {
       "method": "POST",
@@ -1485,19 +1512,29 @@
     "create_mcp_server_route": {
       "method": "POST",
       "path": "/v1/convai/mcp-servers",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Connects the workspace to an external MCP server; the provider will contact that URL; changes which tools run without approval.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Create an MCP server configuration using body.config, including its URL, name and approval policy. Give a URL that contains a credential as a secret reference.",
+      "effect_note": "Connects the workspace to an external MCP server; the provider will contact that URL; changes which tools run without approval.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_request_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "create_merge_proposal_route": {
       "method": "POST",
@@ -1673,19 +1710,27 @@
     "create_secret_route": {
       "method": "POST",
       "path": "/v1/convai/secrets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Creates a workspace secret; the submitted value is write-only.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Create a workspace secret from body.type=new, name and value.",
+      "follow_ups": ["get_secret_route"],
+      "sensitive_request_fields": [["value"]]
     },
     "create_service_account": {
       "method": "POST",
@@ -2243,19 +2288,27 @@
     "delete_environment_variable": {
       "method": "DELETE",
       "path": "/v1/convai/environment-variables/{env_var_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environment-variables",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Deletes the variable and all environment values; dependent agents are not checked and their conversations then fail.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Delete an environment variable and all values by path_params.env_var_id.",
+      "effect_note": "Deletes the variable and all environment values; dependent agents are not checked and their conversations then fail.",
+      "follow_ups": ["list_environment_variables"]
     },
     "delete_finetune": {
       "method": "DELETE",
@@ -2328,19 +2381,27 @@
     "delete_mcp_server_route": {
       "method": "DELETE",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Deletes an MCP server configuration from the workspace.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Delete a workspace MCP server configuration by path_params.mcp_server_id.",
+      "effect_note": "Deletes an MCP server configuration from the workspace.",
+      "follow_ups": ["list_mcp_servers_route"]
     },
     "delete_phone_number_route": {
       "method": "DELETE",
@@ -2474,19 +2535,27 @@
     "delete_secret_route": {
       "method": "DELETE",
       "path": "/v1/convai/secrets/{secret_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Deletes a workspace secret only if it is not in use.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Delete an unused workspace secret by path_params.secret_id.",
+      "effect_note": "Deletes a workspace secret only if it is not in use.",
+      "follow_ups": ["get_secrets_route"]
     },
     "delete_segment": {
       "method": "DELETE",
@@ -4331,19 +4400,25 @@
     "get_environment_variable": {
       "method": "GET",
       "path": "/v1/convai/environment-variables/{env_var_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environment-variables",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads an environment variable and its typed environment values or references.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Read one environment variable and its values by path_params.env_var_id."
     },
     "get_finetune": {
       "method": "GET",
@@ -4626,36 +4701,49 @@
     "get_mcp_route": {
       "method": "GET",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads one MCP server configuration, metadata and dependent agents.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Read one MCP server configuration, metadata and dependent agents by path_params.mcp_server_id.",
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "get_mcp_tool_config_override_route": {
       "method": "GET",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-configs/{tool_name}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads configuration overrides for one MCP tool.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Read one tool configuration override using path_params.mcp_server_id and tool_name."
     },
     "get_merge_proposal_route": {
       "method": "GET",
@@ -5147,53 +5235,71 @@
     "get_secret_dependencies_route": {
       "method": "GET",
       "path": "/v1/convai/secrets/{secret_id}/dependencies/{resource_type}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads paginated resources that depend on a secret, filtered by resource type.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "List dependent resources using path_params.secret_id and resource_type (agents, tools or phone_numbers)."
     },
     "get_secret_route": {
       "method": "GET",
       "path": "/v1/convai/secrets/{secret_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads stored secret metadata and dependency previews, without the secret value.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Read one secret name and dependency previews by path_params.secret_id; no secret value is returned."
     },
     "get_secrets_route": {
       "method": "GET",
       "path": "/v1/convai/secrets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Lists workspace secret metadata and dependency previews, without secret values.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "List workspace secrets and their IDs, names and dependency previews; takes no path IDs, with optional search and cursor."
     },
     "get_service_account_api_keys_route": {
       "method": "GET",
@@ -6223,19 +6329,25 @@
     "list_environment_variables": {
       "method": "GET",
       "path": "/v1/convai/environment-variables",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environment-variables",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Lists environment variables with optional label, environment and type filters.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "List environment variables and IDs; takes no path IDs, with optional label, environment, type and cursor filters."
     },
     "list_environments": {
       "method": "GET",
@@ -6276,36 +6388,49 @@
     "list_mcp_server_tools_route": {
       "method": "GET",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tools",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Reads tools and derived approval states from an external MCP server.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "List tools and approval states for path_params.mcp_server_id; optional query_params.environment selects connection values."
     },
     "list_mcp_servers_route": {
       "method": "GET",
       "path": "/v1/convai/mcp-servers",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Lists workspace MCP server configurations.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "List workspace MCP server configurations and IDs; takes no path IDs.",
+      "sensitive_response_fields": [["mcp_servers", "*", "config", "request_headers", "*"], ["mcp_servers", "*", "config", "request_meta", "*"], ["mcp_servers", "*", "config", "secret_token", "encrypted_value"], ["mcp_servers", "*", "config", "secret_token", "nonce"]]
     },
     "list_merge_proposals_route": {
       "method": "GET",
@@ -7250,36 +7375,54 @@
     "remove_mcp_server_tool_approval_route": {
       "method": "DELETE",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-approvals/{tool_name}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Removes a stored tool approval in per-tool approval mode.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Remove approval using path_params.mcp_server_id and tool_name.",
+      "effect_note": "Removes a stored tool approval in per-tool approval mode.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "remove_mcp_tool_config_override_route": {
       "method": "DELETE",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-configs/{tool_name}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Removes per-tool configuration overrides.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Remove overrides using path_params.mcp_server_id and tool_name.",
+      "effect_note": "Removes per-tool configuration overrides.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "remove_member": {
       "method": "POST",
@@ -9953,19 +10096,28 @@
     "update_environment_variable": {
       "method": "PATCH",
       "path": "/v1/convai/environment-variables/{env_var_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "environment-variables",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Replaces environment values; null removes a value except production.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Replace values by path_params.env_var_id; null removes an environment value except production.",
+      "effect_note": "Replaces environment values; null removes a value except production.",
+      "follow_ups": ["list_environment_variables"],
+      "reviewed_patch_delete": "The PATCH request replaces values and explicitly accepts null to remove an environment value; all calls require the delete profile."
     },
     "update_file_document_route": {
       "method": "PATCH",
@@ -10021,53 +10173,81 @@
     "update_mcp_server_approval_policy_route": {
       "method": "PATCH",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/approval-policy",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Changes which tools run without approval. Deprecated; use update_mcp_server_config_route instead.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Update approval policy by path_params.mcp_server_id; deprecated, use the configuration update instead.",
+      "effect_note": "Changes which tools run without approval. Deprecated; use update_mcp_server_config_route instead.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "update_mcp_server_config_route": {
       "method": "PATCH",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Updates the external MCP server connection; the provider will contact that URL; changes which tools run without approval.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Update an MCP server configuration by path_params.mcp_server_id; accepts approval policy and connection settings.",
+      "effect_note": "Updates the external MCP server connection; the provider will contact that URL; changes which tools run without approval.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_request_fields": [["request_headers", "*"], ["request_meta", "*"]],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "update_mcp_tool_config_override_route": {
       "method": "PATCH",
       "path": "/v1/convai/mcp-servers/{mcp_server_id}/tool-configs/{tool_name}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Updates per-tool configuration overrides.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Update overrides using path_params.mcp_server_id and tool_name; optional query_params.environment.",
+      "effect_note": "Updates per-tool configuration overrides.",
+      "follow_ups": ["get_mcp_route"],
+      "sensitive_response_fields": [["config", "request_headers", "*"], ["config", "request_meta", "*"], ["config", "secret_token", "encrypted_value"], ["config", "secret_token", "nonce"]]
     },
     "update_merge_proposal_route": {
       "method": "PATCH",
@@ -10162,19 +10342,28 @@
     "update_secret_route": {
       "method": "PATCH",
       "path": "/v1/convai/secrets/{secret_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "secrets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Replaces a workspace secret name and value.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "discovery_summary": "Update the workspace secret identified by path_params.secret_id; body.type=update.",
+      "effect_note": "Replaces a workspace secret name and value.",
+      "follow_ups": ["get_secret_route"],
+      "sensitive_request_fields": [["value"]]
     },
     "update_segment_language": {
       "method": "PATCH",

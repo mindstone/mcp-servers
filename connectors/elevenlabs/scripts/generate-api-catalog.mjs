@@ -35,6 +35,12 @@ const idsByProfile = {
   tests: 'run_agent_test_suite_route cancel_test_invocation_route resubmit_tests_route',
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
+const stage75Profiles = {
+  read: 'get_secret_dependencies_route get_secret_route get_secrets_route get_environment_variable list_environment_variables get_mcp_route get_mcp_tool_config_override_route list_mcp_server_tools_route list_mcp_servers_route',
+  create: 'create_secret_route create_environment_variable add_mcp_tool_config_override_route',
+  change: 'update_secret_route add_mcp_server_tool_approval_route create_mcp_server_route update_mcp_server_approval_policy_route update_mcp_server_config_route update_mcp_tool_config_override_route',
+  delete: 'delete_secret_route delete_environment_variable update_environment_variable delete_mcp_server_route remove_mcp_server_tool_approval_route remove_mcp_tool_config_override_route',
+};
 const stage7Profiles = {
   read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments get_branch_route get_branches_route merge_preview_route rebase_preview_route get_version_metadata_route list_agent_deployments_route get_merge_proposal_route list_merge_proposals_route compile_procedures_route get_procedure_route get_procedure_draft_route list_procedures_route get_agent_link_route get_agent_topics_route get_agent_widget_route get_assignable_users_route get_crawl_job_route list_crawl_jobs_route get_rag_index_overview get_agent_knowledge_base_summaries_route get_documentation_chunk_from_knowledge_base get_knowledge_base_bulk_dependent_agents_route get_knowledge_base_source_file_url get_conversation_audio_route get_conversation_histories_route get_conversation_history_route get_conversation_sip_messages get_conversation_summary_route resolve_conversation_reference_route smart_search_conversation_messages_route text_search_conversation_messages_route get_agent_conversation_ticket_route list_workspace_conversation_tickets_route list_agent_conversation_tickets_route',
   create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment create_branch_route create_merge_proposal_route add_merge_proposal_comment_route create_procedure_route create_crawl_job_route get_or_create_rag_indexes add_ticket_comment_route add_turn_comment_route create_manual_agent_ticket_route',
@@ -54,7 +60,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -108,7 +114,9 @@ const operationSchema = z.object({
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
   discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
-  timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(),
+  timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(),
+  sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
+  sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.literal('document') }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
   follow_ups: z.array(text).optional(), examples: z.array(z.record(z.unknown())).optional(),
@@ -160,7 +168,7 @@ export function matchesPrefix(path, prefix) {
   return path === prefix || path.startsWith(prefix + '/');
 }
 function classify(id, path) {
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: Object.values(stage7Profiles).some(ids => ids.split(' ').includes(id)) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage7Profiles, stage75Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -209,16 +217,17 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
       const floor = { GET: 'read', DELETE: 'delete', PUT: 'change', PATCH: 'change' }[row.method];
-      if (floor && floor !== row.profile) refuse('method effect floor', `${id}: ${row.method} requires ${floor}`);
+      if (floor && floor !== row.profile && !(row.method === 'PATCH' && row.profile === 'delete' && row.reviewed_patch_delete)) refuse('method effect floor', `${id}: ${row.method} requires ${floor}`);
       if (row.method !== 'POST' && floor === undefined) refuse('unsupported method', `${id}: ${row.method}`);
       if (row.method === 'POST' && row.profile === 'read' && !row.reviewed_post_read) refuse('unreviewed POST read', id);
       if (row.reviewed_post_read !== undefined && (row.method !== 'POST' || row.profile !== 'read')) refuse('misplaced reviewed POST read', id);
+      if (row.reviewed_patch_delete !== undefined && (row.method !== 'PATCH' || row.profile !== 'delete')) refuse('misplaced reviewed PATCH delete', id);
       if (row.manual_pagination !== undefined && (row.method !== 'GET' || row.profile !== 'read')) refuse('invalid manual pagination', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
       const retryOperation = policy.operations[retryCheck];
       if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -236,7 +245,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 146, planned: 260, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 170, planned: 236, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -456,6 +465,30 @@ function requestDescriptor(operation, row, spec, transform, id) {
   return { media_type: media, required: body.required === true, schema: transform(scalar, `${id}/multipart-fields`), files: files.sort((a, b) => a.field < b.field ? -1 : 1) };
 }
 
+// Paths describe data operands, not schema syntax. * visits a declared map or array.
+export function hasSensitivePath(schema, path, defs, seen = new Set()) {
+  if (schema === null || typeof schema !== 'object') return false;
+  if (!path.length) return true;
+  if (schema.$ref && !seen.has(schema.$ref)) {
+    const next = new Set(seen); next.add(schema.$ref);
+    const name = schema.$ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
+    if (hasSensitivePath(defs[name], path, defs, next)) return true;
+  }
+  if (['allOf', 'anyOf', 'oneOf'].some(key => (schema[key] ?? []).some(branch => hasSensitivePath(branch, path, defs, new Set(seen))))) return true;
+  const [field, ...rest] = path;
+  if (field === '*') return [schema.items, schema.additionalProperties].some(child => hasSensitivePath(child, rest, defs));
+  return Object.hasOwn(schema.properties ?? {}, field) && hasSensitivePath(schema.properties[field], rest, defs);
+}
+function checkSensitivePaths(paths, schemas, defs, id) {
+  const unique = new Set();
+  for (const path of paths ?? []) {
+    const key = JSON.stringify(path);
+    if (unique.has(key)) refuse('duplicate sensitive field', id);
+    unique.add(key);
+    if (!schemas.some(schema => hasSensitivePath(schema, path, defs))) refuse('unbound sensitive field', `${id}: ${path.join('.')}`);
+  }
+}
+
 function successDescriptors(operation, transform, id) {
   const responses = [];
   for (const [status, response] of Object.entries(operation.responses ?? {}).sort()) {
@@ -530,11 +563,16 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     requireEqual(Object.keys(records.path.properties).sort(), placeholders, `path operand bindings ${id}`);
     const request = requestDescriptor(operation, row, spec, transform, id);
     const responses = successDescriptors(operation, transform, id);
+    checkSensitivePaths(row.sensitive_request_fields, [request.schema], defs, id);
+    checkSensitivePaths(row.sensitive_response_fields, responses.map(response => response.schema), defs, id);
     descriptors.push({
       operation_id: id, method: row.method, path: row.path, family: row.family, milestone: row.milestone,
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
+      ...(row.reviewed_patch_delete ? { reviewed_patch_delete: row.reviewed_patch_delete } : {}),
+      ...(row.sensitive_request_fields ? { sensitive_request_fields: row.sensitive_request_fields } : {}),
+      ...(row.sensitive_response_fields ? { sensitive_response_fields: row.sensitive_response_fields } : {}),
       ...(row.effect_note ? { effect_note: row.effect_note } : {}),
       ...(row.manual_pagination ? { manual_pagination: row.manual_pagination } : {}),
       summary: row.discovery_summary ?? operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,

@@ -1,3 +1,4 @@
+import { redactSensitive, sensitiveValues } from './api-sensitive.js';
 import { getApiKey } from './auth.js';
 import { z } from 'zod';
 import { ApiBoundaryError, getOperation, isBinaryResponseMedia, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
@@ -55,24 +56,7 @@ async function responseFailure(op: ApiOperation, message: string): Promise<ApiBo
     `A 2xx request may have completed even though its response is invalid. ${await checkBeforeRetry(op)} Report the operation_id, status and media type to the connector maintainer; keep raw response content private.`);
 }
 
-function redact(text: string, key: string): string {
-  if (!key) return text;
-  // Longest spelling first, so a raw key that is a prefix of its escaped form leaves no residue.
-  const spellings = [...new Set([key, encodeURIComponent(key), JSON.stringify(key).slice(1, -1)])].sort((a, b) => b.length - a.length);
-  return spellings.reduce((result, secret) => result.split(secret).join('[REDACTED]'), text);
-}
-
-// A provider can echo the key inside a successful body (for example in a stored tool description). The parsed body is
-// scrubbed, property names included, before validation and serialization: scrubbing serialized text would miss a key
-// the provider had already escaped and could corrupt the enclosed JSON.
-function redactParsed(value: unknown, key: string): unknown {
-  if (typeof value === 'string') return redact(value, key);
-  if (Array.isArray(value)) return value.map((item) => redactParsed(item, key));
-  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([field, item]) => [redact(field, key), redactParsed(item, key)]));
-  return value;
-}
-
-async function fetchFailure(error: unknown, op: ApiOperation, key: string, signal: AbortSignal): Promise<ElevenLabsError> {
+async function fetchFailure(error: unknown, op: ApiOperation, secrets: readonly string[], signal: AbortSignal): Promise<ElevenLabsError> {
   if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof ElevenLabsError && error.code === 'TIMEOUT')) return timeoutFailure(op);
   if (!(error instanceof ElevenLabsError)) return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
     `${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
@@ -85,12 +69,33 @@ async function fetchFailure(error: unknown, op: ApiOperation, key: string, signa
   else if (error.code === 'RATE_LIMITED') resolution = getErrorResolution(429);
   // The legacy client already extracts loc/msg without FastAPI's raw input field.
   // Re-enveloping also contains any provider-authored text in legacy diagnostics.
-  return new ApiBoundaryError(error.code, wrapUntrusted(redact(error.message, key), `elevenlabs:api:${op.operation_id}`)!, redact(resolution, key));
+  return new ApiBoundaryError(error.code, wrapUntrusted(String(redactSensitive(error.message, secrets)), `elevenlabs:api:${op.operation_id}`)!, String(redactSensitive(resolution, secrets)));
 }
 
 /** Shared production path for all six profiles; file context is resolved only after validation. */
 export async function executeApiOperation(profile: ApiProfile, rawInput: unknown, readContext?: () => FileReadContext) {
-  const input = await validateRequest(profile, normalizedInput(rawInput));
+  const normalized = normalizedInput(rawInput);
+  // Resolve policy before validation, without authentication or network access.
+  const op = isRecord(normalized) && typeof normalized.operation_id === 'string'
+    ? await getOperation(normalized.operation_id) : undefined;
+  const secrets = [
+    ...sensitiveValues(isRecord(rawInput) ? rawInput.body : undefined, op?.sensitive_request_fields ?? []),
+    ...sensitiveValues(isRecord(normalized) ? normalized.body : undefined, op?.sensitive_request_fields ?? []),
+  ];
+  try {
+    return redactSensitive(await executeValidated(profile, normalized, secrets, readContext), secrets);
+  } catch (error) {
+    if (error instanceof ApiBoundaryError) throw new ApiBoundaryError(error.code,
+      String(redactSensitive(error.message, secrets)), String(redactSensitive(error.resolution, secrets)),
+      redactSensitive(error.issues, secrets) as typeof error.issues);
+    if (error instanceof ElevenLabsError) throw new ElevenLabsError(String(redactSensitive(error.message, secrets)),
+      error.code, String(redactSensitive(error.resolution, secrets)));
+    throw error;
+  }
+}
+
+async function executeValidated(profile: ApiProfile, rawInput: unknown, secrets: string[], readContext?: () => FileReadContext) {
+  const input = await validateRequest(profile, rawInput);
   const op = await getOperation(input.operation_id, profile);
   let path: string;
   let body: string | FormData | undefined;
@@ -126,6 +131,7 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
     body = form;
   }
   const key = getApiKey();
+  secrets.push(key);
   const signal = AbortSignal.timeout(op.timeout === 'long' ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
@@ -134,7 +140,7 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
       ...(typeof body === 'string' ? { headers: { 'Content-Type': op.request.media_type! } } : {}),
     }, op.operation_id);
   } catch (error) {
-    throw await fetchFailure(error, op, key, signal);
+    throw await fetchFailure(error, op, secrets, signal);
   }
 
   const declared = op.responses.filter(candidate => candidate.status === response.status);
@@ -160,7 +166,7 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
     data = { file_path: filePath, size_bytes: binary.length, media_type: descriptor.media_type };
   }
   try {
-    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, redactParsed(data, key));
+    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, data, secrets);
   } catch (error) {
     if (error instanceof ElevenLabsError && error.code === 'INVALID_RESPONSE') throw await responseFailure(op, 'The provider response has invalid fields required by the connector.');
     throw error;
