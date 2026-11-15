@@ -16,7 +16,7 @@ const postReads = ['get_agent_response_tests_summaries_route', 'get_public_llm_e
 describe('additional JSON family admission boundaries', () => {
   it('covers exactly the reviewed additional 34 IDs with stated nondeprecated status and valid examples', async () => {
     const catalog = await loadApiCatalog();
-    const additions = catalog.operations.filter(op => op.milestone === 7);
+    const additions = catalog.operations.filter(op => wireCases.some(wire => wire.id === op.operation_id));
     expect(additions.map(op => op.operation_id).sort()).toEqual(wireCases.map(wire => wire.id).sort());
     expect(additions).toHaveLength(34);
     for (const op of additions) {
@@ -71,7 +71,7 @@ describe('additional JSON family admission boundaries', () => {
   });
 
   it('rejects missing, planned and mutation retry-check targets in policy and runtime', () => {
-    for (const target of ['invented', 'get_agent_summaries_route', 'create_conversation_tag_route']) {
+    for (const target of ['invented', 'get_crawl_job_route', 'create_conversation_tag_route']) {
       const policy = structuredClone(policyInput);
       policy.family_retry_checks.tags.read = target;
       expect(() => validatePolicy(policy, rosters)).toThrow('family retry check must be an admitted GET read');

@@ -812,5 +812,357 @@
       "openWorldHint": true
     },
     "method": "PATCH"
+  },
+  "accept_merge_proposal_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "add_merge_proposal_comment_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource"
+  },
+  "compile_procedures_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "POST",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "create_agent_deployment_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "create_agent_draft_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "create_branch_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource"
+  },
+  "create_merge_proposal_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource"
+  },
+  "create_procedure_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource"
+  },
+  "delete_agent_draft_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource"
+  },
+  "delete_procedure_draft_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource"
+  },
+  "get_agent_link_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_agent_topics_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_agent_widget_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_assignable_users_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_branch_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_branches_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_merge_proposal_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_procedure_draft_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_procedure_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_version_metadata_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "list_agent_deployments_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "list_merge_proposals_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "list_procedures_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "merge_branch_into_target": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "merge_preview_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "rebase_branch_onto_main": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "rebase_preview_route": {
+    "effects": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource"
+  },
+  "remove_procedure_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource"
+  },
+  "submit_merge_proposal_review_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "update_branch_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "update_merge_proposal_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
+  },
+  "update_procedure_draft_route": {
+    "effects": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource"
   }
 }

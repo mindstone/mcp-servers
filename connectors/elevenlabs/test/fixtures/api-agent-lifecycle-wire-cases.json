@@ -1,0 +1,1003 @@
+[
+  {
+    "id": "accept_merge_proposal_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "merge_proposal_id": "merge_proposal/a ?#"
+      },
+      "body": {
+        "archive_source_branch": false,
+        "force": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals/merge_proposal%2Fa%20%3F%23/merge",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "source_branch_id": "example",
+      "target_branch_id": "example",
+      "source_tip_version_id_at_creation": "example",
+      "title": "example",
+      "created_at": 1,
+      "updated_at": 1
+    },
+    "body": {
+      "archive_source_branch": false,
+      "force": false
+    }
+  },
+  {
+    "id": "add_merge_proposal_comment_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "merge_proposal_id": "merge_proposal/a ?#"
+      },
+      "body": {
+        "body": "Please inspect the preview."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals/merge_proposal%2Fa%20%3F%23/comments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "source_branch_id": "example",
+      "target_branch_id": "example",
+      "source_tip_version_id_at_creation": "example",
+      "title": "example",
+      "created_at": 1,
+      "updated_at": 1
+    },
+    "body": {
+      "body": "Please inspect the preview."
+    }
+  },
+  {
+    "id": "compile_procedures_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/compile",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "workflow": {
+        "edges": {},
+        "nodes": {
+          "start": {
+            "type": "start",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "edge_order": []
+          }
+        },
+        "prevent_subagent_loops": false
+      }
+    }
+  },
+  {
+    "id": "create_agent_deployment_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "body": {
+        "deployment_request": {
+          "requests": [
+            {
+              "branch_id": "branch_example",
+              "deployment_strategy": {
+                "type": "percentage",
+                "traffic_percentage": 0.5
+              }
+            }
+          ]
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/deployments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "traffic_percentage_branch_id_map": {
+        "branch_example": 0.5
+      }
+    },
+    "body": {
+      "deployment_request": {
+        "requests": [
+          {
+            "branch_id": "branch_example",
+            "deployment_strategy": {
+              "type": "percentage",
+              "traffic_percentage": 0.5
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "create_agent_draft_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "branch_id": "branch & 1"
+      },
+      "body": {
+        "conversation_config": {
+          "agent": {
+            "first_message": "Welcome to the preview."
+          }
+        },
+        "platform_settings": {},
+        "workflow": {},
+        "name": "Preview draft",
+        "tags": [
+          "preview"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/drafts",
+    "query": [
+      [
+        "branch_id",
+        "branch & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {
+      "conversation_config": {
+        "agent": {
+          "first_message": "Welcome to the preview."
+        }
+      },
+      "platform_settings": {},
+      "workflow": {},
+      "name": "Preview draft",
+      "tags": [
+        "preview"
+      ]
+    }
+  },
+  {
+    "id": "create_branch_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "body": {
+        "parent_version_id": "version_example",
+        "name": "Preview branch",
+        "description": "Review changes safely",
+        "include_draft": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "created_branch_id": "branch_example",
+      "created_version_id": "version_example"
+    },
+    "body": {
+      "parent_version_id": "version_example",
+      "name": "Preview branch",
+      "description": "Review changes safely",
+      "include_draft": false
+    }
+  },
+  {
+    "id": "create_merge_proposal_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "body": {
+        "source_branch_id": "source_example",
+        "target_branch_id": "target_example",
+        "title": "Review greeting",
+        "description": "Preview first"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "created_merge_proposal_id": "proposal_example"
+    },
+    "body": {
+      "source_branch_id": "source_example",
+      "target_branch_id": "target_example",
+      "title": "Review greeting",
+      "description": "Preview first"
+    }
+  },
+  {
+    "id": "create_procedure_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      },
+      "body": {
+        "name": "Guide",
+        "content": "Answer using the guide.",
+        "type": "free_form",
+        "trigger": "Guide question"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "procedure_id": "procedure_example",
+      "name": "Guide",
+      "content": "Answer using the guide."
+    },
+    "body": {
+      "name": "Guide",
+      "content": "Answer using the guide.",
+      "type": "free_form",
+      "trigger": "Guide question"
+    }
+  },
+  {
+    "id": "delete_agent_draft_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "branch_id": "branch & 1"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/drafts",
+    "query": [
+      [
+        "branch_id",
+        "branch & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "delete_procedure_draft_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#",
+        "procedure_id": "procedure/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/procedure%2Fa%20%3F%23/draft",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "get_agent_link_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/link",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example"
+    }
+  },
+  {
+    "id": "get_agent_topics_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "page_size": 2,
+        "sort_by": "conversations",
+        "sort_direction": "desc",
+        "include_evaluation_criteria": false,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/topics",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "sort_by",
+        "conversations"
+      ],
+      [
+        "sort_direction",
+        "desc"
+      ],
+      [
+        "include_evaluation_criteria",
+        "false"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "topics": [],
+      "window_start_unix_secs": 1,
+      "window_end_unix_secs": 1
+    }
+  },
+  {
+    "id": "get_agent_widget_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "conversation_signature": "signature & 1"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/widget",
+    "query": [
+      [
+        "conversation_signature",
+        "signature & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "widget_config": {
+        "language": "en"
+      }
+    }
+  },
+  {
+    "id": "get_assignable_users_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/triage-tickets/assignable-users",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": []
+  },
+  {
+    "id": "get_branch_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "name": "example",
+      "agent_id": "agent_example",
+      "description": "example",
+      "created_at": 1,
+      "last_committed_at": 1,
+      "is_archived": false
+    }
+  },
+  {
+    "id": "get_branches_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "include_archived": false,
+        "limit": 2,
+        "include_commit_status": true
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches",
+    "query": [
+      [
+        "include_archived",
+        "false"
+      ],
+      [
+        "limit",
+        "2"
+      ],
+      [
+        "include_commit_status",
+        "true"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": [],
+      "meta": {
+        "total": 4,
+        "page": null,
+        "page_size": 2
+      }
+    }
+  },
+  {
+    "id": "get_merge_proposal_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "merge_proposal_id": "merge_proposal/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals/merge_proposal%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "source_branch_id": "example",
+      "target_branch_id": "example",
+      "source_tip_version_id_at_creation": "example",
+      "title": "example",
+      "created_at": 1,
+      "updated_at": 1
+    }
+  },
+  {
+    "id": "get_procedure_draft_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#",
+        "procedure_id": "procedure/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/procedure%2Fa%20%3F%23/draft",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "procedure_id": "procedure_example",
+      "name": "Guide",
+      "content": "Answer using the guide."
+    }
+  },
+  {
+    "id": "get_procedure_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#",
+        "procedure_id": "procedure/a ?#"
+      },
+      "query_params": {
+        "version_id": "version & 1",
+        "agent_version_id": null
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/procedure%2Fa%20%3F%23",
+    "query": [
+      [
+        "version_id",
+        "version & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "procedure_id": "procedure_example",
+      "name": "Guide",
+      "content": "Answer using the guide."
+    }
+  },
+  {
+    "id": "get_version_metadata_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "version_id": "version/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/versions/version%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "branch_id": "example",
+      "version_description": "example",
+      "seq_no_in_branch": 1,
+      "time_committed_secs": 1,
+      "parents": {}
+    }
+  },
+  {
+    "id": "list_agent_deployments_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "page": 2,
+        "page_size": 2
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/deployments",
+    "query": [
+      [
+        "page",
+        "2"
+      ],
+      [
+        "page_size",
+        "2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": [],
+      "meta": {
+        "total": 4,
+        "page": 2,
+        "page_size": 2
+      }
+    }
+  },
+  {
+    "id": "list_merge_proposals_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#"
+      },
+      "query_params": {
+        "status": "open",
+        "source_branch_id": "source & 1",
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals",
+    "query": [
+      [
+        "status",
+        "open"
+      ],
+      [
+        "source_branch_id",
+        "source & 1"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": [],
+      "next_cursor": null,
+      "has_more": false
+    }
+  },
+  {
+    "id": "list_procedures_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      },
+      "query_params": {
+        "agent_version_id": "version & 1"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures",
+    "query": [
+      [
+        "agent_version_id",
+        "version & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "procedures": []
+    }
+  },
+  {
+    "id": "merge_branch_into_target",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "source_branch_id": "source_branch/a ?#"
+      },
+      "query_params": {
+        "target_branch_id": "target & 1"
+      },
+      "body": {
+        "archive_source_branch": false,
+        "force": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/source_branch%2Fa%20%3F%23/merge",
+    "query": [
+      [
+        "target_branch_id",
+        "target & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {
+      "archive_source_branch": false,
+      "force": false
+    }
+  },
+  {
+    "id": "merge_preview_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "source_branch_id": "source_branch/a ?#"
+      },
+      "query_params": {
+        "target_branch_id": "target & 1",
+        "force": false,
+        "include_procedure_generated_workflow_elements": false
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/source_branch%2Fa%20%3F%23/merge-preview",
+    "query": [
+      [
+        "target_branch_id",
+        "target & 1"
+      ],
+      [
+        "force",
+        "false"
+      ],
+      [
+        "include_procedure_generated_workflow_elements",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "name": "Preview guide",
+      "conversation_config": {
+        "agent": {
+          "first_message": "Welcome to the preview."
+        }
+      },
+      "metadata": {
+        "created_at_unix_secs": 1,
+        "updated_at_unix_secs": 1
+      },
+      "overridden_fields": [
+        "conversation_config.agent.first_message"
+      ],
+      "conflicts": []
+    }
+  },
+  {
+    "id": "rebase_branch_onto_main",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      },
+      "query_params": {
+        "source_branch_id": "source & 1"
+      },
+      "body": {}
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/rebase",
+    "query": [
+      [
+        "source_branch_id",
+        "source & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {}
+  },
+  {
+    "id": "rebase_preview_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      },
+      "query_params": {
+        "source_branch_id": "source & 1",
+        "include_procedure_generated_workflow_elements": false
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/rebase-preview",
+    "query": [
+      [
+        "source_branch_id",
+        "source & 1"
+      ],
+      [
+        "include_procedure_generated_workflow_elements",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "name": "Preview guide",
+      "conversation_config": {
+        "agent": {
+          "first_message": "Welcome to the preview."
+        }
+      },
+      "metadata": {
+        "created_at_unix_secs": 1,
+        "updated_at_unix_secs": 1
+      },
+      "overridden_fields": [
+        "conversation_config.agent.first_message"
+      ],
+      "conflicts": []
+    }
+  },
+  {
+    "id": "remove_procedure_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#",
+        "procedure_id": "procedure/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/procedure%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "submit_merge_proposal_review_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "merge_proposal_id": "merge_proposal/a ?#"
+      },
+      "body": {
+        "state": "changes_requested",
+        "comment": "Keep the current greeting."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals/merge_proposal%2Fa%20%3F%23/reviews",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "source_branch_id": "example",
+      "target_branch_id": "example",
+      "source_tip_version_id_at_creation": "example",
+      "title": "example",
+      "created_at": 1,
+      "updated_at": 1
+    },
+    "body": {
+      "state": "changes_requested",
+      "comment": "Keep the current greeting."
+    }
+  },
+  {
+    "id": "update_branch_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#"
+      },
+      "body": {
+        "name": "Review branch",
+        "description": "",
+        "is_archived": false,
+        "auto_rebase": false
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "name": "example",
+      "agent_id": "agent_example",
+      "description": "example",
+      "created_at": 1,
+      "last_committed_at": 1,
+      "is_archived": false
+    },
+    "body": {
+      "name": "Review branch",
+      "description": "",
+      "is_archived": false,
+      "auto_rebase": false
+    }
+  },
+  {
+    "id": "update_merge_proposal_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "merge_proposal_id": "merge_proposal/a ?#"
+      },
+      "body": {
+        "title": "Updated greeting review",
+        "requested_reviewer_user_ids": [],
+        "close": false
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/merge-proposals/merge_proposal%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "example",
+      "agent_id": "agent_example",
+      "source_branch_id": "example",
+      "target_branch_id": "example",
+      "source_tip_version_id_at_creation": "example",
+      "title": "example",
+      "created_at": 1,
+      "updated_at": 1
+    },
+    "body": {
+      "title": "Updated greeting review",
+      "requested_reviewer_user_ids": [],
+      "close": false
+    }
+  },
+  {
+    "id": "update_procedure_draft_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agent_id": "agent/a ?#",
+        "branch_id": "branch/a ?#",
+        "procedure_id": "procedure/a ?#"
+      },
+      "body": {
+        "name": "Guide",
+        "content": "Ask which guide is needed.",
+        "type": "free_form",
+        "trigger": ""
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/agents/agent%2Fa%20%3F%23/branches/branch%2Fa%20%3F%23/procedures/procedure%2Fa%20%3F%23/draft",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "procedure_id": "procedure_example",
+      "name": "Guide",
+      "content": "Answer using the guide."
+    },
+    "body": {
+      "name": "Guide",
+      "content": "Ask which guide is needed.",
+      "type": "free_form",
+      "trigger": ""
+    }
+  }
+]

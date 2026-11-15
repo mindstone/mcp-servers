@@ -15,6 +15,8 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
+Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
+
 ## Requirements
 
 - Node.js 20+
@@ -135,26 +137,34 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven API tools cover **74 admitted operations in source** (40 in the published 0.6.0 release) from the
+The seven API tools cover **106 admitted operations in source** (40 in the published 0.6.0 release) from the
 2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
 this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 74 admitted, 332 planned and 109 excluded, with reasons and
+515 operations: 106 admitted, 300 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
 The usage calculators and test-summary lookup use reviewed read-only POST requests;
 they do not run tests or generate audio. Deletion stays in the delete profile.
 
+Agent lifecycle coverage includes branches, drafts, version metadata, deployments,
+merge proposals, procedures and agent links, widgets, topics and assignable users.
+Merge and rebase previews are reads. Merges, rebases, deployment traffic changes
+and replacement review verdicts use the destructive change profile. The legacy
+procedure compiler is a dry-run that persists nothing; saving or publishing already
+compiles procedures. Branch lists accept a result limit; deployment history accepts
+page and page_size. Inspect returned metadata; pagination is caller-managed.
+
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 34 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 14 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 14 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 8 deletes | Destructive |
+| `elevenlabs_read_resource` | 50 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 18 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 23 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 11 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 
@@ -162,6 +172,7 @@ Receipt follow-ups name required path and query parameters; optional filters mat
 known request IDs are marked optional. Other listed operation IDs are names only. Before the
 first call to each operation in a conversation, discover its contract unless a
 tool description or receipt already gives the exact parameter names and locations.
+Branch and version metadata receipts point to the agent configuration read.
 Do not infer path parameters, query parameters or body fields from operation names.
 Start with local discovery, then send the operation to its declared tool:
 

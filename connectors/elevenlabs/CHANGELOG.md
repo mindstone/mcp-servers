@@ -13,9 +13,13 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- 32 agent lifecycle operations for branches, drafts, versions, deployments, merge proposals and procedures, plus agent reads. Preview before merging; previews are reads, while merges, rebases and traffic changes stay behind the change tool.
+
 - 34 more API operations for conversation tags, analysis items, workspace and dashboard settings, environments, test folders and summaries, invocation names, conversation users, live counts, tool executions, usage estimates and knowledge-base size. The same seven API tools handle them; delete operations stay behind the delete tool.
 
 ### Fixed
+
+- Agent summaries remain planned because their name is easily mistaken for saved-Test summaries. Saving an agent draft now uses the change tool and warns that it can replace your unpublished draft. Merge, acceptance and rebase guidance explains when callers hear the result immediately.
 
 - Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
 - API tool guidance now requires discovering each operation's contract before its first call unless exact parameter names and locations are already supplied, including for receipt follow-ups.

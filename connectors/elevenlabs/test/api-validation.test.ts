@@ -206,7 +206,7 @@ describe('API request validation over the preserved provider graph', () => {
     expect((await errorFrom(validateRequest('read', create({})))).code).toBe('WRONG_TOOL');
     expect((await errorFrom(getOperation('missing_operation'))).code).toBe('UNKNOWN_OPERATION');
     expect((await errorFrom(getOperation('constructor'))).code).toBe('UNKNOWN_OPERATION');
-    for (const operation_id of ['missing_operation', 'accept_merge_proposal_route', 'add_documentation_to_knowledge_base']) {
+    for (const operation_id of ['missing_operation', 'get_crawl_job_route', 'add_documentation_to_knowledge_base']) {
       const error = await errorFrom(validateRequest('create', { operation_id, body: {} }));
       expect(error.toJSON()).toEqual({
         ok: false, code: 'UNKNOWN_OPERATION',

@@ -54,7 +54,7 @@ const responseSchema = z.object({ status: z.number().int().min(200).max(299), me
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
-  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(),
+  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
   summary: z.string(), description: z.string(), deprecated: z.boolean(),
   parameters: z.object({ path: parameterRecord, query: parameterRecord, query_serialization: dictionary(z.literal('form-explode')) }).strict(),
   request: z.object({ media_type: z.enum(['application/json', 'multipart/form-data']).nullable(), required: z.boolean(), schema: schemaValue.optional(), files: z.array(fileBinding).optional() }).strict(),
@@ -178,6 +178,9 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (Object.keys(expected).some(key => op.effects[key as keyof typeof expected] !== expected[key as keyof typeof expected])) invalid('Operation profile/effect mismatch.');
     if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change') || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
     if (op.reviewed_post_read !== undefined && (op.method !== 'POST' || op.profile !== 'read')) invalid('Misplaced reviewed POST read.');
+    if (op.manual_pagination !== undefined && (op.method !== 'GET' || op.profile !== 'read' || op.pagination !== null
+      || !['page', 'limit'].some(name => Object.hasOwn(op.parameters.query.properties, name))
+      || Object.hasOwn(op.parameters.query.properties, 'cursor'))) invalid('Invalid manual pagination.');
     const retryOperation = byId.get(op.check_before_retry);
     if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
     if (/[?#\u0000-\u0020\u007f]/.test(op.path) || op.path.startsWith('//') || op.path.split('/').some(part => part === '.' || part === '..')) invalid('Invalid operation path.');
@@ -185,7 +188,7 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     const keys = Object.keys(op.parameters.path.properties).sort();
     if (JSON.stringify(placeholders) !== JSON.stringify(keys) || JSON.stringify([...op.parameters.path.required].sort()) !== JSON.stringify(keys)) invalid('Path operand bindings mismatch.');
     if (JSON.stringify(Object.keys(op.parameters.query.properties).sort()) !== JSON.stringify(Object.keys(op.parameters.query_serialization).sort())) invalid('Query serialization bindings mismatch.');
-    for (const id of op.follow_ups) if (!byId.has(id)) invalid('Missing follow-up operation.');
+    for (const id of op.follow_ups) if (id === op.operation_id || byId.get(id)?.profile !== 'read') invalid('Follow-up must be a different admitted read.');
     const location = `operations/${op.operation_id}`;
     walk(op.parameters.path, `${location}/parameters/path`); walk(op.parameters.query, `${location}/parameters/query`);
     if ((op.request.media_type === null) !== (op.request.schema === undefined) || (op.request.media_type === null && op.request.required)) invalid('Request media/schema mismatch.');
@@ -313,9 +316,11 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
     try { await validateRequest(op.profile, example); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
   const files = ['create', 'change'].includes(op.profile) ? op.request.files : undefined;
+  const effectNote = op.effect_note ? ` ${op.effect_note}` : '';
+  const pagingNote = op.manual_pagination ? ` ${op.manual_pagination}` : '';
   const workspaceNote = ['update_settings_route', 'update_dashboard_settings_route'].includes(op.operation_id) ? ' This operation changes settings for the whole workspace.' : '';
-  const result = { ...listing(op), instructions: `${profileInstructions[op.profile]} ${discoveryInstructions}${workspaceNote}`,
-    contract: envelope({ summary: op.summary, description: op.description, method: op.method, path: op.path,
+  const result = { ...listing(op), instructions: `${profileInstructions[op.profile]} ${discoveryInstructions}${workspaceNote}${effectNote}${pagingNote}`,
+    contract: envelope({ summary: op.summary, description: op.description, deprecated: op.deprecated, method: op.method, path: op.path,
       request: { path_params: expandSchema(op.parameters.path, catalog), query_params: expandSchema(op.parameters.query, catalog), body: op.request.schema === undefined ? undefined : expandSchema(op.request.schema, catalog), ...(files?.length ? { files } : {}) },
       ...(definition === undefined ? {} : { definition: { name: definition, schema: expandSchema(catalog.$defs[definition], catalog) } }),
       definitions: Object.keys(catalog.$defs).sort(), responses: op.responses, examples,

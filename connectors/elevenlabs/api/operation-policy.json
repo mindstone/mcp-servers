@@ -166,19 +166,28 @@
     "accept_merge_proposal_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/merge",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation changes target branch configuration by merging the proposal and can archive the source branch. If the target branch serves live traffic, callers get the result at once.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation changes target branch configuration by merging the proposal and can archive the source branch. If the target branch serves live traffic, callers get the result at once.",
+      "follow_ups": [
+        "get_merge_proposal_route"
+      ]
     },
     "add_chapter": {
       "method": "POST",
@@ -332,19 +341,27 @@
     "add_merge_proposal_comment_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/comments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Create a new provider resource without changing live configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_merge_proposal_route"
+      ]
     },
     "add_project": {
       "method": "POST",
@@ -727,19 +744,29 @@
     "compile_procedures_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/compile",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Legacy dry-run only: compiles current procedure drafts without persisting a workflow; saving a draft or publishing already compiles procedures.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Legacy dry-run only: compiles current procedure drafts without persisting a workflow; saving a draft or publishing already compiles procedures.",
+      "follow_ups": [
+        "list_procedures_route"
+      ],
+      "reviewed_post_read": "The pinned description explicitly defines a dry-run that compiles drafts without persisting anything."
     },
     "compose_detailed": {
       "method": "POST",
@@ -869,36 +896,99 @@
     "create_agent_deployment_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/deployments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation changes live traffic allocation between agent branches.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation changes live traffic allocation between agent branches.",
+      "examples": [
+        {
+          "body": {
+            "deployment_request": {
+              "requests": [
+                {
+                  "branch_id": "branch_example",
+                  "deployment_strategy": {
+                    "traffic_percentage": 0.5,
+                    "type": "percentage"
+                  }
+                }
+              ]
+            }
+          },
+          "operation_id": "create_agent_deployment_route",
+          "path_params": {
+            "agent_id": "agent_example"
+          }
+        }
+      ],
+      "follow_ups": [
+        "list_agent_deployments_route"
+      ]
     },
     "create_agent_draft_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/drafts",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation replaces your existing draft on that branch, if any, without publishing it or changing live configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation replaces your existing draft on that branch, if any, without publishing it or changing live configuration.",
+      "examples": [
+        {
+          "body": {
+            "conversation_config": {
+              "agent": {
+                "first_message": "Welcome to the preview."
+              }
+            },
+            "name": "Preview draft",
+            "platform_settings": {},
+            "tags": [
+              "preview"
+            ],
+            "workflow": {}
+          },
+          "operation_id": "create_agent_draft_route",
+          "path_params": {
+            "agent_id": "agent_example"
+          },
+          "query_params": {
+            "branch_id": "branch & 1"
+          }
+        }
+      ],
+      "follow_ups": [
+        "get_agent_route"
+      ]
     },
     "create_agent_response_test_route": {
       "method": "POST",
@@ -1056,19 +1146,41 @@
     "create_branch_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/branches",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Create a new provider resource without changing live configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "examples": [
+        {
+          "body": {
+            "description": "Review changes safely",
+            "include_draft": false,
+            "name": "Preview branch",
+            "parent_version_id": "version_example"
+          },
+          "operation_id": "create_branch_route",
+          "path_params": {
+            "agent_id": "agent_example"
+          }
+        }
+      ],
+      "follow_ups": [
+        "get_branch_route"
+      ]
     },
     "create_clip": {
       "method": "POST",
@@ -1337,19 +1449,27 @@
     "create_merge_proposal_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Create a new provider resource without changing live configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_merge_proposal_route"
+      ]
     },
     "create_or_update_user_voice_collection": {
       "method": "POST",
@@ -1409,19 +1529,42 @@
     "create_procedure_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Create a new provider resource without changing live configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "examples": [
+        {
+          "body": {
+            "content": "Answer using the guide.",
+            "name": "Guide",
+            "trigger": "Guide question",
+            "type": "free_form"
+          },
+          "operation_id": "create_procedure_route",
+          "path_params": {
+            "agent_id": "agent_example",
+            "branch_id": "branch_example"
+          }
+        }
+      ],
+      "follow_ups": [
+        "get_procedure_draft_route"
+      ]
     },
     "create_public_template_run": {
       "method": "POST",
@@ -1719,19 +1862,27 @@
     "delete_agent_draft_route": {
       "method": "DELETE",
       "path": "/v1/convai/agents/{agent_id}/drafts",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Delete the specified draft or procedure.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_agent_route"
+      ]
     },
     "delete_agent_hold_audio_route": {
       "method": "DELETE",
@@ -2150,19 +2301,27 @@
     "delete_procedure_draft_route": {
       "method": "DELETE",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Delete the specified draft or procedure.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_procedure_route"
+      ]
     },
     "delete_project": {
       "method": "DELETE",
@@ -3115,19 +3274,25 @@
     "get_agent_link_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/link",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_agent_llm_expected_cost_calculation": {
       "method": "POST",
@@ -3242,7 +3407,9 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "reason": "Its name is easily mistaken for the tests-family summaries read; revisit when discovery can disambiguate similar names."
     },
     "get_agent_test_folder_route": {
       "method": "GET",
@@ -3266,36 +3433,48 @@
     "get_agent_topics_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/topics",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_agent_widget_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/widget",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_agents_route": {
       "method": "GET",
@@ -3386,19 +3565,25 @@
     "get_assignable_users_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/triage-tickets/assignable-users",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_audio_effects_catalog": {
       "method": "GET",
@@ -3513,36 +3698,49 @@
     "get_branch_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_route"]
     },
     "get_branches_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_branch_route", "get_agent_route"],
+      "manual_pagination": "Forward the documented limit/page parameters as supplied. Inspect data.meta for provider paging details; no automatic next-page instruction is emitted."
     },
     "get_chapter_by_id_endpoint": {
       "method": "GET",
@@ -4294,19 +4492,25 @@
     "get_merge_proposal_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_models": {
       "method": "GET",
@@ -4370,36 +4574,48 @@
     "get_procedure_draft_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_procedure_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_project_by_id": {
       "method": "GET",
@@ -5223,19 +5439,25 @@
     "get_version_metadata_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/versions/{version_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_route"]
     },
     "get_video_generation": {
       "method": "GET",
@@ -5570,19 +5792,26 @@
     "list_agent_deployments_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/deployments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "manual_pagination": "Forward the documented limit/page parameters as supplied. Inspect data.meta for provider paging details; no automatic next-page instruction is emitted."
     },
     "list_analysis_item_versions_route": {
       "method": "GET",
@@ -5870,19 +6099,25 @@
     "list_merge_proposals_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "list_phone_numbers_page_route": {
       "method": "GET",
@@ -5925,19 +6160,25 @@
     "list_procedures_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "list_public_template_runs": {
       "method": "GET",
@@ -6122,36 +6363,65 @@
     "merge_branch_into_target": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/branches/{source_branch_id}/merge",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation replaces target branch configuration with the merge result and can archive the source branch. If the target branch serves live traffic, callers get the result at once.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation replaces target branch configuration with the merge result and can archive the source branch. If the target branch serves live traffic, callers get the result at once.",
+      "follow_ups": [
+        "get_branches_route"
+      ]
     },
     "merge_preview_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{source_branch_id}/merge-preview",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "examples": [
+        {
+          "operation_id": "merge_preview_route",
+          "path_params": {
+            "agent_id": "agent_example",
+            "source_branch_id": "source_branch_example"
+          },
+          "query_params": {
+            "force": false,
+            "include_procedure_generated_workflow_elements": false,
+            "target_branch_id": "target & 1"
+          }
+        }
+      ],
+      "follow_ups": []
     },
     "migrate_segments": {
       "method": "POST",
@@ -6599,36 +6869,51 @@
     "rebase_branch_onto_main": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/rebase",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation changes the branch configuration by pulling source changes into a new version. If the target branch serves live traffic, callers get the result at once.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation changes the branch configuration by pulling source changes into a new version. If the target branch serves live traffic, callers get the result at once.",
+      "follow_ups": [
+        "get_branch_route"
+      ]
     },
     "rebase_preview_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/rebase-preview",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "effect_reason": "Read provider resources without persisting changes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "redirect_to_mintlify": {
       "method": "GET",
@@ -6750,19 +7035,27 @@
     "remove_procedure_route": {
       "method": "DELETE",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "Delete the specified draft or procedure.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "list_procedures_route"
+      ]
     },
     "remove_rules": {
       "method": "POST",
@@ -8806,19 +9099,28 @@
     "submit_merge_proposal_review_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/reviews",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation replaces your previous review verdict and can enable a merge.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation replaces your previous review verdict and can enable a merge.",
+      "follow_ups": [
+        "get_merge_proposal_route"
+      ]
     },
     "text_search_conversation_messages_route": {
       "method": "GET",
@@ -9246,19 +9548,28 @@
     "update_branch_route": {
       "method": "PATCH",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation changes branch properties, including protection and automatic rebasing.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation changes branch properties, including protection and automatic rebasing.",
+      "follow_ups": [
+        "get_branch_route"
+      ]
     },
     "update_conversation_group_route": {
       "method": "PATCH",
@@ -9465,19 +9776,28 @@
     "update_merge_proposal_route": {
       "method": "PATCH",
       "path": "/v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation changes proposal details or closes the proposal without merging.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation changes proposal details or closes the proposal without merging.",
+      "follow_ups": [
+        "get_merge_proposal_route"
+      ]
     },
     "update_phone_number_route": {
       "method": "PATCH",
@@ -9503,19 +9823,28 @@
     "update_procedure_draft_route": {
       "method": "PATCH",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "effect_reason": "This operation replaces your draft procedure content.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "This operation replaces your draft procedure content.",
+      "follow_ups": [
+        "get_procedure_draft_route"
+      ]
     },
     "update_pronunciation_dictionaries": {
       "method": "POST",

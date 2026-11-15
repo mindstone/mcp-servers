@@ -36,10 +36,10 @@ const idsByProfile = {
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
 const stage7Profiles = {
-  read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments',
-  create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment',
-  change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route',
-  delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment'
+  read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments get_branch_route get_branches_route merge_preview_route rebase_preview_route get_version_metadata_route list_agent_deployments_route get_merge_proposal_route list_merge_proposals_route compile_procedures_route get_procedure_route get_procedure_draft_route list_procedures_route get_agent_link_route get_agent_topics_route get_agent_widget_route get_assignable_users_route',
+  create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment create_branch_route create_merge_proposal_route add_merge_proposal_comment_route create_procedure_route',
+  change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route update_branch_route create_agent_draft_route merge_branch_into_target rebase_branch_onto_main create_agent_deployment_route update_merge_proposal_route accept_merge_proposal_route submit_merge_proposal_review_route update_procedure_draft_route',
+  delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment delete_agent_draft_route remove_procedure_route delete_procedure_draft_route'
 };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
@@ -107,6 +107,7 @@ const operationSchema = z.object({
     tools: z.array(text), reason: text, evidence: z.array(text),
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
+  effect_note: text.optional(), manual_pagination: text.optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.literal('document') }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
@@ -198,6 +199,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
     }
     for (const followUp of row.follow_ups ?? []) {
       const followUpPolicy = policy.operations[followUp];
+      if (followUp === id) refuse('self follow_up', id);
       if (followUpPolicy?.status !== 'admitted') refuse('follow_up must be admitted', `${id}: ${followUp}`);
       if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
@@ -211,11 +213,12 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (row.method !== 'POST' && floor === undefined) refuse('unsupported method', `${id}: ${row.method}`);
       if (row.method === 'POST' && row.profile === 'read' && !row.reviewed_post_read) refuse('unreviewed POST read', id);
       if (row.reviewed_post_read !== undefined && (row.method !== 'POST' || row.profile !== 'read')) refuse('misplaced reviewed POST read', id);
+      if (row.manual_pagination !== undefined && (row.method !== 'GET' || row.profile !== 'read')) refuse('invalid manual pagination', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
       const retryOperation = policy.operations[retryCheck];
       if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -233,7 +236,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 74, planned: 332, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 106, planned: 300, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -468,7 +471,7 @@ function successDescriptors(operation, transform, id) {
   if (responses.length === 0) refuse('missing concrete success response', id);
   return responses;
 }
-function paginationDescriptor(operation, parameters, responses, spec, id) {
+function paginationDescriptor(operation, parameters, responses, spec, id, row) {
   const queries = parameters.filter(parameter => parameter.in === 'query').map(parameter => parameter.name);
   function rootProperties(schema, seen = new Set()) {
     if (schema === null || typeof schema !== 'object') return [];
@@ -492,6 +495,12 @@ function paginationDescriptor(operation, parameters, responses, spec, id) {
   const unsupported = new Set(['offset', 'skip', 'limit', 'page', 'page_number', 'page_index', 'page_token', 'page_key', 'page_cursor',
     'next_page_token', 'start_after', 'start_after_history_item_id', 'last_doc', 'next_page', 'next_token',
     'after', 'before', 'starting_after', 'ending_before', 'continuation', 'continuation_token', 'continuationToken', 'pagination', 'paging']);
+  if (row.manual_pagination !== undefined) {
+    if (row.method !== 'GET' || row.profile !== 'read' || !queries.some(name => ['limit', 'page'].includes(name))
+      || queries.includes('cursor') || properties.includes('next_cursor')
+      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page'].includes(name))) refuse('invalid manual pagination', id);
+    return null;
+  }
   if ([...queries, ...properties].some(name => unsupported.has(name))) refuse('unsupported pagination', `${id}: only cursor -> next_cursor is supported`);
   if (queries.includes('cursor') !== properties.includes('next_cursor')) refuse('unsupported pagination', `${id}: expected cursor -> next_cursor pair`);
   return queries.includes('cursor') ? { request: 'cursor', response: 'next_cursor' } : null;
@@ -525,9 +534,11 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
+      ...(row.effect_note ? { effect_note: row.effect_note } : {}),
+      ...(row.manual_pagination ? { manual_pagination: row.manual_pagination } : {}),
       summary: operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,
       parameters: records, request, responses,
-      pagination: paginationDescriptor(operation, parameters, responses, spec, id),
+      pagination: paginationDescriptor(operation, parameters, responses, spec, id, row),
       timeout: row.timeout ?? 'standard', authentication: { header: 'xi-api-key', supplied_by: 'connector' },
       search_aliases: row.search_aliases ?? [], rank: row.rank ?? 0, follow_ups: row.follow_ups ?? [], examples: row.examples ?? [],
     });
