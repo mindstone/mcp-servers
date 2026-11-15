@@ -170,6 +170,10 @@ The typical workflow uses accessibility snapshots for reliable element targeting
 
 Browser automation has a large attack surface: the agent-browser CLI controls a real headless browser that loads URLs you pass it, runs page-side JavaScript, and persists cookies and session state across runs. Read this section before deploying.
 
+### Which `agent-browser` config files are read
+
+The `agent-browser` CLI this connector drives now runs in the connector's own folder (where its package is installed), so an `agent-browser.json` in the folder the host starts the connector from is not read: that file can choose which program the CLI launches. Your own `~/.agent-browser/config.json` is still read, and so is a file named by `AGENT_BROWSER_CONFIG`; to keep settings from a project file, move them into one of those. Give full paths for any path in an agent-browser config file or `AGENT_BROWSER_*` variable: a relative path is now resolved from the connector's own folder, not from the folder the host started in.
+
 ### `browser_evaluate` runs by default — host confirmation is the gate
 
 `browser_evaluate` lets the model execute arbitrary JavaScript inside the page context — the security equivalent of giving the model a shell on whatever site it has just navigated to. The tool is registered **unconditionally** (capability-first); the safeguard is the host's tool-approval layer. The tool is marked `destructiveHint: true`, so MCP hosts SHOULD require explicit user confirmation before each invocation. Do not configure a host to auto-approve this tool.
