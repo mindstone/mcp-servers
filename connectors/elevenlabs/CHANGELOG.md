@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- 14 knowledge-base operations for crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl cancellation also deletes its documents and folders; it is not an undo button.
+
 - 32 agent lifecycle operations for branches, drafts, versions, deployments, merge proposals and procedures, plus agent reads. Preview before merging; previews are reads, while merges, rebases and traffic changes stay behind the change tool.
 
 - 34 more API operations for conversation tags, analysis items, workspace and dashboard settings, environments, test folders and summaries, invocation names, conversation users, live counts, tool executions, usage estimates and knowledge-base size. The same seven API tools handle them; delete operations stay behind the delete tool.

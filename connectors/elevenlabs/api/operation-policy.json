@@ -666,19 +666,34 @@
     "cancel_crawl_job_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/crawl/{crawl_job_id}/cancel",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Stops a crawl job and deletes all associated documents and folders.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "list_crawl_jobs_route"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "crawl"
+      ],
+      "rank": 50,
+      "effect_note": "Stops a crawl job and deletes all associated documents and folders."
     },
     "cancel_file_upload_route": {
       "method": "DELETE",
@@ -1238,19 +1253,34 @@
     "create_crawl_job_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/crawl",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Asks the provider to fetch the URL and may consume credits. max_depth is deprecated and has no effect.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_crawl_job_route"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "crawl"
+      ],
+      "rank": 50,
+      "effect_note": "Asks the provider to fetch the URL and may consume credits. max_depth is deprecated and has no effect."
     },
     "create_dubbing": {
       "method": "POST",
@@ -2360,19 +2390,34 @@
     "delete_rag_index": {
       "method": "DELETE",
       "path": "/v1/convai/knowledge-base/{documentation_id}/rag-index/{rag_index_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Deletes the selected document RAG index.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_rag_indexes"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "rag"
+      ],
+      "rank": 50,
+      "effect_note": "Deletes the selected document RAG index."
     },
     "delete_sample": {
       "method": "DELETE",
@@ -3257,19 +3302,32 @@
     "get_agent_knowledge_base_summaries_route": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/summaries",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "knowledge-base"
+      ],
+      "rank": 50,
+      "discovery_summary": "Get document summaries by query_params.document_ids (document IDs, not an agent ID)."
     },
     "get_agent_link_route": {
       "method": "GET",
@@ -3982,19 +4040,31 @@
     "get_crawl_job_route": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/crawl/{crawl_job_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "crawl"
+      ],
+      "rank": 50
     },
     "get_dashboard_settings_route": {
       "method": "GET",
@@ -4018,19 +4088,32 @@
     "get_documentation_chunk_from_knowledge_base": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/{documentation_id}/chunk/{chunk_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "knowledge-base"
+      ],
+      "rank": 50,
+      "discovery_summary": "Get one RAG chunk's id, name and content by path_params.documentation_id and path_params.chunk_id; optional query_params.embedding_model."
     },
     "get_documentation_chunks_from_knowledge_base": {
       "method": "GET",
@@ -4275,19 +4358,32 @@
     "get_knowledge_base_bulk_dependent_agents_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/dependent-agents",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "knowledge-base"
+      ],
+      "rank": 50,
+      "reviewed_post_read": "The pinned POST only lists agents depending on body.document_ids; no resource creation or mutation."
     },
     "get_knowledge_base_content": {
       "method": "GET",
@@ -4384,19 +4480,31 @@
     "get_knowledge_base_source_file_url": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/{documentation_id}/source-file-url",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "knowledge-base"
+      ],
+      "rank": 50
     },
     "get_library_voices": {
       "method": "GET",
@@ -4536,19 +4644,34 @@
     "get_or_create_rag_indexes": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/rag-index",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Retrieves or creates indexes according to each item's create_if_missing flag; creation may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_rag_indexes"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "rag"
+      ],
+      "rank": 50,
+      "effect_note": "Retrieves or creates indexes according to each item's create_if_missing flag; creation may consume credits."
     },
     "get_phone_number_route": {
       "method": "GET",
@@ -4886,19 +5009,31 @@
     "get_rag_index_overview": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/rag-index",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "rag"
+      ],
+      "rank": 50
     },
     "get_rag_indexes": {
       "method": "GET",
@@ -5978,19 +6113,31 @@
     "list_crawl_jobs_route": {
       "method": "GET",
       "path": "/v1/convai/knowledge-base/crawl",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads provider knowledge-base data without changing resources.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "crawl"
+      ],
+      "rank": 50
     },
     "list_dubs": {
       "method": "GET",
@@ -6550,53 +6697,98 @@
     "post_knowledge_base_bulk_delete_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/bulk-delete",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Deletes documents or folders independently. force also removes agent dependencies and recursively deletes folder contents.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_knowledge_base_list_route"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "knowledge-base"
+      ],
+      "rank": 50,
+      "effect_note": "Deletes documents or folders independently. force also removes agent dependencies and recursively deletes folder contents."
     },
     "post_knowledge_base_bulk_move_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/bulk-move",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Moves multiple documents or folders; omitted or null move_to selects the root folder.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_knowledge_base_list_route"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "folder"
+      ],
+      "rank": 50,
+      "effect_note": "Moves multiple documents or folders; omitted or null move_to selects the root folder."
     },
     "post_knowledge_base_move_route": {
       "method": "POST",
       "path": "/v1/convai/knowledge-base/{document_id}/move",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "knowledge-base",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Moves one document or folder; omitted or null move_to selects the root folder.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_documentation_from_knowledge_base"
+      ],
+      "search_aliases": [
+        "knowledge",
+        "document",
+        "folder"
+      ],
+      "rank": 50,
+      "effect_note": "Moves one document or folder; omitted or null move_to selects the root folder."
     },
     "public_create_order": {
       "method": "POST",

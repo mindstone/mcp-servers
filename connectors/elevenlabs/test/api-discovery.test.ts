@@ -11,7 +11,7 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(106);
+    expect(catalog.operations).toHaveLength(120);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
@@ -56,9 +56,16 @@ describe('discovery', () => {
     ['tests', 'run_agent_test_suite_route'],
     ['knowledge', 'query_agent_knowledge_base_rag_route'],
   ])('finds profile-specific operations in the %s family', async (family, operation_id) => {
-    const result = await discoverOperations({ family, limit: 25 });
-    expect(result).toHaveProperty('operations');
-    if ('operations' in result) expect(result.operations).toEqual(expect.arrayContaining([expect.objectContaining({ operation_id, family })]));
+    const operations = [];
+    let cursor: string | undefined;
+    do {
+      const result = await discoverOperations({ family, limit: 25, cursor });
+      expect(result).toHaveProperty('operations');
+      if (!('operations' in result)) throw new Error('Expected a discovery listing.');
+      operations.push(...result.operations);
+      cursor = result.next_cursor ?? undefined;
+    } while (cursor);
+    expect(operations).toEqual(expect.arrayContaining([expect.objectContaining({ operation_id, family })]));
   });
 
   it('keeps connector-written navigation references tied to actual tools, operations and the snapshot date', async () => {

@@ -15,6 +15,8 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
+The API tools also cover crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl creation asks the provider to fetch a URL and may consume credits. Cancelling a crawl also deletes its associated documents and folders, so cancellation, like index and bulk deletion, uses the delete tool.
+
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements

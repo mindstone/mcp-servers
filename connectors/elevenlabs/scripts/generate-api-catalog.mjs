@@ -36,10 +36,10 @@ const idsByProfile = {
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
 const stage7Profiles = {
-  read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments get_branch_route get_branches_route merge_preview_route rebase_preview_route get_version_metadata_route list_agent_deployments_route get_merge_proposal_route list_merge_proposals_route compile_procedures_route get_procedure_route get_procedure_draft_route list_procedures_route get_agent_link_route get_agent_topics_route get_agent_widget_route get_assignable_users_route',
-  create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment create_branch_route create_merge_proposal_route add_merge_proposal_comment_route create_procedure_route',
-  change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route update_branch_route create_agent_draft_route merge_branch_into_target rebase_branch_onto_main create_agent_deployment_route update_merge_proposal_route accept_merge_proposal_route submit_merge_proposal_review_route update_procedure_draft_route',
-  delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment delete_agent_draft_route remove_procedure_route delete_procedure_draft_route'
+  read: 'get_agent_knowledge_base_size get_agent_llm_expected_cost_calculation get_agent_response_tests_summaries_route get_agent_test_folder_route get_analysis_item_dependent_agents_route get_analysis_item_route get_conversation_tag_route get_conversation_users_route get_dashboard_settings_route get_live_count get_public_llm_expected_cost_calculation get_settings_route get_tool_executions_route list_analysis_item_versions_route list_analysis_items_route list_conversation_tags_route list_environments get_branch_route get_branches_route merge_preview_route rebase_preview_route get_version_metadata_route list_agent_deployments_route get_merge_proposal_route list_merge_proposals_route compile_procedures_route get_procedure_route get_procedure_draft_route list_procedures_route get_agent_link_route get_agent_topics_route get_agent_widget_route get_assignable_users_route get_crawl_job_route list_crawl_jobs_route get_rag_index_overview get_agent_knowledge_base_summaries_route get_documentation_chunk_from_knowledge_base get_knowledge_base_bulk_dependent_agents_route get_knowledge_base_source_file_url',
+  create: 'copy_analysis_item_route create_agent_test_folder_route create_analysis_item_route create_conversation_tag_route create_environment create_branch_route create_merge_proposal_route add_merge_proposal_comment_route create_procedure_route create_crawl_job_route get_or_create_rag_indexes',
+  change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route update_branch_route create_agent_draft_route merge_branch_into_target rebase_branch_onto_main create_agent_deployment_route update_merge_proposal_route accept_merge_proposal_route submit_merge_proposal_review_route update_procedure_draft_route post_knowledge_base_move_route post_knowledge_base_bulk_move_route',
+  delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment delete_agent_draft_route remove_procedure_route delete_procedure_draft_route delete_rag_index post_knowledge_base_bulk_delete_route cancel_crawl_job_route',
 };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
@@ -107,7 +107,7 @@ const operationSchema = z.object({
     tools: z.array(text), reason: text, evidence: z.array(text),
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
-  effect_note: text.optional(), manual_pagination: text.optional(),
+  discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.literal('document') }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
@@ -218,7 +218,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       const retryOperation = policy.operations[retryCheck];
       if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -236,7 +236,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 106, planned: 300, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 120, planned: 286, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -536,7 +536,7 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
       ...(row.effect_note ? { effect_note: row.effect_note } : {}),
       ...(row.manual_pagination ? { manual_pagination: row.manual_pagination } : {}),
-      summary: operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,
+      summary: row.discovery_summary ?? operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,
       parameters: records, request, responses,
       pagination: paginationDescriptor(operation, parameters, responses, spec, id, row),
       timeout: row.timeout ?? 'standard', authentication: { header: 'xi-api-key', supplied_by: 'connector' },
