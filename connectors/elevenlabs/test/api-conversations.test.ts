@@ -55,7 +55,7 @@ describe('conversation and ticket contracts', () => {
       expect(description).toHaveProperty('contract', expect.stringContaining('"deprecated":false'));
       if (wire.profile === 'read') expect(description).toHaveProperty('contract', expect.stringContaining('summary'));
     }
-    for (const id of ['upload_file_route', 'get_agent_summaries_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route']) {
+    for (const id of ['get_signed_url_deprecated']) {
       await expect(validateRequest('create', { operation_id: id })).rejects.toMatchObject({ code: 'UNKNOWN_OPERATION' });
     }
   });

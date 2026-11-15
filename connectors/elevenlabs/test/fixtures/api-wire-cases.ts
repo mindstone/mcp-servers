@@ -28,6 +28,14 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  {
+    id: 'get_agent_summaries_route', profile: 'read', args: { query_params: { agent_ids: ['agent/a ?#', 'agent_second'] } },
+    method: 'GET', path: '/v1/convai/agents/summaries', query: [['agent_ids', 'agent/a ?#'], ['agent_ids', 'agent_second']],
+    status: 200, media: 'application/json', response: {
+      'agent/a ?#': { status: 'success', data: { agent_id: 'agent/a ?#', name: 'Acme guide', voice_id: 'voice_example', tags: [], created_at_unix_secs: 1, updated_at_unix_secs: 2, access_info: access } },
+      agent_second: { status: 'failure', error_code: 404, error_status: 'not_found', error_message: 'Agent not found.' },
+    },
+  },
   ...sensitiveCases as WireCase[],
   ...jsonFamilyCases as WireCase[],
   ...lifecycleCases as WireCase[],
@@ -207,6 +215,24 @@ export interface MultipartWireCase extends WireCase {
   multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[] };
 }
 export const multipartCases: MultipartWireCase[] = [
+  {
+    id: 'post_agent_avatar_route', profile: 'change', args: { path_params: { agent_id: 'agent/a ?#' } },
+    method: 'POST', path: '/v1/convai/agents/agent%2Fa%20%3F%23/avatar', query: [],
+    multipart: { scalars: [], field: 'avatar_file', fileName: 'avatar.png', mime: 'image/png', bytes: [137, 80, 78, 71, 13, 10, 26, 10, 0, 128, 255] },
+    status: 200, media: 'application/json', response: { agent_id: 'agent_example', avatar_url: 'https://example.com/avatar.png' },
+  },
+  {
+    id: 'post_agent_hold_audio_route', profile: 'change', args: { path_params: { agent_id: 'agent/a ?#' } },
+    method: 'POST', path: '/v1/convai/agents/agent%2Fa%20%3F%23/hold-audio', query: [],
+    multipart: { scalars: [], field: 'hold_audio_file', fileName: 'hold.wav', mime: 'audio/wav', bytes: [82, 73, 70, 70, 0, 128, 255] },
+    status: 200, media: 'application/json', response: { agent_id: 'agent_example', hold_audio: { audio_path: 'clips/hold.wav', audio_url: 'https://example.com/hold.wav', original_filename: 'hold.wav', duration_secs: 1, size_bytes: 7 } },
+  },
+  {
+    id: 'upload_file_route', profile: 'create', args: { path_params: { conversation_id: 'conv/a ?#' } },
+    method: 'POST', path: '/v1/convai/conversations/conv%2Fa%20%3F%23/files', query: [],
+    multipart: { scalars: [], field: 'file', fileName: 'message.png', mime: 'image/png', bytes: [137, 80, 78, 71, 13, 10, 26, 10, 0, 128, 255] },
+    status: 200, media: 'application/json', response: { file_id: 'file_example' },
+  },
   {
     id: 'create_file_document_route', profile: 'create',
     args: { body: { name: 'Acme guide', parent_folder_id: 'folder & 1' }, files: [{ field: 'file', file_path: './guide.pdf' }] },

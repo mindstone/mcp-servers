@@ -139,13 +139,13 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven API tools cover **170 admitted operations in source** (40 in the published 0.6.0 release) from the
+The seven API tools cover **174 admitted operations in source** (40 in the published 0.6.0 release) from the
 2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
 this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 170 admitted, 236 planned and 109 excluded, with reasons and
+515 operations: 174 admitted, 232 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
@@ -168,16 +168,24 @@ Analysis and evaluation reruns can replace stored results and may consume credit
 Ticket creation for a conversation can update an existing open ticket, so it uses the
 change tool. Ticket merging keeps source tickets marked as merged. Unused-file
 removal, tag unassignment and custom hold-audio removal use the delete tool.
-Conversation file upload remains planned: the snapshot accepts images, PDFs and text,
-and the existing file kinds do not yet cover that full set.
+Conversation file uploads accept images, PDFs and text and return a file ID for use in
+that conversation. Audio is not accepted by this route.
+
+Agent summaries take `query_params.agent_ids`, not test IDs, and return a map of
+per-agent summaries or failure details. Avatar and custom hold-audio uploads use
+the change tool because they replace existing media. Avatars accept PNG, JPEG,
+GIF or WebP. Hold audio accepts MP3 or WAV up to 40 MB; the provider also limits
+clips to 180 seconds. The snapshot gives no avatar size limit, so the runtime
+buffer limit applies. These uploads use the same file authorization and opened
+descriptor checks as document uploads; a canonical filename determines the type.
 
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 68 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 23 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 32 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 19 deletes | Destructive |
+| `elevenlabs_read_resource` | 78 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 27 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 40 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 25 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 

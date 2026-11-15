@@ -86,7 +86,7 @@ describe('sensitive family contracts', () => {
   });
 
   it.each(['sensitive_request_fields', 'sensitive_response_fields'] as const)('refuses %s on planned and excluded operations', field => {
-    for (const id of ['upload_file_route', 'redirect_to_mintlify'] as const) {
+    for (const id of ['get_signed_url_deprecated', 'redirect_to_mintlify'] as const) {
       const policy = structuredClone(policyInput);
       Object.assign(policy.operations[id], { [field]: [['value']] });
       expect(() => validatePolicy(policy, rosters)).toThrow('non-admitted transport metadata');

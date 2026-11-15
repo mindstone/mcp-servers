@@ -133,14 +133,14 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 168 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(168);
-    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
+  it('has independent cases for every admission, with exactly 169 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(169);
+    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'update_file_document_route', 'upload_file_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(170);
+    expect(new Set(expectedIds).size).toBe(174);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
-    expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
+    expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'update_file_document_route', 'upload_file_route']);
     for (const profile of profiles) expect(catalog.operations.filter(op => op.profile === profile).map(op => op.operation_id).sort())
       .toEqual([...apiWireCases, ...multipartCases].filter(wire => wire.profile === profile).map(wire => wire.id).sort());
   });
@@ -190,7 +190,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(requests).toHaveLength(0);
   });
 
-  it.each(profiles.flatMap(profile => ['not_an_operation', 'post_agent_avatar_route', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
+  it.each(profiles.flatMap(profile => ['not_an_operation', 'get_signed_url_deprecated', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
     const getKey = vi.spyOn(auth, 'getApiKey');
     const readFile = vi.spyOn(fileInput, 'readSandboxedFile');
     const result = await call(profile, { operation_id: id });
@@ -200,7 +200,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(requests).toHaveLength(0);
   });
 
-  it.each(multipartCases)('$id sends exact document fields and bytes once with a checked receipt', async wire => {
+  it.each(multipartCases)('$id sends exact multipart fields and bytes once with a checked receipt', async wire => {
     const filePath = path.join(workspace, wire.multipart.fileName);
     fs.writeFileSync(filePath, Buffer.from(wire.multipart.bytes));
     let inspected = 0;
@@ -218,7 +218,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
       expect({ name: part.name, type: part.type, bytes: [...new Uint8Array(await part.arrayBuffer())] })
         .toEqual({ name: wire.multipart.fileName, type: wire.multipart.mime, bytes: wire.multipart.bytes });
     });
-    const result = await call(wire.profile, { operation_id: wire.id, ...wire.args, files: [{ field: 'file', file_path: filePath }] });
+    const result = await call(wire.profile, { operation_id: wire.id, ...wire.args, files: [{ field: wire.multipart.field, file_path: filePath }] });
     expect(result.isError, result.text).not.toBe(true);
     expect(inspected).toBe(1);
     expect(requests).toHaveLength(1);
@@ -229,6 +229,9 @@ describe('literal provider wire contracts through the real SDK registration', ()
     if (wire.id === 'create_file_document_route') {
       expect(result.json.follow_up_operations).toEqual(['get_documentation_from_knowledge_base']);
       expect(result.json.next_step).toBe('Before using or attaching this result in any other call, read it with elevenlabs_read_resource using operation_id get_documentation_from_knowledge_base (path_params.documentation_id); use IDs from data or the request where needed, then check the result.');
+    } else if (['post_agent_avatar_route', 'post_agent_hold_audio_route', 'upload_file_route'].includes(wire.id)) {
+      expect(result.json.follow_up_operations).toEqual([wire.id === 'post_agent_avatar_route' ? 'get_agent_widget_route' : wire.id === 'post_agent_hold_audio_route' ? 'get_agent_route' : 'get_conversation_history_route']);
+      expect(result.json.next_step).toContain('Before using or attaching this result');
     } else expect(result.json.next_step).toBeUndefined();
   });
 });

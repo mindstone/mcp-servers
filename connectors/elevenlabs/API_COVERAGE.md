@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **170 admitted + 236 planned + 109 excluded = 515**.
+Partition: **174 admitted + 232 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; additional admitted operations are available in source until the next release. Later versions are unset.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the 170 admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the 174 admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -19,7 +19,7 @@ Regenerate from the connector directory: `npm run api:generate -- --spec <pinned
 
 Provider constraints (including enums, required fields, maps and open objects) are preserved. Only synthesized path/query records are closed. Forbidden aliases are exact anchored own-property checks described in the compatibility overlay, separate from discovery search aliases. Enum errors refer to the 2026-11-08 snapshot and recommend a reviewed catalogue refresh.
 
-Document uploads bind only multipart field `file` as a document. File requiredness is separate from scalar multipart fields; create-file uses the existing long request timeout category. Document uploads use document MIME types with application/octet-stream fallback, regular-file and descriptor identity checks, and the runtime buffer size limit. Provider format and account limits still apply. The legacy audio MIME fallback is unchanged.
+File uploads bind only reviewed multipart fields and image, audio or document kinds. Avatar images use PNG, JPEG, GIF or WebP with the runtime buffer limit; the spec gives no avatar size limit. Hold audio accepts MP3 or WAV up to 40 MB; the provider also limits duration to 180 seconds. Conversation uploads accept images, PDFs or text and return a file ID for use in the conversation, not an audio attachment. File requiredness is separate from scalar multipart fields; create-file uses the existing long request timeout category. Document uploads use document MIME types with application/octet-stream fallback, regular-file and descriptor identity checks, and the runtime buffer size limit. Provider format and account limits still apply. The legacy audio MIME fallback is unchanged.
 
 Saved Tests can spend credits and invoke real integrations. No implicit mocks, retries, polling, attachment merges or cleanup are authorized. Knowledge retrieval can spend credits but creates no conversation. Host permission bands determine authority; these annotations are not a host rating.
 
@@ -201,7 +201,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_agent_response_test_route | GET | /v1/convai/agent-testing/{test_id} | admitted | 1 | agent-testing | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_response_tests_summaries_route | POST | /v1/convai/agent-testing/summaries | admitted | 7 | agent-testing | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_route | GET | /v1/convai/agents/{agent_id} | admitted | 1 | agents | read | partial | @mindstone/mcp-server-elevenlabs-agents:get_agent | Reads agent_id; version_id, branch_id and procedure-workflow controls are not exposed. |
-| get_agent_summaries_route | GET | /v1/convai/agents/summaries | planned | 7 | agents | — | missing | — | Its name is easily mistaken for the tests-family summaries read; revisit when discovery can disambiguate similar names. No existing tool maps to this exact HTTP operation. |
+| get_agent_summaries_route | GET | /v1/convai/agents/summaries | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_test_folder_route | GET | /v1/convai/agent-testing/folders/{folder_id} | admitted | 7 | agent-testing | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_topics_route | GET | /v1/convai/agents/{agent_id}/topics | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_widget_route | GET | /v1/convai/agents/{agent_id}/widget | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -359,8 +359,8 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | migrate_segments | POST | /v1/dubbing/resource/{dubbing_id}/migrate-segments | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | patch_agent_settings_route | PATCH | /v1/convai/agents/{agent_id} | admitted | 1 | agents | change | partial | @mindstone/mcp-server-elevenlabs-agents:update_agent | Existing first-class model and knowledge-base fields map to llm_model and knowledge_base_document_ids instead of provider llm and structured knowledge_base locators. Advanced config is partial reach, not verified working equivalence; version and branch controls are absent. |
 | patch_pronunciation_dictionary | PATCH | /v1/pronunciation-dictionaries/{pronunciation_dictionary_id} | planned | 9 | pronunciation-dictionaries | — | partial | @mindstone/mcp-server-elevenlabs:archive_pronunciation_dictionary | Only sends archived=true; does not support other dictionary edits or restoration. |
-| post_agent_avatar_route | POST | /v1/convai/agents/{agent_id}/avatar | planned | 7 | agents | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| post_agent_hold_audio_route | POST | /v1/convai/agents/{agent_id}/hold-audio | planned | 7 | agents | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| post_agent_avatar_route | POST | /v1/convai/agents/{agent_id}/avatar | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| post_agent_hold_audio_route | POST | /v1/convai/agents/{agent_id}/hold-audio | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | post_conversation_feedback_route | POST | /v1/convai/conversations/{conversation_id}/feedback | admitted | 7 | conversations | change | partial | @mindstone/mcp-server-elevenlabs-agents:submit_conversation_feedback | Supports conversation_id and requires non-null feedback ('like' or 'dislike'); the provider also permits omitted or null feedback. |
 | post_knowledge_base_bulk_delete_route | POST | /v1/convai/knowledge-base/bulk-delete | admitted | 7 | knowledge-base | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | post_knowledge_base_bulk_move_route | POST | /v1/convai/knowledge-base/bulk-move | admitted | 7 | knowledge-base | change | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -545,7 +545,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | update_workspace_member | POST | /v1/workspace/members | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | update_workspace_member_usage_limit | PUT | /v1/workspace/members/{user_id}/usage-limit | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | upload_asset | POST | /v1/assets | planned | 10 | assets | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| upload_file_route | POST | /v1/convai/conversations/{conversation_id}/files | planned | 7 | conversations | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| upload_file_route | POST | /v1/convai/conversations/{conversation_id}/files | admitted | 7 | conversations | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | upload_song | POST | /v1/music/upload | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | usage_by_product_over_time | POST | /v1/workspace/analytics/query/usage-by-product-over-time | planned | 10 | workspace/analytics | — | partial | @mindstone/mcp-server-elevenlabs:get_usage_stats | Maps days_back, interval and group_by to start_time, end_time, interval_seconds and group_by; provider filters and time_zone are absent. Returns summarized credit usage rather than the entire provider response. |
 | usage_characters | GET | /v1/usage/character-stats | planned | 9 | usage | — | missing | — | No existing tool maps to this exact HTTP operation. |

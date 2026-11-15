@@ -17,7 +17,7 @@ describe('agent lifecycle admission and effects', () => {
     const catalog = await loadApiCatalog();
     const ids = lifecycleCases.map(wire => wire.id).sort();
     expect(ids).toHaveLength(32);
-    expect(catalog.operations.filter(op => op.family === 'agents' && op.milestone === 7 && !['get_agent_knowledge_base_size', 'get_agent_llm_expected_cost_calculation', 'create_manual_agent_ticket_route', 'list_agent_conversation_tickets_route', 'delete_agent_hold_audio_route'].includes(op.operation_id)).map(op => op.operation_id)).toEqual(ids);
+    expect(catalog.operations.filter(op => op.family === 'agents' && op.milestone === 7 && !['get_agent_summaries_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route'].includes(op.operation_id) && !['get_agent_knowledge_base_size', 'get_agent_llm_expected_cost_calculation', 'create_manual_agent_ticket_route', 'list_agent_conversation_tickets_route', 'delete_agent_hold_audio_route'].includes(op.operation_id)).map(op => op.operation_id)).toEqual(ids);
     for (const id of ids) {
       const op = catalog.operations.find(op => op.operation_id === id)!;
       expect(op.deprecated, id).toBe(false);

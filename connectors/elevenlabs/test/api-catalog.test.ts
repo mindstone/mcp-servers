@@ -231,7 +231,7 @@ describe('pinned operation policy and public artifacts', () => {
     });
     const rows = Object.values(policy.operations);
     expect(rows).toHaveLength(515);
-    for (const [status, count] of [['admitted', 170], ['planned', 236], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
+    for (const [status, count] of [['admitted', 174], ['planned', 232], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
     for (const [milestone, count] of [[1, 40], [7, 134], [8, 35], [9, 131], [10, 66]] as const) expect(rows.filter(row => row.milestone === milestone)).toHaveLength(count);
     for (const [group, count] of [['account_and_keys', 9], ['identity_and_seats', 10], ['reception', 75], ['productions', 11], ['engineering', 4]] as const) {
       expect(rows.filter(row => row.exclusion_group === group)).toHaveLength(count);
@@ -244,9 +244,9 @@ describe('pinned operation policy and public artifacts', () => {
     expect(matchesPrefix('/v1/convai/conversations', '/v1/convai/conversation')).toBe(false);
   });
 
-  it('matches the independent 170-operation effects, methods and tools without adding registrations', () => {
-    expect(Object.keys(effectExpectations)).toHaveLength(170);
-    expect(apiCatalog.operations).toHaveLength(170);
+  it('matches the independent 174-operation effects, methods and tools without adding registrations', () => {
+    expect(Object.keys(effectExpectations)).toHaveLength(174);
+    expect(apiCatalog.operations).toHaveLength(174);
     expect(apiCatalog.operations.map(row => row.operation_id)).toEqual(Object.keys(effectExpectations).sort());
     const counts: Record<string, number> = {};
     for (const row of apiCatalog.operations) {
@@ -257,7 +257,7 @@ describe('pinned operation policy and public artifacts', () => {
       if (floors[row.method]) expect(row.profile).toBe(row.operation_id === 'update_environment_variable' ? 'delete' : floors[row.method]);
       counts[row.profile] = (counts[row.profile] ?? 0) + 1;
     }
-    expect(counts).toEqual({ read: 77, create: 26, change: 38, delete: 25, tests: 3, query_knowledge: 1 });
+    expect(counts).toEqual({ read: 78, create: 27, change: 40, delete: 25, tests: 3, query_knowledge: 1 });
     expect(apiCatalog.operations.filter(row => row.profile === 'query_knowledge').map(row => row.operation_id)).toEqual(['query_agent_knowledge_base_rag_route']);
     expect(apiCatalog.operations.some(row => ['elevenlabs_run_job', 'elevenlabs_place_call'].includes(row.tool))).toBe(false);
     expect(legacyTools).toHaveLength(32);
@@ -328,7 +328,7 @@ describe('pinned operation policy and public artifacts', () => {
       policy => { policy.operations.get_agents_route.method = 'PUT'; },
       policy => { policy.operations.get_agents_route.existing_coverage.tools = ['@mindstone/mcp-server-elevenlabs:invented']; },
       policy => { policy.operations.redirect_to_mintlify.replacements = ['invented']; },
-      policy => { policy.operations.create_agent_route.follow_ups = ['post_agent_avatar_route']; },
+      policy => { policy.operations.create_agent_route.follow_ups = ['get_signed_url_deprecated']; },
       policy => { policy.operations.create_agent_route.follow_ups = ['invented']; },
       policy => { Object.assign(policy.operations.create_agent_route, { file_bindings: [{ field: 'file', kind: 'document' }] }); },
       policy => { policy.operations.create_file_document_route.timeout = 'standard'; },
@@ -340,14 +340,14 @@ describe('pinned operation policy and public artifacts', () => {
       const policy = structuredClone(policyInput); mutate(policy);
       expect(() => validatePolicy(policy, rosters)).toThrow();
     }
-    const followup = structuredClone(policyInput); followup.operations.create_agent_route.follow_ups = ['post_agent_avatar_route'];
+    const followup = structuredClone(policyInput); followup.operations.create_agent_route.follow_ups = ['get_signed_url_deprecated'];
     expect(() => validatePolicy(followup, rosters)).toThrow('follow_up must be admitted');
   });
 
   it('has deterministic committed outputs and an admitted-only reachable graph', async () => {
     expect(await readFile(resolve(root, 'src/generated/api-catalog.ts'), 'utf8')).toBe(renderCatalog(apiCatalog));
     expect(await readFile(resolve(root, 'API_COVERAGE.md'), 'utf8')).toBe(renderCoverage(policyInput, rosters));
-    expect(Object.keys(apiCatalog.$defs)).toHaveLength(920);
+    expect(Object.keys(apiCatalog.$defs)).toHaveLength(923);
     expect(apiCatalog.source).toEqual(policyInput.source);
     expect(apiCatalog.compatibility_overlay).toEqual(policyInput.compatibility_overlay);
     for (const descriptor of apiCatalog.operations) {
@@ -358,7 +358,7 @@ describe('pinned operation policy and public artifacts', () => {
       expect(descriptor.follow_ups).toEqual(row.follow_ups ?? []);
       expect(descriptor.rank).toBe(row.rank ?? 0);
       expect(descriptor.examples).toEqual(row.examples ?? []);
-      expect((descriptor.request.files ?? []).map(({ field, kind }) => ({ field, kind }))).toEqual(row.file_bindings ?? []);
+      expect((descriptor.request.files ?? []).map(({ required: _required, schema: _schema, ...binding }) => binding)).toEqual(row.file_bindings ?? []);
     }
     expect(apiCatalog.operations.map(row => row.operation_id)).toEqual([...apiCatalog.operations.map(row => row.operation_id)].sort());
     expect(apiCatalog).not.toHaveProperty('paths');
@@ -539,11 +539,11 @@ describe('provided pinned full source', () => {
     const fromJson = compileCatalog(bytes, policyInput, PINNED_SOURCE, rosters);
     const fromGzip = compileCatalog(gzipSync(bytes), policyInput, PINNED_SOURCE, rosters);
     expect(fromJson).toEqual(apiCatalog); expect(fromGzip).toEqual(fromJson);
-    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 170, components: 920, checked: true });
+    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 174, components: 923, checked: true });
     const directory = await mkdtemp(join(tmpdir(), 'elevenlabs-pin-'));
     try {
       const file = join(directory, 'pinned.json'); await writeFile(file, bytes);
-      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 170, components: 920, checked: true });
+      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 174, components: 923, checked: true });
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 
@@ -568,7 +568,8 @@ describe('provided pinned full source', () => {
           const multipart = structuredClone(obj(spec.components.schemas[String(original.$ref).split('/').at(-1)!]));
           const properties = obj(multipart.properties); const required = multipart.required as string[] | undefined;
           for (const file of row.request.files ?? []) {
-            expect(file.field).toBe('file'); expect(file.kind).toBe('document');
+            const binding = (policyInput.operations[row.operation_id as keyof typeof policyInput.operations] as { file_bindings?: { field: string; kind: unknown }[] }).file_bindings?.find(binding => binding.field === file.field);
+            expect(binding).toBeDefined(); expect(file.kind).toEqual(binding!.kind);
             expect(file.required).toBe(required?.includes(file.field) ?? false);
             expect(file.schema).toEqual(properties[file.field]); delete properties[file.field];
           }

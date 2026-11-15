@@ -35,6 +35,7 @@ const idsByProfile = {
   tests: 'run_agent_test_suite_route cancel_test_invocation_route resubmit_tests_route',
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
+const stage76Profiles = { read: 'get_agent_summaries_route', create: 'upload_file_route', change: 'post_agent_avatar_route post_agent_hold_audio_route' };
 const stage75Profiles = {
   read: 'get_secret_dependencies_route get_secret_route get_secrets_route get_environment_variable list_environment_variables get_mcp_route get_mcp_tool_config_override_route list_mcp_server_tools_route list_mcp_servers_route',
   create: 'create_secret_route create_environment_variable add_mcp_tool_config_override_route',
@@ -60,7 +61,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -117,7 +118,7 @@ const operationSchema = z.object({
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
-  file_bindings: z.array(z.object({ field: text, kind: z.literal('document') }).strict()).optional(),
+  file_bindings: z.array(z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional() }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
   follow_ups: z.array(text).optional(), examples: z.array(z.record(z.unknown())).optional(),
 }).strict();
@@ -168,7 +169,7 @@ export function matchesPrefix(path, prefix) {
   return path === prefix || path.startsWith(prefix + '/');
 }
 function classify(id, path) {
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage7Profiles, stage75Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -245,7 +246,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 170, planned: 236, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 174, planned: 232, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -262,9 +263,15 @@ function validateProductionCensus(policy) {
     for (const row of rows.filter(row => row.milestone === Number(milestone))) actual[row.family] = (actual[row.family] ?? 0) + 1;
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
-  for (const id of ['create_file_document_route', 'update_file_document_route']) requireEqual(policy.operations[id].file_bindings, [{ field: 'file', kind: 'document' }], `document file binding ${id}`);
+  const fileBindings = {
+    create_file_document_route: [{ field: 'file', kind: 'document' }],
+    update_file_document_route: [{ field: 'file', kind: 'document' }],
+    post_agent_avatar_route: [{ field: 'avatar_file', kind: 'image' }],
+    post_agent_hold_audio_route: [{ field: 'hold_audio_file', kind: 'audio', allowed_media_types: ['audio/mpeg', 'audio/wav'], max_bytes: 40_000_000 }],
+    upload_file_route: [{ field: 'file', kind: ['image', 'document'], allowed_media_types: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'text/csv'] }],
+  };
   for (const [id, row] of Object.entries(policy.operations)) {
-    if (!['create_file_document_route', 'update_file_document_route'].includes(id) && row.file_bindings !== undefined) refuse('unreviewed file binding', id);
+    requireEqual(row.file_bindings, fileBindings[id], `reviewed file binding ${id}`);
   }
   requireEqual(policy.operations.create_file_document_route.timeout, 'long', 'create-file long timeout');
   requireEqual(policy.milestones, [{ number: 1, proposed_version: '0.6.0', version: null }, ...[7, 8, 9, 10].map(number => ({ number, version: null }))], 'unpublished milestones');
@@ -619,7 +626,7 @@ export function renderCoverage(rawPolicy, rosters) {
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',
     'Provider constraints (including enums, required fields, maps and open objects) are preserved. Only synthesized path/query records are closed. Forbidden aliases are exact anchored own-property checks described in the compatibility overlay, separate from discovery search aliases. Enum errors refer to the 2026-11-08 snapshot and recommend a reviewed catalogue refresh.', '',
-    'Document uploads bind only multipart field `file` as a document. File requiredness is separate from scalar multipart fields; create-file uses the existing long request timeout category. Document uploads use document MIME types with application/octet-stream fallback, regular-file and descriptor identity checks, and the runtime buffer size limit. Provider format and account limits still apply. The legacy audio MIME fallback is unchanged.', '',
+    'File uploads bind only reviewed multipart fields and image, audio or document kinds. Avatar images use PNG, JPEG, GIF or WebP with the runtime buffer limit; the spec gives no avatar size limit. Hold audio accepts MP3 or WAV up to 40 MB; the provider also limits duration to 180 seconds. Conversation uploads accept images, PDFs or text and return a file ID for use in the conversation, not an audio attachment. File requiredness is separate from scalar multipart fields; create-file uses the existing long request timeout category. Document uploads use document MIME types with application/octet-stream fallback, regular-file and descriptor identity checks, and the runtime buffer size limit. Provider format and account limits still apply. The legacy audio MIME fallback is unchanged.', '',
     'Saved Tests can spend credits and invoke real integrations. No implicit mocks, retries, polling, attachment merges or cleanup are authorized. Knowledge retrieval can spend credits but creates no conversation. Host permission bands determine authority; these annotations are not a host rating.', '',
     'Ajv and ajv-formats are direct dependencies so the validator interprets the retained schema graph directly with strict, non-mutating validation and full standard formats; zoneinfo uses Intl. They are existing locked dependencies promoted to direct dependencies, not a claim that Zod cannot represent unions or recursion.', '',
     '## Exclusions', '',

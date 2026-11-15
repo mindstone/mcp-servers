@@ -3561,12 +3561,17 @@
     "get_agent_summaries_route": {
       "method": "GET",
       "path": "/v1/convai/agents/summaries",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Returns summaries for the specified agent IDs without changing agents.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
@@ -3575,7 +3580,8 @@
       },
       "replacements": [],
       "follow_ups": [],
-      "reason": "Its name is easily mistaken for the tests-family summaries read; revisit when discovery can disambiguate similar names."
+      "effect_note": "Returns summaries for the specified agent IDs without changing agents.",
+      "discovery_summary": "Get agent summaries for required query_params.agent_ids (agent IDs, not test IDs): a map keyed by agent ID with per-agent success data (ID, name, access information and tags) or failure details."
     },
     "get_agent_test_folder_route": {
       "method": "GET",
@@ -6839,36 +6845,73 @@
     "post_agent_avatar_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/avatar",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Sets the image displayed as the agent widget avatar, replacing the existing avatar if present.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Sets the image displayed as the agent widget avatar, replacing the existing avatar if present.",
+      "discovery_summary": "Set the widget avatar for path_params.agent_id from files field avatar_file; replaces the existing avatar.",
+      "follow_ups": [
+        "get_agent_widget_route"
+      ],
+      "file_bindings": [
+        {
+          "field": "avatar_file",
+          "kind": "image"
+        }
+      ]
     },
     "post_agent_hold_audio_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/hold-audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Sets custom hold audio for callers waiting in the concurrency queue, replacing any previously uploaded clip. MP3 or WAV only, maximum 40 MB and 180 seconds; duration is checked by the provider.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Sets custom hold audio for callers waiting in the concurrency queue, replacing any previously uploaded clip. MP3 or WAV only, maximum 40 MB and 180 seconds; duration is checked by the provider.",
+      "discovery_summary": "Set hold audio for path_params.agent_id from files field hold_audio_file; replaces the previous clip.",
+      "follow_ups": [
+        "get_agent_route"
+      ],
+      "file_bindings": [
+        {
+          "field": "hold_audio_file",
+          "kind": "audio",
+          "allowed_media_types": [
+            "audio/mpeg",
+            "audio/wav"
+          ],
+          "max_bytes": 40000000
+        }
+      ]
     },
     "post_conversation_feedback_route": {
       "method": "POST",
@@ -10573,19 +10616,49 @@
     "upload_file_route": {
       "method": "POST",
       "path": "/v1/convai/conversations/{conversation_id}/files",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Uploads an image, PDF or text file for a conversation. The provider returns a unique file ID that can be used to reference the file in that conversation; this does not upload audio.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Uploads an image, PDF or text file for a conversation. The provider returns a unique file ID that can be used to reference the file in that conversation; this does not upload audio.",
+      "discovery_summary": "Upload an image, PDF or text file for path_params.conversation_id from files field file; returns a file ID for referencing in the conversation.",
+      "follow_ups": [
+        "get_conversation_history_route"
+      ],
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": [
+            "image",
+            "document"
+          ],
+          "allowed_media_types": [
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+            "application/pdf",
+            "text/plain",
+            "text/markdown",
+            "text/html",
+            "text/csv"
+          ]
+        }
+      ]
     },
     "upload_song": {
       "method": "POST",

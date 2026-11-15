@@ -307,6 +307,17 @@
     },
     "method": "GET"
   },
+  "get_agent_summaries_route": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
   "get_agent_test_folder_route": {
     "profile": "read",
     "tool": "elevenlabs_read_resource",
@@ -1407,6 +1418,28 @@
     },
     "tool": "elevenlabs_read_resource"
   },
+  "post_agent_hold_audio_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "post_agent_avatar_route": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
   "post_conversation_feedback_route": {
     "method": "POST",
     "profile": "change",
@@ -1868,5 +1901,16 @@
       "openWorldHint": true
     },
     "method": "DELETE"
+  },
+  "upload_file_route": {
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
   }
 }

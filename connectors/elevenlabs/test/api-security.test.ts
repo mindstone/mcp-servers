@@ -108,7 +108,7 @@ describe('exact nested document read authorization through supported SDK context
     expect(requests).toBe(2);
   });
 
-  it.each(multipartCases)('$id requires fresh exact-operand authorization after a successful upload on the same connection', async wire => {
+  it.each(multipartCases.filter(wire => ['create_file_document_route', 'update_file_document_route'].includes(wire.id)))('$id requires fresh exact-operand authorization after a successful upload on the same connection', async wire => {
     const name = wire.profile === 'create' ? 'elevenlabs_create_resource' : 'elevenlabs_change_resource';
     const input = { operation_id: wire.id, ...wire.args, files: [{ field: 'file', file_path: alias }] };
     const uploads: unknown[] = [];

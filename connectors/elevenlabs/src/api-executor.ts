@@ -9,7 +9,7 @@ import { writeWorkspaceArtifact } from './tools/path-safety.js';
 import { ElevenLabsError, LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, getErrorResolution } from './types.js';
 import { unwrapUntrusted, wrapUntrusted } from './untrusted-content.js';
 import type { FileReadContext } from './file-read-context.js';
-import { documentMimeTypeForFileName, readSandboxedFile } from './tools/file-input.js';
+import { fileMimeTypeForFileName, readSandboxedFile } from './tools/file-input.js';
 
 const multipartScalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 
@@ -125,8 +125,9 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, secrets:
         'Ask the host to authorize the exact files[index].file_path operand and supply valid files/readMode metadata.');
     }
     for (const [index, operand] of (input.files ?? []).entries()) {
-      const file = readSandboxedFile(operand.file_path, reads, ['files', index, 'file_path'], 'document');
-      form.append(operand.field, new Blob([new Uint8Array(file.buffer)], { type: documentMimeTypeForFileName(file.fileName) }), file.fileName);
+      const binding = op.request.files!.find(file => file.field === operand.field)!;
+      const file = readSandboxedFile(operand.file_path, reads, ['files', index, 'file_path'], binding.kind, binding);
+      form.append(operand.field, new Blob([new Uint8Array(file.buffer)], { type: fileMimeTypeForFileName(file.fileName, binding.kind) }), file.fileName);
     }
     body = form;
   }

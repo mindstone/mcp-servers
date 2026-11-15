@@ -13,9 +13,11 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Agent summaries, widget avatar and custom hold-audio uploads, plus image, PDF and text uploads into conversations. Replacing agent media uses the change tool; the rest of the agent stays as it was.
+
 - Workspace secrets, environment variables and MCP server management through the existing API tools. Approval changes are explicit; removals use the delete tool.
 
-- 26 conversation and triage operations: find references, read summaries and transcripts, save recordings, manage tags and review tickets. Merging keeps source tickets marked as merged. Conversation file upload remains planned until its image, PDF and text types are supported together.
+- 26 conversation and triage operations: find references, read summaries and transcripts, save recordings, manage tags and review tickets. Merging keeps source tickets marked as merged.
 
 - 14 knowledge-base operations for crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl cancellation also deletes its documents and folders; it is not an undo button.
 
@@ -25,7 +27,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
-- Agent summaries remain planned because their name is easily mistaken for saved-Test summaries. Saving an agent draft now uses the change tool and warns that it can replace your unpublished draft. Merge, acceptance and rebase guidance explains when callers hear the result immediately.
+- Saving an agent draft now uses the change tool and warns that it can replace your unpublished draft. Merge, acceptance and rebase guidance explains when callers hear the result immediately.
 
 - Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
 - API tool guidance now requires discovering each operation's contract before its first call unless exact parameter names and locations are already supplied, including for receipt follow-ups.

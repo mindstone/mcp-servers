@@ -32,6 +32,7 @@ export const profileOperationIds = {
     "get_agent_response_test_route",
     "get_agent_response_tests_summaries_route",
     "get_agent_route",
+    "get_agent_summaries_route",
     "get_agent_test_folder_route",
     "get_agent_topics_route",
     "get_agent_widget_route",
@@ -127,7 +128,8 @@ export const profileOperationIds = {
     "create_url_document_route",
     "duplicate_agent_route",
     "get_or_create_rag_indexes",
-    "rag_index_status"
+    "rag_index_status",
+    "upload_file_route"
   ],
   "change": [
     "accept_merge_proposal_route",
@@ -141,6 +143,8 @@ export const profileOperationIds = {
     "merge_agent_conversation_tickets_route",
     "merge_branch_into_target",
     "patch_agent_settings_route",
+    "post_agent_avatar_route",
+    "post_agent_hold_audio_route",
     "post_conversation_feedback_route",
     "post_knowledge_base_bulk_move_route",
     "post_knowledge_base_move_route",

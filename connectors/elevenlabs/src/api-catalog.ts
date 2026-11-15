@@ -49,7 +49,7 @@ const text = z.string().min(1);
 const schemaValue = z.custom<JsonSchema>(value => typeof value === 'boolean' || isRecord(value));
 export const effectsSchema = z.object({ readOnlyHint: z.boolean(), destructiveHint: z.boolean(), idempotentHint: z.boolean(), openWorldHint: z.boolean() }).strict();
 const parameterRecord = z.object({ type: z.literal('object'), properties: dictionary(schemaValue), required: z.array(text), additionalProperties: z.literal(false) }).strict();
-const fileBinding = z.object({ field: text, kind: z.literal('document'), required: z.boolean(), schema: schemaValue }).strict();
+const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), required: z.boolean(), schema: schemaValue }).strict();
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
 export const binaryResponseMedia = ['audio/mpeg'] as const;
 export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', ...binaryResponseMedia]);
