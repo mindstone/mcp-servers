@@ -1318,5 +1318,291 @@
       "openWorldHint": true
     },
     "method": "POST"
+  },
+  "assign_conversation_tags_route": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "cancel_file_upload_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_delete_resource"
+  },
+  "delete_conversation_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_delete_resource"
+  },
+  "get_conversation_audio_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_conversation_histories_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_conversation_history_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_conversation_sip_messages": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_conversation_summary_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "post_conversation_feedback_route": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "resolve_conversation_reference_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "run_conversation_analysis": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "run_conversation_evaluations": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "smart_search_conversation_messages_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "text_search_conversation_messages_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "unassign_conversation_tag_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_delete_resource"
+  },
+  "add_ticket_comment_route": {
+    "method": "POST",
+    "profile": "create",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_create_resource"
+  },
+  "add_turn_comment_route": {
+    "method": "POST",
+    "profile": "create",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_create_resource"
+  },
+  "create_agent_conversation_ticket_route": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "delete_agent_conversation_ticket_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_delete_resource"
+  },
+  "get_agent_conversation_ticket_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "list_workspace_conversation_tickets_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "merge_agent_conversation_tickets_route": {
+    "method": "POST",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "update_agent_conversation_ticket_route": {
+    "method": "PATCH",
+    "profile": "change",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_change_resource"
+  },
+  "create_manual_agent_ticket_route": {
+    "method": "POST",
+    "profile": "create",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_create_resource"
+  },
+  "list_agent_conversation_tickets_route": {
+    "method": "GET",
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_read_resource"
+  },
+  "delete_agent_hold_audio_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "tool": "elevenlabs_delete_resource"
   }
 }

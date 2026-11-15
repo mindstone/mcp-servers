@@ -1,3 +1,4 @@
+import conversationCases from './api-conversations-wire-cases.json' with { type: 'json' };
 import knowledgeBaseCases from './api-knowledge-base-wire-cases.json' with { type: 'json' };
 import lifecycleCases from './api-agent-lifecycle-wire-cases.json' with { type: 'json' };
 import jsonFamilyCases from './api-json-family-wire-cases.json' with { type: 'json' };
@@ -13,7 +14,7 @@ export interface WireCase {
   query: [string, string][];
   body?: unknown;
   status: number;
-  media: 'application/json' | 'text/html' | null;
+  media: 'application/json' | 'text/html' | 'audio/mpeg' | null;
   response: unknown;
 }
 
@@ -29,6 +30,7 @@ export const apiWireCases: WireCase[] = [
   ...jsonFamilyCases as WireCase[],
   ...lifecycleCases as WireCase[],
   ...knowledgeBaseCases as WireCase[],
+  ...conversationCases as WireCase[],
   {
     id: 'get_agents_route', profile: 'read', args: { query_params: { search: 'Acme & guide', page_size: 2, archived: false, tags: ['help desk', 'a&b'], cursor: null } },
     method: 'GET', path: '/v1/convai/agents', query: [['search', 'Acme & guide'], ['page_size', '2'], ['archived', 'false'], ['tags', 'help desk'], ['tags', 'a&b']],

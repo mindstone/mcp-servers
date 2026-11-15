@@ -160,7 +160,9 @@
     "tags": {"read": "list_conversation_tags_route"},
     "test-invocations": {"read": "list_test_invocations_route", "tests": "get_test_invocation_route"},
     "tools": {"read": "get_tools_route"},
-    "users": {"read": "get_conversation_users_route"}
+    "users": {"read": "get_conversation_users_route"},
+    "conversations": {"read": "get_conversation_histories_route"},
+    "triage-tickets": {"read": "list_workspace_conversation_tickets_route"}
   },
   "operations": {
     "accept_merge_proposal_route": {
@@ -434,19 +436,22 @@
     "add_ticket_comment_route": {
       "method": "POST",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}/comments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Append a comment discussing how to resolve the ticket. Requires viewer access to the ticket's agent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_conversation_ticket_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50
     },
     "add_tool_route": {
       "method": "POST",
@@ -482,19 +487,22 @@
     "add_turn_comment_route": {
       "method": "POST",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}/turn-comments",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Append a turn-level comment to a ticket. Requires viewer access to the ticket's agent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_conversation_ticket_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50
     },
     "add_voice": {
       "method": "POST",
@@ -556,19 +564,23 @@
     "assign_conversation_tags_route": {
       "method": "POST",
       "path": "/v1/convai/conversations/{conversation_id}/tags",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Assigns tags to the conversation; already assigned tags are ignored.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Assigns tags to the conversation; already assigned tags are ignored."
     },
     "audio_isolation": {
       "method": "POST",
@@ -698,19 +710,23 @@
     "cancel_file_upload_route": {
       "method": "DELETE",
       "path": "/v1/convai/conversations/{conversation_id}/files/{file_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes an unused uploaded file from the conversation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Removes an unused uploaded file from the conversation."
     },
     "cancel_test_invocation_route": {
       "method": "POST",
@@ -894,19 +910,23 @@
     "create_agent_conversation_ticket_route": {
       "method": "POST",
       "path": "/v1/convai/triage-tickets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Creates a conversation ticket or adds comments to its existing open ticket and may raise its priority; title is ignored for an existing open ticket.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_workspace_conversation_tickets_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "effect_note": "Creates a conversation ticket or adds comments to its existing open ticket and may raise its priority; title is ignored for an existing open ticket."
     },
     "create_agent_deployment_route": {
       "method": "POST",
@@ -1445,19 +1465,22 @@
     "create_manual_agent_ticket_route": {
       "method": "POST",
       "path": "/v1/convai/agents/{agent_id}/triage-tickets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Manually raise a follow-up ticket against an agent, not tied to any conversation (for example a task like 'add the KB about X'). Without a title, one is derived from the comment. Requires viewer access to the agent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_agent_conversation_tickets_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50
     },
     "create_mcp_server_route": {
       "method": "POST",
@@ -1875,19 +1898,23 @@
     "delete_agent_conversation_ticket_route": {
       "method": "DELETE",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the ticket; restricted to its creator or a workspace admin.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_workspace_conversation_tickets_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "effect_note": "Deletes the ticket; restricted to its creator or a workspace admin."
     },
     "delete_agent_draft_route": {
       "method": "DELETE",
@@ -1917,19 +1944,23 @@
     "delete_agent_hold_audio_route": {
       "method": "DELETE",
       "path": "/v1/convai/agents/{agent_id}/hold-audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes custom hold audio; queued callers hear the default hold tone again.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Deletes custom hold audio; queued callers hear the default hold tone again."
     },
     "delete_agent_route": {
       "method": "DELETE",
@@ -2132,19 +2163,23 @@
     "delete_conversation_route": {
       "method": "DELETE",
       "path": "/v1/convai/conversations/{conversation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the conversation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_histories_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Deletes the conversation."
     },
     "delete_conversation_tag_route": {
       "method": "DELETE",
@@ -3266,19 +3301,23 @@
     "get_agent_conversation_ticket_route": {
       "method": "GET",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get an agent conversation ticket by ID.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "discovery_summary": "Read one triage ticket by path_params.agentqa_ticket_id; returns its details and comments."
     },
     "get_agent_knowledge_base_size": {
       "method": "GET",
@@ -3871,12 +3910,12 @@
     "get_conversation_audio_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/{conversation_id}/audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get the audio recording of a particular conversation",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -3887,7 +3926,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/conversations.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Download one conversation audio recording using path_params.conversation_id to a local workspace artifact."
     },
     "get_conversation_group_route": {
       "method": "GET",
@@ -3909,12 +3952,12 @@
     "get_conversation_histories_route": {
       "method": "GET",
       "path": "/v1/convai/conversations",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get all conversations of agents that user owns. With option to restrict to a specific agent.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -3925,17 +3968,22 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/conversations.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "List conversations across owned agents, optionally filtered by query_params.agent_id; returns a page of conversation summaries, not one full transcript.",
+      "effect_note": "The search query parameter is deprecated; use the text-search or smart-search operation instead."
     },
     "get_conversation_history_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/{conversation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get the details of a particular conversation",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -3946,7 +3994,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/conversations.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Read one full conversation with transcript and analysis using path_params.conversation_id; query_params.format selects JSON or an OpenTelemetry trace."
     },
     "get_conversation_signed_link": {
       "method": "GET",
@@ -3968,36 +4020,44 @@
     "get_conversation_sip_messages": {
       "method": "GET",
       "path": "/v1/convai/conversations/{conversation_id}/sip-messages",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get SIP messages associated with a conversation's phone call",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Read SIP messages for a conversation phone call using path_params.conversation_id, with cursor pagination."
     },
     "get_conversation_summary_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/{conversation_id}/summary",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Get a lightweight summary of a conversation: its title, the generated transcript summary, whether the call was successful, and — only when the conversation is short — the plain chat messages. Tool calls, tool results, and contextual updates are omitted so the response stays small. Use this instead of the full conversation endpoint when you only need the gist (e.g. an agent reading many conversations); use GET /v1/convai/conversations/{conversation_id} when you need the full transcript with tool calls and contextual updates.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Read one lightweight conversation summary using path_params.conversation_id, with title, transcript summary and simplified messages; query_params.max_messages limits messages."
     },
     "get_conversation_tag_route": {
       "method": "GET",
@@ -5910,19 +5970,23 @@
     "list_agent_conversation_tickets_route": {
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/triage-tickets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "agents",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List an agent's conversation triage tickets, ordered by most recently created first unless sorted by priority. These are tickets about the agent's own performance on a conversation (for triage with Architect), not tickets an agent opens for end users.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "discovery_summary": "List performance triage tickets for one agent using path_params.agent_id, optionally filtered by query_params.conversation_id."
     },
     "list_agent_deployments_route": {
       "method": "GET",
@@ -6476,36 +6540,44 @@
     "list_workspace_conversation_tickets_route": {
       "method": "GET",
       "path": "/v1/convai/triage-tickets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "List conversation triage tickets across every agent in the workspace, ordered by most recently created first. Use this to build a workspace-wide view (for example, tickets assigned to the caller). Supports the same filters, sorting and search as the per-agent endpoint. Tickets for agents the caller cannot access are omitted.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "discovery_summary": "List triage tickets across accessible workspace agents, optionally filtered by query_params.agent_id; no agent path parameter."
     },
     "merge_agent_conversation_tickets_route": {
       "method": "POST",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}/merge",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Moves conversations into the target ticket and raises its priority; source tickets are retained with status 'merged', rather than deleted.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_conversation_ticket_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "effect_note": "Moves conversations into the target ticket and raises its priority; source tickets are retained with status 'merged', rather than deleted."
     },
     "merge_branch_into_target": {
       "method": "POST",
@@ -6676,12 +6748,12 @@
     "post_conversation_feedback_route": {
       "method": "POST",
       "path": "/v1/convai/conversations/{conversation_id}/feedback",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Sets conversation feedback, potentially replacing existing feedback.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -6692,7 +6764,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/conversations.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Sets conversation feedback, potentially replacing existing feedback."
     },
     "post_knowledge_base_bulk_delete_route": {
       "method": "POST",
@@ -7354,19 +7430,23 @@
     "resolve_conversation_reference_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/resolve",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Resolve a conversation URL (a Slack message URL or a Zendesk ticket URL) to the deterministic conversation ID for the given agent, then confirm the conversation exists.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Resolve query_params.reference (a Slack message or Zendesk ticket URL) for query_params.agent_id; returns the existing conversation and its conversation_id."
     },
     "resubmit_tests_route": {
       "method": "POST",
@@ -7449,36 +7529,44 @@
     "run_conversation_analysis": {
       "method": "POST",
       "path": "/v1/convai/conversations/{conversation_id}/analysis/run",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Runs stored conversation analysis using the agent’s current criteria and collection settings; may replace previous results and consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Runs stored conversation analysis using the agent’s current criteria and collection settings; may replace previous results and consume credits."
     },
     "run_conversation_evaluations": {
       "method": "POST",
       "path": "/v1/convai/conversations/{conversation_id}/analysis/evaluations/run",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Reruns one stored evaluation, potentially replacing its result; may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Reruns one stored evaluation, potentially replacing its result; may consume credits."
     },
     "run_conversation_simulation_route": {
       "method": "POST",
@@ -7684,19 +7772,23 @@
     "smart_search_conversation_messages_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/messages/smart-search",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Search conversation transcripts by semantic similarity to surface relevant messages based on meaning and intent, rather than exact keyword matches",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Search transcript messages by semantic similarity using query_params.text_query, optionally filtered by query_params.agent_id and branch_id."
     },
     "smb_activate_customer_facing_agent": {
       "method": "POST",
@@ -9317,19 +9409,23 @@
     "text_search_conversation_messages_route": {
       "method": "GET",
       "path": "/v1/convai/conversations/messages/text-search",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Search through conversation transcript messages by full-text and fuzzy search",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "discovery_summary": "Search transcript messages by full-text and fuzzy matching using query_params.text_query, with optional agent, conversation and time filters."
     },
     "text_to_dialogue": {
       "method": "POST",
@@ -9588,19 +9684,23 @@
     "unassign_conversation_tag_route": {
       "method": "DELETE",
       "path": "/v1/convai/conversations/{conversation_id}/tags/{tag_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "conversations",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes a tag assignment from the conversation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_history_route"],
+      "search_aliases": ["conversation"],
+      "rank": 50,
+      "effect_note": "Removes a tag assignment from the conversation."
     },
     "unshare_resource_endpoint": {
       "method": "POST",
@@ -9622,19 +9722,23 @@
     "update_agent_conversation_ticket_route": {
       "method": "PATCH",
       "path": "/v1/convai/triage-tickets/{agentqa_ticket_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 7,
       "family": "triage-tickets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Updates ticket fields; explicit null clears assignee or priority. Omitted fields remain unchanged.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_agent_conversation_ticket_route"],
+      "search_aliases": ["conversation", "triage"],
+      "rank": 50,
+      "effect_note": "Updates ticket fields; explicit null clears assignee or priority. Omitted fields remain unchanged."
     },
     "update_agent_response_test_route": {
       "method": "PUT",

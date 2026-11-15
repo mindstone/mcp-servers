@@ -1,8 +1,10 @@
 import { getApiKey } from './auth.js';
 import { z } from 'zod';
-import { ApiBoundaryError, getOperation, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
+import { ApiBoundaryError, getOperation, isBinaryResponseMedia, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
 import { createSuccessReceipt, validateRequest } from './api-validation.js';
-import { elevenLabsFetch } from './client.js';
+import { elevenLabsFetch, extensionFromContentType } from './client.js';
+import { randomUUID } from 'node:crypto';
+import { writeWorkspaceArtifact } from './tools/path-safety.js';
 import { ElevenLabsError, LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, getErrorResolution } from './types.js';
 import { unwrapUntrusted, wrapUntrusted } from './untrusted-content.js';
 import type { FileReadContext } from './file-read-context.js';
@@ -142,13 +144,20 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
   const descriptor = empty ?? declared.find(candidate => candidate.media_type === media);
   if (!descriptor) throw await responseFailure(op, 'The provider returned an undeclared success status or media type.');
   let data: unknown = null;
+  let binary: Buffer | undefined;
   if (descriptor.media_type !== null) {
     try {
-      data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
+      if (isBinaryResponseMedia(descriptor.media_type)) binary = Buffer.from(await response.arrayBuffer());
+      else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
     } catch (error) {
       if (signal.aborted || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) throw await timeoutFailure(op);
       throw await responseFailure(op, 'The provider response could not be read in its declared format.');
     }
+  }
+  if (binary !== undefined) {
+    // Never use provider headers, filenames or IDs in a filesystem path or receipt metadata.
+    const filePath = writeWorkspaceArtifact(`elevenlabs_${randomUUID()}.${extensionFromContentType(descriptor.media_type)}`, binary);
+    data = { file_path: filePath, size_bytes: binary.length, media_type: descriptor.media_type };
   }
   try {
     return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, redactParsed(data, key));

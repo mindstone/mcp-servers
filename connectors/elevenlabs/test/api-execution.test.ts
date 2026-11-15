@@ -133,11 +133,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 118 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(118);
+  it('has independent cases for every admission, with exactly 144 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(144);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(120);
+    expect(new Set(expectedIds).size).toBe(146);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'update_file_document_route']);
@@ -163,7 +163,15 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(result.json).toMatchObject({ ok: true, operation_id: wire.id, status: wire.status, content_type: wire.media, response_contract: 'matched', effects: {
       readOnlyHint: wire.profile === 'read' || wire.profile === 'query_knowledge', destructiveHint: ['change', 'delete', 'tests'].includes(wire.profile), idempotentHint: wire.profile === 'read', openWorldHint: true,
     }, message: 'The provider returned a success response.' });
-    if (wire.media === null) expect(result.json.data).toBeNull();
+    if (wire.media === 'audio/mpeg') {
+      expect(result.json.data).toBeNull();
+      const artifact = result.json.artifact as { file_path: string; size_bytes: number; media_type: string };
+      expect(artifact).toEqual({ file_path: expect.any(String), size_bytes: Buffer.byteLength(String(wire.response)), media_type: wire.media });
+      expect(path.dirname(artifact.file_path)).toBe(workspace);
+      expect(fs.readdirSync(workspace)).toEqual([path.basename(artifact.file_path)]);
+      expect(fs.readFileSync(artifact.file_path).toString()).toBe(wire.response);
+      expect(result.text).not.toContain(wire.response);
+    } else if (wire.media === null) expect(result.json.data).toBeNull();
     else {
       expect(result.json.data).toEqual(expect.stringMatching(new RegExp(`^<untrusted-content source="elevenlabs:api:${wire.id}">`)));
       const data = unwrapUntrusted(String(result.json.data));
@@ -182,7 +190,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(requests).toHaveLength(0);
   });
 
-  it.each(profiles.flatMap(profile => ['not_an_operation', 'assign_conversation_tags_route', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
+  it.each(profiles.flatMap(profile => ['not_an_operation', 'post_agent_avatar_route', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
     const getKey = vi.spyOn(auth, 'getApiKey');
     const readFile = vi.spyOn(fileInput, 'readSandboxedFile');
     const result = await call(profile, { operation_id: id });

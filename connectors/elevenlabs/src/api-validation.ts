@@ -4,7 +4,7 @@ import formats = require('ajv-formats');
 import { z } from 'zod';
 import { parseApiResponse } from './api-schemas.js';
 import {
-  ApiBoundaryError, effectsSchema, enumGuidance, getOperation, inputIssues, isRecord, loadApiCatalog, mapSchemaChildren, operationReference, paginationFieldsFor,
+  ApiBoundaryError, binaryResponseMedia, effectsSchema, enumGuidance, getOperation, inputIssues, isBinaryResponseMedia, isRecord, loadApiCatalog, mapSchemaChildren, operationReference, paginationFieldsFor, responseMediaSchema,
   type ApiCatalog, type ApiOperation, type ApiProfile, type ApiResponseDescriptor,
   type JsonSchema, type ValidationIssue,
 } from './api-catalog.js';
@@ -238,9 +238,10 @@ function nextStepFor(followUps: readonly ApiOperation[], source?: ApiOperation):
   return `Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: ${followUps.map(op => operationReference(op, source)).join(', ')}; use IDs from data or the request where needed, then check the result.`;
 }
 export type ResponseContract = z.infer<typeof responseContractSchema>;
+const artifactSchema = z.object({ file_path: z.string().min(1), size_bytes: z.number().int().nonnegative().safe(), media_type: z.enum(binaryResponseMedia) }).strict();
 const receiptEnvelopeSchema = z.object({
   ok: z.literal(true), operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), status: z.number().int().min(200).max(299),
-  content_type: z.enum(['application/json', 'text/plain', 'text/html']).nullable(), data: envelopeText.nullable(),
+  content_type: responseMediaSchema.nullable(), data: envelopeText.nullable(), artifact: artifactSchema.optional(),
   response_contract: responseContractSchema, has_more: z.boolean().optional(), next: z.literal(NEXT_PAGE_INSTRUCTION).optional(),
   follow_up_operations: z.array(z.string().regex(/^[a-zA-Z0-9_]+$/)).optional(), next_step: z.string().min(1).optional(), effects: effectsSchema, message: z.literal('The provider returned a success response.'),
 }).strict();
@@ -250,7 +251,9 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     for (const [path, text] of [['data', value.data], ['response_contract', typeof value.response_contract === 'object' ? value.response_contract.mismatch : null]] as const) {
       if (text !== null && wrapUntrusted(text, source) !== text) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message: 'Expected one intact operation envelope.' });
     }
-    if ((value.content_type === null) !== (value.data === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['data'], message: 'Empty responses require null data.' });
+    const binary = isBinaryResponseMedia(value.content_type);
+    if ((value.content_type === null || binary) !== (value.data === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['data'], message: 'Empty and binary responses require null data.' });
+    if (binary !== (value.artifact !== undefined) || (value.artifact && value.artifact.media_type !== value.content_type)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['artifact'], message: 'Binary responses require an artifact of the declared media type.' });
     if (value.has_more === true && value.next === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next'], message: 'A continuing page requires the static next instruction.' });
     const followUps = value.follow_up_operations ?? [];
     if (JSON.stringify(followUps) !== JSON.stringify(followUpOperations.map(op => op.operation_id))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['follow_up_operations'], message: 'The follow-up operations must match the catalogue.' });
@@ -262,12 +265,14 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const op = await getOperation(operationId);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media);
-  const response_contract = validator.validateResponse(op, status, descriptor.media_type, parsedData);
-  const pagination = projectPagination(op, parsedData);
-  const data = descriptor.media_type === null ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
+  const binary = isBinaryResponseMedia(descriptor.media_type);
+  const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
+  const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData);
+  const pagination = binary ? {} : projectPagination(op, parsedData);
+  const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: descriptor.media_type,
-    data, response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
+    data, ...(artifact ? { artifact } : {}), response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
 }
 
 /** Connector-authored examples, checked against the same request refinement before discovery. */

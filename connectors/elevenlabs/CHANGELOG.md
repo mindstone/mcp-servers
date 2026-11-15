@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- 26 conversation and triage operations: find references, read summaries and transcripts, save recordings, manage tags and review tickets. Merging keeps source tickets marked as merged. Conversation file upload remains planned until its image, PDF and text types are supported together.
+
 - 14 knowledge-base operations for crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl cancellation also deletes its documents and folders; it is not an undo button.
 
 - 32 agent lifecycle operations for branches, drafts, versions, deployments, merge proposals and procedures, plus agent reads. Preview before merging; previews are reads, while merges, rebases and traffic changes stay behind the change tool.

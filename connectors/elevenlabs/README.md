@@ -139,13 +139,13 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven API tools cover **106 admitted operations in source** (40 in the published 0.6.0 release) from the
+The seven API tools cover **146 admitted operations in source** (40 in the published 0.6.0 release) from the
 2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
 this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 106 admitted, 300 planned and 109 excluded, with reasons and
+515 operations: 146 admitted, 260 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
@@ -160,13 +160,24 @@ procedure compiler is a dry-run that persists nothing; saving or publishing alre
 compiles procedures. Branch lists accept a result limit; deployment history accepts
 page and page_size. Inspect returned metadata; pagination is caller-managed.
 
+Conversation coverage includes reference resolution, full transcripts, lightweight
+summaries, transcript search, SIP messages, tags and triage tickets across the workspace
+or one agent. Audio recordings are saved inside the workspace; receipts contain the
+local path, byte length and declared media type, with no audio bytes in model text.
+Analysis and evaluation reruns can replace stored results and may consume credits.
+Ticket creation for a conversation can update an existing open ticket, so it uses the
+change tool. Ticket merging keeps source tickets marked as merged. Unused-file
+removal, tag unassignment and custom hold-audio removal use the delete tool.
+Conversation file upload remains planned: the snapshot accepts images, PDFs and text,
+and the existing file kinds do not yet cover that full set.
+
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 50 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 18 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 23 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 11 deletes | Destructive |
+| `elevenlabs_read_resource` | 68 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 23 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 32 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 19 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 

@@ -11,7 +11,7 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(120);
+    expect(catalog.operations).toHaveLength(146);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
@@ -98,7 +98,7 @@ describe('discovery', () => {
     expect(second).toMatchObject({ operations: [{ operation_id: 'get_tool_dependent_agents_route' }, { operation_id: 'get_tool_route' }], next_cursor: '4', total: 6 });
     expect(await discoverOperations({ query: 'webhook', family: 'tools', limit: 2 })).toEqual(first);
     expect(await discoverOperations({ query: 'webhook', family: 'tools', cursor: '6' })).toMatchObject({ operations: [], next_cursor: null, total: 6 });
-    expect(await discoverOperations({ query: 'no-match-token' })).toMatchObject({ operations: [], total: 0 });
+    expect(await discoverOperations({ query: 'zzzzzzzz_unfindable' })).toMatchObject({ operations: [], total: 0 });
   });
 
   it.each([{ limit: 0 }, { limit: 26 }, { limit: 1.5 }, { limit: '2' }, { cursor: '-1' }, { cursor: '1e2' }, { cursor: '9007199254740992' }, { family: 'unknown' }, { extra: true }, { definition: 'LLM' }])('rejects invalid discovery input %j', async input => {
@@ -112,7 +112,7 @@ describe('discovery', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiBoundaryError);
       const failure = error as ApiBoundaryError;
-      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, environments, llm-usage, settings, tags, users.' });
+      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, conversations, environments, llm-usage, settings, tags, triage-tickets, users.' });
       expect(failure.resolution).toContain('elevenlabs_discover_api({query:"agents"})');
       expect(failure.resolution).toContain("previous discovery result's next_cursor");
       expect(failure.resolution).toContain('Replace create_agent_route in both examples with the operation_id you intend to use.');

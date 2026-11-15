@@ -90,7 +90,10 @@ const mutationCases = [
   { name: 'query serialization', hash: '9a117cbab072bfa80f2245b7eeeae6521e8349cf9c02b5d7c1b179c1aca46e67', expected: 'unsupported parameter serialization', mutate(spec: FixtureSpec) {
     operation(spec, LIST_PATH, 'get').parameters![1].explode = false;
   } },
-  { name: 'success media', hash: 'c58c63c4f15231709fbbef577a8227466e5730089359496435561d9b22f835e7', expected: 'unsupported success media', mutate(spec: FixtureSpec) {
+  { name: 'undeclared binary media', hash: '3d4ec22cfe1a9c4b60f8b937e7de0f1675286d70ed9ad5774e59977c58f887c3', expected: 'unsupported success media', mutate(spec: FixtureSpec) {
+    operation(spec, CREATE_PATH, 'post').responses['200'].content = { 'application/octet-stream': {} };
+  } },
+  { name: 'binary success schema', hash: 'c58c63c4f15231709fbbef577a8227466e5730089359496435561d9b22f835e7', expected: 'unsupported binary success schema', mutate(spec: FixtureSpec) {
     operation(spec, CREATE_PATH, 'post').responses['200'].content = { 'audio/mpeg': { schema: { type: 'string' } } };
   } },
   { name: 'page pagination', hash: '1ca4f70df579058bf5a0181ce2e0f368411031b0aab5ce75df62f5cddb56b448', expected: 'unsupported pagination', mutate(spec: FixtureSpec) {
@@ -228,7 +231,7 @@ describe('pinned operation policy and public artifacts', () => {
     });
     const rows = Object.values(policy.operations);
     expect(rows).toHaveLength(515);
-    for (const [status, count] of [['admitted', 120], ['planned', 286], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
+    for (const [status, count] of [['admitted', 146], ['planned', 260], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
     for (const [milestone, count] of [[1, 40], [7, 134], [8, 35], [9, 131], [10, 66]] as const) expect(rows.filter(row => row.milestone === milestone)).toHaveLength(count);
     for (const [group, count] of [['account_and_keys', 9], ['identity_and_seats', 10], ['reception', 75], ['productions', 11], ['engineering', 4]] as const) {
       expect(rows.filter(row => row.exclusion_group === group)).toHaveLength(count);
@@ -241,9 +244,9 @@ describe('pinned operation policy and public artifacts', () => {
     expect(matchesPrefix('/v1/convai/conversations', '/v1/convai/conversation')).toBe(false);
   });
 
-  it('matches the independent 120-operation effects, methods and tools without adding registrations', () => {
-    expect(Object.keys(effectExpectations)).toHaveLength(120);
-    expect(apiCatalog.operations).toHaveLength(120);
+  it('matches the independent 146-operation effects, methods and tools without adding registrations', () => {
+    expect(Object.keys(effectExpectations)).toHaveLength(146);
+    expect(apiCatalog.operations).toHaveLength(146);
     expect(apiCatalog.operations.map(row => row.operation_id)).toEqual(Object.keys(effectExpectations).sort());
     const counts: Record<string, number> = {};
     for (const row of apiCatalog.operations) {
@@ -254,7 +257,7 @@ describe('pinned operation policy and public artifacts', () => {
       if (floors[row.method]) expect(row.profile).toBe(floors[row.method]);
       counts[row.profile] = (counts[row.profile] ?? 0) + 1;
     }
-    expect(counts).toEqual({ read: 57, create: 20, change: 25, delete: 14, tests: 3, query_knowledge: 1 });
+    expect(counts).toEqual({ read: 68, create: 23, change: 32, delete: 19, tests: 3, query_knowledge: 1 });
     expect(apiCatalog.operations.filter(row => row.profile === 'query_knowledge').map(row => row.operation_id)).toEqual(['query_agent_knowledge_base_rag_route']);
     expect(apiCatalog.operations.some(row => ['elevenlabs_run_job', 'elevenlabs_place_call'].includes(row.tool))).toBe(false);
     expect(legacyTools).toHaveLength(32);
@@ -325,7 +328,7 @@ describe('pinned operation policy and public artifacts', () => {
       policy => { policy.operations.get_agents_route.method = 'PUT'; },
       policy => { policy.operations.get_agents_route.existing_coverage.tools = ['@mindstone/mcp-server-elevenlabs:invented']; },
       policy => { policy.operations.redirect_to_mintlify.replacements = ['invented']; },
-      policy => { policy.operations.create_agent_route.follow_ups = ['assign_conversation_tags_route']; },
+      policy => { policy.operations.create_agent_route.follow_ups = ['post_agent_avatar_route']; },
       policy => { policy.operations.create_agent_route.follow_ups = ['invented']; },
       policy => { Object.assign(policy.operations.create_agent_route, { file_bindings: [{ field: 'file', kind: 'document' }] }); },
       policy => { policy.operations.create_file_document_route.timeout = 'standard'; },
@@ -337,14 +340,14 @@ describe('pinned operation policy and public artifacts', () => {
       const policy = structuredClone(policyInput); mutate(policy);
       expect(() => validatePolicy(policy, rosters)).toThrow();
     }
-    const followup = structuredClone(policyInput); followup.operations.create_agent_route.follow_ups = ['assign_conversation_tags_route'];
+    const followup = structuredClone(policyInput); followup.operations.create_agent_route.follow_ups = ['post_agent_avatar_route'];
     expect(() => validatePolicy(followup, rosters)).toThrow('follow_up must be admitted');
   });
 
   it('has deterministic committed outputs and an admitted-only reachable graph', async () => {
     expect(await readFile(resolve(root, 'src/generated/api-catalog.ts'), 'utf8')).toBe(renderCatalog(apiCatalog));
     expect(await readFile(resolve(root, 'API_COVERAGE.md'), 'utf8')).toBe(renderCoverage(policyInput, rosters));
-    expect(Object.keys(apiCatalog.$defs)).toHaveLength(789);
+    expect(Object.keys(apiCatalog.$defs)).toHaveLength(870);
     expect(apiCatalog.source).toEqual(policyInput.source);
     expect(apiCatalog.compatibility_overlay).toEqual(policyInput.compatibility_overlay);
     for (const descriptor of apiCatalog.operations) {
@@ -536,11 +539,11 @@ describe('provided pinned full source', () => {
     const fromJson = compileCatalog(bytes, policyInput, PINNED_SOURCE, rosters);
     const fromGzip = compileCatalog(gzipSync(bytes), policyInput, PINNED_SOURCE, rosters);
     expect(fromJson).toEqual(apiCatalog); expect(fromGzip).toEqual(fromJson);
-    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 120, components: 789, checked: true });
+    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 146, components: 870, checked: true });
     const directory = await mkdtemp(join(tmpdir(), 'elevenlabs-pin-'));
     try {
       const file = join(directory, 'pinned.json'); await writeFile(file, bytes);
-      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 120, components: 789, checked: true });
+      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 146, components: 870, checked: true });
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 

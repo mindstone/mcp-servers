@@ -71,7 +71,7 @@ describe('additional JSON family admission boundaries', () => {
   });
 
   it('rejects missing, planned and mutation retry-check targets in policy and runtime', () => {
-    for (const target of ['invented', 'assign_conversation_tags_route', 'create_conversation_tag_route']) {
+    for (const target of ['invented', 'post_agent_avatar_route', 'create_conversation_tag_route']) {
       const policy = structuredClone(policyInput);
       policy.family_retry_checks.tags.read = target;
       expect(() => validatePolicy(policy, rosters)).toThrow('family retry check must be an admitted GET read');

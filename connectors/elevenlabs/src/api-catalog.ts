@@ -50,7 +50,13 @@ const schemaValue = z.custom<JsonSchema>(value => typeof value === 'boolean' || 
 export const effectsSchema = z.object({ readOnlyHint: z.boolean(), destructiveHint: z.boolean(), idempotentHint: z.boolean(), openWorldHint: z.boolean() }).strict();
 const parameterRecord = z.object({ type: z.literal('object'), properties: dictionary(schemaValue), required: z.array(text), additionalProperties: z.literal(false) }).strict();
 const fileBinding = z.object({ field: text, kind: z.literal('document'), required: z.boolean(), schema: schemaValue }).strict();
-const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: z.enum(['application/json', 'text/plain', 'text/html']).nullable(), schema: schemaValue.optional() }).strict();
+// Only the binary media declared by admitted contracts are enabled. Extend after spec review.
+export const binaryResponseMedia = ['audio/mpeg'] as const;
+export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', ...binaryResponseMedia]);
+export function isBinaryResponseMedia(media: string | null): media is typeof binaryResponseMedia[number] {
+  return binaryResponseMedia.some(candidate => candidate === media);
+}
+const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
