@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-16
+
+### Changed
+
+- Manage ElevenLabs voice agents through 134 more API operations, with submitted credentials kept out of tool results and errors.
+
 ### Added
 
 - Agent summaries, widget avatar and custom hold-audio uploads, plus image, PDF and text uploads into conversations. Replacing agent media uses the change tool; the rest of the agent stays as it was.
