@@ -36,7 +36,8 @@ function lockCommand(file: string, seconds: number): [string, string[]] {
   const hold = ['/bin/sh', '-c', 'echo locked; exec cat'];
   return process.platform === 'darwin'
     ? ['/usr/bin/lockf', ['-k', '-s', '-t', String(seconds), file, ...hold]]
-    : ['flock', ['-w', String(seconds), file, ...hold]];
+    : // -o: the lock stays with flock alone, as with lockf, not with the command it runs.
+      ['flock', ['-o', '-w', String(seconds), file, ...hold]];
 }
 
 const BUSY = 'Another copy of the Things MCP server has been changing Things for a while. Nothing was changed; try again shortly.';

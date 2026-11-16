@@ -84,7 +84,7 @@ describe('the lock', () => {
     const file = join(dir, `${createHash('sha256').update(key).digest('hex').slice(0, 16)}.lock`);
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, '');
-    const [cmd, args] = process.platform === 'darwin' ? ['/usr/bin/lockf', ['-k', file, '/bin/sh', '-c', 'echo held; exec sleep 30']] : ['flock', [file, '/bin/sh', '-c', 'echo held; exec sleep 30']];
+    const [cmd, args] = process.platform === 'darwin' ? ['/usr/bin/lockf', ['-k', file, '/bin/sh', '-c', 'echo held; exec sleep 30']] : ['flock', ['-o', file, '/bin/sh', '-c', 'echo held; exec sleep 30']];
     const child = spawn(cmd, args as string[], { stdio: ['ignore', 'pipe', 'ignore'] });
     const held = new Promise<void>((resolve) => child.stdout!.once('data', () => resolve()));
     return { child, held };
