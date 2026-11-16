@@ -117,8 +117,15 @@ export class XeroClientCredentialsRefusedError extends Error {
   }
 }
 
+/**
+ * Only a 400 or 401 can mean the keys were refused. A rate limit, timeout or
+ * outage is a try-again, even if its body carries one of these codes, so it
+ * never opens the browser to sign in again.
+ */
 function isClientCredentialsRefused(error: unknown): boolean {
   if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  if (status !== 400 && status !== 401) return false;
   const code = (error.response?.data as { error?: unknown } | undefined)?.error;
   return code === "unauthorized_client" || code === "invalid_client";
 }

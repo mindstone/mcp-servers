@@ -69,6 +69,27 @@ describe("Custom Connection grant refused", () => {
     },
   );
 
+  it.each([
+    [429, "unauthorized_client"],
+    [503, "invalid_client"],
+    [408, "invalid_client"],
+  ])("treats a %i carrying %s as a try-again, not refused keys", async (status, code) => {
+    post.mockImplementation(async () => {
+      throw oauthError(status, code);
+    });
+    const error = await client().authenticate().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(XeroClientCredentialsRefusedError);
+  });
+
+  it("marks invalid_client on a 401 as refused keys", async () => {
+    post.mockImplementation(async () => {
+      throw oauthError(401, "invalid_client");
+    });
+    const error = await client().authenticate().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(XeroClientCredentialsRefusedError);
+  });
+
   it("keeps other failures as plain errors", async () => {
     post.mockImplementation(async () => {
       throw oauthError(429, "rate_limited");
