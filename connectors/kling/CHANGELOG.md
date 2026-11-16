@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-16
+
+### Changed
+
+- Declare file operands (files/readInputs, files/readModes) so Rebel can hand the connector files outside the workspace, e.g. in linked Spaces.
+
 ### Security
 
 - `check_kling_task` now sends the task ID as one encoded path segment and refuses `.` and `..`, so an ID can only ever reach its own task's status.
