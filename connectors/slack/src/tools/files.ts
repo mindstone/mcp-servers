@@ -59,7 +59,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       },
     },
     withErrorHandling(async (args) => {
-      const userClient = await getSlackUserClient();
+      const userClient = await getSlackUserClient({ forRead: true });
       const reader = userClient ?? await getSlackClient();
       if (!reader) return notConnectedJson();
       if (!args.file_id && !args.file_url) {

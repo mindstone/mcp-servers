@@ -33,6 +33,11 @@ import { sanitizeErrorMessage } from './utils.js';
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
+/** User refresh failures after which a read may use the bot token instead. */
+const USER_REFRESH_BOT_READ_CODES: ReadonlyArray<string> = [
+  REFRESH_TRANSIENT, REFRESH_RATE_LIMITED, REFRESH_MALFORMED_RESPONSE, REFRESH_NO_CLIENT_CREDENTIALS,
+];
+
 /** Host labels and JSON formatting do not change connection authority. */
 function connectionCredentials(tokens: SlackTokenData) {
   const {
@@ -397,13 +402,22 @@ export class SlackTokenProvider {
 
   /**
    * Returns the current user token, refreshing if needed. Returns null if
-   * no user token exists. User refresh failure is non-fatal for read paths
-   * that fall back to the bot token (returns null), but auth-rejected
-   * refreshes propagate so the host can surface auth_required for tools
-   * that strictly require the user token. Confirmed disconnect and token-file
-   * errors also propagate instead of becoming an absent user credential.
+   * no user token exists. A failed refresh throws, so a user-only tool says
+   * "try again" rather than "reconnect". Only `forRead` turns one
+   * of USER_REFRESH_BOT_READ_CODES into null, so the read uses the bot token.
+   * Auth rejection, confirmed disconnect, persistence and token-file errors
+   * always propagate.
    */
-  async getUserToken(): Promise<string | null> {
+  async getUserToken(options: { forRead?: boolean } = {}): Promise<string | null> {
+    try {
+      return await this.acquireUserToken();
+    } catch (err) {
+      if (options.forRead && err instanceof ConnectorError && USER_REFRESH_BOT_READ_CODES.includes(err.code)) return null;
+      throw err;
+    }
+  }
+
+  private async acquireUserToken(): Promise<string | null> {
     const readError = await this.tokensForRequest();
     const tokens = this.cachedTokens;
     if (!tokens?.userToken) {
@@ -456,7 +470,7 @@ export class SlackTokenProvider {
           }
           // Release the old flight before resolving the replacement connection.
           this.userRefreshPromise = null;
-          return this.getUserToken();
+          return this.acquireUserToken();
         }
         const updated = this.cachedTokens!;
         await this.saveTokens(updated);
@@ -480,8 +494,6 @@ export class SlackTokenProvider {
           throw err;
         }
 
-        // Auth rejection, confirmed disconnect and token-file errors propagate;
-        // ordinary transient refresh failures retain the existing read fallback.
         if (err instanceof ConnectorError) {
           logRefreshEvent('refresh_failure', {
             teamId: this.teamId,
@@ -491,10 +503,7 @@ export class SlackTokenProvider {
             retryAfterSeconds: typeof err.extra?.retry_after_seconds === 'number' ? err.extra.retry_after_seconds : undefined,
             message: err.message,
           });
-          if (err.code === REFRESH_AUTH_REJECTED || err.code === 'NO_TOKEN' ||
-              err.code === 'TOKEN_FILE_PERMISSION_DENIED' || err.code === 'TOKEN_FILE_UNREADABLE' ||
-              err.code === 'TOKEN_FILE_CORRUPT') throw err;
-          return null;
+          throw err;
         }
 
         const msg = err instanceof Error ? err.message : String(err);
@@ -504,7 +513,11 @@ export class SlackTokenProvider {
           outcomeCode: REFRESH_TRANSIENT,
           message: msg,
         });
-        return null;
+        throw new ConnectorError(
+          'Slack user token refresh failed unexpectedly.',
+          REFRESH_TRANSIENT,
+          'Retry the operation in a few seconds.',
+        );
       } finally {
         this.userRefreshPromise = null;
       }

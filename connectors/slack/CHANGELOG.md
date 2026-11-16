@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- When your user token can't be refreshed for a temporary reason, tools that act as you (sending, searching, opening a DM) now say to try again instead of asking you to reconnect Slack.
+
 ## [0.3.8] - 2026-11-14
 
 ### Changed

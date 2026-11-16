@@ -138,6 +138,30 @@ describe('people read recovery', () => {
     expect(calls).toHaveLength(0);
   });
 
+  // FOX-8063: a user-only tool must say "try again", not "reconnect".
+  it.each([
+    [429, 'ratelimited', 'REFRESH_RATE_LIMITED'],
+    [500, 'internal_error', 'REFRESH_TRANSIENT'],
+  ] as const)('a DM whose user token refresh briefly fails with HTTP %s says retry, not reconnect', async (status, error, code) => {
+    mswServer.use(
+      http.post(`${SLACK_API_BASE}/oauth.v2.access`, () => HttpResponse.json({ ok: false, error }, { status })),
+      mock('conversations.open', () => ({ ok: true, channel: { id: 'D123' } })),
+      ...createSlackHandlers(),
+    );
+    await start();
+    const { getTokenProvider } = await import('../src/client.js');
+    await getTokenProvider()!.saveTokens({
+      botToken: 'xoxb-mock', userToken: 'xoxp-mock', botUserId: 'U999BOT',
+      userRefreshToken: 'xoxe-1-mock', userExpiresAt: Date.now() - 60_000,
+    });
+    const getBot = vi.spyOn(getTokenProvider()!, 'getBotToken');
+    expect((await client!.callTool('open_slack_dm', { user: 'U123' })).json).toMatchObject({
+      ok: false, code, next_step: 'retry_after_delay',
+    });
+    expect(getBot).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
   it('missing user DM authorization returns auth_required without a bot attempt', async () => {
     await start({ userToken: '' });
     const { getTokenProvider } = await import('../src/client.js');

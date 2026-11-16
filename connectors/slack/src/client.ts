@@ -189,12 +189,14 @@ export async function getSlackClient(): Promise<WebClient | null> {
 
 /**
  * Resolve the user WebClient. Structured token-provider errors propagate;
- * otherwise an unavailable user token yields null.
+ * otherwise an unavailable user token yields null. A user-only tool gets a
+ * temporary refresh failure as its error; `forRead` turns it into
+ * null so the read can use the bot instead.
  */
-export async function getSlackUserClient(): Promise<WebClient | null> {
+export async function getSlackUserClient(options: { forRead?: boolean } = {}): Promise<WebClient | null> {
   if (tokenProvider) {
     try {
-      const token = await tokenProvider.getUserToken();
+      const token = await tokenProvider.getUserToken({ forRead: options.forRead });
       if (!token) return null;
       if (token !== _lastUserToken) {
         _userClient = new WebClient(token, clientOpts);
@@ -222,7 +224,7 @@ export async function getSlackAppIdentity(): Promise<{ appKind: 'own' | 'shared'
  * token fallback. Used by list/get tools.
  */
 export async function getSlackReaderClient(): Promise<WebClient | null> {
-  return (await getSlackUserClient()) ?? (await getSlackClient());
+  return (await getSlackUserClient({ forRead: true })) ?? (await getSlackClient());
 }
 
 /** People reads may use either identity. Each callback owns its pagination/state. */
@@ -232,11 +234,11 @@ export async function runSlackRead<T>(read: (client: WebClient) => Promise<T>): 
   let recoveringPersistence = false;
   try {
     try {
-      userClient = await getSlackUserClient();
+      userClient = await getSlackUserClient({ forRead: true });
     } catch (error) {
       if (!(error instanceof ConnectorError && error.code === 'TOKEN_PERSIST_FAILED')) throw error;
       recoveringPersistence = true;
-      userClient = await getSlackUserClient();
+      userClient = await getSlackUserClient({ forRead: true });
       if (!userClient) throw new ConnectorError('No Slack user token found after persistence retry.', 'NO_TOKEN', 'Reconnect Slack via authenticate_slack_workspace.');
     }
     if (userClient) return await read(userClient);

@@ -58,6 +58,27 @@ describe('refresh failure classification — direct provider tests', () => {
     return errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
   }
 
+  // FOX-8063: a user token that fails to refresh for a temporary reason must
+  // not read as "never connected", or user-only tools say "reconnect".
+  it.each([
+    ['a network error', 'REFRESH_TRANSIENT', () => HttpResponse.error()],
+    ['HTTP 500', 'REFRESH_TRANSIENT', () => new HttpResponse('', { status: 500 })],
+    ['HTTP 429', 'REFRESH_RATE_LIMITED', () => new HttpResponse('', { status: 429, headers: { 'Retry-After': '7' } })],
+  ] as const)('a user token refresh failing with %s throws %s instead of reading as absent', async (_case, code, respond) => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'workspaces', 'T123.json'),
+      JSON.stringify({
+        botToken: 'xoxb-current', botUserId: 'U999BOT',
+        userToken: 'xoxp-stale', userRefreshToken: 'xoxe-1-user-stale', userExpiresAt: Date.now() - 60_000,
+      }),
+      { mode: 0o600 },
+    );
+    mswServer.use(http.post(`${SLACK_API_BASE}/oauth.v2.access`, respond));
+    const { SlackTokenProvider } = await import('../src/tokenProvider.js');
+    const tp = new SlackTokenProvider(tmpDir, 'T123', 'cid', 'csec');
+    await expect(tp.getUserToken()).rejects.toMatchObject({ code });
+  });
+
   it('Network error during refresh classifies as REFRESH_TRANSIENT', async () => {
     mswServer.use(
       http.post(`${SLACK_API_BASE}/oauth.v2.access`, () => HttpResponse.error()),
