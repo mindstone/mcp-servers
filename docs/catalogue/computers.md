@@ -13,7 +13,7 @@ Linux computers with a web browser, on **your own** Fly.io, E2B or Google Cloud 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.0 |
+| Version | 0.2.0 |
 | Auth | API key (`FLY_API_TOKEN`, `E2B_API_KEY`, `GOOGLE_CLOUD_KEY`) |
 | Tools | 14 (computers, commands, browser, files) |
 | Surface | cloud API |

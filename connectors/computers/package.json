@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-computers",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-computers",
   "description": "Rebel computers: create Linux computers on your own Fly.io, E2B or Google Cloud account, run commands, copy files and drive their browser",
   "license": "FSL-1.1-MIT",

@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
+### Changed
+
+- Accepts files the host has approved from outside the workspace (files/readModes v1), plus safer output file permissions and clearer read-failure messages.
+
 ### Fixed
 
 - `computer_tools` (which lists the scripts saved on a computer with `computer_save_tool`) names any saved tool whose file could not be read, in a new `unreadable` result field, instead of hiding it, and reports a failed listing as an error rather than an empty list.
