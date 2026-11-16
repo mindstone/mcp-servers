@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-16
+
+### Changed
+
+- Sign in with Xero: a free Xero Web app now works, alongside Custom Connections.
+
 ### Added
 
 - Sign in with Xero: a free Xero Web app now works too. With `XERO_REFRESH_TOKEN` set, the server renews its access token itself and hands each new refresh token to Rebel to keep. The new `xero_sign_in` tool signs in (through Rebel) when the keys belong to a Web app, and just checks the connection for a Custom Connection, which keeps working as before.
