@@ -143,7 +143,7 @@ What changed:
 - Unit tests against a generated fixture database (the real schema's tables and columns, made-up
   data), and a fake executor that records URL and AppleScript commands.
 - Over the protocol with the SDK's in-memory transport: tools listed, writes hidden by default,
-  errors returned as `isError` results.
+  errors returned as `isError` results, and the exact hints on all nine tools.
 - A live smoke test, opt-in (`THINGS_LIVE=1`), that reads the real database; and a live write test
   (`THINGS_LIVE_WRITES=1`) that adds one uniquely named to-do, updates it, completes it and
   trashes it, touching nothing else.
@@ -152,3 +152,21 @@ What changed:
 
 Creating projects, headings and checklists beyond appending items; removing tags; replacing notes;
 moving a to-do to a heading; reminders.
+
+## Where it stands (2026-11-16)
+
+- **PR [#244](https://github.com/mindstone/mcp-servers/pull/244)** is open. Every `things` check
+  passes (build-and-test on Node 22 and 24, STATUS drift, envelope coverage, server.json). It is
+  BLOCKED on a code-owner review. Do not arm auto-merge: the first npm publish is a maintainer step.
+- **The one red check, Release hygiene, is not this PR's.** It fails on `packages/mcp-app-compose`
+  (src changed after its last version bump), and fails the same way on `main`.
+- **CI found one real bug, fixed:** on Linux `flock(1)` passed the locked file to the command it ran,
+  so a child outliving `flock` kept the lock. `flock -o` keeps it with `flock` alone, as `lockf` does
+  on macOS.
+- **Next:** answer review comments on #244 (re-run `npm test` and the repo's `check-*` scripts for
+  `things` after any change); after merge, the first npm publish of `@mindstone/mcp-server-things`,
+  then a Rebel catalogue entry (`catalog-entry.json`, `catalogId: bundled-things`, darwin only).
+  Later, not yet asked for: an `.mcpb` bundle for Claude Desktop.
+- **Live tests** (`npm run test:live`, `test:live-writes`) need a Mac with Things; a Linux box cannot
+  run them. Writes in them touch only one self-created test to-do; never change anything else in a
+  real Things database.
