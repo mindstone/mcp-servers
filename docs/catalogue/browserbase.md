@@ -13,7 +13,7 @@ Cloud browser automation via the &#91;Browserbase&#93;&#40;https://www.browserba
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.2.0 |
 | Auth | API key (`BROWSERBASE_API_KEY`) |
 | Tools | 53 (projects, sessions, contexts, agents, agent-runs, downloads, extensions, certificates, fetch-search, functions) |
 | Surface | cloud API |

@@ -9,7 +9,7 @@ Cloud browser automation via the [Browserbase](https://www.browserbase.com/) API
 
 ## Status
 
-- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browserbase)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browserbase)
 - **Auth:** API key ([`BROWSERBASE_API_KEY`](./server.json))
 - **Tools:** [53](./src/tools/) (projects, sessions, contexts, agents, agent runs, downloads, extensions, certificates, fetch/search, functions)
 - **Surface:** cloud-api

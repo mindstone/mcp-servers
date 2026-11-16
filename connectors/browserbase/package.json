@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-browserbase",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-browserbase",
   "description": "Browserbase MCP server — cloud browser sessions, agents, contexts, downloads, fetch, search, and functions via the Browserbase API",
   "license": "FSL-1.1-MIT",
