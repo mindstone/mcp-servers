@@ -29,12 +29,42 @@ describe('raw query aggregate and trailing clause handling', () => {
     ['SELECT From__c, SUM(Amount) FROM Opportunity', 'SELECT From__c, SUM(Amount) FROM Opportunity'],
     ['SELECT Id, (SELECT FORMAT(SUM(Amount)) FROM Contacts) FROM Account', 'SELECT Id, (SELECT FORMAT(SUM(Amount)) FROM Contacts) FROM Account LIMIT 200'],
     ["SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a\\\' GROUP BY test'", "SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a\\\' GROUP BY test'"],
-    ["SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a'' GROUP BY test'", "SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a'' GROUP BY test'"],
+    ["SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a'' GROUP BY test'", "SELECT SUM(Amount) FROM Opportunity WHERE Name = 'a\\' GROUP BY test'"],
     ['SELECT TYPEOF What WHEN Account THEN Phone ELSE Name END FROM Event', 'SELECT TYPEOF What WHEN Account THEN Phone ELSE Name END FROM Event LIMIT 200'],
     ["SELECT Id, (SELECT Id FROM Contacts WHERE Name = ')') FROM Account", "SELECT Id, (SELECT Id FROM Contacts WHERE Name = ')') FROM Account LIMIT 200"],
     ['SELECT SUM(Amount) FROM Opportunity /* GROUP BY x */ LIMIT 1', 'SELECT SUM(Amount) FROM Opportunity'],
   ])('%s', (query, expected) => {
     expect(applyQueryLimitCap(query, 200)).toBe(expected);
+  });
+});
+
+// SOQL escapes an apostrophe as \' and has no double-quoted strings. Callers
+// often write SQL's doubled '' and "..." instead, which Salesforce refuses.
+describe('raw query SQL quoting repair', () => {
+  it.each([
+    [String.raw`SELECT Id FROM Contact WHERE LastName = 'O''Brien'`, String.raw`SELECT Id FROM Contact WHERE LastName = 'O\'Brien' LIMIT 200`],
+    [String.raw`SELECT Id FROM Contact WHERE LastName = ''''`, String.raw`SELECT Id FROM Contact WHERE LastName = '\'' LIMIT 200`],
+    [String.raw`SELECT Id FROM Account WHERE Name = "Acme"`, String.raw`SELECT Id FROM Account WHERE Name = 'Acme' LIMIT 200`],
+    [String.raw`SELECT Id FROM Contact WHERE LastName = "O'Brien"`, String.raw`SELECT Id FROM Contact WHERE LastName = 'O\'Brien' LIMIT 200`],
+    [String.raw`SELECT Id FROM Account WHERE Name = "say ""hi"""`, String.raw`SELECT Id FROM Account WHERE Name = 'say \"hi\"' LIMIT 200`],
+    [String.raw`SELECT Id FROM Account WHERE Name = "a\"b"`, String.raw`SELECT Id FROM Account WHERE Name = 'a\"b' LIMIT 200`],
+    [String.raw`SELECT Id FROM Account WHERE Name = ""`, String.raw`SELECT Id FROM Account WHERE Name = '' LIMIT 200`],
+    [String.raw`SELECT Id FROM Account WHERE Name IN ("a", "b") LIMIT 5`, String.raw`SELECT Id FROM Account WHERE Name IN ('a', 'b') LIMIT 5`],
+    [String.raw`SELECT Id FROM Account WHERE Website = "https://example.com/x"`, String.raw`SELECT Id FROM Account WHERE Website = 'https://example.com/x' LIMIT 200`],
+    [String.raw`SELECT SUM(Amount) FROM Opportunity WHERE Name = "GROUP BY x"`, String.raw`SELECT SUM(Amount) FROM Opportunity WHERE Name = 'GROUP BY x'`],
+  ])('repairs %s', (query, expected) => {
+    expect(applyQueryLimitCap(query, 200)).toBe(expected);
+  });
+
+  it.each([
+    String.raw`SELECT Id FROM Contact WHERE LastName = 'O\'Brien'`,
+    String.raw`SELECT Id FROM Account WHERE Name = ''`,
+    String.raw`SELECT Id FROM Account WHERE Name = '' AND Type = 'b'`,
+    String.raw`SELECT Id FROM Account WHERE Name = 'say "hi"'`,
+    String.raw`SELECT Id FROM Account WHERE Name = 'a\\'`,
+    String.raw`SELECT Id FROM Account WHERE Name IN ('a','b')`,
+  ])('leaves valid SOQL unchanged: %s', (query) => {
+    expect(applyQueryLimitCap(query, 200)).toBe(`${query} LIMIT 200`);
   });
 });
 

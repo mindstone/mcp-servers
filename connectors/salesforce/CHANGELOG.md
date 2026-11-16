@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- `salesforce_query` now accepts two SQL quoting habits that Salesforce refuses: a doubled apostrophe inside a string (`'O''Brien'`) is sent as `'O\'Brien'`, and a double-quoted string (`"Acme"`) is sent single-quoted. Valid SOQL is sent unchanged.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.

@@ -480,12 +480,12 @@ describe('M3-fix-A — applyQueryLimitCap is quote-aware (VAL-SALESFORCE-020)', 
     );
   });
 
-  it("VAL-SALESFORCE-020 — respects '' (doubled-apostrophe) escape and keeps '// ok' literal intact", async () => {
+  it("VAL-SALESFORCE-020 — turns a doubled apostrophe into \\' and keeps '// ok' literal intact", async () => {
     const { applyQueryLimitCap } = await import('../src/tools/query.js');
     const input = "SELECT Id FROM Lead WHERE Name = 'O''Brien // ok'";
     const output = applyQueryLimitCap(input, 200);
     expect(output).toBe(
-      "SELECT Id FROM Lead WHERE Name = 'O''Brien // ok' LIMIT 200",
+      "SELECT Id FROM Lead WHERE Name = 'O\\'Brien // ok' LIMIT 200",
     );
   });
 
