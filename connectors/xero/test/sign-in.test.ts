@@ -180,6 +180,44 @@ describe("xero_sign_in", () => {
     expect(host.requests).toHaveLength(1);
   });
 
+  it.each([401, 403])("signs in again when Xero refuses the saved sign-in with HTTP %i and no code", async (status) => {
+    state.mode = "refresh-token";
+    state.authenticate.mockRejectedValue(new XeroRefreshError({ kind: "http", status }));
+
+    expect(await signInToXero()).toMatchObject({ ok: true, status: "authenticated" });
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it.each(["invalid_client", "unauthorized_client"] as const)(
+    "says to check the keys, without opening the browser, when Xero answers %s",
+    async (code) => {
+      state.mode = "refresh-token";
+      state.authenticate.mockRejectedValue(new XeroRefreshError({ kind: "http", status: 400, code }));
+
+      expect(await signInToXero()).toMatchObject({ ok: false, error: expect.stringContaining("Client ID and Client Secret") });
+      expect(host.requests).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    [429, "rate limiting", undefined],
+    [408, "having trouble", undefined],
+    [500, "having trouble", undefined],
+    [503, "having trouble", undefined],
+    // A contradictory body on an outage still reads as an outage.
+    [503, "having trouble", "invalid_grant"],
+  ] as const)("does not open the browser when Xero answers HTTP %i, and says to try again", async (status, words, code) => {
+    state.mode = "refresh-token";
+    state.authenticate.mockRejectedValue(new XeroRefreshError({ kind: "http", status, code }));
+
+    const result = await signInToXero();
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining(words) });
+    expect(result).toMatchObject({ error: expect.stringContaining("try again") });
+    expect(result).not.toMatchObject({ error: expect.stringContaining("sign in again") });
+    expect(host.requests).toHaveLength(0);
+  });
+
   it("does not open the browser when Xero is merely unreachable", async () => {
     state.mode = "refresh-token";
     state.authenticate.mockRejectedValue(new XeroRefreshError({ kind: "network" }));

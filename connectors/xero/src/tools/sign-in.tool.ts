@@ -5,6 +5,7 @@ import {
   BRIDGE_SIGN_IN_TIMEOUT_MS,
   bridgeRequest,
 } from "../auth/bridge.js";
+import { needsNewSignIn } from "../auth/token-grant.js";
 import {
   XeroClientCredentialsRefusedError,
   XeroRefreshError,
@@ -83,9 +84,10 @@ export async function signInToXero(): Promise<SignInResult> {
     );
   } catch (error) {
     // A Web app's keys cannot use a Custom Connection's grant; an expired or
-    // revoked sign-in cannot be renewed. Both mean: sign in again.
+    // revoked sign-in cannot be renewed. Both mean: sign in again. A rate
+    // limit or Xero outage gets its own "try again" words instead.
     if (error instanceof XeroClientCredentialsRefusedError) return signInInBrowser();
-    if (error instanceof XeroRefreshError && error.failure.kind === "http") {
+    if (error instanceof XeroRefreshError && needsNewSignIn(error.failure)) {
       return signInInBrowser();
     }
     return failed(error instanceof Error ? error.message : formatError(error));

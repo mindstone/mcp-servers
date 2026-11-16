@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { post } = vi.hoisted(() => {
+const { post, get } = vi.hoisted(() => {
   process.env.XERO_CLIENT_ID = "test-client-id";
   process.env.XERO_CLIENT_SECRET = "test-client-secret";
-  return { post: vi.fn() };
+  return { post: vi.fn(), get: vi.fn() };
 });
 
 vi.mock("axios", async (importOriginal) => {
   const actual = await importOriginal<typeof import("axios")>();
-  return { ...actual, default: { ...actual.default, post, get: vi.fn() } };
+  return { ...actual, default: { ...actual.default, post, get } };
 });
 
 import {
@@ -33,6 +33,26 @@ const client = () =>
 
 beforeEach(() => {
   post.mockReset();
+  get.mockReset();
+});
+
+describe("Custom Connection requests", () => {
+  it("never follow a redirect with the app's keys or the access token", async () => {
+    post.mockResolvedValue({ data: { access_token: "test-access", expires_in: 1800 } });
+    get.mockResolvedValue({ data: [{ tenantId: "tenant-1" }] });
+
+    await client().authenticate();
+
+    expect(post).toHaveBeenCalledWith(
+      "https://identity.xero.com/connect/token",
+      expect.any(String),
+      expect.objectContaining({ maxRedirects: 0 }),
+    );
+    expect(get).toHaveBeenCalledWith(
+      "https://api.xero.com/connections",
+      expect.objectContaining({ maxRedirects: 0 }),
+    );
+  });
 });
 
 describe("Custom Connection grant refused", () => {

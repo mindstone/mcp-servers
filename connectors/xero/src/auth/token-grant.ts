@@ -5,6 +5,10 @@
  *
  * Only the standard OAuth error code from a failed grant is ever used:
  * `error_description` and other fields can echo what was sent.
+ *
+ * Both requests refuse redirects: fetch would otherwise resend the refresh
+ * token (in the body) or the access token (in the header) to wherever a
+ * redirect points. A redirect fails as a network error instead.
  */
 
 import { z } from "zod";
@@ -85,6 +89,7 @@ export async function requestRefreshGrant(
   try {
     response = await fetch(XERO_TOKEN_URL, {
       method: "POST",
+      redirect: "error",
       signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: authHeader,
@@ -123,6 +128,30 @@ export async function requestRefreshGrant(
   return { ok: true, token };
 }
 
+/**
+ * Codes that signing in again cannot fix: the browser sign-in uses the same
+ * Client ID and Secret, and a malformed request stays malformed.
+ */
+const NOT_FIXED_BY_SIGNING_IN: readonly OAuthErrorCode[] = [
+  "invalid_client",
+  "unauthorized_client",
+  "invalid_request",
+  "unsupported_grant_type",
+];
+
+/**
+ * Did Xero refuse the sign-in itself, so signing in again can fix it? An
+ * expired or revoked sign-in (invalid_grant), or a refusal with no code, is.
+ * A rate limit, a timeout, a Xero outage or wrong keys is not: opening the
+ * browser for those would ask the person to redo a sign-in that cannot help.
+ */
+export function needsNewSignIn(failure: TokenGrantFailure): boolean {
+  if (failure.kind !== "http") return false;
+  if (failure.status < 400 || failure.status >= 500) return false;
+  if (failure.status === 408 || failure.status === 429) return false;
+  return !(failure.code && NOT_FIXED_BY_SIGNING_IN.includes(failure.code));
+}
+
 /** The words a person sees when a refresh-token grant fails. */
 export function describeRefreshFailure(failure: TokenGrantFailure): string {
   switch (failure.kind) {
@@ -133,14 +162,21 @@ export function describeRefreshFailure(failure: TokenGrantFailure): string {
     case "malformed":
       return `Xero sent back an unexpected answer (HTTP ${failure.status}). Please try again.`;
     case "http":
+      // A rate limit or outage first, whatever code its body carries.
+      if (failure.status === 429) {
+        return "Xero is rate limiting sign-in requests. Please try again in a moment.";
+      }
+      if (failure.status === 408 || failure.status >= 500) {
+        return `Xero is having trouble right now (HTTP ${failure.status}). Please try again in a few minutes.`;
+      }
       if (failure.code === "invalid_grant") {
         return "Your Xero sign-in has expired or was revoked. Open Xero in Rebel's connector settings and click Connect to sign in again.";
       }
       if (failure.code === "invalid_client" || failure.code === "unauthorized_client") {
         return "Xero did not accept the Client ID and Client Secret. Check them in Rebel's Xero connector settings, then click Connect to sign in again.";
       }
-      if (failure.status === 429) {
-        return "Xero is rate limiting sign-in requests. Please try again in a moment.";
+      if (failure.code === "invalid_request" || failure.code === "unsupported_grant_type") {
+        return `Xero could not read the sign-in request (HTTP ${failure.status}, ${failure.code}). Please try again; if it keeps happening, update the Xero connector.`;
       }
       return `Xero refused to renew the sign-in (HTTP ${failure.status}${failure.code ? `, ${failure.code}` : ""}). Click Connect on the Xero connector to sign in again.`;
     default: {
@@ -163,6 +199,7 @@ export async function fetchFirstTenantId(accessToken: string): Promise<string> {
   let response: Response;
   try {
     response = await fetch(XERO_CONNECTIONS_URL, {
+      redirect: "error",
       signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });

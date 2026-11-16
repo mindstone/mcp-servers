@@ -160,6 +160,8 @@ export class CustomConnectionsXeroClient extends MCPXeroClient {
           "Content-Type": "application/x-www-form-urlencoded",
           Accept: "application/json",
         },
+        // Never follow a redirect with the app's keys (see token-grant.ts).
+        maxRedirects: 0,
         signal,
       },
     );
@@ -178,6 +180,7 @@ export class CustomConnectionsXeroClient extends MCPXeroClient {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
           },
+          maxRedirects: 0,
         },
       );
 
