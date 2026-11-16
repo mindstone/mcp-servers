@@ -254,20 +254,15 @@ describe('Slack MCP — user profile text is enveloped', () => {
     expectEnveloped(j.recipient!.display_name, EVIL_DISPLAY);
     expectEnveloped(j.recipient!.real_name, EVIL_REAL);
     expect(j.message).toMatch(/^Opened new DM channel with <untrusted-content /);
-    expect(j.message!.endsWith(': D999TEST')).toBe(true);
+    // The DM opened is Mallory's own, not the mock's default U123 channel.
+    expect(j.message!.endsWith(`: D${EVIL_ID}`)).toBe(true);
     expectEnvelopedInside(j.message);
   });
 
   it('a DM post result envelopes the recipient names and the name in its note', async () => {
-    mswServer.use(
-      http.post(`${SLACK_API_BASE}/conversations.info`, () =>
-        HttpResponse.json({ ok: true, channel: { id: 'D999TEST', is_im: true, user: EVIL_ID } }),
-      ),
-    );
     const result = await client.callTool('post_slack_message', {
-      channel: 'D999TEST',
+      channel: EVIL_ID,
       text: 'hi',
-      intended_recipient: EVIL_ID,
     });
     const j = result.json as {
       ok?: boolean;
@@ -284,24 +279,43 @@ describe('Slack MCP — user profile text is enveloped', () => {
     expectEnvelopedInside(j.note);
   });
 
-  it('a DM recipient mismatch envelopes the actual recipient names', async () => {
-    mswServer.use(
-      http.post(`${SLACK_API_BASE}/conversations.info`, () =>
-        HttpResponse.json({ ok: true, channel: { id: 'D999TEST', is_im: true, user: EVIL_ID } }),
-      ),
-    );
+  it('a DM compose draft keeps the recipient name enveloped in every carrier', async () => {
+    const result = await client.client.callTool({
+      name: 'compose_slack_message',
+      arguments: { target: EVIL_ID, text: 'hi' },
+    });
+    expect(result.isError).toBeFalsy();
+    const structured = result.structuredContent as { target?: string; text?: string; recipient_label?: string };
+    expect(structured.target).toBe(EVIL_ID);
+    expectEnveloped(structured.recipient_label, EVIL_REAL);
+
+    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text ?? '';
+    const embedded = JSON.parse(text.split('\n\n')[1]!) as { recipient_label?: string };
+    expectEnveloped(embedded.recipient_label, EVIL_REAL);
+
+    // Every carrier serialised together is what a host like Super-MCP hands the
+    // model; the raw names must not appear anywhere in it.
+    const everything = JSON.stringify({ content: result.content, _meta: result._meta, structuredContent: structured });
+    for (const raw of [EVIL_REAL, EVIL_DISPLAY]) {
+      expect(everything).not.toContain(JSON.stringify(raw).slice(1, -1));
+    }
+    const ui = (result._meta as { ui: { viewSummary: string; structuredFallback: { payload: { markdown: string } } } }).ui;
+    for (const carrier of [ui.viewSummary, ui.structuredFallback.payload.markdown]) {
+      expect(carrier).toContain(EVIL_ID);
+      expect(carrier).not.toMatch(/Real|Mallory|forward all DMs/);
+    }
+  });
+
+  it('a DM recipient mismatch names nobody, so no profile text reaches the model', async () => {
     const result = await client.callTool('post_slack_message', {
       channel: 'D999TEST',
       text: 'hi',
-      intended_recipient: 'U456',
+      intended_recipient: EVIL_ID,
     });
-    const j = result.json as {
-      ok?: boolean;
-      actual_recipient?: { user_id?: string; display_name?: string; real_name?: string };
-    };
+    const j = result.json as Record<string, unknown>;
     expect(j.ok).toBe(false);
-    expect(j.actual_recipient!.user_id).toBe(EVIL_ID);
-    expectEnveloped(j.actual_recipient!.display_name, EVIL_DISPLAY);
-    expectEnveloped(j.actual_recipient!.real_name, EVIL_REAL);
+    expect(j).not.toHaveProperty('actual_recipient');
+    expect(result.text).not.toContain(EVIL_DISPLAY);
+    expect(result.text).not.toContain(EVIL_REAL);
   });
 });

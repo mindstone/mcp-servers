@@ -25,7 +25,7 @@ describe('Stage 4 smoke — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers all seven Stage 4 tools', async () => {
+  it('registers all seven Stage 4 tools within the 39-tool roster', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -41,6 +41,6 @@ describe('Stage 4 smoke — tool registration', () => {
     for (const name of STAGE4_TOOL_NAMES) {
       expect(toolNames, `missing ${name}`).toContain(name);
     }
-    expect(toolsResult.tools).toHaveLength(32);
+    expect(toolsResult.tools).toHaveLength(39);
   });
 });

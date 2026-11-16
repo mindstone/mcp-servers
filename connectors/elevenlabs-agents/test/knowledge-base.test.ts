@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import {
   createDeleteKnowledgeBaseCapturingHandler,
@@ -64,6 +65,39 @@ describe('knowledge-base tools', () => {
     expect(single.json.document.extracted_inner_html).toContain('<untrusted-content');
     expect(typeof single.json.document.content).toBe('string');
     expect(single.json.document.content).toContain('<untrusted-content');
+  });
+
+  it('returns the metadata and says why when the body text could not be fetched', async () => {
+    mswServer.use(
+      http.get('https://api.elevenlabs.io/v1/convai/knowledge-base/:documentationId/content', () =>
+        HttpResponse.json({ detail: { message: 'Internal error' } }, { status: 500 })),
+      ...createElevenLabsAgentsHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const single = await testClient.callTool('get_knowledge_base_doc', { documentation_id: 'doc_test_123' });
+    expect(single.isError).toBeFalsy();
+    expect(single.json.document.documentation_id).toBe('doc_test_123');
+    expect(single.json.document.content).toBeUndefined();
+    expect(single.json.content_error).toContain('HTTP 500');
+  });
+
+  it('reports an empty document as empty, not as a failure', async () => {
+    mswServer.use(
+      http.get('https://api.elevenlabs.io/v1/convai/knowledge-base/:documentationId/content', () =>
+        HttpResponse.text('   ', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })),
+      ...createElevenLabsAgentsHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const single = await testClient.callTool('get_knowledge_base_doc', { documentation_id: 'doc_test_123' });
+    expect(single.isError).toBeFalsy();
+    expect(single.json.document.content).toBeUndefined();
+    expect(single.json.content_error).toBeUndefined();
   });
 
   it('adds a knowledge-base document in text mode', async () => {

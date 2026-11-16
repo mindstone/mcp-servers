@@ -11,6 +11,22 @@ import {
 } from '../utils.js';
 import { wrapActivity } from '../formatters.js';
 
+/**
+ * The cursor is returned raw because the model passes it back verbatim, so
+ * it is held to an opaque-token alphabet. This constrains its syntax only.
+ */
+const CURSOR_CHARSET = /^[A-Za-z0-9_\-=.:%+]{1,512}$/;
+
+function sanitizeCursor(raw: unknown): { cursor: string | null; hasMore: boolean } {
+  if (typeof raw === 'string' && CURSOR_CHARSET.test(raw)) {
+    return { cursor: raw, hasMore: true };
+  }
+  if (raw != null) {
+    console.error('[wise] activities cursor was not an opaque token; pagination stops here');
+  }
+  return { cursor: null, hasMore: false };
+}
+
 export function registerActivityTools(server: McpServer): void {
   // ── list_wise_activities ────────────────────────────────────────
 
@@ -49,7 +65,7 @@ export function registerActivityTools(server: McpServer): void {
       const profileId = await resolveProfileId(credentials, args.profile_id);
 
       const page = await wiseFetch<WiseActivitiesPage>(
-        credentials.apiToken,
+        credentials,
         `/v1/profiles/${profileId}/activities`,
         {
           params: {
@@ -68,8 +84,7 @@ export function registerActivityTools(server: McpServer): void {
         profileId,
         activities,
         count: activities.length,
-        cursor: page.cursor ?? null,
-        hasMore: page.cursor != null,
+        ...sanitizeCursor(page.cursor),
       });
     }),
   );

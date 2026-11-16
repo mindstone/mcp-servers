@@ -11,9 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
+### Security
+
+- Keep every ID placed in a request path inside its own path segment (owners, pipelines, forms, marketing emails, lists, files, analytics reports), and refuse `.` and `..`, so a crafted ID cannot redirect a read or delete to another record. The `properties` list on call, email and meeting lookups is now encoded, so it cannot add other query parameters. Knowledge-base GraphQL queries now write the article ID as a proper string literal and accept only whole-number `limit` and `offset`.
 
 ## [0.4.1] - 2026-08-08
 

@@ -7,7 +7,7 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 
 ## Status
 
-- **Version:** [0.3.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
+- **Version:** [0.3.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
 - **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
 - **Tools:** [17](./src/tools/) (mailbox, messages, drafts, send)
 - **Surface:** local-protocol
@@ -121,7 +121,8 @@ mass sends. Defaults are baked into the source so a host that sets none of
 these still gets safe behaviour. Hosts can tighten them per deployment.
 
 - `EMAIL_IMAP_MAX_RECIPIENTS` — maximum combined To+CC+BCC recipients per
-  `email_send` call (default: `25`). Exceeding this returns a structured
+  `email_send` call (default: `25`), counted as the sender parses the
+  addresses (commas, semicolons and groups). Exceeding this returns a structured
   error with `code: "RECIPIENT_LIMIT_EXCEEDED"`.
 - `EMAIL_IMAP_RATE_LIMIT_PER_HOUR` — maximum number of `email_send` calls per
   rolling window (default: `50`). Exceeding this returns a structured error
@@ -129,6 +130,25 @@ these still gets safe behaviour. Hosts can tighten them per deployment.
   `retryAfterMs` so the host/LLM can back off.
 - `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS` — sliding-window length, in milliseconds,
   for the rate limit (default: `3600000` — one hour).
+
+### Reset on reconfigure
+
+`configure_email_imap` can switch accounts inside a running server.
+Each protocol client resets its connection state when its own resolved
+settings change; switching accounts resets both. Clients whose settings are
+unchanged are kept. Anything new that caches per-account state must
+join this list and the same-process test in `test/reconfiguration.test.ts`:
+
+- [ ] Credentials (`EMAIL_IMAP_EMAIL`, `EMAIL_IMAP_PASSWORD`, `EMAIL_IMAP_PROVIDER`)
+      are replaced by the configured values.
+- [ ] The resolved client configuration is replaced.
+- [ ] The active IMAP connection is logged out (or closed) and the pending
+      connection reference is dropped, so the next call connects with the new
+      settings.
+- [ ] The per-mailbox UID-validity map is cleared, so the new account's
+      mailboxes are not compared against the old account's.
+- [ ] The SMTP transport is closed and dropped, so the next send verifies a new
+      one.
 
 ## Host configuration examples
 

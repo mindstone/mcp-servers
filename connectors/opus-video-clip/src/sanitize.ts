@@ -12,7 +12,7 @@
  * subsequent tool calls (projectId, curationId, collectionId, jobId,
  * postAccountId, …) and asset/profile URLs surfaced for the user to open.
  */
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonValues } from './untrusted-content.js';
 
 type Obj = Record<string, unknown>;
 
@@ -26,7 +26,7 @@ function wrapStr(v: unknown, source: string): unknown {
 
 /** Wrap every string inside an upstream `raw` debug dump. */
 export function wrapRawDump(v: unknown, source: string): unknown {
-  return wrapUntrustedJsonStrings(v, source);
+  return wrapUntrustedJsonValues(v, source);
 }
 
 /** Map a sanitizer over an array, passing non-arrays through unchanged. */

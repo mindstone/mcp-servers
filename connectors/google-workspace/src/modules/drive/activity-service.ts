@@ -1,7 +1,7 @@
 import { google, driveactivity_v2 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
 import { DRIVE_SCOPES } from './scopes.js';
-import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-controls.js';
 
 export interface QueryDriveActivityOptions {
   /** Drive item to inspect ("items/<id>" or a bare file/folder ID). */

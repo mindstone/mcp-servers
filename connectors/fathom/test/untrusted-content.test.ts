@@ -49,7 +49,8 @@ describe('Untrusted-content envelopes', () => {
     expect(result.text).toContain('<untrusted-content source="fathom:transcript">');
     // The attacker's close-tag variant must be neutralised, not passed through.
     expect(result.text).not.toContain('</untrusted-content >');
-    expect(result.text).toContain('<\\/untrusted-content>');
+    expect(result.text).toMatch(/<\\\/untrusted-content/i);
+    expect(result.text.match(/<\/untrusted-content/gi)).toHaveLength(1);
     // Exactly one real close tag — the envelope's own, at the end.
     const closeCount = result.text.split('</untrusted-content>').length - 1;
     expect(closeCount).toBe(1);
@@ -122,12 +123,14 @@ describe('Untrusted-content envelopes', () => {
     expect(json.ok).toBe(true);
     expect(json.meetings[0].title).toContain('<untrusted-content source="fathom:meeting:title">');
     // The attacker's uppercase close-tag variant must be neutralised.
-    expect(json.meetings[0].title).toContain('<\\/untrusted-content>');
+    expect(json.meetings[0].title).toMatch(/<\\\/untrusted-content/i);
+    expect(json.meetings[0].title.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(json.meetings[0].title).not.toContain('</UNTRUSTED-CONTENT>');
     expect(json.meetings[0].default_summary.markdown_formatted).toContain(
       '<untrusted-content source="fathom:meeting:summary">',
     );
-    expect(json.meetings[0].default_summary.markdown_formatted).toContain('<\\/untrusted-content>');
+    expect(json.meetings[0].default_summary.markdown_formatted).toMatch(/<\\\/untrusted-content/i);
+    expect(json.meetings[0].default_summary.markdown_formatted.match(/<\/untrusted-content/gi)).toHaveLength(1);
   });
 
   it('wraps team member names', async () => {

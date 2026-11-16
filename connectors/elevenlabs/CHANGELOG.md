@@ -11,9 +11,58 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Agent summaries, widget avatar and custom hold-audio uploads, plus image, PDF and text uploads into conversations. Replacing agent media uses the change tool; the rest of the agent stays as it was.
+
+- Workspace secrets, environment variables and MCP server management through the existing API tools. Approval changes are explicit; removals use the delete tool.
+
+- 26 conversation and triage operations: find references, read summaries and transcripts, save recordings, manage tags and review tickets. Merging keeps source tickets marked as merged.
+
+- 14 knowledge-base operations for crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl cancellation also deletes its documents and folders; it is not an undo button.
+
+- 32 agent lifecycle operations for branches, drafts, versions, deployments, merge proposals and procedures, plus agent reads. Preview before merging; previews are reads, while merges, rebases and traffic changes stay behind the change tool.
+
+- 34 more API operations for conversation tags, analysis items, workspace and dashboard settings, environments, test folders and summaries, invocation names, conversation users, live counts, tool executions, usage estimates and knowledge-base size. The same seven API tools handle them; delete operations stay behind the delete tool.
+
+### Fixed
+
+- Saving an agent draft now uses the change tool and warns that it can replace your unpublished draft. Merge, acceptance and rebase guidance explains when callers hear the result immediately.
+
+- Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
+- API tool guidance now requires discovering each operation's contract before its first call unless exact parameter names and locations are already supplied, including for receipt follow-ups.
+
+### Security
+
+- Secret values and MCP credentials stay out of receipts and errors, even when the provider repeats them back. Credentials stored in MCP server settings are hidden when those settings are read.
+
+## [0.6.0] - 2026-11-14
+
+### Changed
+
+- Adds 39 agent-first tools generated from the ElevenLabs API to manage agents, knowledge bases, tools and tests, with a fixed API origin, request and response schema checks, and key redaction.
+
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Files the connector saves (generated audio and timing data) are now created readable only by their owner.
+- Raised the MCP SDK dependency to 1.32.2 and refreshed compatible dependencies for security fixes.
+- If ElevenLabs sends your API key back inside a successful reply, the API tools now replace it with `[REDACTED]` before the assistant sees it, as they already did for errors.
+
+### Added
+
+- Seven registered API tools for local discovery and 40 admitted agent, tool, knowledge and saved-Test operations, bringing the source tool count to 39 while preserving the existing 32 definitions. Paid read-only RAG retrieval and Test execution have separate tools and effect boundaries.
+- A pinned operation policy, generated request/response catalogue and complete coverage ledger with 40 admitted, 366 planned and 109 excluded operations. Ajv and ajv-formats are direct dependencies for strict, non-mutating provider-schema validation; Zod validates connector envelopes and consumed response fields.
+- Authorized multipart document creation and file replacement through the shared executor, with exact nested file operands, document MIME types, standalone containment and negotiated read-mode support. File/URL creation and attachment remain explicit caller-managed requests.
+- Independent SDK/MSW wire cases and mocked agent, webhook, knowledge, saved-Test and deletion workflows. These exercise connector behavior without live provider calls; release, host integration and live tool-selection acceptance are separate steps.
+- Reject `unevaluatedProperties` at schema nodes in the API catalogue generator and loader until a reviewed validator correction is available; preserve property names and opaque data. The keyword is absent from the 2026-11-08 provider pin.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+- Successful creation responses now include a `next_step` naming the read operation, prompting the assistant to check the created resource before using it.
+- Checking an uploaded document or reading test results may still need a follow-up read. A successful upload or test submission alone does not confirm the document's contents or the test outcome.
+- Known limitation: when ElevenLabs content contains instructions aimed at the assistant (a prompt injection), the assistant may repeat that injected text in its answer while explaining it. Our tests caught this more often with this version than with 0.5.2.
 
 ## [0.5.2] - 2026-08-18
 

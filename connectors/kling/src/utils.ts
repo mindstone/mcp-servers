@@ -92,3 +92,21 @@ export const epochMsField = () =>
       message:
         'Expected epoch milliseconds (number), a 13-digit epoch-ms string, or a parseable date string (e.g. "2026-01-01").',
     });
+
+/**
+ * Encodes one value as a single URL path segment, so an ID can never change
+ * which endpoint a request reaches. encodeURIComponent alone is not enough:
+ * URL parsing still treats `.` and `..` as directory steps, so those and the
+ * empty string are refused. Every value interpolated into a request path goes
+ * through this.
+ */
+export function pathSegment(value: string): string {
+  if (value === '' || value === '.' || value === '..') {
+    throw new KlingError(
+      `Invalid ID: ${JSON.stringify(value)}`,
+      'INVALID_ARGUMENTS',
+      'Pass the ID exactly as Kling returned it.',
+    );
+  }
+  return encodeURIComponent(value);
+}

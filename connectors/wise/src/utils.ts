@@ -2,8 +2,8 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { WiseError } from './types.js';
 import { loadCredentials } from './auth.js';
-import { wiseFetch } from './client.js';
-import type { WiseCredentials, WiseProfile } from './types.js';
+import { errorKind, wiseFetch } from './client.js';
+import type { WiseCredentials } from './types.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -25,8 +25,8 @@ export function validateCurrency(value: string, fieldName = 'currency'): string 
  * Wise ids are int64; path segments must be digits only so a crafted value
  * cannot smuggle path traversal or query injection into the URL.
  */
-export function validateNumericId(value: number, fieldName: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
+export function validateNumericId(value: unknown, fieldName: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     throw new WiseError(
       `Invalid ${fieldName}: must be a positive integer.`,
       'INVALID_INPUT',
@@ -34,6 +34,23 @@ export function validateNumericId(value: number, fieldName: string): number {
     );
   }
   return value;
+}
+
+/**
+ * The part of a `/v2/profiles` reply that profile auto-selection reads: an
+ * array of objects that each carry an id. The id's own check is
+ * `validateNumericId`, so a malformed id gives INVALID_INPUT rather than a
+ * shape error.
+ */
+const profileIdsReplySchema = z.array(z.object({ id: z.union([z.number(), z.string()]) }));
+
+/**
+ * ` (id 123)` for a connector-written message when a response id is an
+ * integer, else nothing: a response value is quoted in message text only
+ * after a type check. The enveloped record still carries the id.
+ */
+export function idInMessage(id: unknown): string {
+  return Number.isSafeInteger(id) ? ` (id ${id as number})` : '';
 }
 
 /**
@@ -57,7 +74,9 @@ export const isoDateTimeField = () =>
  *
  * - On success: returns the string result as a text content block.
  * - On WiseError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On unknown error: returns fixed connector-written text. The original
+ *   message can quote file paths, hosts or vendor bytes, so only its code or
+ *   name goes to stderr.
  *
  * Secrets are never exposed in error messages.
  */
@@ -85,9 +104,21 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[wise] tool failed with an unexpected error (${errorKind(error)})`);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'The Wise request could not be completed.',
+              code: 'INTERNAL_ERROR',
+              resolution:
+                'Try again. If it keeps failing, reconnect your Wise account with configure_wise; ' +
+                'the Wise MCP server log records the error code.',
+            }),
+          },
+        ],
         isError: true,
       };
     }
@@ -133,7 +164,16 @@ export async function resolveProfileId(
   if (profileId !== undefined) {
     return validateNumericId(profileId, 'profile_id');
   }
-  const profiles = await wiseFetch<WiseProfile[]>(credentials.apiToken, '/v2/profiles');
+  const reply = profileIdsReplySchema.safeParse(await wiseFetch<unknown>(credentials, '/v2/profiles'));
+  if (!reply.success) {
+    console.error('[wise] profiles reply did not have the expected shape');
+    throw new WiseError(
+      'Wise sent a profiles reply that could not be read.',
+      'API_ERROR',
+      'Try again, or call list_wise_profiles and pass profile_id explicitly.',
+    );
+  }
+  const profiles = reply.data;
   if (profiles.length === 0) {
     throw new WiseError(
       'No Wise profiles found for this token.',
@@ -142,7 +182,9 @@ export async function resolveProfileId(
     );
   }
   if (profiles.length === 1) {
-    return profiles[0].id;
+    // The id goes straight into URL paths, so it gets the same check as a
+    // caller-supplied one.
+    return validateNumericId(profiles[0].id, 'profile_id');
   }
   throw new WiseError(
     `This token can access ${profiles.length} Wise profiles; specify profile_id.`,

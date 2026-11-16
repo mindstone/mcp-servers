@@ -73,7 +73,6 @@ export class AttachmentService {
       // Create calendar directory structure
       const calendarPath = path.join(this.config.basePath!, ATTACHMENT_FOLDERS.CALENDAR);
       await fs.mkdir(calendarPath, { recursive: true });
-      await fs.mkdir(path.join(calendarPath, ATTACHMENT_FOLDERS.EVENT_FILES), { recursive: true });
 
       this.initialized = true;
     } catch (error) {

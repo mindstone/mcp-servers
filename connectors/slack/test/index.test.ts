@@ -93,6 +93,25 @@ const READ_ONLY_TOOLS = [
   'download_slack_file',
 ];
 
+const SENDS_VIA_RESOLVER = new Set([
+  'post_slack_message', 'compose_slack_message', 'schedule_slack_message', 'upload_slack_file',
+]);
+const EXCEPTIONS = new Map([
+  ['reply_to_slack_thread', 'Replies inside an existing thread the caller already read; it does not start a new conversation.'],
+  ['add_slack_reaction', 'Adds an emoji to an existing message, without sending a message or file.'],
+  ['remove_slack_reaction', 'Removes an emoji from an existing message.'],
+  ['pin_slack_message', 'Pins an existing message rather than sending new content.'],
+  ['unpin_slack_message', 'Unpins an existing message.'],
+  ['invite_user_to_channel', 'Changes channel membership rather than sending a message or file.'],
+  ['mark_slack_channel_as_read', 'Updates the read cursor without sending content.'],
+  ['add_slack_bookmark', 'Adds a channel bookmark rather than a conversation message or file.'],
+  ['update_slack_message', 'Edits a specific existing message in its existing conversation.'],
+  ['delete_slack_message', 'Deletes a specific existing message.'],
+  ['delete_scheduled_slack_message', 'Cancels an existing scheduled message without sending it.'],
+  ['add_slack_reminder', 'Names the person by user ID; posts no conversation message.'],
+  ['open_slack_dm', 'Opens a DM; sends no content.'],
+]);
+
 const DESTRUCTIVE_TOOLS = [
   'post_slack_message',
   'reply_to_slack_thread',
@@ -176,6 +195,48 @@ describe('Slack MCP — smoke & registration', () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);
+  });
+
+  it('classifies every conversation write as resolver-protected or a justified exception', async () => {
+    const { tools } = await client.client.listTools();
+    const writes = tools.filter((tool) => {
+      const properties = tool.inputSchema.properties ?? {};
+      return ('channel' in properties || 'target' in properties || 'user' in properties)
+        && !READ_ONLY_TOOLS.includes(tool.name) && tool.annotations?.readOnlyHint !== true;
+    });
+    for (const tool of writes) {
+      expect(SENDS_VIA_RESOLVER.has(tool.name) || Boolean(EXCEPTIONS.get(tool.name)?.trim()),
+        `${tool.name}: route sends through resolveSendTarget or add a justified EXCEPTIONS entry.`).toBe(true);
+    }
+    expect([...SENDS_VIA_RESOLVER, ...EXCEPTIONS.keys()].sort()).toEqual(writes.map((tool) => tool.name).sort());
+  });
+
+  it.each([...SENDS_VIA_RESOLVER])('%s refuses an unnamed DM before any Slack send', async (name) => {
+    const writes: string[] = [];
+    mswServer.use(...['chat.postMessage', 'chat.scheduleMessage', 'files.getUploadURLExternal',
+      'files.completeUploadExternal'].map((method) => http.post(`${SLACK_API_BASE}/${method}`, () => {
+      writes.push(method);
+      return HttpResponse.json({ ok: true });
+    })));
+    vi.stubEnv('MCP_WORKSPACE_PATH', cfg.configPath);
+    const channel = 'D999TEST';
+    const text = 'Resolver registry check';
+    const inputs: Record<string, Record<string, unknown>> = {
+      post_slack_message: { channel, text },
+      compose_slack_message: { target: channel, text },
+      schedule_slack_message: { channel, text, post_at: Math.floor(Date.now() / 1000) + 3600 },
+      upload_slack_file: { channel, file_path: path.join(cfg.configPath, 'config.json') },
+    };
+    const results = [await client.callTool(name, inputs[name])];
+    if (name === 'compose_slack_message') {
+      // Send calls post_slack_message; check that endpoint too, including an edited bare-D target.
+      results.push(await client.callTool('post_slack_message', { channel, text }));
+    }
+    expect(writes).toEqual([]);
+    for (const result of results) {
+      expect(result.json).toMatchObject({ ok: false, next_step: 'lookup_user_by_email' });
+      expect((result.json as { error: string }).error).toContain('DM NOT sent');
+    }
   });
 
   it('every tool has a non-empty description', async () => {
@@ -321,6 +382,65 @@ describe('Slack MCP — DM recipient verification', () => {
     expect(result.json).toMatchObject({ ok: false });
     const errMsg = (result.json as { error?: string }).error || '';
     expect(errMsg).toContain('RECIPIENT MISMATCH');
+    // The refusal never names who the DM actually belongs to.
+    expect(result.json).not.toHaveProperty('actual_recipient');
+    expect(result.text).not.toContain('U123');
+  });
+
+  it('opens the DM for a person target with the sending client and posts there', async () => {
+    const openAuth: Array<string | null> = [];
+    const postAuth: Array<string | null> = [];
+    mswServer.use(
+      http.post(`${SLACK_API_BASE}/conversations.open`, ({ request }) => {
+        openAuth.push(request.headers.get('authorization'));
+        return undefined; // falls through to the shared mock
+      }),
+      http.post(`${SLACK_API_BASE}/chat.postMessage`, ({ request }) => {
+        postAuth.push(request.headers.get('authorization'));
+        return undefined;
+      }),
+    );
+    const result = await client.callTool('post_slack_message', {
+      channel: 'U777',
+      text: 'hello person',
+    });
+    expect(result.json).toMatchObject({ ok: true, channel: 'DU777' });
+    const recipient = (result.json as { recipient?: { user_id?: string; email?: string } }).recipient;
+    expect(recipient?.user_id).toBe('U777');
+    expect(recipient?.email).toBe('u777@example.com');
+    // The DM is opened by the same (user) client that posts, never the bot.
+    expect(openAuth).toEqual(['Bearer xoxp-mock']);
+    expect(postAuth).toEqual(['Bearer xoxp-mock']);
+  });
+
+  it('opens the DM for a W-prefixed (Enterprise Grid) person target', async () => {
+    const result = await client.callTool('post_slack_message', {
+      channel: 'W888',
+      text: 'hello grid person',
+    });
+    expect(result.json).toMatchObject({ ok: true, channel: 'DW888' });
+    const recipient = (result.json as { recipient?: { user_id?: string; email?: string } }).recipient;
+    expect(recipient?.user_id).toBe('W888');
+    expect(recipient?.email).toBe('w888@example.com');
+  });
+
+  it('resolves an email person target to that person\'s DM', async () => {
+    const result = await client.callTool('post_slack_message', {
+      channel: 'testuser@example.com',
+      text: 'hello by email',
+    });
+    expect(result.json).toMatchObject({ ok: true, channel: 'D999TEST' });
+    expect((result.json as { recipient?: { user_id?: string } }).recipient?.user_id).toBe('U123');
+  });
+
+  it('refuses a person target whose intended_recipient names someone else', async () => {
+    const result = await client.callTool('post_slack_message', {
+      channel: 'U777',
+      text: 'conflict',
+      intended_recipient: 'U123',
+    });
+    expect(result.json).toMatchObject({ ok: false });
+    expect((result.json as { error?: string }).error).toContain('RECIPIENT MISMATCH');
   });
 
   it('succeeds when intended_recipient matches', async () => {
@@ -339,8 +459,9 @@ describe('Slack MCP — DM recipient verification', () => {
       text: 'no intent',
     });
     expect(result.json).toMatchObject({ ok: false });
-    const j = result.json as { error?: string; next_step?: string };
-    expect(j.error).toMatch(/intended_recipient is required/i);
+    const j = result.json as { error?: string; action_required?: string; next_step?: string };
+    expect(j.error).toMatch(/DM NOT sent/);
+    expect(j.action_required).toMatch(/user ID or email/i);
     expect(j.next_step).toBe('lookup_user_by_email');
     // The refusal happens BEFORE chat.postMessage, so nothing is posted.
     expect(result.json).not.toHaveProperty('recipient');
@@ -690,7 +811,7 @@ describe('Slack MCP — self-DM send guards', () => {
       ok: false,
       next_step: 'lookup_user_by_email',
     });
-    expect(((result.json as { error?: string }).error || '')).toMatch(/intended_recipient is required/i);
+    expect(((result.json as { error?: string }).error || '')).toMatch(/DM NOT sent/);
     expect(postCalls).toBe(0);
   });
 
@@ -771,12 +892,6 @@ describe('Slack MCP — self-DM send guards', () => {
     let postCalls = 0;
     mswServer.use(
       http.post(`${SLACK_API_BASE}/auth.test`, () => HttpResponse.json({ ok: true })),
-      http.post(`${SLACK_API_BASE}/conversations.info`, () =>
-        HttpResponse.json({
-          ok: true,
-          channel: { id: 'D999TEST', is_im: true, user: 'U456' },
-        }),
-      ),
       http.post(`${SLACK_API_BASE}/users.info`, () =>
         HttpResponse.json({
           ok: true,
@@ -805,9 +920,8 @@ describe('Slack MCP — self-DM send guards', () => {
     });
 
     const result = await client.callTool('post_slack_message', {
-      channel: 'D999TEST',
+      channel: 'U456',
       text: 'identity unknown',
-      intended_recipient: 'U456',
     });
 
     expect(result.json).toMatchObject({
@@ -843,7 +957,7 @@ describe('Slack MCP — self-DM send guards', () => {
     });
 
     const result = await client.callTool('schedule_slack_message', {
-      channel: 'D999TEST',
+      channel: 'U123',
       text: 'later silent note',
       post_at: Math.floor(Date.now() / 1000) + 3600,
     });
@@ -857,6 +971,89 @@ describe('Slack MCP — self-DM send guards', () => {
       'Scheduled self-notes are not supported yet',
     );
     expect(scheduleCalls).toBe(0);
+  });
+});
+
+describe('Slack MCP — schedule names the DM recipient', () => {
+  let client: McpTestClient;
+  let cfg: SlackTestConfig;
+  let scheduleChannels: string[];
+
+  beforeAll(async () => {
+    cfg = createSlackConfigDir({
+      tokens: {
+        botToken: 'xoxb-mock',
+        userToken: 'xoxp-mock',
+        botUserId: 'U999BOT',
+        authedUserId: 'USELF',
+      },
+    });
+    client = await createTestClient({
+      env: { ...CLIENT_ENV, SLACK_CONFIG_PATH: cfg.configPath },
+    });
+  });
+
+  beforeEach(() => {
+    scheduleChannels = [];
+    mswServer.use(
+      http.post(`${SLACK_API_BASE}/chat.scheduleMessage`, async ({ request }) => {
+        const channel = new URLSearchParams(await request.text()).get('channel') ?? '';
+        scheduleChannels.push(channel);
+        return HttpResponse.json({ ok: true, channel, scheduled_message_id: 'Q1234ABCD', post_at: 1 });
+      }),
+      ...createSlackHandlers(),
+    );
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  const postAt = () => Math.floor(Date.now() / 1000) + 3600;
+
+  it('schedule refuses a bare DM channel before scheduling anything', async () => {
+    const result = await client.callTool('schedule_slack_message', {
+      channel: 'D999TEST',
+      text: 'later',
+      post_at: postAt(),
+    });
+    expect(result.json).toMatchObject({ ok: false, next_step: 'lookup_user_by_email' });
+    expect(scheduleChannels).toEqual([]);
+  });
+
+  it('schedule accepts a DM channel whose intended_recipient matches', async () => {
+    const result = await client.callTool('schedule_slack_message', {
+      channel: 'D999TEST',
+      text: 'later',
+      post_at: postAt(),
+      intended_recipient: 'U123',
+    });
+    expect(result.json).toMatchObject({ ok: true });
+    expect(scheduleChannels).toEqual(['D999TEST']);
+  });
+
+  it('schedule refuses a DM channel that belongs to someone else, without naming them', async () => {
+    const result = await client.callTool('schedule_slack_message', {
+      channel: 'D999TEST',
+      text: 'later',
+      post_at: postAt(),
+      intended_recipient: 'U777',
+    });
+    expect(result.json).toMatchObject({ ok: false });
+    expect((result.json as { error?: string }).error).toContain('RECIPIENT MISMATCH');
+    expect(result.text).not.toContain('U123');
+    expect(scheduleChannels).toEqual([]);
+  });
+
+  it('schedule opens the DM for a person target', async () => {
+    const result = await client.callTool('schedule_slack_message', {
+      channel: 'U777',
+      text: 'later',
+      post_at: postAt(),
+    });
+    expect(result.json).toMatchObject({ ok: true });
+    expect(scheduleChannels).toEqual(['DU777']);
   });
 });
 

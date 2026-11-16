@@ -122,13 +122,18 @@ export function createSlackHandlers() {
         ts: params.get('ts') || '1704067200.123456',
       });
     }),
-    http.post(`${SLACK_API_BASE}/conversations.open`, () =>
-      HttpResponse.json({
+    // Each person has their own DM: U123's is D999TEST; anyone else gets a
+    // distinct D id.
+    http.post(`${SLACK_API_BASE}/conversations.open`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      const users = params.get('users');
+      const id = !users || users === 'U123' ? 'D999TEST' : `D${users}`;
+      return HttpResponse.json({
         ok: true,
-        channel: { id: 'D999TEST', is_im: true },
+        channel: { id, is_im: true },
         already_open: false,
-      }),
-    ),
+      });
+    }),
     http.post(`${SLACK_API_BASE}/conversations.list`, () =>
       HttpResponse.json({
         ok: true,
@@ -192,20 +197,28 @@ export function createSlackHandlers() {
         channel: { id: 'C123TEST', name: 'general' },
       }),
     ),
-    http.post(`${SLACK_API_BASE}/users.info`, () =>
-      HttpResponse.json({
-        ok: true,
-        user: {
-          id: 'U123',
-          name: 'testuser',
-          real_name: 'Test User',
-          profile: {
-            display_name: 'Test',
-            email: 'testuser@example.com',
-          },
-        },
-      }),
-    ),
+    // Each person has their own profile: U123 is Test User; anyone else gets a
+    // distinct profile derived from their id.
+    http.post(`${SLACK_API_BASE}/users.info`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      const id = params.get('user') || 'U123';
+      const handle = id.toLowerCase();
+      const user =
+        id === 'U123'
+          ? {
+              id: 'U123',
+              name: 'testuser',
+              real_name: 'Test User',
+              profile: { display_name: 'Test', email: 'testuser@example.com' },
+            }
+          : {
+              id,
+              name: handle,
+              real_name: `Person ${id}`,
+              profile: { display_name: `person-${handle}`, email: `${handle}@example.com` },
+            };
+      return HttpResponse.json({ ok: true, user });
+    }),
     http.post(`${SLACK_API_BASE}/users.list`, () =>
       HttpResponse.json({
         ok: true,

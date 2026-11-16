@@ -168,7 +168,8 @@ describe('Humaans people tools', () => {
     expect(bio.endsWith('</untrusted-content>')).toBe(true);
     expect(bio.split('</untrusted-content>').length - 1).toBe(1);
     expect(bio).not.toContain('</untrusted-content >');
-    expect(bio).toContain('<\\/untrusted-content>');
+    expect(bio).toMatch(/<\\\/untrusted-content/i);
+    expect(bio.match(/<\/untrusted-content/gi)).toHaveLength(1);
 
     const link = json.person.socialLinks[0];
     expect(link.split('</untrusted-content>').length - 1).toBe(1);

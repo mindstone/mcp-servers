@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-xero",
   "title": "Xero",
   "description": "Xero MCP server for invoices, contacts, payments, quotes, and financial reports.",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-xero",
-      "version": "0.1.1",
+      "version": "0.1.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -22,21 +22,28 @@
       "environmentVariables": [
         {
           "name": "XERO_CLIENT_ID",
-          "description": "Xero Custom Connection client ID.",
+          "description": "Client ID of your Xero Web app (Sign in with Xero) or Custom Connection.",
           "isRequired": true,
           "isSecret": true,
           "format": "string"
         },
         {
           "name": "XERO_CLIENT_SECRET",
-          "description": "Xero Custom Connection client secret.",
+          "description": "Client secret of your Xero Web app (Sign in with Xero) or Custom Connection.",
           "isRequired": true,
           "isSecret": true,
           "format": "string"
         },
         {
+          "name": "XERO_REFRESH_TOKEN",
+          "description": "Optional refresh token from Sign in with Xero, for a Web app. Rebel saves it when you click Connect. With it, the client ID and secret are used as a Web app's, not a Custom Connection's.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
           "name": "XERO_CLIENT_BEARER_TOKEN",
-          "description": "Optional externally-managed Xero bearer token. When set, this takes precedence over the Custom Connection client credentials.",
+          "description": "Optional externally-managed Xero bearer token. When set, it takes precedence over the refresh token and the Custom Connection client credentials.",
           "isRequired": false,
           "isSecret": true,
           "format": "string"

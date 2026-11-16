@@ -360,7 +360,7 @@ export const COMPOSE_MESSAGE_HTML = `
 
       <div class="field">
         <label for="toInput">To</label>
-        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="#general or a channel ID">
+        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="#general, a channel ID, or a person's email">
       </div>
 
       <div class="field">
@@ -433,7 +433,8 @@ export const COMPOSE_MESSAGE_HTML = `
       var collapsed = false;
       var sendMayHaveGone = false;
       var sent = false;
-      var intendedRecipient = '';
+      var boundRecipientTarget = '';
+      var boundRecipientLabel = '';
       var sendBlocked = false;
       var persistentBlockMessage = '';
       var sendTimeoutId = null;
@@ -670,14 +671,11 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function readFormPayload() {
-        var channel = String(toInput.value || '').trim();
+        var typed = String(toInput.value || '').trim();
         var payload = {
-          channel: channel,
+          channel: isBoundRecipientShown() ? boundRecipientTarget : typed,
           text: String(bodyInput.value || '')
         };
-        if (intendedRecipient) {
-          payload.intended_recipient = intendedRecipient;
-        }
         return payload;
       }
 
@@ -719,16 +717,13 @@ export const COMPOSE_MESSAGE_HTML = `
 
       function applyDraftData(rawDraft) {
         var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};
-        toInput.value = String(draft.target || '');
+        var target = String(draft.target || '').trim();
+        var label = typeof draft.recipient_label === 'string' ? unwrapUntrustedLabel(draft.recipient_label).trim() : '';
+        boundRecipientTarget = target && label ? target : '';
+        boundRecipientLabel = target && label ? label : '';
+        toInput.value = boundRecipientLabel || target;
         bodyInput.value = String(draft.text || '');
-        intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';
-        if (intendedRecipient) {
-          recipientNotice.textContent = 'This will be sent as a direct message to the person you asked to contact.';
-          recipientNotice.classList.remove('hidden');
-        } else {
-          recipientNotice.textContent = '';
-          recipientNotice.classList.add('hidden');
-        }
+        syncRecipientNotice();
         clearError();
         clearSuccess();
         postResize();
@@ -873,8 +868,9 @@ export const COMPOSE_MESSAGE_HTML = `
       function renderSentView(payload, meta, stamp) {
         payload = payload && typeof payload === 'object' ? payload : {};
         sentTimestamp.textContent = stamp ? 'Sent ' + stamp : 'Sent';
-        sentTo.textContent = String(payload.channel || payload.chatId || '');
-        sentBody.textContent = String(payload.text || payload.content || '');
+        var sentChannel = String(payload.channel || '');
+        sentTo.textContent = boundRecipientLabel && sentChannel === boundRecipientTarget ? boundRecipientLabel : sentChannel;
+        sentBody.textContent = String(payload.text || '');
       }
 
       function handleSendRequest() {
@@ -954,6 +950,27 @@ export const COMPOSE_MESSAGE_HTML = `
           postResize();
         });
       });
+      function unwrapUntrustedLabel(value) {
+        var match = /^<untrusted-content source="[^"]*">([\\s\\S]*)<\\/untrusted-content>$/.exec(value);
+        if (!match) return value;
+        return match[1].replace(/<\\\\(\\\\*)(\\/?untrusted-content)(?=[\\s\\/>])/gi, '<$1$2');
+      }
+
+      function isBoundRecipientShown() {
+        return Boolean(boundRecipientLabel) && String(toInput.value || '').trim() === boundRecipientLabel;
+      }
+
+      function syncRecipientNotice() {
+        if (isBoundRecipientShown()) {
+          recipientNotice.textContent = 'Direct message to ' + boundRecipientLabel + ' (' + boundRecipientTarget + ').';
+          recipientNotice.classList.remove('hidden');
+        } else {
+          recipientNotice.textContent = '';
+          recipientNotice.classList.add('hidden');
+        }
+      }
+
+      toInput.addEventListener('input', syncRecipientNotice);
 
       window.addEventListener('message', function (event) {
         // Honest scope (origin-independent): the iframe sandbox origin is 'null',

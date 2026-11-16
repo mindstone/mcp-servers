@@ -38,7 +38,7 @@
  *
  * Non-string leaves (numbers, booleans, null) pass through unchanged.
  */
-import { wrapUntrusted } from './untrusted-content.js';
+import { escapeUntrustedTags, wrapUntrusted } from './untrusted-content.js';
 
 type Obj = Record<string, unknown>;
 
@@ -121,18 +121,6 @@ function isStructuralKey(key: string | undefined): boolean {
  */
 const MAX_SANITIZE_DEPTH = 40;
 const MAX_SANITIZE_NODES = 100_000;
-
-// Mirrors the close-tag sentinel escaping in the vendored untrusted-content.ts
-// (kept byte-for-byte with the shared reference, so not imported from). Object
-// keys are not enveloped — they must round-trip as identifiers — but a key
-// smuggling a close-tag variant would otherwise forge an envelope boundary in
-// model-visible output.
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
-const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
-
-function defangKey(key: string): string {
-  return key.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
-}
 
 /**
  * A path-scoped exception for API-contract identifiers that are
@@ -233,7 +221,10 @@ function sanitizeValue(
     // A `properties` object on a CRM record holds tenant-defined custom
     // property values: everything below it is untrusted regardless of key name.
     const childInRecordProperties = inRecordProperties || childKey === 'properties';
-    out[defangKey(childKey)] = sanitizeValue(
+    // Keys are not enveloped (they must round-trip as identifiers), but a key
+    // smuggling an untrusted-content tag would otherwise forge an envelope
+    // boundary in model-visible output, so its tags are escaped.
+    out[escapeUntrustedTags(childKey)] = sanitizeValue(
       childValue,
       childKey,
       ownPath,

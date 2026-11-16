@@ -1,16 +1,13 @@
-import { AttachmentMetadata } from '../attachments/types.js';
-import { AttachmentInfo } from '../attachments/response-transformer.js';
-
-export interface CalendarModuleConfig {
-  maxAttachmentSize?: number;
-  allowedAttachmentTypes?: string[];
-}
-
-export interface CalendarAttachment {
-  content: string;      // Base64 content
-  title: string;       // Filename
-  mimeType: string;    // MIME type
-  size?: number;       // Size in bytes
+/**
+ * A Calendar attachment is a reference to a Drive file, not file content:
+ * open it with the Drive tools by `fileId`. A provider attachment without a
+ * `fileId` (a plain link) keeps its URL and gets no ID.
+ */
+export interface CalendarAttachmentReference {
+  name: string;
+  fileId?: string;
+  fileUrl?: string;
+  mimeType?: string;
 }
 
 export interface EventTime {
@@ -49,7 +46,7 @@ export interface EventResponse {
   end: EventTime;
   attendees?: EventAttendee[];
   organizer?: EventOrganizer;
-  attachments?: AttachmentInfo[];
+  attachments?: CalendarAttachmentReference[];
   htmlLink?: string;
   hangoutLink?: string;
   conferenceData?: ConferenceData;
@@ -89,8 +86,8 @@ export interface CreateEventParams {
     email: string;
   }[];
   attachments?: {
-    driveFileId?: string;  // For existing Drive files
-    content?: string;      // Base64 content for new files
+    driveFileId?: string;  // An existing Drive file, attached by its Drive link
+    content?: string;      // Base64 content, uploaded to Drive first
     name: string;
     mimeType: string;
     size?: number;
@@ -113,7 +110,7 @@ export interface CreateEventResponse {
   htmlLink: string;
   /** Human-readable confirmation with day-of-week to help verify correct date (e.g., "Thursday, Jan 30, 2026 3:00 PM–4:00 PM (America/New_York)") */
   scheduledFor: string;
-  attachments?: AttachmentMetadata[];
+  attachments?: CalendarAttachmentReference[];
 }
 
 export interface ManageEventParams {

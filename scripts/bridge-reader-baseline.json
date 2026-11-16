@@ -1,0 +1,30 @@
+{
+  "$comment": "Connectors that read the host app bridge state file (MCP_HOST_BRIDGE_STATE / MINDSTONE_REBEL_BRIDGE_STATE) without the vendored hardened reader, test-harness/src/bridge-reader.ts. Found by a sweep on 2026-11-12; some already harden their own reader in part or in full, but none uses the shared copy. scripts/check-bridge-reader.mjs lets these pass so the gate is not red on day one, and fails any other connector that reads the bridge without the copy. RATCHET: this list can only shrink (CI compares it with the base commit's); a connector that adopts the copy fails until it is removed from here.",
+  "discoveredAt": "2026-11-12",
+  "gappedConnectors": [
+    "browserbase",
+    "elevenlabs",
+    "elevenlabs-agents",
+    "email-imap",
+    "fathom",
+    "freshdesk",
+    "gamma",
+    "humaans",
+    "kling",
+    "mixmax",
+    "nano-banana",
+    "napkin",
+    "opus-video-clip",
+    "outreach",
+    "pandadoc",
+    "quickbooks",
+    "retell-ai",
+    "runway",
+    "salesforce",
+    "servicenow",
+    "talentlms",
+    "wise",
+    "workday",
+    "zendesk"
+  ]
+}

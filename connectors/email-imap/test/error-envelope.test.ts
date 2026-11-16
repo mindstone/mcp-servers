@@ -74,6 +74,57 @@ describe('external error enveloping', () => {
     expect(closeMatches.length).toBe(1);
   });
 
+  it('returns the structured { ok, error, code, resolution } contract for generic exceptions', async () => {
+    const { createTestClient } = await import('./helpers/mcp-test-client.js');
+    testClient = await createTestClient({
+      env: {
+        EMAIL_IMAP_EMAIL: 'test@icloud.com',
+        EMAIL_IMAP_PASSWORD: 'test-pass',
+        EMAIL_IMAP_PROVIDER: 'icloud',
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+    await testClient.callTool('configure_email_imap', {
+      email: 'test@icloud.com',
+      password: 'test-pass',
+      provider: 'icloud',
+    });
+
+    const result = await testClient.callTool('email_list_mailboxes', {});
+    expect(result.isError).toBe(true);
+
+    const json = result.json as Record<string, unknown>;
+    expect(Object.keys(json).sort()).toEqual(['code', 'error', 'ok', 'resolution']);
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INTERNAL_ERROR');
+    const resolution = json.resolution as string;
+    expect(resolution.length).toBeGreaterThan(0);
+    // A send or write may have partly happened before the failure, so the
+    // guidance must not present a blind retry as safe.
+    expect(resolution).not.toMatch(/^\s*(try again|retry)/i);
+    expect(resolution).toMatch(/before (retrying|trying again)/i);
+  });
+
+  it('gives non-Error throws the same structured contract', async () => {
+    const { withErrorHandling } = await import('../src/utils.js');
+    const handler = withErrorHandling(async () => {
+      throw 'plain string failure';
+    });
+
+    const result = await handler({}, undefined);
+    expect(result.isError).toBe(true);
+    const json = JSON.parse((result.content[0] as { text: string }).text) as Record<
+      string,
+      unknown
+    >;
+    expect(json.ok).toBe(false);
+    expect(json.error).toBe(
+      '<untrusted-content source="email-imap:external-error">plain string failure</untrusted-content>',
+    );
+    expect(json.code).toBe('INTERNAL_ERROR');
+    expect(typeof json.resolution).toBe('string');
+  });
+
   it('keeps EmailImapError structured responses unenveloped', async () => {
     const { createTestClient } = await import('./helpers/mcp-test-client.js');
     testClient = await createTestClient({
@@ -93,6 +144,7 @@ describe('external error enveloping', () => {
     expect(result.isError).toBe(true);
     const json = result.json as Record<string, unknown>;
     expect(json.code).toBe('PROVIDER_DETECTION_FAILED');
+    expect(json.resolution as string).toContain('EMAIL_IMAP_PROVIDER');
     expect(json.error as string).not.toContain('<untrusted-content');
   });
 });

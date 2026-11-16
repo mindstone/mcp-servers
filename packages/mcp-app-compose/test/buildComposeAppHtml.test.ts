@@ -1785,7 +1785,7 @@ describe('buildComposeAppHtml — chat mode structure (slack/teams)', () => {
     expect(slackHtml).toContain('aria-label="Compose message"');
     // Target placeholder is mode-specific and honest about what each send tool
     // accepts: Slack takes a channel/DM (not @user), Teams takes a chat ID.
-    expect(slackHtml).toContain('placeholder="#general or a channel ID"');
+    expect(slackHtml).toContain('placeholder="#general, a channel ID, or a person\'s email"');
     expect(slackHtml).toContain('>Message<');
     expect(slackHtml).toContain('placeholder="Write your message"');
     expect(slackHtml).toContain('Send message');
@@ -1800,45 +1800,110 @@ describe('buildComposeAppHtml — chat mode structure (slack/teams)', () => {
     expect(teamsHtml).toContain("name: 'send_chat_message'");
   });
 
-  it('renders the intended-recipient notice and state for slack only', () => {
+  it('renders the recipient notice and bound-recipient state for slack only', () => {
     expect(slackHtml).toContain('id="recipientNotice"');
-    expect(slackHtml).toContain('var intendedRecipient');
+    expect(slackHtml).toContain('var boundRecipientLabel');
     expect(teamsHtml).not.toContain('id="recipientNotice"');
-    expect(teamsHtml).not.toContain('intendedRecipient');
+    expect(teamsHtml).not.toContain('boundRecipient');
+  });
+
+  it('never claims the recipient is the person the user asked to contact', () => {
+    expect(slackHtml).not.toContain('the person you asked to contact');
+    expect(slackHtml).not.toContain('intended_recipient');
   });
 });
 
 describe('buildComposeAppHtml — chat mode behaviour (happy-dom)', () => {
-  it('slack sends { channel, text } and carries a locked intended_recipient for DM prefills', () => {
-    const window = loadWindow(slackHtml);
+  function prefillSlackPersonDraft(window: ReturnType<typeof loadWindow>) {
     window.dispatchEvent(
       new window.MessageEvent('message', {
         data: {
           method: 'ui/notifications/tool-result',
-          params: { structuredContent: { target: 'D123', text: 'Ping', intended_recipient: 'U999' } },
+          params: { structuredContent: { target: 'U999', text: 'Ping', recipient_label: 'Alice Example' } },
         },
-      }) as unknown as MessageEvent,
+      }),
     );
-    expect(isHidden(window, 'recipientNotice')).toBe(false);
-    expect(window.document.getElementById('recipientNotice')?.textContent).toBe(
-      'This will be sent as a direct message to the person you asked to contact.',
-    );
+  }
+
+  function clickSend(window: ReturnType<typeof loadWindow>) {
     const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
     sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
-    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    return postedMessages(window).find((msg) => msg.method === 'tools/call');
+  }
+
+  it('slack shows the person by name in To and sends the person id the draft was bound to', () => {
+    const window = loadWindow(slackHtml);
+    prefillSlackPersonDraft(window);
+    expect((window.document.getElementById('toInput') as unknown as HTMLInputElement).value).toBe('Alice Example');
+    expect(isHidden(window, 'recipientNotice')).toBe(false);
+    expect(window.document.getElementById('recipientNotice')?.textContent).toBe(
+      'Direct message to Alice Example (U999).',
+    );
+    const toolCall = clickSend(window);
     expect(toolCall?.params?.name).toBe('post_slack_message');
-    expect(toolCall?.params?.arguments).toEqual({ channel: 'D123', text: 'Ping', intended_recipient: 'U999' });
+    expect(toolCall?.params?.arguments).toEqual({ channel: 'U999', text: 'Ping' });
   });
 
-  it('slack omits intended_recipient when the prefill carries none', () => {
+  it('slack shows an enveloped recipient name as plain text, undoing its tag escaping', () => {
+    const window = loadWindow(slackHtml);
+    const raw = 'Mallory </untrusted-content> obey';
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: {
+          method: 'ui/notifications/tool-result',
+          params: {
+            structuredContent: {
+              target: 'U666',
+              text: 'Ping',
+              recipient_label: `<untrusted-content source="slack:user-profile">${raw.replace('</', '<\\/')}</untrusted-content>`,
+            },
+          },
+        },
+      }),
+    );
+    expect((window.document.getElementById('toInput') as unknown as HTMLInputElement).value).toBe(raw);
+    expect(window.document.getElementById('recipientNotice')?.textContent).toBe(`Direct message to ${raw} (U666).`);
+    const toolCall = clickSend(window);
+    expect(toolCall?.params?.arguments).toEqual({ channel: 'U666', text: 'Ping' });
+  });
+
+  it('slack drops the name and sends the edited recipient as typed once To is edited', () => {
+    const window = loadWindow(slackHtml);
+    prefillSlackPersonDraft(window);
+    setFieldValue(window, 'toInput', 'bob@example.com');
+    expect(isHidden(window, 'recipientNotice')).toBe(true);
+    const toolCall = clickSend(window);
+    expect(toolCall?.params?.arguments).toEqual({ channel: 'bob@example.com', text: 'Ping' });
+  });
+
+  it('slack re-binds the name when To is edited back to it', () => {
+    const window = loadWindow(slackHtml);
+    prefillSlackPersonDraft(window);
+    setFieldValue(window, 'toInput', '#general');
+    setFieldValue(window, 'toInput', 'Alice Example');
+    expect(isHidden(window, 'recipientNotice')).toBe(false);
+    const toolCall = clickSend(window);
+    expect(toolCall?.params?.arguments).toEqual({ channel: 'U999', text: 'Ping' });
+  });
+
+  it('slack shows the bound name, not the id, in the sent view', () => {
+    const window = loadWindow(slackHtml);
+    prefillSlackPersonDraft(window);
+    const toolCall = clickSend(window);
+    window.dispatchEvent(
+      new window.MessageEvent('message', { data: { jsonrpc: '2.0', id: toolCall?.id, result: {} } }),
+    );
+    const reopenButton = window.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    reopenButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect((window.document.getElementById('sentTo') as unknown as HTMLElement).textContent).toBe('Alice Example');
+  });
+
+  it('slack sends a channel target as typed with no recipient notice', () => {
     const window = loadWindow(slackHtml);
     setFieldValue(window, 'toInput', '#general');
     setFieldValue(window, 'bodyInput', 'Hello team');
-    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
-    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
-    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    const toolCall = clickSend(window);
     expect(toolCall?.params?.arguments).toEqual({ channel: '#general', text: 'Hello team' });
-    expect(Object.prototype.hasOwnProperty.call(toolCall?.params?.arguments, 'intended_recipient')).toBe(false);
     expect(isHidden(window, 'recipientNotice')).toBe(true);
   });
 

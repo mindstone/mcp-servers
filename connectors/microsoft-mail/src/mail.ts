@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonValues } from './untrusted-content.js';
 
 // Graph response payloads are cast by the SDK; the tools added here validate
 // the fields they consume with Zod at the boundary (planned tightening —
@@ -180,12 +180,12 @@ export async function getEmail(
   return {
     id: email.id,
     subject: wrapUntrusted(email.subject, 'microsoft-mail:get_email:subject'),
-    from: wrapUntrustedJsonStrings(email.from?.emailAddress, 'microsoft-mail:get_email:from'),
-    to: wrapUntrustedJsonStrings(
+    from: wrapUntrustedJsonValues(email.from?.emailAddress, 'microsoft-mail:get_email:from'),
+    to: wrapUntrustedJsonValues(
       email.toRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
       'microsoft-mail:get_email:to',
     ),
-    cc: wrapUntrustedJsonStrings(
+    cc: wrapUntrustedJsonValues(
       email.ccRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
       'microsoft-mail:get_email:cc',
     ),

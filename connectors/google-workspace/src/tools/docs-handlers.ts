@@ -28,7 +28,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 import { preserveGoogleRetryDecision } from '../utils/google-retry.js';
 
 // Handler argument types

@@ -186,7 +186,7 @@ export interface SlackWorkspace {
   authedAt: string;
 }
 
-/** Verified DM partner identity used by `post_slack_message` recipient guard. */
+/** The person a direct message goes to, as resolved by `resolveSendTarget`. */
 export interface DmRecipient {
   user_id: string;
   real_name: string;

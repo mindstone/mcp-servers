@@ -374,7 +374,10 @@ describe('download_attachment adversarial cases', () => {
     expect(json.error).toContain('<untrusted-content source="microsoft-mail:download_attachment:name">');
     // The breakout close-tag variant must be escaped, not emitted raw.
     expect(json.error).not.toContain('</untrusted-content >');
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    const nameEnvelope = json.error.split('" is not a file attachment ')[0];
+    expect(nameEnvelope.match(/<\/untrusted-content/gi)).toHaveLength(1);
+    expect(nameEnvelope).toMatch(/<\/untrusted-content>$/);
   });
 
   it('envelopes an attacker-controlled @odata.type on the unsupported-type error path', async () => {

@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+import * as path from 'path';
 import { centralReadPath, fileReadContext } from '../file-read-context.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -9,7 +11,7 @@ import {
   RUNWAY_API_SOURCE,
 } from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { pathSegment, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -29,7 +31,7 @@ export function registerTaskTools(server: McpServer): void {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const result = await runwayFetch<TaskDetail>(`/tasks/${args.task_id}`);
+      const result = await runwayFetch<TaskDetail>(`/tasks/${pathSegment(args.task_id)}`);
       const response: Record<string, unknown> = {
         ok: true, task_id: result.id, status: result.status, created_at: result.createdAt,
       };
@@ -69,6 +71,7 @@ export function registerTaskTools(server: McpServer): void {
       const pollInterval = Math.max(5, args.poll_interval || 15) * 1000;
       const timeout = Math.min(600, Math.max(30, args.timeout || 300)) * 1000;
       const taskId = args.task_id;
+      const taskPath = `/tasks/${pathSegment(taskId)}`;
       const startTime = Date.now();
       const maxTransientErrors = 3;
       let transientErrors = 0;
@@ -76,7 +79,7 @@ export function registerTaskTools(server: McpServer): void {
       while (Date.now() - startTime < timeout) {
         let result: TaskDetail;
         try {
-          result = await runwayFetch<TaskDetail>(`/tasks/${taskId}`);
+          result = await runwayFetch<TaskDetail>(taskPath);
           transientErrors = 0;
         } catch (pollErr) {
           transientErrors++;
@@ -125,7 +128,7 @@ export function registerTaskTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const cancelRes = await runwayRawFetch(`/tasks/${args.task_id}`, { method: 'DELETE' });
+      const cancelRes = await runwayRawFetch(`/tasks/${pathSegment(args.task_id)}`, { method: 'DELETE' });
       if (!cancelRes.ok && cancelRes.status !== 204) {
         throw new RunwayError(
           `Failed to cancel task (HTTP ${cancelRes.status})`,
@@ -146,14 +149,15 @@ export function registerTaskTools(server: McpServer): void {
         'Use after a task succeeds to save the output locally. ' +
         'output_path MUST live inside RUNWAY_DOWNLOAD_ROOT (default ~/Downloads/runway-mcp). ' +
         'Sensitive paths (~/.ssh, ~/.aws, /etc, ~/.bashrc, ~/.zshrc) are refused even when the root would otherwise permit them. ' +
-        'By default, refuses to overwrite an existing file (atomic flags: "wx") — pass overwrite: true to clobber.',
+        'By default, refuses to overwrite an existing file (atomic flags: "wx") — pass overwrite: true to replace it. ' +
+        'An overwrite is staged to a temporary file and moved into place only after the download succeeds, so a failed download leaves the existing file untouched.',
       inputSchema: z.object({
         url: z.string().describe('Output URL from a completed task.'),
         output_path: z.string().describe(
           'Local file path to save to. Must be inside RUNWAY_DOWNLOAD_ROOT (default ~/Downloads/runway-mcp). Parent directory must exist.',
         ),
         overwrite: z.boolean().optional().describe(
-          'If true, replace an existing file at output_path. Defaults to false (refuses to clobber).',
+          'If true, replace an existing file at output_path once the download succeeds; a failed download keeps the existing file. Defaults to false (refuses to clobber).',
         ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -191,17 +195,24 @@ export function registerTaskTools(server: McpServer): void {
         throw err;
       }
 
-      // Open the output file synchronously with `wx` (or `w` if overwrite)
-      // so the EEXIST refusal is atomic with the open. createWriteStream
-      // with `flags: 'wx'` would also work, but doing this synchronously
-      // gives us a clean refusal BEFORE we issue any network request.
-      const writeFlag = overwrite ? 'w' : 'wx';
+      // A fresh download writes the target directly, opened with `wx` so the
+      // EEXIST refusal is atomic with the open and happens BEFORE any network
+      // request. An overwrite never opens the existing file: it stages into a
+      // temp sibling (same directory, so the final rename stays on one
+      // filesystem) that is moved into place only after the download
+      // succeeds, so a failed download leaves the existing file untouched.
+      // The temp name is short and target-independent so long valid target
+      // names are not newly refused.
+      const writePath = overwrite
+        ? path.join(path.dirname(safe.resolved), `.runway-download-${randomUUID()}.tmp`)
+        : safe.resolved;
       let fd: number;
       try {
-        fd = fs.openSync(safe.resolved, writeFlag);
+        // Owner-only on creation; an overwrite's staged file carries this mode into place.
+        fd = fs.openSync(writePath, 'wx', 0o600);
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;
-        if (e && e.code === 'EEXIST') {
+        if (e && e.code === 'EEXIST' && !overwrite) {
           return JSON.stringify({
             ok: false,
             error: `Output file already exists: ${outputPath}. Pass overwrite: true to clobber.`,
@@ -229,8 +240,10 @@ export function registerTaskTools(server: McpServer): void {
       // we hand it off to `fs.createWriteStream({ fd })` — after that point
       // the stream owns it and will close it on `end`/`destroy`. Until
       // then, ANY thrown exception (network failure on `fetch`, abort on
-      // the body iterator, etc.) must close the fd and unlink the freshly
-      // created (wx-flagged) file so the caller's failure is atomic.
+      // the body iterator, etc.) must close the fd and unlink writePath,
+      // which is always a file this call created (the target for a fresh
+      // download, the temp sibling for an overwrite), so the caller's
+      // failure is atomic and an existing file is never touched.
       let fdReleased = false;
       let bytesWritten = 0;
       try {
@@ -282,49 +295,71 @@ export function registerTaskTools(server: McpServer): void {
         if (redirectError) {
           try { fs.closeSync(fd); } catch { /* empty */ }
           fdReleased = true;
-          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
           return JSON.stringify({ ok: false, error: redirectError });
         }
         if (!response.ok) {
           try { fs.closeSync(fd); } catch { /* empty */ }
           fdReleased = true;
-          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
           return JSON.stringify({ ok: false, error: `Download failed (HTTP ${response.status}). The URL may have expired.` });
         }
         if (!response.body) {
           try { fs.closeSync(fd); } catch { /* empty */ }
           fdReleased = true;
-          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
           return JSON.stringify({ ok: false, error: 'No response body received.' });
         }
 
         // Hand the open fd to a write stream (avoids re-opening with default
         // `w` and so preserves the wx semantics of our pre-check).
-        const fileHandle = fs.createWriteStream(safe.resolved, { fd });
+        const fileHandle = fs.createWriteStream(writePath, { fd });
         fdReleased = true; // fd ownership transferred to the stream
+        // Listeners go on BEFORE the first write, so an early write error
+        // rejects this promise instead of escaping as an unhandled 'error'.
+        // Settle on 'close' (not 'finish') so the fd is released before the
+        // rename or unlink below; Windows refuses both on an open handle.
+        const writeSettled = new Promise<void>((resolve, reject) => {
+          fileHandle.on('close', resolve);
+          fileHandle.on('error', reject);
+        });
+        writeSettled.catch(() => undefined);
         try {
           for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
             fileHandle.write(chunk);
             bytesWritten += chunk.length;
           }
           fileHandle.end();
-          await new Promise<void>((resolve, reject) => {
-            fileHandle.on('finish', resolve);
-            fileHandle.on('error', reject);
-          });
+          await writeSettled;
         } catch (streamErr) {
           fileHandle.destroy();
-          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          await new Promise<void>(resolve => {
+            if (fileHandle.closed) resolve();
+            else fileHandle.once('close', () => resolve());
+          });
+          try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
           throw streamErr;
+        }
+
+        // The download succeeded: move the staged overwrite into place.
+        // rename() replaces the target in one step, and a failure here
+        // still leaves the existing file intact.
+        if (overwrite) {
+          try {
+            fs.renameSync(writePath, safe.resolved);
+          } catch (renameErr) {
+            try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
+            throw renameErr;
+          }
         }
       } catch (err) {
         // Resource hygiene: if anything between `fs.openSync` and the
         // `createWriteStream` hand-off threw (e.g. `fetch` rejecting with
-        // a network error), close the fd we own and unlink the freshly
-        // created file so the failure is atomic.
+        // a network error), close the fd we own and unlink writePath (a
+        // file this call created) so the failure is atomic.
         if (!fdReleased) {
           try { fs.closeSync(fd); } catch { /* empty */ }
-          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          try { fs.unlinkSync(writePath); } catch { /* cleanup best-effort */ }
         }
         throw err;
       }

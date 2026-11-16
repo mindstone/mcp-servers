@@ -7,9 +7,17 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Changed
 
 - Use per-request canonical paths for local input files when the client negotiates file read modes version 1; preserve standalone restrictions and output-write rules.
+
+### Security
+
+- Files the connector saves (downloaded clips, including ones that replace an existing file) are now created readable only by their owner.
 
 ## [0.2.1] - 2026-08-09
 

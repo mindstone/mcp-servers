@@ -44,3 +44,21 @@ export function withErrorHandling<T>(
     }
   };
 }
+
+/**
+ * Encodes one value as a single URL path segment, so an ID can never change
+ * which endpoint a request reaches. encodeURIComponent alone is not enough:
+ * URL parsing still treats `.` and `..` as directory steps, so those and the
+ * empty string are refused. Every value interpolated into a request path goes
+ * through this.
+ */
+export function pathSegment(value: string): string {
+  if (value === '' || value === '.' || value === '..') {
+    throw new NapkinError(
+      `Invalid ID: ${JSON.stringify(value)}`,
+      'INVALID_ARGUMENTS',
+      'Pass the ID exactly as Napkin returned it.',
+    );
+  }
+  return encodeURIComponent(value);
+}

@@ -3,15 +3,20 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { WebClient } from '@slack/web-api';
 import { z } from 'zod';
-import { errorJson, parseSlackPermalink, slackTsToDatetime, withErrorHandling } from '../utils.js';
+import { errorJson, parseSlackPermalink, sanitizeErrorMessage, slackTsToDatetime, withErrorHandling } from '../utils.js';
+import type { DmRecipient } from '../types.js';
 import { getSlackClient, getSlackReaderClient, getSlackUserClient, getSlackAppIdentity } from '../client.js';
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
   mapSlackFiles,
   resolveAuthedUserId,
+  DM_SAFETY_GUIDANCE,
+  INTENDED_RECIPIENT_SCHEMA,
+  isPersonTarget,
   resolveChannelId,
-  resolveDmRecipient,
+  resolveSendTarget,
+  SEND_TARGET_DESCRIPTION,
   resolveUserIdsToCache,
   SLACK_USER_PROFILE_SOURCE,
   withOwnBotMentionsAsPlainText,
@@ -748,20 +753,19 @@ PARAMETER: text. Use text, not message, note, or channel.`,
   // iframe invokes post_slack_message when the user clicks Send. Registered
   // WITHOUT withErrorHandling: it does no send I/O, and its InvalidParams
   // validation must surface as-is rather than as an auth-flavoured retry
-  // envelope. For a DM target (D…) it resolves the recipient User ID and rides
-  // it hidden+locked into the draft so the send passes DM verification.
+  // envelope. A person target is bound to their user ID before the form opens.
   server.registerTool(
     'compose_slack_message',
     {
       description: `Open an inline editable message compose form before sending to Slack. Use this when the user wants to write or send a Slack message so they can review and edit it first. Does NOT send directly — the form posts the message (via post_slack_message) when the user clicks Send.
 
-PARAMETERS: target (channel ID, #channel-name, or a DM channel), text. For a DM target the recipient identity is resolved and locked into the draft so the send is verified.`,
+PARAMETERS: target, text. For a direct message, target is the person: their user ID (U…) or email. The form shows their name and sends to their DM. A DM channel ID (D…) is refused, because it does not say who the message is for.`,
       inputSchema: z
         .object({
           target: z
             .string()
             .min(1)
-            .describe('Where to send — channel ID (e.g., C1234567890), #channel-name (e.g., #general), or a DM channel (D…)'),
+            .describe('Where to send — channel ID (e.g., C1234567890), #channel-name (e.g., #general), or for a direct message the person\'s user ID (U…) or email'),
           text: z.string().min(1).describe('Message text (supports Slack markdown)'),
         })
         .strict(),
@@ -781,45 +785,65 @@ PARAMETERS: target (channel ID, #channel-name, or a DM channel), text. For a DM 
         );
       }
 
-      // For a DM target, resolve the recipient User ID so it can ride hidden +
-      // locked into the send and pass post_slack_message's DM verification.
-      // Best-effort: if resolution fails the draft still opens, but the send
-      // will be refused (fail-closed) until a recipient is confirmed.
-      let intendedRecipient: string | undefined;
-      if (target.startsWith('D')) {
+      // A DM draft is bound to a person through the same resolver the send
+      // uses (and the same client), so it is refused here, before the user
+      // writes anything, if it could not be sent. The person's name is only a
+      // label the form shows; the form sends their user ID.
+      let person: DmRecipient | undefined;
+      if (isPersonTarget(target) || target.startsWith('D')) {
+        const refused = (refusal: string): CallToolResult => ({
+          content: [{ type: 'text', text: refusal }],
+          isError: true,
+        });
         try {
-          const verifyClient = (await getSlackUserClient()) || (await getSlackClient());
-          if (verifyClient) {
-            const dmRecipient = await resolveDmRecipient(verifyClient, target);
-            if (dmRecipient?.user_id) intendedRecipient = dmRecipient.user_id;
-          }
-          if (!intendedRecipient) {
-            console.warn(
-              `[slack-mcp] compose_slack_message could not resolve DM recipient for ${target}; the send will require confirmation.`,
+          const userClient = await getSlackUserClient();
+          if (!userClient) {
+            return refused(
+              errorJson({
+                error: 'Sending messages requires user authorization.',
+                action_required: 'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
+                next_step: 'authenticate_slack_workspace',
+              }),
             );
           }
+          const resolution = await resolveSendTarget(userClient, target);
+          if (!resolution.ok) return refused(resolution.refusal);
+          person = resolution.person;
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[slack-mcp] compose_slack_message DM recipient resolution failed: ${msg}`);
+          const message = err instanceof Error ? err.message : String(err);
+          return refused(
+            errorJson({
+              error: `Could not check who this message is for: ${sanitizeErrorMessage(message)}`,
+              action_required: 'Try again, or use lookup_user_by_email to confirm the person first.',
+              next_step: 'lookup_user_by_email',
+            }),
+          );
         }
       }
 
-      const structuredContent = {
-        target,
-        text,
-        ...(intendedRecipient ? { intended_recipient: intendedRecipient } : {}),
-      };
+      // The name comes from the person's Slack profile, and every carrier of
+      // this result reaches the model, so it stays enveloped everywhere; the
+      // form strips the envelope when it renders the name. The summary and the
+      // fallback name the person by user ID instead of carrying the name.
+      const recipientLabel = person
+        ? wrapUntrusted(person.real_name || person.display_name, SLACK_USER_PROFILE_SOURCE)
+        : undefined;
+      const structuredContent = person
+        ? { target: person.user_id, text, recipient_label: recipientLabel }
+        : { target, text };
+      const modelVisibleTarget = person ? `${recipientLabel ?? person.user_id} (${person.user_id})` : target;
 
-      const viewSummaryTarget = truncateText(sanitizeViewSummaryPart(target), 120);
+      const shownTarget = person ? `the direct message with ${person.user_id}` : target;
+      const viewSummaryTarget = truncateText(sanitizeViewSummaryPart(shownTarget), 120);
       const viewSummary = truncateText(`Slack message draft to ${viewSummaryTarget || '(no target)'}.`, 280);
-      const fallbackTarget = truncateText(target, 256);
+      const fallbackTarget = truncateText(shownTarget, 256);
       const fallbackText = truncateText(text, 5_000);
 
       return {
         content: [
           {
             type: 'text',
-            text: `Drafting a Slack message to ${target}\n\n${JSON.stringify(structuredContent)}\n\n[View: ${COMPOSE_MESSAGE_RESOURCE_URI}]`,
+            text: `Drafting a Slack message to ${modelVisibleTarget}\n\n${JSON.stringify(structuredContent)}\n\n[View: ${COMPOSE_MESSAGE_RESOURCE_URI}]`,
           },
         ],
         _meta: {
@@ -851,11 +875,7 @@ PARAMETERS: target (channel ID, #channel-name, or a DM channel), text. For a DM 
 
 PREVIEW FIRST: If the person, or instructions you are following, ask to see, preview or approve the message before it is sent, do not call this tool; show it as an editable draft instead, and post only when they send it.
 
-DM SAFETY: For direct messages (D... channels), intended_recipient (the recipient
-User ID) is REQUIRED. Without it the message is NOT sent — a DM has no visible
-recipient name, so sending unverified risks reaching the wrong person. The tool
-also refuses to send if intended_recipient does not match the actual DM recipient.
-To get a User ID use lookup_user_by_email, then open_slack_dm for their DM channel.
+${DM_SAFETY_GUIDANCE}
 
 PARAMETERS: channel, text, intended_recipient. Do not use channel_id or message —
 these are not the parameter names.
@@ -863,17 +883,9 @@ these are not the parameter names.
 Posted as the user — messages are editable in Slack.`,
       inputSchema: z
         .object({
-          channel: z
-            .string()
-            .min(1)
-            .describe('Channel target — channel ID (e.g., C1234567890) or #channel-name (e.g., #general)'),
+          channel: z.string().min(1).describe(SEND_TARGET_DESCRIPTION),
           text: z.string().min(1).describe('Message text (supports Slack markdown)'),
-          intended_recipient: z
-            .string()
-            .optional()
-            .describe(
-              'For DMs only: expected recipient User ID. If the DM channel belongs to a different user, the message is NOT sent.',
-            ),
+          intended_recipient: INTENDED_RECIPIENT_SCHEMA,
         })
         .strict(),
       annotations: {
@@ -893,55 +905,11 @@ Posted as the user — messages are editable in Slack.`,
           next_step: 'authenticate_slack_workspace',
         });
       }
-      const channelId = await resolveChannelId(args.channel);
-      const intendedRecipient = args.intended_recipient;
-      const isDmChannel = channelId.startsWith('D');
-      let dmRecipient = null;
-      if (isDmChannel) {
-        // Fail-closed: a DM has no visible recipient name, so we refuse to send
-        // without an intended_recipient to verify against rather than trusting
-        // the channel ID resolved to the right person.
-        if (!intendedRecipient) {
-          return errorJson({
-            error: 'DM NOT sent — intended_recipient is required for direct messages.',
-            action_required:
-              'Provide intended_recipient (the recipient User ID) so the DM can be verified. Use lookup_user_by_email to find the User ID, then open_slack_dm to get their DM channel.',
-            next_step: 'lookup_user_by_email',
-            channel: channelId,
-          });
-        }
-        const verifyClient = userClient || (await getSlackClient());
-        if (!verifyClient) return notConnectedJson();
-        dmRecipient = await resolveDmRecipient(verifyClient, channelId);
-        if (!dmRecipient) {
-          return errorJson({
-            error: 'Could not verify DM recipient.',
-            action_required:
-              'Use open_slack_dm with a verified User ID to get a valid DM channel.',
-            next_step: 'open_slack_dm',
-            channel: channelId,
-          });
-        }
-        if (intendedRecipient) {
-          const normalizedIntended = normalizeSlackUserId(intendedRecipient);
-          const normalizedActual = normalizeSlackUserId(dmRecipient.user_id);
-          if (normalizedIntended !== normalizedActual) {
-            return errorJson({
-              error: 'RECIPIENT MISMATCH — message NOT sent.',
-              action_required:
-                'Use lookup_user_by_email to get the correct user ID, then open_slack_dm to get their DM channel.',
-              next_step: 'lookup_user_by_email',
-              intended_recipient: intendedRecipient,
-              actual_recipient: {
-                user_id: dmRecipient.user_id,
-                real_name: wrapUntrusted(dmRecipient.real_name, SLACK_USER_PROFILE_SOURCE),
-                display_name: wrapUntrusted(dmRecipient.display_name, SLACK_USER_PROFILE_SOURCE),
-                ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
-              },
-              channel: channelId,
-            });
-          }
-        }
+      const resolution = await resolveSendTarget(userClient, args.channel, args.intended_recipient);
+      if (!resolution.ok) return resolution.refusal;
+      const { channelId, person: dmRecipient } = resolution;
+      const isDmChannel = Boolean(dmRecipient);
+      if (dmRecipient) {
         const authedUserId = await resolveAuthedUserId();
         if (!authedUserId) return unknownAuthedUserJson(channelId);
         if (normalizeSlackUserId(dmRecipient.user_id) === normalizeSlackUserId(authedUserId)) {
@@ -1065,16 +1033,19 @@ thread_ts_slack on a message returned by get_slack_channel_history.`,
       description: `Schedule a message to be posted at a future time.
 
 post_at is a Unix timestamp in SECONDS (not ms). Max 30 scheduled messages per
-channel per 5 minutes. Max 120 days in advance.`,
+channel per 5 minutes. Max 120 days in advance.
+
+${DM_SAFETY_GUIDANCE}`,
       inputSchema: z
         .object({
-          channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
+          channel: z.string().min(1).describe(SEND_TARGET_DESCRIPTION),
           text: z.string().min(1).describe('Message text (supports Slack markdown)'),
           post_at: z
             .number()
             .int()
             .min(1)
             .describe('Unix timestamp IN SECONDS (not ms) for when to post'),
+          intended_recipient: INTENDED_RECIPIENT_SCHEMA,
         })
         .strict(),
       annotations: {
@@ -1094,18 +1065,10 @@ channel per 5 minutes. Max 120 days in advance.`,
           next_step: 'authenticate_slack_workspace',
         });
       }
-      const channelId = await resolveChannelId(args.channel);
-      if (channelId.startsWith('D')) {
-        const dmRecipient = await resolveDmRecipient(userClient, channelId);
-        if (!dmRecipient) {
-          return errorJson({
-            error: 'Could not verify scheduled DM recipient.',
-            action_required:
-              'Use open_slack_dm with a verified User ID to get a valid DM channel, or schedule to a Slack channel.',
-            next_step: 'open_slack_dm',
-            channel: channelId,
-          });
-        }
+      const resolution = await resolveSendTarget(userClient, args.channel, args.intended_recipient);
+      if (!resolution.ok) return resolution.refusal;
+      const { channelId, person: dmRecipient } = resolution;
+      if (dmRecipient) {
         const authedUserId = await resolveAuthedUserId();
         if (!authedUserId) return unknownAuthedUserJson(channelId);
         if (normalizeSlackUserId(dmRecipient.user_id) === normalizeSlackUserId(authedUserId)) {

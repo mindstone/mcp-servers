@@ -192,7 +192,8 @@ export function resolveWorkspaceOutputPath(fileName: string): string {
 export function writeWorkspaceArtifact(fileName: string, data: Buffer | string): string {
   const dest = resolveWorkspaceOutputPath(fileName);
   try {
-    fs.writeFileSync(dest, data, { flag: 'wx' });
+    // Owner-only: generated audio can be private.
+    fs.writeFileSync(dest, data, { flag: 'wx', mode: 0o600 });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
       throw new ElevenLabsError(

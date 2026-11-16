@@ -379,13 +379,14 @@ RETURNS: the tool's name and where it is saved (~/tools/<name>).`,
 
 WHEN TO USE: before redoing a job by hand on a computer that may already have a tool for it.
 
-RETURNS: tools (name, description).`,
+RETURNS: tools (name, description). If a saved tool's file could not be read, unreadable names it; save that tool again with computer_save_tool to fix it.`,
       inputSchema: { computer: computerArg },
       annotations: readOnly,
     },
     tool(async ({ computer }: { computer: string }) => {
       const located = await computers.ready(computer);
-      return json({ computer: located.computer.name, tools: await computers.tools(located) });
+      const { tools, unreadable } = await computers.tools(located);
+      return json({ computer: located.computer.name, tools, ...(unreadable.length > 0 ? { unreadable } : {}) });
     }),
   );
 

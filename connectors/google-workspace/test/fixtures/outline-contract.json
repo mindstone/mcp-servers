@@ -1,0 +1,775 @@
+{
+  "tools": [
+    {
+      "name": "read_workspace_document",
+      "category": "Docs/Documents",
+      "description": "Read content from a Google Docs document.\n\n    Returns human-readable text by default. Use return_json: true for the raw Google Docs API response.\n\n    Tabs: without tab_id or all_tabs this reads the first tab only. On a document with several\n    tabs the result says how many there are and which one is shown. Pass tab_id to read one tab\n    (sub-tabs are separate tabs), or all_tabs: true to read every tab in order under\n    \"## Tab: <path> [tabId: …]\" headings; all tabs share one max_chars budget, and tabs past the\n    budget are listed by id so you can read them with tab_id. On tab_id / all_tabs reads, smart\n    chips, people and dates appear as their text, each list item (bulleted or numbered) starts\n    with \"• \" (indented two spaces per nesting level, so an empty list item shows as a bare \"•\"),\n    and headings start with [H1]…[H6], [Title] or [Subtitle]. These markers are not document\n    text: leave them out of anchor_text and find_text. A Docs link containing ?tab=t.xxxx points at one tab; \"t.xxxx\" is its tab_id.\n\n    Usage examples:\n    \n    1. Simple read:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\" }\n    \n    2. With character limit:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"max_chars\": 10000 }\n    \n    3. Get raw JSON structure:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"return_json\": true }\n\n    4. Read one tab:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"tab_id\": \"t.abc123\" }\n\n    5. Read every tab:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"all_tabs\": true }\n    \n    Response includes:\n    - Document title and URL\n    - Text content (default: up to 50,000 characters)\n    - Truncation indicator if content exceeds limit\n    \n    Note: For very large documents, consider using max_chars to limit response size.\n    all_tabs cannot be combined with return_json; tab_id with return_json returns that one tab\n    (up to 100,000 characters of JSON; sub-tabs listed by id; named ranges as a list, not keyed by name).",
+      "aliases": [
+        "read_doc",
+        "get_document",
+        "view_document"
+      ],
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "document_id": {
+            "type": "string",
+            "description": "Google Docs document ID (from URL or extract_workspace_document_id)"
+          },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters to return (default: 50000). With all_tabs, one budget shared by all tabs."
+          },
+          "return_json": {
+            "type": "boolean",
+            "description": "Return raw Google Docs API JSON instead of formatted text (default: false)"
+          },
+          "tab_id": {
+            "type": "string",
+            "description": "Tab id from list_workspace_document_tabs. \"default\" means the first tab."
+          },
+          "all_tabs": {
+            "type": "boolean",
+            "description": "Read every tab, in tree order (default: false). Not with tab_id or return_json."
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      }
+    },
+    {
+      "name": "find_and_replace_workspace_document",
+      "category": "Docs/Documents",
+      "description": "Find and replace text throughout a Google Docs document.\n\n    Without tab_id this replaces in every tab; pass tab_id to limit it to one tab (sub-tabs are\n    separate tabs and are not included). A Docs link containing ?tab=t.xxxx points at one tab; \"t.xxxx\" is its tab_id.\n\n    Usage examples:\n    \n    1. Simple replacement:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"find_text\": \"old text\", \"replace_text\": \"new text\" }\n    \n    2. Case-sensitive replacement:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"find_text\": \"TODO\", \"replace_text\": \"DONE\", \"match_case\": true }\n\n    3. Replace a date placeholder in one tab only:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"tab_id\": \"t.abc123\", \"find_text\": \"{{date}}\", \"replace_text\": \"2031-10-13\" }\n       Without tab_id a placeholder that also sits in a Template tab is replaced there too.\n    \n    Returns the number of occurrences replaced.\n    Note: This replaces ALL occurrences of the text in every tab it covers.",
+      "aliases": [
+        "find_replace_doc",
+        "search_replace_document",
+        "document_find_replace"
+      ],
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "document_id": {
+            "type": "string",
+            "description": "Google Docs document ID"
+          },
+          "find_text": {
+            "type": "string",
+            "description": "Text to find"
+          },
+          "replace_text": {
+            "type": "string",
+            "description": "Text to replace with"
+          },
+          "match_case": {
+            "type": "boolean",
+            "description": "Case-sensitive matching (default: false)"
+          },
+          "tab_id": {
+            "type": "string",
+            "description": "Tab id from list_workspace_document_tabs. \"default\" means the first tab."
+          }
+        },
+        "required": [
+          "document_id",
+          "find_text",
+          "replace_text"
+        ]
+      }
+    },
+    {
+      "name": "list_workspace_document_tabs",
+      "category": "Docs/Documents",
+      "description": "List every tab in a Google Docs document, including nested sub-tabs.\n\n    Returns the tab tree: one line per tab, indented by nesting level and numbered by position\n    (1., 1.1., 1.1.1.), with its tab id and number of sub-tabs. Use a tab id as:\n    - tab_id in read_workspace_document, append_to_workspace_document, replace_workspace_document,\n      find_and_replace_workspace_document and insert_workspace_document_text;\n    - parent_tab_id in add_workspace_document_tab and update_workspace_document_tab (nest a tab);\n    - tab_id in update_workspace_document_tab and delete_workspace_document_tab (rename, move or\n      delete a tab);\n    - source_tab_id, target_tab_id or new_tab_parent_id in copy_workspace_document_tab.\n    The list numbers start at 1; the position arguments of the tab tools start at 0. A Docs link containing ?tab=t.xxxx points at one tab; \"t.xxxx\" is its tab_id.\n\n    Usage examples:\n    \n    1. List tabs:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\" }\n    \n    2. Include word count:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"include_word_count\": true }\n\n    3. As JSON (flat list in tree order with tabId, title, parentTabId, index, nestingLevel, path, childCount):\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"return_json\": true }\n    \n    Returns tab information including title and optional word count. include_word_count reads\n    every tab's content, so it is slower on large documents.",
+      "aliases": [
+        "list_doc_tabs",
+        "get_document_tabs",
+        "document_tabs"
+      ],
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "document_id": {
+            "type": "string",
+            "description": "Google Docs document ID"
+          },
+          "include_word_count": {
+            "type": "boolean",
+            "description": "Include word count for each tab (default: false)"
+          },
+          "return_json": {
+            "type": "boolean",
+            "description": "Return the tab list as JSON instead of formatted text (default: false)"
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      }
+    },
+    {
+      "name": "batch_update_workspace_document",
+      "category": "Docs/Documents",
+      "description": "Execute multiple updates to a Google Docs document in a single request.\n\n    This is the low-level API for modifying documents. It accepts an array of request objects\n    that are passed directly to the Google Docs API batchUpdate endpoint.\n\n    Common request types include:\n    - insertText: Insert text at a specific location (index-based)\n    - deleteContentRange: Delete a range of content by start/end index\n    - replaceAllText: Find and replace text throughout the document\n    - updateTextStyle: Format text (bold, italic, underline, font, color, link, etc.)\n    - updateParagraphStyle: Change paragraph alignment, spacing, indentation, heading level\n    - createParagraphBullets: Add bullet or numbered list formatting to paragraphs\n    - insertInlineImage: Insert an image from a URL at a specific location\n    - insertTable: Insert a table with specified rows and columns\n    - insertTableRow/insertTableColumn: Add rows or columns to existing tables\n    - deleteTableRow/deleteTableColumn: Remove rows or columns from tables\n    - mergeTableCells/unmergeTableCells: Merge or unmerge table cells\n    - createNamedRange: Create a named range for bookmarking content\n    - insertPageBreak: Insert a page break\n    - createHeader/createFooter: Add headers or footers\n\n    Usage examples:\n\n    1. Insert text at the beginning of the document:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"insertText\": { \"location\": { \"index\": 1 }, \"text\": \"Hello World\\n\" } }\n         ]\n       }\n\n    2. Delete a range of content:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"deleteContentRange\": { \"range\": { \"startIndex\": 5, \"endIndex\": 20 } } }\n         ]\n       }\n\n    3. Replace all occurrences of text:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"replaceAllText\": { \"containsText\": { \"text\": \"{{placeholder}}\", \"matchCase\": true }, \"replaceText\": \"Actual Value\" } }\n         ]\n       }\n\n    4. Bold a range of text:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"updateTextStyle\": { \"range\": { \"startIndex\": 1, \"endIndex\": 12 }, \"textStyle\": { \"bold\": true }, \"fields\": \"bold\" } }\n         ]\n       }\n\n    5. Add bullet points to paragraphs:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"createParagraphBullets\": { \"range\": { \"startIndex\": 1, \"endIndex\": 50 }, \"bulletPreset\": \"BULLET_DISC_CIRCLE_SQUARE\" } }\n         ]\n       }\n\n    6. Insert a table:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"insertTable\": { \"location\": { \"index\": 1 }, \"rows\": 3, \"columns\": 4 } }\n         ]\n       }\n\n    7. Insert an inline image:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"insertInlineImage\": { \"location\": { \"index\": 1 }, \"uri\": \"https://example.com/image.png\", \"objectSize\": { \"width\": { \"magnitude\": 300, \"unit\": \"PT\" }, \"height\": { \"magnitude\": 200, \"unit\": \"PT\" } } } }\n         ]\n       }\n\n    8. Multiple operations with revision control:\n       {\n         \"email\": \"user@example.com\",\n         \"document_id\": \"1ABC123xyz\",\n         \"requests\": [\n           { \"replaceAllText\": { \"containsText\": { \"text\": \"{{date}}\" }, \"replaceText\": \"2025-01-15\" } },\n           { \"replaceAllText\": { \"containsText\": { \"text\": \"{{author}}\" }, \"replaceText\": \"John Doe\" } }\n         ],\n         \"write_control\": { \"requiredRevisionId\": \"abc123\" }\n       }\n\n    Note: Changes are atomic - if any request fails, none are applied. Use return_json: true\n    to see the full API response including detailed replies per request.\n\n    Returns: Success message with update count, or raw API response with return_json: true.\n\n    Reference: https://developers.google.com/docs/api/reference/rest/v1/documents/batchUpdate",
+      "aliases": [
+        "batch_update_doc",
+        "update_document",
+        "modify_document"
+      ],
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "document_id": {
+            "type": "string",
+            "description": "Google Docs document ID or URL"
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Array of update request objects (see Google Docs API reference for schema)"
+          },
+          "write_control": {
+            "type": "object",
+            "properties": {
+              "requiredRevisionId": {
+                "type": "string",
+                "description": "Revision ID for optimistic concurrency control (optional)"
+              }
+            },
+            "description": "Optional write control settings"
+          },
+          "return_json": {
+            "type": "boolean",
+            "description": "Return raw API response instead of formatted text (default: false)"
+          }
+        },
+        "required": [
+          "document_id",
+          "requests"
+        ]
+      }
+    },
+    {
+      "name": "update_workspace_document_tab",
+      "category": "Docs/Documents",
+      "description": "Rename a tab and/or move it in a Google Docs document: reorder it among its siblings\n    or nest it under another tab. A moved tab takes its sub-tabs with it. The API can't move a\n    sub-tab back to the top level; re-create it there instead if needed.\n\n    position is where the tab should end up (0 = first) among its siblings after the move; the\n    numbers in list outputs start at 1. When nesting under another tab without position, the tab\n    goes last. Titles must stay unique across the document. Needs a real tab id: \"default\" is\n    refused. The result reports the tab's actual parent and position after the change.\n    A Docs link containing ?tab=t.xxxx points at one tab; \"t.xxxx\" is its tab_id.\n\n    Usage examples:\n\n    1. Rename:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"tab_id\": \"t.abc123\", \"title\": \"Archive 2031-10-06\" }\n\n    2. Reorder (make it the first of its siblings):\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"tab_id\": \"t.abc123\", \"position\": 0 }\n\n    3. Nest under another tab, as its first sub-tab:\n       { \"email\": \"user@example.com\", \"document_id\": \"1ABC123xyz\", \"tab_id\": \"t.abc123\", \"parent_tab_id\": \"t.def456\", \"position\": 0 }",
+      "aliases": [
+        "rename_doc_tab",
+        "move_doc_tab",
+        "reorder_document_tab"
+      ],
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Google account"
+          },
+          "document_id": {
+            "type": "string",
+            "description": "Google Docs document ID"
+          },
+          "tab_id": {
+            "type": "string",
+            "description": "Tab id from list_workspace_document_tabs (\"default\" is not accepted)"
+          },
+          "title": {
+            "type": "string",
+            "description": "New title (unique in the document, sub-tabs included)"
+          },
+          "parent_tab_id": {
+            "type": "string",
+            "description": "Tab id to nest this tab under (\"default\" is not accepted)"
+          },
+          "position": {
+            "type": "number",
+            "description": "Final position among the siblings after the move: 0 = first; the numbers in list outputs start at 1."
+          }
+        },
+        "required": [
+          "document_id",
+          "tab_id"
+        ]
+      }
+    },
+    {
+      "name": "list_drive_files",
+      "category": "Drive/Files",
+      "description": "List files in a Google Drive account with optional filtering.\n    \n    Returns human-readable text by default. Use return_json: true for structured output.\n\n    Usage examples:\n    \n    1. List recent files:\n       { \"email\": \"user@example.com\" }\n    \n    2. List files in a folder:\n       { \"email\": \"user@example.com\", \"options\": { \"folderId\": \"1ABC123xyz\", \"pageSize\": 50 } }\n    \n    3. Filter by query:\n       { \"email\": \"user@example.com\", \"options\": { \"query\": \"mimeType='application/pdf'\", \"pageSize\": 20 } }\n    \n    4. List files in one shared drive (get the ID from list_shared_drives):\n       { \"email\": \"user@example.com\", \"options\": { \"driveId\": \"0ABCdef123\" } }\n\n    5. Get JSON output:\n       { \"email\": \"user@example.com\", \"return_json\": true }\n\n    6. Most recently modified first:\n       { \"email\": \"user@example.com\", \"options\": { \"orderBy\": \"modifiedTime desc\", \"pageSize\": 10 } }\n\n    Parameters (all inside \"options\"):\n    - folderId: List contents of specific folder\n    - query: Drive API query string\n    - pageSize: Number of files to return\n    - orderBy: Sort order, e.g. \"modifiedTime desc\" or [\"folder\", \"name\"] (Drive API orderBy keys)\n    - driveId: Limit results to one shared drive (corpora is forced to 'drive')\n    - corpora: 'user' (default), 'drive', or 'allDrives' (My Drive + every shared drive)",
+      "aliases": [
+        "list_files",
+        "get_files",
+        "show_files"
+      ],
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Drive account"
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "folderId": {
+                "type": "string",
+                "description": "Optional folder ID to list contents of"
+              },
+              "query": {
+                "type": "string",
+                "description": "Custom query string for filtering"
+              },
+              "pageSize": {
+                "type": "number",
+                "description": "Maximum number of files to return"
+              },
+              "orderBy": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Sort order, e.g. \"modifiedTime desc\" or [\"folder\", \"name\"] (Drive API orderBy keys)"
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Fields to include in response"
+              },
+              "driveId": {
+                "type": "string",
+                "description": "Shared drive ID to list from (see list_shared_drives); corpora is forced to \"drive\""
+              },
+              "corpora": {
+                "type": "string",
+                "enum": [
+                  "user",
+                  "drive",
+                  "allDrives"
+                ],
+                "description": "Scope of the listing: \"user\" (default), \"drive\" (one shared drive), or \"allDrives\""
+              }
+            }
+          },
+          "return_json": {
+            "type": "boolean",
+            "description": "Return structured JSON instead of formatted text (default: false)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "move_drive_file",
+      "category": "Drive/Files",
+      "description": "Move a file to a different folder in Google Drive.\n\nExample: { \"file_id\": \"abc123\", \"new_parent_id\": \"folder456\" }\n\nWORKFLOW: \n1. Use search_drive_files or list_drive_files to find the file_id\n2. Use list_drive_files to find the target folder ID\n3. Call this tool with file_id and new_parent_id\n\nIMPORTANT: By default, this MOVES the file (removes from all current folders). \nTo ADD to a folder without removing from existing folders, set remove_from_parents to an empty string.",
+      "aliases": [
+        "relocate_file",
+        "move_file"
+      ],
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address of the Drive account"
+          },
+          "file_id": {
+            "type": "string",
+            "description": "ID of file to move"
+          },
+          "new_parent_id": {
+            "type": "string",
+            "description": "ID of the destination folder"
+          },
+          "remove_from_parents": {
+            "type": "string",
+            "description": "Parent IDs to remove from, comma-separated. Default: fetches current parents (true move). Set to \"\" to add to folder without removing."
+          }
+        },
+        "required": [
+          "file_id",
+          "new_parent_id"
+        ]
+      }
+    }
+  ],
+  "tabTrees": [
+    {
+      "plain": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "Project Plan",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "Project plan",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Project plan",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "Research notes",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Research notes",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "Findings",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 1,
+            "path": "Research notes > Findings",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "Launch",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Launch",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "Budget",
+            "index": 3,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Budget",
+            "childCount": 0
+          }
+        ]
+      },
+      "wrapped": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project Plan</untrusted-content>",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes</untrusted-content>",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 1,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes > Findings</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "index": 3,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "childCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "plain": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "Project Plan",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "Project plan",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Project plan",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "Research",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Research",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "Findings",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 1,
+            "path": "Research > Findings",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "Launch",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Launch",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "Budget",
+            "index": 3,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Budget",
+            "childCount": 0
+          }
+        ]
+      },
+      "wrapped": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project Plan</untrusted-content>",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research</untrusted-content>",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 1,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research > Findings</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "index": 3,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "childCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "plain": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "Project Plan",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "Project plan",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Project plan",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "Research notes",
+            "index": 0,
+            "parentTabId": "t.0",
+            "nestingLevel": 1,
+            "path": "Project plan > Research notes",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "Findings",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 2,
+            "path": "Project plan > Research notes > Findings",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "Launch",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Launch",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "Budget",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Budget",
+            "childCount": 0
+          }
+        ]
+      },
+      "wrapped": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project Plan</untrusted-content>",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.0",
+            "nestingLevel": 1,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research notes</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 2,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research notes > Findings</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "childCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "plain": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "Project Plan",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "Project plan",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Project plan",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "Research",
+            "index": 0,
+            "parentTabId": "t.0",
+            "nestingLevel": 1,
+            "path": "Project plan > Research",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "Findings",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 2,
+            "path": "Project plan > Research > Findings",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "Launch",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Launch",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "Budget",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "Budget",
+            "childCount": 0
+          }
+        ]
+      },
+      "wrapped": {
+        "documentId": "1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8",
+        "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project Plan</untrusted-content>",
+        "tabCount": 5,
+        "tabs": [
+          {
+            "tabId": "t.0",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "index": 0,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.a1b2c3d4",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.0",
+            "nestingLevel": 1,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research</untrusted-content>",
+            "childCount": 1
+          },
+          {
+            "tabId": "t.c5d6e7f8",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
+            "index": 0,
+            "parentTabId": "t.a1b2c3d4",
+            "nestingLevel": 2,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research > Findings</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.d9e0f1a2",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "index": 1,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
+            "childCount": 0
+          },
+          {
+            "tabId": "t.b3c4d5e6",
+            "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "index": 2,
+            "parentTabId": null,
+            "nestingLevel": 0,
+            "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
+            "childCount": 0
+          }
+        ]
+      }
+    }
+  ]
+}

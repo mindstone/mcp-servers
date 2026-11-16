@@ -11,7 +11,7 @@ import {
   ensureInitialized,
   formatAddresses,
   formatDate,
-  unwrapMailboxName,
+  requireMailboxName,
   wrapEmailField,
 } from './shared.js';
 
@@ -92,7 +92,9 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const mailbox = unwrapMailboxName(args.mailbox?.trim() || 'INBOX', 'mailbox');
+      // An omitted or blank mailbox (an empty envelope included, once
+      // withErrorHandling has unwrapped it) reads INBOX; the result names it.
+      const mailbox = args.mailbox?.trim() || 'INBOX';
       const includeLatest = args.includeLatest ?? false;
       const client = await getConnection();
 
@@ -139,7 +141,7 @@ export function registerMailboxTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        mailbox,
+        mailbox: wrapEmailField(mailbox),
         total: status.messages ?? 0,
         unread: status.unseen ?? 0,
         ...(latestUnread ? { latestUnread } : {}),
@@ -163,7 +165,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapMailboxName(args.name, 'name');
+      const name = requireMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX always exists and cannot be created');
       }
@@ -174,7 +176,7 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to create mailbox "${name}"`);
       }
 
-      return JSON.stringify({ ok: true, created: name });
+      return JSON.stringify({ ok: true, created: wrapEmailField(name) });
     }),
   );
 
@@ -196,8 +198,8 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const oldName = unwrapMailboxName(args.old_name, 'old_name');
-      const newName = unwrapMailboxName(args.new_name, 'new_name');
+      const oldName = requireMailboxName(args.old_name, 'old_name');
+      const newName = requireMailboxName(args.new_name, 'new_name');
       if (oldName.toUpperCase() === 'INBOX' || newName.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be renamed or used as a rename target');
       }
@@ -208,7 +210,10 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to rename mailbox "${oldName}" to "${newName}"`);
       }
 
-      return JSON.stringify({ ok: true, renamed: { from: oldName, to: newName } });
+      return JSON.stringify({
+        ok: true,
+        renamed: { from: wrapEmailField(oldName), to: wrapEmailField(newName) },
+      });
     }),
   );
 
@@ -229,7 +234,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapMailboxName(args.name, 'name');
+      const name = requireMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be deleted');
       }
@@ -240,7 +245,7 @@ export function registerMailboxTools(server: McpServer): void {
         throw new Error(`Unable to delete mailbox "${name}"`);
       }
 
-      return JSON.stringify({ ok: true, deleted: name });
+      return JSON.stringify({ ok: true, deleted: wrapEmailField(name) });
     }),
   );
 }

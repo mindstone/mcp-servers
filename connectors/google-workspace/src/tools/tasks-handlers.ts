@@ -8,7 +8,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../utils/untrusted-controls.js';
 
 // Singleton instances
 let tasksService: ReturnType<typeof getTasksService>;

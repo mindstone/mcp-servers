@@ -54,7 +54,8 @@ describe('Vendor error text handling (invariant #6)', () => {
     expect(data.code).toBe('AUTH_FAILED');
     expect(data.error).toContain('<untrusted-content source="talentlms:api-error">');
     // The embedded close-tag variant is escaped, so the envelope cannot be broken out of.
-    expect(data.error).toContain('<\\/untrusted-content>');
+    expect(data.error).toMatch(/<\\\/untrusted-content/i);
+    expect(data.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(data.error).not.toContain('</untrusted-content >');
   });
 

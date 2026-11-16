@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as envelopes from '../src/utils/untrusted-content.js';
+import * as envelopes from '../src/utils/untrusted-controls.js';
 
 describe('explicit JSON control paths', () => {
   it('leaves only declared, well-shaped provider controls unchanged', () => {
@@ -18,7 +18,8 @@ describe('explicit JSON control paths', () => {
     expect(result.emails[0].metadata.id).toContain('<untrusted-content');
     expect(result.emails[0].headers.id).toContain('<untrusted-content');
     expect(result.emails[0].headers['Message-ID']).toContain('<untrusted-content');
-    expect(result.emails[0].body).toContain('<\\/untrusted-content>do this');
+    expect(result.emails[0].body).toContain('<\\/UNTRUSTED-CONTENT >do this');
+    expect(result.emails[0].body.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(input.emails[0].id).toBe('msg-1');
   });
 
@@ -33,10 +34,6 @@ describe('explicit JSON control paths', () => {
     }, 'test', ['emails.*.id']);
     expect(result.emails['*'].id).toContain('<untrusted-content');
     expect(result.emails['0'].id).toContain('<untrusted-content');
-  });
-
-  it('the existing wrap-every-string serializer keeps its behavior', () => {
-    expect(envelopes.wrapUntrustedJsonStrings({ id: 'msg-1' }, 'test').id).toContain('<untrusted-content');
   });
 
   it('matches object-map values only at an explicitly declared {} segment', () => {

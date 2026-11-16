@@ -13,15 +13,6 @@ import { ATTACK_PAYLOAD, CLOSE_TAG_AGENT_NAME } from './fixtures/elevenlabs-agen
 
 type Json = Record<string, any>;
 
-/**
- * Close-tag *variants* (`</UNTRUSTED-CONTENT \t>`) are defanged to the single
- * canonical form on the way out, and unescaping restores that canonical form — so a
- * value carrying a breakout attempt round-trips normalized, not byte-identical.
- * Ordinary text, and the canonical close tag itself, round-trip exactly.
- */
-const ATTACK_PAYLOAD_AFTER_ROUND_TRIP =
-  ATTACK_PAYLOAD.replace(/<\/untrusted-content\s*>/gi, '</untrusted-content>');
-
 describe('agents tools', () => {
   let testClient: McpTestClient;
 
@@ -363,7 +354,7 @@ describe('agents tools', () => {
           agent: {
             language: 'en',
             prompt: {
-              prompt: ATTACK_PAYLOAD_AFTER_ROUND_TRIP,
+              prompt: ATTACK_PAYLOAD,
               llm_model: 'gpt-realtime',
             },
           },

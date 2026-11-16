@@ -6,6 +6,7 @@ import { DeleteTools } from "./delete/index.js";
 import { GetTools } from "./get/index.js";
 import { HistoryTools } from "./history/index.js";
 import { ListTools } from "./list/index.js";
+import { registerSignInTool } from "./sign-in.tool.js";
 import { UpdateTools } from "./update/index.js";
 
 const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
@@ -21,6 +22,7 @@ const WRITE_ANNOTATIONS: ToolAnnotations = {
 };
 
 export function ToolFactory(server: McpServer) {
+  registerSignInTool(server);
   DeleteTools.map((tool) => tool()).forEach((tool) =>
     server.tool(tool.name, tool.description, tool.schema, WRITE_ANNOTATIONS, tool.handler),
   );

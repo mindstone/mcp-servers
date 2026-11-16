@@ -12,7 +12,7 @@ import { createImapMock } from './helpers/imap-mock.js';
 import { createSmtpMock } from './helpers/smtp-mock.js';
 import { createMailboxes, createMessages } from './fixtures/email-data.js';
 
-const { MockImapFlow, calls } = createImapMock({
+const { MockImapFlow, calls, mailboxOps } = createImapMock({
   mailboxes: createMailboxes(),
   messages: createMessages(),
   searchUids: [101, 102, 103],
@@ -122,5 +122,30 @@ describe('mailbox names — empty after envelope unwrap fails closed', () => {
     expect(result.isError).toBeFalsy();
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
+  });
+
+  it('an enveloped name padded with whitespace still round-trips', async () => {
+    await setupClient();
+    mailboxOps.length = 0;
+
+    const result = await testClient.callTool('email_get_mailbox_status', {
+      mailbox: '  <untrusted-content source="external-email">Sent</untrusted-content>\n',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(mailboxOps).toContainEqual({ op: 'status', args: ['Sent'] });
+  });
+
+  it('email_get_mailbox_status reads INBOX for an enveloped-empty mailbox, and says so', async () => {
+    await setupClient();
+    mailboxOps.length = 0;
+
+    const result = await testClient.callTool('email_get_mailbox_status', {
+      mailbox: ENVELOPED_EMPTY,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(mailboxOps).toContainEqual({ op: 'status', args: ['INBOX'] });
+    expect(JSON.stringify(result.json)).toContain('INBOX');
   });
 });

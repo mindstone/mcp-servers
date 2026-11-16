@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ### Added
 
 - Admin write tools, off by default and enabled with `GA4_ALLOW_WRITES=true`: create, update, and archive or delete key events, custom dimensions, custom metrics, audiences, channel groups, event create rules, data streams, Measurement Protocol secrets, and Google Ads, Firebase, and BigQuery links; update property settings, enhanced measurement, and data retention; create and delete properties; acknowledge user-data collection.

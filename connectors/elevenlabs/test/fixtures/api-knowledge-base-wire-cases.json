@@ -1,0 +1,474 @@
+[
+  {
+    "id": "create_crawl_job_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "url": "https://docs.example.com/guide",
+        "max_pages": 5,
+        "max_depth": 2,
+        "pattern": "*/guide/*",
+        "exclude_patterns": [
+          "*/archive/*"
+        ],
+        "sitemap_urls": null,
+        "parent_folder_id": "folder_example",
+        "enable_auto_sync": false,
+        "auto_remove": false,
+        "auto_discover": false,
+        "minimum_frequency_days": null
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/crawl",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "crawl_example",
+      "type": "discovery",
+      "root_folder_id": "folder_example",
+      "status": "queued",
+      "created_at": 1
+    },
+    "body": {
+      "url": "https://docs.example.com/guide",
+      "max_pages": 5,
+      "max_depth": 2,
+      "pattern": "*/guide/*",
+      "exclude_patterns": [
+        "*/archive/*"
+      ],
+      "sitemap_urls": null,
+      "parent_folder_id": "folder_example",
+      "enable_auto_sync": false,
+      "auto_remove": false,
+      "auto_discover": false,
+      "minimum_frequency_days": null
+    }
+  },
+  {
+    "id": "get_crawl_job_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "crawl_job_id": "crawl/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/crawl/crawl%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "crawl_example",
+      "type": "discovery",
+      "seed_url": "https://docs.example.com/guide",
+      "max_pages": 5,
+      "root_folder_id": "folder_example",
+      "status": "processing",
+      "pages_identified": 5,
+      "pages_scraped": 2,
+      "updated_at": 2,
+      "created_at": 1
+    }
+  },
+  {
+    "id": "list_crawl_jobs_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "include_job_ids": [
+          "crawl & 1",
+          "crawl/2"
+        ],
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/crawl",
+    "query": [
+      [
+        "include_job_ids",
+        "crawl & 1"
+      ],
+      [
+        "include_job_ids",
+        "crawl/2"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "crawl_jobs": [
+        {
+          "id": "crawl_example",
+          "type": "discovery",
+          "seed_url": "https://docs.example.com/guide",
+          "max_pages": 5,
+          "root_folder_id": "folder_example",
+          "status": "processing",
+          "pages_identified": 5,
+          "pages_scraped": 2,
+          "updated_at": 2,
+          "created_at": 1
+        }
+      ],
+      "next_cursor": "page & 3"
+    }
+  },
+  {
+    "id": "cancel_crawl_job_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "crawl_job_id": "crawl/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/crawl/crawl%2Fa%20%3F%23/cancel",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "get_or_create_rag_indexes",
+    "profile": "create",
+    "args": {
+      "body": {
+        "items": [
+          {
+            "document_id": "doc_example",
+            "create_if_missing": true,
+            "model": "e5_mistral_7b_instruct"
+          },
+          {
+            "document_id": "doc_other",
+            "create_if_missing": false,
+            "model": "multilingual_e5_large_instruct"
+          }
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/rag-index",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "doc_example": {
+        "status": "success",
+        "data": {
+          "id": "index_example",
+          "model": "e5_mistral_7b_instruct",
+          "status": "succeeded",
+          "progress_percentage": 100,
+          "document_model_index_usage": {
+            "used_bytes": 200
+          }
+        }
+      }
+    },
+    "body": {
+      "items": [
+        {
+          "document_id": "doc_example",
+          "create_if_missing": true,
+          "model": "e5_mistral_7b_instruct"
+        },
+        {
+          "document_id": "doc_other",
+          "create_if_missing": false,
+          "model": "multilingual_e5_large_instruct"
+        }
+      ]
+    }
+  },
+  {
+    "id": "get_rag_index_overview",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/rag-index",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "total_used_bytes": 200,
+      "total_max_bytes": 1000,
+      "models": [
+        {
+          "model": "e5_mistral_7b_instruct",
+          "used_bytes": 200
+        }
+      ]
+    }
+  },
+  {
+    "id": "delete_rag_index",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "documentation_id": "doc/a ?#",
+        "rag_index_id": "index/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/knowledge-base/doc%2Fa%20%3F%23/rag-index/index%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "index_example",
+      "model": "e5_mistral_7b_instruct",
+      "status": "succeeded",
+      "progress_percentage": 100,
+      "document_model_index_usage": {
+        "used_bytes": 200
+      }
+    }
+  },
+  {
+    "id": "get_agent_knowledge_base_summaries_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "document_ids": [
+          "doc & 1",
+          "doc/2"
+        ]
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/summaries",
+    "query": [
+      [
+        "document_ids",
+        "doc & 1"
+      ],
+      [
+        "document_ids",
+        "doc/2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "doc & 1": {
+        "status": "success",
+        "data": {
+          "id": "doc_example",
+          "name": "Guide",
+          "type": "text",
+          "metadata": {
+            "created_at_unix_secs": 1,
+            "last_updated_at_unix_secs": 2,
+            "size_bytes": 20
+          },
+          "supported_usages": [],
+          "access_info": {
+            "is_creator": true,
+            "creator_name": "Jane Example",
+            "creator_email": "jane@example.com",
+            "role": "admin"
+          },
+          "dependent_agents": []
+        }
+      },
+      "doc/2": {
+        "status": "failure",
+        "error_code": 404,
+        "error_status": "not_found",
+        "error_message": "Document not found."
+      }
+    }
+  },
+  {
+    "id": "get_documentation_chunk_from_knowledge_base",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "documentation_id": "doc/a ?#",
+        "chunk_id": "chunk/a ?#"
+      },
+      "query_params": {
+        "embedding_model": "multilingual_e5_large_instruct"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/doc%2Fa%20%3F%23/chunk/chunk%2Fa%20%3F%23",
+    "query": [
+      [
+        "embedding_model",
+        "multilingual_e5_large_instruct"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "chunk_example",
+      "name": "Guide excerpt",
+      "content": "A guide excerpt."
+    }
+  },
+  {
+    "id": "get_knowledge_base_bulk_dependent_agents_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "dependent_type": "direct",
+        "page_size": 2,
+        "cursor": "page & 2"
+      },
+      "body": {
+        "document_ids": [
+          "doc_example",
+          "folder_example"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/dependent-agents",
+    "query": [
+      [
+        "dependent_type",
+        "direct"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agents": [],
+      "branches": [],
+      "has_more": false,
+      "next_cursor": null
+    },
+    "body": {
+      "document_ids": [
+        "doc_example",
+        "folder_example"
+      ]
+    }
+  },
+  {
+    "id": "get_knowledge_base_source_file_url",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "documentation_id": "doc/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/knowledge-base/doc%2Fa%20%3F%23/source-file-url",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "signed_url": "https://files.example.com/guide.pdf?signature=example"
+    }
+  },
+  {
+    "id": "post_knowledge_base_move_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "document_id": "doc/a ?#"
+      },
+      "body": {
+        "move_to": "folder_example"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/doc%2Fa%20%3F%23/move",
+    "query": [],
+    "status": 200,
+    "media": null,
+    "response": null,
+    "body": {
+      "move_to": "folder_example"
+    }
+  },
+  {
+    "id": "post_knowledge_base_bulk_move_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "document_ids": [
+          "doc_example",
+          "folder_example"
+        ],
+        "move_to": null
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/bulk-move",
+    "query": [],
+    "status": 200,
+    "media": null,
+    "response": null,
+    "body": {
+      "document_ids": [
+        "doc_example",
+        "folder_example"
+      ],
+      "move_to": null
+    }
+  },
+  {
+    "id": "post_knowledge_base_bulk_delete_route",
+    "profile": "delete",
+    "args": {
+      "body": {
+        "document_ids": [
+          "doc_example",
+          "doc_other"
+        ],
+        "force": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/knowledge-base/bulk-delete",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "doc_example": {
+        "status": "success",
+        "data": {
+          "id": "doc_example"
+        }
+      },
+      "doc_other": {
+        "status": "failure",
+        "error_code": 409,
+        "error_status": "in_use",
+        "error_message": "Document is in use."
+      }
+    },
+    "body": {
+      "document_ids": [
+        "doc_example",
+        "doc_other"
+      ],
+      "force": false
+    }
+  }
+]

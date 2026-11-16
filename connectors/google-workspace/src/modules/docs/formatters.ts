@@ -1,7 +1,7 @@
 /**
  * Utilities for formatting Google Docs content and parsing URLs.
  */
-import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-controls.js';
 
 /**
  * Construct a Google Docs URL from document ID

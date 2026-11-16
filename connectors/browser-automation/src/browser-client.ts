@@ -60,6 +60,9 @@ const DAEMON_ADDRESS_ENV = new Set([
   'AGENT_BROWSER_NAMESPACE',
 ]);
 
+// The folder this module is in; see runAgentBrowser.
+const CONNECTOR_DIR = fileURLToPath(new URL('.', import.meta.url));
+
 let bundledBinary: string | null = null;
 
 /**
@@ -231,6 +234,12 @@ async function runAgentBrowser(
     // execFile is safe against command injection (no shell interpretation)
     const result = await execFileAsync(resolveBundledBinary(), args, {
       env,
+      // The CLI loads a project config, agent-browser.json, from its working
+      // directory, and that file can choose what it launches. The host's
+      // working directory may be any project, so the CLI runs in this
+      // connector's own folder, which has none. The user's own config in
+      // ~/.agent-browser still applies.
+      cwd: CONNECTOR_DIR,
       timeout: timeoutMs,
       signal: stopping.signal,
       maxBuffer: MAX_BUFFER,

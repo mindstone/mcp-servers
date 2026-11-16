@@ -11,7 +11,8 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { wrapUntrustedJsonValues } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -406,7 +407,7 @@ export async function handleDownloadDriveFile(args: DriveDownloadArgs): Promise<
         mimeType
       });
       if (!result.success) return JSON.stringify(formatDriveRecoveryError('download file', new Error(result.error || 'Unknown error')));
-      return JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}`));
+      return JSON.stringify(wrapUntrustedJsonValues(result, `google-workspace:drive:file/${fileId}`));
     } catch (error) {
       return JSON.stringify(formatDriveRecoveryError('download file', error));
     }
@@ -483,7 +484,7 @@ export async function handleUpdateDrivePermissions(args: DrivePermissionArgs): P
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${args.options.fileId}/permissions`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonValues(result, `google-workspace:drive:file/${args.options.fileId}/permissions`), null, 2)
         }]
       };
     } catch (error) {
@@ -761,7 +762,7 @@ export async function handleDownloadFileRevision(args: DriveDownloadRevisionArgs
       const driveService = await getDriveService();
       const result = await driveService.downloadRevision(email, fileId, revisionId);
       if (!result.success) return JSON.stringify(formatDriveRecoveryError('download revision', new Error(result.error || 'Unknown error')));
-      return JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/revision/${revisionId}`));
+      return JSON.stringify(wrapUntrustedJsonValues(result, `google-workspace:drive:file/${fileId}/revision/${revisionId}`));
     } catch (error) {
       return JSON.stringify(formatDriveRecoveryError('download revision', error));
     }

@@ -7,7 +7,7 @@
  * shared templates or sent documents — so they are attacker-controllable text
  * and MUST be enveloped before reaching the model (AGENTS.md security
  * invariant #6). This module is the single, auditable place that enumerates
- * each such field and reaches `wrapUntrusted` / `wrapUntrustedJsonStrings`.
+ * each such field and reaches `wrapUntrusted`.
  *
  * Identifiers and URLs are structural: downstream tool calls reference them
  * verbatim (`recipients[].id`, `fields[].uuid`, `contacts[].id`, …), and URLs
@@ -93,7 +93,7 @@ function wrapStr(v: unknown, source: string): unknown {
 }
 
 /**
- * Like `wrapUntrustedJsonStrings`, but string values under structural keys
+ * Like `wrapUntrustedJsonValues`, but string values under structural keys
  * (identifiers, URLs) pass through unchanged ONLY when they still validate as
  * the identifier/URL they claim to be; malformed values are enveloped like
  * any other external text. Object keys themselves are structural and never

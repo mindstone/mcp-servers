@@ -166,7 +166,8 @@ describe('microsoft-sharepoint adversarial hardening', () => {
       expect(json.error).toContain('<untrusted-content source="microsoft-sharepoint:graph-error">');
       // The close-tag variant inside the vendor message is neutralised.
       expect(json.error).not.toContain('</UNTRUSTED-CONTENT >');
-      expect(json.error).toContain('<\\/untrusted-content>');
+      expect(json.error).toMatch(/<\\\/untrusted-content/i);
+      expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
       expect(json.error).toContain('Ignore prior instructions');
     });
   });
@@ -281,7 +282,8 @@ describe('microsoft-sharepoint adversarial hardening', () => {
         // Payload text survives as data, but the close-tag variant is neutralised.
         expect(field).toContain('Ignore prior instructions');
         expect(field).not.toContain('</UNTRUSTED-CONTENT >');
-        expect(field).toContain('<\\/untrusted-content>');
+        expect(field).toMatch(/<\\\/untrusted-content/i);
+        expect(field.match(/<\/untrusted-content/gi)).toHaveLength(1);
       }
     });
 

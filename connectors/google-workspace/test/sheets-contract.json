@@ -152,7 +152,7 @@
             ]
           ]
         },
-        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 18<\\/untrusted-content></untrusted-content>"
+        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<\\untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 18<\\/untrusted-content></untrusted-content>"
       },
       {
         "input": {
@@ -172,7 +172,7 @@
             ]
           ]
         },
-        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 19.25<\\/untrusted-content></untrusted-content>"
+        "text": "<untrusted-content source=\"google-workspace:sheets:anchor-read\">Range: Targets!B2\nRows: 1, Columns: 1\nFormula cells: 0\nColumn types: number\n---\n<\\untrusted-content source=\"google-workspace:sheets:shaped-read\">2| | 19.25<\\/untrusted-content></untrusted-content>"
       }
     ],
     "update": {

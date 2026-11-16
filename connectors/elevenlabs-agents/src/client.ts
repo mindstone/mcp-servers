@@ -245,7 +245,8 @@ export async function elevenLabsBinaryDownload(
   const buffer = Buffer.from(await response.arrayBuffer());
   const fileName = `elevenlabs_agents_${crypto.randomUUID()}.${ext}`;
   const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, buffer);
+  // Owner-only: conversation recordings are private. `wx` so the mode always applies.
+  fs.writeFileSync(filePath, buffer, { flag: 'wx', mode: 0o600 });
 
   return { filePath, sizeBytes: buffer.length };
 }

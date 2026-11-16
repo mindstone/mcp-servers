@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { mswServer } from './fixtures/setup.js';
+import { recordRequests } from './fixtures/record-requests.js';
 
 const TEST_EMAIL = 'user@example.com';
 const GOOGLE_SCOPES = [
@@ -363,5 +364,57 @@ describe('Meet handlers error handling', () => {
       expect(err.code).toBe(ErrorCode.InvalidParams);
       expect(err.message).toContain('transcript');
     });
+  });
+});
+
+
+describe('Meet resource ID request target', () => {
+  it.each([
+    'conf-1?x=1',
+    'conf-1#frag',
+    'conf-1&x=1',
+    '..',
+    'conferenceRecords/..',
+    'conf-1%2F..',
+    'conferenceRecords/conf-1/transcripts/t-1',
+  ])('rejects conference_record %s before any request is sent', async (conferenceRecord) => {
+    const handlers = await loadMeetModules();
+    const sent = await recordRequests(async () => {
+      await expect(handlers.handleListMeetTranscripts({ conference_record: conferenceRecord }))
+        .rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+      await expect(handlers.handleGetMeetTranscriptEntries({ conference_record: conferenceRecord, transcript: 't-1' }))
+        .rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    });
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    't-1?x=1',
+    'transcripts/t-1#frag',
+    'transcripts/..',
+    'transcripts/t-1/entries/e-1',
+    'conferenceRecords/conf-1/transcripts/t-1?x=1',
+    'conferenceRecords/conf-1/../conf-2/transcripts/t-1',
+    'conferenceRecords/conf-1/transcripts/t-1/entries/e-1',
+  ])('rejects transcript %s before any request is sent', async (transcript) => {
+    const handlers = await loadMeetModules();
+    const sent = await recordRequests(() => expect(
+      handlers.handleGetMeetTranscriptEntries({ conference_record: 'conf-1', transcript }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams }));
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    ['conf-1', 't-1'],
+    ['conferenceRecords/conf-1', 'transcripts/t-1'],
+    [' conf-1 ', 'conferenceRecords/conf-1/transcripts/t-1'],
+  ])('reads entries of exactly the named transcript (%s, %s)', async (conferenceRecord, transcript) => {
+    installMeetApiMocks();
+    const handlers = await loadMeetModules();
+    const sent = await recordRequests(() =>
+      handlers.handleGetMeetTranscriptEntries({ conference_record: conferenceRecord, transcript }));
+    expect(sent).toEqual([
+      'GET https://meet.googleapis.com/v2/conferenceRecords/conf-1/transcripts/t-1/entries',
+    ]);
   });
 });

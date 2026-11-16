@@ -47,10 +47,6 @@ function captureSentText(): Record<string, string | null> {
       });
     });
   mswServer.use(
-    // A public channel, so post_slack_message skips the DM recipient check.
-    http.post(`${SLACK_API_BASE}/conversations.info`, () =>
-      HttpResponse.json({ ok: true, channel: { id: 'C123TEST', is_im: false } }),
-    ),
     record('chat.postMessage', 'text'),
     record('chat.scheduleMessage', 'text'),
     record('chat.update', 'text'),

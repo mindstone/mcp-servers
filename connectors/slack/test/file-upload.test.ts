@@ -110,6 +110,63 @@ describe('Slack MCP — upload_slack_file', () => {
     expect(completedWith).toEqual({ channel_id: 'C123TEST', initial_comment: 'FYI' });
   });
 
+  describe('direct messages name the person', () => {
+    let calls: string[];
+    let completedChannel: string | null;
+
+    beforeEach(() => {
+      calls = [];
+      completedChannel = null;
+      mswServer.use(
+        http.post(`${SLACK_API_BASE}/files.getUploadURLExternal`, () => {
+          calls.push('getUploadURLExternal');
+          return HttpResponse.json({ ok: true, upload_url: 'https://files.slack.com/upload/v1/DM1', file_id: 'F0DM' });
+        }),
+        http.post('https://files.slack.com/upload/v1/:uploadId', () => {
+          calls.push('upload-bytes');
+          return HttpResponse.text('OK', { status: 200 });
+        }),
+        http.post(`${SLACK_API_BASE}/files.completeUploadExternal`, async ({ request }) => {
+          completedChannel = new URLSearchParams(await request.text()).get('channel_id');
+          return HttpResponse.json({ ok: true, files: [{ id: 'F0DM', name: 'report.txt' }] });
+        }),
+      );
+    });
+
+    it('refuses a bare DM channel before any bytes leave the machine', async () => {
+      const result = await client.callTool('upload_slack_file', { file_path: workspaceFile, channel: 'D999TEST' });
+      expect(result.json).toMatchObject({ ok: false, next_step: 'lookup_user_by_email' });
+      expect(calls).toEqual([]);
+    });
+
+    it('refuses a DM channel that belongs to someone else, without naming them', async () => {
+      const result = await client.callTool('upload_slack_file', {
+        file_path: workspaceFile,
+        channel: 'D999TEST',
+        intended_recipient: 'U777',
+      });
+      expect((result.json as { error?: string }).error).toContain('RECIPIENT MISMATCH');
+      expect(result.text).not.toContain('U123');
+      expect(calls).toEqual([]);
+    });
+
+    it('shares into a DM channel whose intended_recipient matches', async () => {
+      const result = await client.callTool('upload_slack_file', {
+        file_path: workspaceFile,
+        channel: 'D999TEST',
+        intended_recipient: 'U123',
+      });
+      expect(result.json).toMatchObject({ ok: true, channel: 'D999TEST' });
+      expect(completedChannel).toBe('D999TEST');
+    });
+
+    it('opens the DM for a person target and shares there', async () => {
+      const result = await client.callTool('upload_slack_file', { file_path: workspaceFile, channel: 'U777' });
+      expect(result.json).toMatchObject({ ok: true, channel: 'DU777' });
+      expect(completedChannel).toBe('DU777');
+    });
+  });
+
   it('uploads privately when no channel is given', async () => {
     const result = await client.callTool('upload_slack_file', { file_path: workspaceFile });
     const j = result.json as { ok?: boolean; channel?: string; note?: string };

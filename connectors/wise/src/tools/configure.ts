@@ -1,10 +1,19 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { saveCredentials, removeCredentials, loadCredentials, getEnvironment } from '../auth.js';
+import {
+  saveCredentials,
+  removeCredentials,
+  loadCredentials,
+  getEnvironment,
+  getApiBaseUrl,
+} from '../auth.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
-import { wiseFetch } from '../client.js';
-import { WiseError, type WiseProfile } from '../types.js';
+import { errorKind } from '../client.js';
+import { WiseError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+
+/** The token check reads only how many profiles the reply lists. */
+const profilesReplySchema = z.array(z.unknown());
 
 export function registerConfigureTools(server: McpServer): void {
   // ── configure_wise ──────────────────────────────────────────────
@@ -32,42 +41,68 @@ export function registerConfigureTools(server: McpServer): void {
       const apiToken = args.api_token.trim();
       const environment = args.environment ?? getEnvironment();
 
-      // Verify the token before storing anything. Call the API directly
-      // (not wiseFetch, so the base URL matches the requested environment).
-      const baseUrl =
-        environment === 'sandbox' ? 'https://api.wise-sandbox.com' : 'https://api.wise.com';
-      let profiles: WiseProfile[];
+      // Verify the token before storing anything. This calls the API
+      // directly rather than through wiseFetch, because a failed check has
+      // its own wording. Native error text can quote hosts or reply bytes, so
+      // every failure here is reported with fixed text.
+      let response: Response;
       try {
-        const response = await fetch(`${baseUrl}/v2/profiles`, {
+        response = await fetch(`${getApiBaseUrl(environment)}/v2/profiles`, {
           headers: { Authorization: `Bearer ${apiToken}`, Accept: 'application/json' },
           signal: AbortSignal.timeout(15_000),
+          // Never follow a redirect, so the token goes only to the Wise host.
+          redirect: 'error',
         });
-        if (response.status === 401 || response.status === 403) {
-          throw new WiseError(
-            'Wise rejected the API token.',
-            'AUTH_FAILED',
-            environment === 'sandbox'
-              ? 'Check that you created the token in the Wise SANDBOX, not on wise.com.'
-              : 'Check that you copied the full token from wise.com → Settings → API tokens, and that it has not been revoked.',
-          );
-        }
-        if (!response.ok) {
-          await response.text().catch(() => '');
-          throw new WiseError(
-            `Could not verify the token (Wise API error ${response.status}).`,
-            'API_ERROR',
-            'Try again. If the problem persists, check the Wise status page.',
-          );
-        }
-        profiles = (await response.json()) as WiseProfile[];
       } catch (error) {
-        if (error instanceof WiseError) throw error;
+        console.error(`[wise] token check could not reach the Wise API (${errorKind(error)})`);
         throw new WiseError(
-          `Could not reach the Wise API to verify the token: ${error instanceof Error ? error.message : String(error)}`,
+          'Could not reach the Wise API to verify the token.',
           'API_ERROR',
           'Check your network connection and try again.',
         );
       }
+      if (response.status === 401 || response.status === 403) {
+        // Discarding the body is connection hygiene only: an errored body
+        // stream must not replace the rejected-token answer.
+        await response.body?.cancel().catch((error: unknown) => {
+          console.error(`[wise] token check reply body could not be discarded (${errorKind(error)})`);
+        });
+        throw new WiseError(
+          'Wise rejected the API token.',
+          'AUTH_FAILED',
+          environment === 'sandbox'
+            ? 'Check that you created the token in the Wise SANDBOX, not on wise.com.'
+            : 'Check that you copied the full token from wise.com → Settings → API tokens, and that it has not been revoked. If this is a sandbox token, pass environment: "sandbox".',
+        );
+      }
+      if (!response.ok) {
+        await response.text().catch(() => '');
+        throw new WiseError(
+          `Could not verify the token (Wise API error ${response.status}).`,
+          'API_ERROR',
+          'Try again. If the problem persists, check the Wise status page.',
+        );
+      }
+      const unreadableReply = new WiseError(
+        'Could not verify the token: Wise sent a reply that could not be read.',
+        'API_ERROR',
+        'Try again. If the problem persists, check the Wise status page.',
+      );
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        console.error('[wise] token check reply could not be parsed');
+        throw unreadableReply;
+      }
+      // Only the count is read, and it is quoted in the message, so it must
+      // come from a checked array.
+      const reply = profilesReplySchema.safeParse(body);
+      if (!reply.success) {
+        console.error('[wise] token check reply did not have the expected shape');
+        throw unreadableReply;
+      }
+      const profiles = reply.data;
 
       // If bridge is available, persist via bridge
       if (BRIDGE_STATE_PATH) {
@@ -82,29 +117,41 @@ export function registerConfigureTools(server: McpServer): void {
               : `Wise account connected (${profiles.length} profile(s) accessible).`;
             return JSON.stringify({ ok: true, message, environment, profileCount: profiles.length });
           }
-          // Bridge returned failure — surface as error, do NOT fall through
+          // Bridge returned failure — surface as error, do NOT fall through.
+          // bridgeRequest has already enveloped any bridge-supplied error text.
           throw new WiseError(
             result.error || 'Bridge configuration failed',
             'BRIDGE_ERROR',
-            'The host app bridge rejected the configuration request. Check the host app logs.',
+            'The host app could not save the Wise connection. Make sure the host app is running, then try again.',
           );
         } catch (error) {
           if (error instanceof WiseError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
+          // Network, timeout or refused-redirect failures get fixed text, never the raw message.
           throw new WiseError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            'Bridge request failed.',
             'BRIDGE_ERROR',
             'Could not reach the host app bridge. Ensure the host app is running.',
           );
         }
       }
 
-      // No bridge — store locally
-      saveCredentials({
-        apiToken,
-        environment,
-        connectedAt: new Date().toISOString(),
-      });
+      // No bridge — store locally. The write error can quote the config
+      // path, so only its code is logged and the result has fixed text.
+      try {
+        await saveCredentials({
+          apiToken,
+          environment,
+          connectedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error(`[wise] credentials could not be saved (${errorKind(error)})`);
+        throw new WiseError(
+          'The Wise API token was verified but could not be saved.',
+          'SAVE_FAILED',
+          'Check that the Wise config folder (WISE_CONFIG_PATH, default ~/.mcp/wise) is writable and that ' +
+            'credentials.json in it is not a symbolic link, then run configure_wise again.',
+        );
+      }
 
       return JSON.stringify({
         ok: true,

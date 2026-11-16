@@ -1,0 +1,965 @@
+[
+  {
+    "id": "assign_conversation_tags_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "body": {
+        "tag_ids": [
+          "tag_example",
+          "tag_other"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/tags",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null,
+    "body": {
+      "tag_ids": [
+        "tag_example",
+        "tag_other"
+      ]
+    }
+  },
+  {
+    "id": "cancel_file_upload_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "file_id": "file_id/a ?#",
+        "conversation_id": "conversation_id/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/files/file_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "file_id": "file_example"
+    }
+  },
+  {
+    "id": "delete_conversation_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "get_conversation_audio_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/audio",
+    "query": [],
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "ID3-synthetic-audio"
+  },
+  {
+    "id": "get_conversation_histories_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "agent_id": "agent_example",
+        "visited_agent_ids": [
+          "agent & 1",
+          "agent/2"
+        ],
+        "call_successful": "success",
+        "call_start_after_unix": 1,
+        "include_invalid_tool_calls": false,
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations",
+    "query": [
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "visited_agent_ids",
+        "agent & 1"
+      ],
+      [
+        "visited_agent_ids",
+        "agent/2"
+      ],
+      [
+        "call_successful",
+        "success"
+      ],
+      [
+        "call_start_after_unix",
+        "1"
+      ],
+      [
+        "include_invalid_tool_calls",
+        "false"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "conversations": [],
+      "has_more": false
+    }
+  },
+  {
+    "id": "get_conversation_history_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "query_params": {
+        "format": "opentelemetry"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23",
+    "query": [
+      [
+        "format",
+        "opentelemetry"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1,
+        "call_duration_secs": 60,
+        "cost_fiat": null
+      },
+      "has_audio": true,
+      "has_user_audio": true,
+      "has_response_audio": true,
+      "has_auxiliary_audio": false,
+      "transcript": []
+    }
+  },
+  {
+    "id": "get_conversation_sip_messages",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "query_params": {
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/sip-messages",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "sip_messages": [],
+      "has_more": false
+    }
+  },
+  {
+    "id": "get_conversation_summary_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "query_params": {
+        "max_messages": 2
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/summary",
+    "query": [
+      [
+        "max_messages",
+        "2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "conversation_id": "conv_example",
+      "agent_id": "agent_example",
+      "status": "done",
+      "message_count": 2,
+      "call_summary_title": "Delivery question",
+      "transcript_summary": "The caller asked about delivery.",
+      "note": "Fetch full transcript for details."
+    }
+  },
+  {
+    "id": "post_conversation_feedback_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "body": {
+        "feedback": "dislike"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/feedback",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {
+      "feedback": "dislike"
+    }
+  },
+  {
+    "id": "resolve_conversation_reference_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "agent_id": "agent_example",
+        "reference": "https://acme.zendesk.com/agent/tickets/12345"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/resolve",
+    "query": [
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "reference",
+        "https://acme.zendesk.com/agent/tickets/12345"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1,
+        "call_duration_secs": 60,
+        "cost_fiat": null
+      },
+      "has_audio": true,
+      "has_user_audio": true,
+      "has_response_audio": true,
+      "has_auxiliary_audio": false,
+      "transcript": []
+    }
+  },
+  {
+    "id": "run_conversation_analysis",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/analysis/run",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1,
+        "call_duration_secs": 60,
+        "cost_fiat": null
+      },
+      "has_audio": true,
+      "has_user_audio": true,
+      "has_response_audio": true,
+      "has_auxiliary_audio": false,
+      "transcript": []
+    }
+  },
+  {
+    "id": "run_conversation_evaluations",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#"
+      },
+      "body": {
+        "evaluation_id": "eval_example",
+        "scope": "conversation",
+        "evaluated_agent_id": "agent_example"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/analysis/evaluations/run",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1,
+        "call_duration_secs": 60,
+        "cost_fiat": null
+      },
+      "has_audio": true,
+      "has_user_audio": true,
+      "has_response_audio": true,
+      "has_auxiliary_audio": false,
+      "transcript": []
+    },
+    "body": {
+      "evaluation_id": "eval_example",
+      "scope": "conversation",
+      "evaluated_agent_id": "agent_example"
+    }
+  },
+  {
+    "id": "smart_search_conversation_messages_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "text_query": "delivery & return",
+        "agent_id": "agent_example",
+        "branch_id": null,
+        "page_size": 2
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/messages/smart-search",
+    "query": [
+      [
+        "text_query",
+        "delivery & return"
+      ],
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "page_size",
+        "2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": [],
+      "has_more": false
+    }
+  },
+  {
+    "id": "text_search_conversation_messages_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "text_query": "delivery & return",
+        "agent_id": "agent_example",
+        "tool_names": [
+          "lookup",
+          "status"
+        ],
+        "page_size": 2,
+        "text_only": false
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversations/messages/text-search",
+    "query": [
+      [
+        "text_query",
+        "delivery & return"
+      ],
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "tool_names",
+        "lookup"
+      ],
+      [
+        "tool_names",
+        "status"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "text_only",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "results": [],
+      "has_more": false
+    }
+  },
+  {
+    "id": "unassign_conversation_tag_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "conversation_id": "conversation_id/a ?#",
+        "tag_id": "tag_id/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/conversations/conversation_id%2Fa%20%3F%23/tags/tag_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "add_ticket_comment_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      },
+      "body": {
+        "comment": "Review the delivery answer."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23/comments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "comment": "Review the delivery answer."
+    }
+  },
+  {
+    "id": "add_turn_comment_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      },
+      "body": {
+        "turn_index": 0,
+        "comment": "Check the delivery estimate."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23/turn-comments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "turn_index": 0,
+      "comment": "Check the delivery estimate."
+    }
+  },
+  {
+    "id": "create_agent_conversation_ticket_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "conversation_id": "conv_example",
+        "qa_comment": "Review response",
+        "priority": "high"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/triage-tickets",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "conversation_id": "conv_example",
+      "qa_comment": "Review response",
+      "priority": "high"
+    }
+  },
+  {
+    "id": "delete_agent_conversation_ticket_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "get_agent_conversation_ticket_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    }
+  },
+  {
+    "id": "list_workspace_conversation_tickets_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "agent_id": "agent_example",
+        "search": "delivery & return",
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/triage-tickets",
+    "query": [
+      [
+        "agent_id",
+        "agent_example"
+      ],
+      [
+        "search",
+        "delivery & return"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_conversation_tickets": [
+        {
+          "agentqa_ticket_id": "ticket_example",
+          "workspace_id": "workspace_example",
+          "owner_user_id": "user_example",
+          "agent_id": "agent_example",
+          "needs_clustering": false,
+          "title": "Review call",
+          "issue_type": null,
+          "labels": [],
+          "conversation_ids": [
+            "conv_example"
+          ],
+          "first_seen_unix_secs": 1,
+          "last_seen_unix_secs": 2,
+          "qa_comment": "Review response",
+          "ticket_comments": [],
+          "turn_comments": [],
+          "status": "open",
+          "priority": null,
+          "priority_changes": [],
+          "status_changes": [],
+          "source": "qa",
+          "assignee_user_id": null,
+          "created_at_unix_secs": 1,
+          "updated_at_unix_secs": 2
+        }
+      ],
+      "has_more": false
+    }
+  },
+  {
+    "id": "merge_agent_conversation_tickets_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      },
+      "body": {
+        "source_ticket_ids": [
+          "ticket_source"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23/merge",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "source_ticket_ids": [
+        "ticket_source"
+      ]
+    }
+  },
+  {
+    "id": "update_agent_conversation_ticket_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "agentqa_ticket_id": "agentqa_ticket_id/a ?#"
+      },
+      "body": {
+        "title": "Updated review",
+        "assignee_user_id": null,
+        "priority": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/triage-tickets/agentqa_ticket_id%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "title": "Updated review",
+      "assignee_user_id": null,
+      "priority": null
+    }
+  },
+  {
+    "id": "create_manual_agent_ticket_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "agent_id": "agent_id/a ?#"
+      },
+      "body": {
+        "qa_comment": "Update delivery guidance",
+        "title": "Delivery guidance"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/agents/agent_id%2Fa%20%3F%23/triage-tickets",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agentqa_ticket_id": "ticket_example",
+      "workspace_id": "workspace_example",
+      "owner_user_id": "user_example",
+      "agent_id": "agent_example",
+      "needs_clustering": false,
+      "title": "Review call",
+      "issue_type": null,
+      "labels": [],
+      "conversation_ids": [
+        "conv_example"
+      ],
+      "first_seen_unix_secs": 1,
+      "last_seen_unix_secs": 2,
+      "qa_comment": "Review response",
+      "ticket_comments": [],
+      "turn_comments": [],
+      "status": "open",
+      "priority": null,
+      "priority_changes": [],
+      "status_changes": [],
+      "source": "qa",
+      "assignee_user_id": null,
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "qa_comment": "Update delivery guidance",
+      "title": "Delivery guidance"
+    }
+  },
+  {
+    "id": "list_agent_conversation_tickets_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "agent_id": "agent_id/a ?#"
+      },
+      "query_params": {
+        "conversation_id": "conv_example",
+        "status": "open",
+        "sources": [
+          "qa"
+        ],
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/agents/agent_id%2Fa%20%3F%23/triage-tickets",
+    "query": [
+      [
+        "conversation_id",
+        "conv_example"
+      ],
+      [
+        "status",
+        "open"
+      ],
+      [
+        "sources",
+        "qa"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_conversation_tickets": [
+        {
+          "agentqa_ticket_id": "ticket_example",
+          "workspace_id": "workspace_example",
+          "owner_user_id": "user_example",
+          "agent_id": "agent_example",
+          "needs_clustering": false,
+          "title": "Review call",
+          "issue_type": null,
+          "labels": [],
+          "conversation_ids": [
+            "conv_example"
+          ],
+          "first_seen_unix_secs": 1,
+          "last_seen_unix_secs": 2,
+          "qa_comment": "Review response",
+          "ticket_comments": [],
+          "turn_comments": [],
+          "status": "open",
+          "priority": null,
+          "priority_changes": [],
+          "status_changes": [],
+          "source": "qa",
+          "assignee_user_id": null,
+          "created_at_unix_secs": 1,
+          "updated_at_unix_secs": 2
+        }
+      ],
+      "has_more": false
+    }
+  },
+  {
+    "id": "delete_agent_hold_audio_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "agent_id": "agent_id/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/agents/agent_id%2Fa%20%3F%23/hold-audio",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "agent_id": "agent_example"
+    }
+  }
+]

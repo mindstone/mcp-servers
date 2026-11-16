@@ -1,0 +1,766 @@
+[
+  {
+    "id": "create_secret_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "type": "new",
+        "name": "Guide credential",
+        "value": "example-secret-value"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/secrets",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "type": "stored",
+      "secret_id": "secret_example",
+      "name": "Guide credential"
+    },
+    "body": {
+      "type": "new",
+      "name": "Guide credential",
+      "value": "example-secret-value"
+    }
+  },
+  {
+    "id": "update_secret_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "secret_id": "secret/a ?#"
+      },
+      "body": {
+        "type": "update",
+        "name": "Updated credential",
+        "value": "example-updated-secret-value"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/secrets/secret%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "type": "stored",
+      "secret_id": "secret_example",
+      "name": "Guide credential"
+    },
+    "body": {
+      "type": "update",
+      "name": "Updated credential",
+      "value": "example-updated-secret-value"
+    }
+  },
+  {
+    "id": "delete_secret_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "secret_id": "secret/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/secrets/secret%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "get_secret_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "secret_id": "secret/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/secrets/secret%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "type": "stored",
+      "secret_id": "secret_example",
+      "name": "Guide credential",
+      "used_by": {
+        "tools": [],
+        "agents": [],
+        "others": []
+      }
+    }
+  },
+  {
+    "id": "get_secrets_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "page_size": 2,
+        "dependency_limit": 2,
+        "search": "Guide & docs",
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/secrets",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "dependency_limit",
+        "2"
+      ],
+      [
+        "search",
+        "Guide & docs"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "secrets": [
+        {
+          "type": "stored",
+          "secret_id": "secret_example",
+          "name": "Guide credential",
+          "used_by": {
+            "tools": [],
+            "agents": [],
+            "others": []
+          }
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "get_secret_dependencies_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "secret_id": "secret/a ?#",
+        "resource_type": "agents"
+      },
+      "query_params": {
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/secrets/secret%2Fa%20%3F%23/dependencies/agents",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "dependencies": [],
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "create_environment_variable",
+    "profile": "create",
+    "args": {
+      "body": {
+        "type": "secret",
+        "label": "Guide credential",
+        "values": {
+          "production": {
+            "secret_id": "secret_example"
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/environment-variables",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "env_example",
+      "workspace_id": "workspace_example",
+      "type": "secret",
+      "label": "Guide credential",
+      "values": {
+        "production": {
+          "secret_id": "secret_example"
+        }
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "type": "secret",
+      "label": "Guide credential",
+      "values": {
+        "production": {
+          "secret_id": "secret_example"
+        }
+      }
+    }
+  },
+  {
+    "id": "update_environment_variable",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "env_var_id": "env/a ?#"
+      },
+      "body": {
+        "values": {
+          "production": {
+            "secret_id": "secret_example"
+          },
+          "staging": null
+        }
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/environment-variables/env%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "env_example",
+      "workspace_id": "workspace_example",
+      "type": "secret",
+      "label": "Guide credential",
+      "values": {
+        "production": {
+          "secret_id": "secret_example"
+        }
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    },
+    "body": {
+      "values": {
+        "production": {
+          "secret_id": "secret_example"
+        },
+        "staging": null
+      }
+    }
+  },
+  {
+    "id": "delete_environment_variable",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "env_var_id": "env/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/environment-variables/env%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "get_environment_variable",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "env_var_id": "env/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/environment-variables/env%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "env_example",
+      "workspace_id": "workspace_example",
+      "type": "secret",
+      "label": "Guide credential",
+      "values": {
+        "production": {
+          "secret_id": "secret_example"
+        }
+      },
+      "created_at_unix_secs": 1,
+      "updated_at_unix_secs": 2
+    }
+  },
+  {
+    "id": "list_environment_variables",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "cursor": "page & 2",
+        "page_size": 2,
+        "label": "Guide & docs",
+        "environment": "production",
+        "type": "secret"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/environment-variables",
+    "query": [
+      [
+        "cursor",
+        "page & 2"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "label",
+        "Guide & docs"
+      ],
+      [
+        "environment",
+        "production"
+      ],
+      [
+        "type",
+        "secret"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "environment_variables": [
+        {
+          "id": "env_example",
+          "workspace_id": "workspace_example",
+          "type": "secret",
+          "label": "Guide credential",
+          "values": {
+            "production": {
+              "secret_id": "secret_example"
+            }
+          },
+          "created_at_unix_secs": 1,
+          "updated_at_unix_secs": 2
+        }
+      ],
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
+  {
+    "id": "create_mcp_server_route",
+    "profile": "change",
+    "args": {
+      "body": {
+        "config": {
+          "name": "Guide server",
+          "url": "https://mcp.example.com/events",
+          "approval_policy": "auto_approve_all",
+          "request_headers": {
+            "Authorization": "example-header-secret-value"
+          },
+          "secret_token": {
+            "name": "Guide credential",
+            "encrypted_value": "example-encrypted-secret-value",
+            "nonce": "example-nonce-value",
+            "id": "secret_example"
+          },
+          "request_meta": {
+            "credential": "example-meta-secret-value"
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/mcp-servers",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events",
+        "approval_policy": "auto_approve_all",
+        "request_headers": {
+          "Authorization": "example-header-secret-value"
+        },
+        "secret_token": {
+          "name": "Guide credential",
+          "encrypted_value": "example-encrypted-secret-value",
+          "nonce": "example-nonce-value",
+          "id": "secret_example"
+        },
+        "request_meta": {
+          "credential": "example-meta-secret-value"
+        }
+      }
+    }
+  },
+  {
+    "id": "update_mcp_server_config_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      },
+      "body": {
+        "approval_policy": "require_approval_all",
+        "request_headers": {
+          "Authorization": "example-updated-header-secret-value"
+        },
+        "request_meta": {
+          "credential": "example-updated-meta-secret-value"
+        }
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "approval_policy": "require_approval_all",
+      "request_headers": {
+        "Authorization": "example-updated-header-secret-value"
+      },
+      "request_meta": {
+        "credential": "example-updated-meta-secret-value"
+      }
+    }
+  },
+  {
+    "id": "delete_mcp_server_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "get_mcp_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    }
+  },
+  {
+    "id": "list_mcp_servers_route",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/convai/mcp-servers",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "mcp_servers": [
+        {
+          "id": "mcp_example",
+          "config": {
+            "name": "Guide server",
+            "url": "https://mcp.example.com/events"
+          },
+          "metadata": {
+            "created_at": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "list_mcp_server_tools_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      },
+      "query_params": {
+        "environment": "staging & docs"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tools",
+    "query": [
+      [
+        "environment",
+        "staging & docs"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "success": true,
+      "tools": []
+    }
+  },
+  {
+    "id": "update_mcp_server_approval_policy_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      },
+      "body": {
+        "approval_policy": "auto_approve_all"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/approval-policy",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "approval_policy": "auto_approve_all"
+    }
+  },
+  {
+    "id": "add_mcp_server_tool_approval_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      },
+      "body": {
+        "tool_name": "lookup_guide",
+        "tool_description": "Find guide entries.",
+        "input_schema": {},
+        "approval_policy": "auto_approved"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-approvals",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "tool_name": "lookup_guide",
+      "tool_description": "Find guide entries.",
+      "input_schema": {},
+      "approval_policy": "auto_approved"
+    }
+  },
+  {
+    "id": "remove_mcp_server_tool_approval_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#",
+        "tool_name": "lookup/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-approvals/lookup%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    }
+  },
+  {
+    "id": "add_mcp_tool_config_override_route",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#"
+      },
+      "query_params": {
+        "environment": "staging & docs"
+      },
+      "body": {
+        "tool_name": "lookup_guide",
+        "response_timeout_secs": 20
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-configs",
+    "query": [
+      [
+        "environment",
+        "staging & docs"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "tool_name": "lookup_guide",
+      "response_timeout_secs": 20
+    }
+  },
+  {
+    "id": "get_mcp_tool_config_override_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#",
+        "tool_name": "lookup/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-configs/lookup%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tool_name": "lookup_guide",
+      "response_timeout_secs": 20
+    }
+  },
+  {
+    "id": "update_mcp_tool_config_override_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#",
+        "tool_name": "lookup/a ?#"
+      },
+      "query_params": {
+        "environment": "staging & docs"
+      },
+      "body": {
+        "response_timeout_secs": 25
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-configs/lookup%2Fa%20%3F%23",
+    "query": [
+      [
+        "environment",
+        "staging & docs"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    },
+    "body": {
+      "response_timeout_secs": 25
+    }
+  },
+  {
+    "id": "remove_mcp_tool_config_override_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "mcp_server_id": "mcp/a ?#",
+        "tool_name": "lookup/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/mcp-servers/mcp%2Fa%20%3F%23/tool-configs/lookup%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "mcp_example",
+      "config": {
+        "name": "Guide server",
+        "url": "https://mcp.example.com/events"
+      },
+      "metadata": {
+        "created_at": 1
+      }
+    }
+  }
+]

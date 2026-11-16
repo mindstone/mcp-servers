@@ -23,3 +23,12 @@ export const XERO_CUSTOM_CONNECTION_SCOPES = [
 export const XERO_CUSTOM_CONNECTION_SCOPE = XERO_CUSTOM_CONNECTION_SCOPES.join(" ");
 export const XERO_CUSTOM_CONNECTION_SCOPE_MESSAGE =
   XERO_CUSTOM_CONNECTION_SCOPES.join(", ");
+
+/**
+ * What "Sign in with Xero" asks for: the same access as a Custom Connection,
+ * plus offline_access so Xero hands back a refresh token.
+ */
+export const XERO_SIGN_IN_SCOPES = [
+  "offline_access",
+  ...XERO_CUSTOM_CONNECTION_SCOPES,
+] as const;

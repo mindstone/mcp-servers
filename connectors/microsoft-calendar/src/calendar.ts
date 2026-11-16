@@ -3,7 +3,7 @@ import {
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonValues } from './untrusted-content.js';
 
 /**
  * Thrown by calendar tool functions when a request is rejected by business
@@ -729,7 +729,7 @@ export async function listEvents(
       ),
     },
     location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:list_events:location'),
-    organizer: wrapUntrustedJsonStrings(
+    organizer: wrapUntrustedJsonValues(
       event.organizer?.emailAddress,
       'microsoft-calendar:list_events:organizer',
     ),
@@ -842,7 +842,7 @@ export async function getEvent(
     location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:get_event:location'),
     body: wrapUntrusted(event.body?.content, 'microsoft-calendar:get_event:body'),
     bodyType: enumOrEnvelop(event.body?.contentType, GRAPH_BODY_CONTENT_TYPES, 'microsoft-calendar:get_event:bodyType'),
-    organizer: wrapUntrustedJsonStrings(
+    organizer: wrapUntrustedJsonValues(
       event.organizer?.emailAddress,
       'microsoft-calendar:get_event:organizer',
     ),

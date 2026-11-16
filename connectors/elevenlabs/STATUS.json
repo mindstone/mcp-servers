@@ -10,23 +10,16 @@
     ]
   },
   "tools": {
-    "count": 32,
+    "count": 39,
     "domains": [
-      "account",
-      "usage",
-      "voices",
-      "speech",
-      "music",
-      "transcription",
-      "voice conversion",
-      "isolation",
-      "alignment",
-      "cloning",
-      "dialogue",
-      "voice design",
-      "dubbing",
-      "history",
-      "pronunciation dictionaries"
+      "account and usage",
+      "voices and pronunciation",
+      "speech and dialogue",
+      "music and sound effects",
+      "transcription and audio processing",
+      "dubbing and history",
+      "API discovery and voice-agent configuration",
+      "webhook tools, knowledge documents and saved tests"
     ]
   },
   "surface": "cloud-api",

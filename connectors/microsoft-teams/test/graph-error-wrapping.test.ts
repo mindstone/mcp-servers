@@ -58,7 +58,8 @@ describe('Graph error text is enveloped before reaching the model', () => {
     );
     expect(json.error.endsWith('</untrusted-content>')).toBe(true);
     // The breakout attempt is escaped, not emitted raw.
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(json.error).not.toContain(BREAKOUT_MESSAGE);
   });
 
@@ -80,7 +81,8 @@ describe('Graph error text is enveloped before reaching the model', () => {
     expect(json.error.startsWith('<untrusted-content source="microsoft-teams:error:graph">')).toBe(
       true,
     );
-    expect(json.error).toContain('<\\/untrusted-content>');
+    expect(json.error).toMatch(/<\\\/untrusted-content/i);
+    expect(json.error.match(/<\/untrusted-content/gi)).toHaveLength(1);
     expect(json.error).not.toContain(BREAKOUT_MESSAGE);
   });
 });

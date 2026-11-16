@@ -7,6 +7,31 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-16
+
+### Changed
+
+- Sign in with Xero: a free Xero Web app now works, alongside Custom Connections.
+
+### Added
+
+- Sign in with Xero: a free Xero Web app now works too. With `XERO_REFRESH_TOKEN` set, the server renews its access token itself and hands each new refresh token to Rebel to keep. The new `xero_sign_in` tool signs in (through Rebel) when the keys belong to a Web app, and just checks the connection for a Custom Connection, which keeps working as before.
+
+### Security
+
+- The connector's own sign-in requests (the token grants and the company list) refuse redirects, so a token or the app's keys are never resent to another host. API calls made through xero-node keep its default redirect handling.
+- Sign in with Xero opens the browser only when the saved sign-in has expired or been revoked. A rate limit, timeout or Xero outage says to try again, and keys Xero refuses say to check them.
+
+## [0.1.2] - 2026-11-14
+
+### Changed
+
+- Setup errors now name exactly which Xero scopes are missing; envelope helper re-synced.
+
+### Changed
+
+- When Xero refuses the token because the Custom Connection lacks a scope, the error now names exactly the missing scopes instead of listing all 19, by asking Xero for each scope on its own.
+
 ### Security
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wiseFetch } from '../client.js';
-import type { WiseTransfer, WiseTransferPayment } from '../types.js';
+import type { WiseTransfer } from '../types.js';
 import { WiseError } from '../types.js';
 import {
   withErrorHandling,
@@ -12,8 +12,16 @@ import {
   validateCurrency,
   validateNumericId,
   isoDateTimeField,
+  idInMessage,
 } from '../utils.js';
-import { wrapTransfer } from '../formatters.js';
+import { wrapTransfer, wrapTransferPayment } from '../formatters.js';
+
+/** A funding reply; unknown fields are stripped before anything is returned. */
+const transferPaymentSchema = z.object({
+  type: z.string(),
+  status: z.string(),
+  errorCode: z.string().nullable().optional(),
+});
 
 function validateUuid(value: string, fieldName: string): string {
   const trimmed = value.trim();
@@ -66,7 +74,7 @@ export function registerTransferTools(server: McpServer): void {
 
       const profileId = await resolveProfileId(credentials, args.profile_id);
 
-      const transfers = await wiseFetch<WiseTransfer[]>(credentials.apiToken, '/v1/transfers', {
+      const transfers = await wiseFetch<WiseTransfer[]>(credentials, '/v1/transfers', {
         params: {
           profile: profileId,
           status: args.status,
@@ -115,7 +123,7 @@ export function registerTransferTools(server: McpServer): void {
 
       const transferId = validateNumericId(args.transfer_id, 'transfer_id');
       const transfer = await wiseFetch<WiseTransfer>(
-        credentials.apiToken,
+        credentials,
         `/v1/transfers/${transferId}`,
       );
 
@@ -159,7 +167,7 @@ export function registerTransferTools(server: McpServer): void {
         ? validateUuid(args.customer_transaction_id, 'customer_transaction_id')
         : randomUUID();
 
-      const transfer = await wiseFetch<WiseTransfer>(credentials.apiToken, '/v1/transfers', {
+      const transfer = await wiseFetch<WiseTransfer>(credentials, '/v1/transfers', {
         method: 'POST',
         body: JSON.stringify({
           targetAccount,
@@ -172,7 +180,7 @@ export function registerTransferTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         message:
-          `Transfer created (id ${transfer.id}, status: ${transfer.status ?? 'unknown'}). ` +
+          `Transfer created${idInMessage(transfer.id)}. ` +
           'It is NOT funded yet — call fund_wise_transfer to pay from a Wise balance.',
         customerTransactionId,
         transfer: wrapTransfer(transfer),
@@ -204,34 +212,47 @@ export function registerTransferTools(server: McpServer): void {
       const profileId = await resolveProfileId(credentials, args.profile_id);
       const transferId = validateNumericId(args.transfer_id, 'transfer_id');
 
-      const payment = await wiseFetch<WiseTransferPayment>(
-        credentials.apiToken,
-        `/v3/profiles/${profileId}/transfers/${transferId}/payments`,
-        { method: 'POST', body: JSON.stringify({ type: 'BALANCE' }) },
+      const reply = transferPaymentSchema.safeParse(
+        await wiseFetch<unknown>(
+          credentials,
+          `/v3/profiles/${profileId}/transfers/${transferId}/payments`,
+          { method: 'POST', body: JSON.stringify({ type: 'BALANCE' }) },
+        ),
       );
+      if (!reply.success) {
+        console.error('[wise] funding reply did not have the expected shape');
+        throw new WiseError(
+          'Wise sent a funding reply that could not be read.',
+          'API_ERROR',
+          'The transfer may or may not have been funded. Check it with get_wise_transfer before calling fund_wise_transfer again.',
+        );
+      }
+      const payment = reply.data;
 
       // Wise signals funding failure with HTTP 200 + status REJECTED (e.g.
       // errorCode "transfer.insufficient_funds") — check the body, not the
-      // status code.
+      // status code. The raw values are compared here; only the enveloped
+      // copy is returned.
       if (payment.status !== 'COMPLETED') {
-        const reason =
-          payment.errorCode === 'transfer.insufficient_funds'
-            ? 'The Wise balance does not have enough funds in the source currency.'
-            : `Wise rejected the funding (errorCode: ${payment.errorCode ?? 'unknown'}).`;
+        const insufficientFunds = payment.errorCode === 'transfer.insufficient_funds';
+        const reason = insufficientFunds
+          ? 'The Wise balance does not have enough funds in the source currency.'
+          : 'Wise rejected the funding.';
         return JSON.stringify({
           ok: false,
           error: `Transfer ${transferId} was not funded. ${reason}`,
           code: 'FUNDING_REJECTED',
-          resolution:
-            'Top up the source balance (or convert funds into the source currency) and call fund_wise_transfer again.',
-          payment,
+          resolution: insufficientFunds
+            ? 'Top up the source balance (or convert funds into the source currency) and call fund_wise_transfer again.'
+            : 'Check the transfer with get_wise_transfer and in your Wise account before trying again.',
+          payment: wrapTransferPayment(payment),
         });
       }
 
       return JSON.stringify({
         ok: true,
         message: `Transfer ${transferId} funded from balance. Wise is now processing the payout.`,
-        payment,
+        payment: wrapTransferPayment(payment),
       });
     }),
   );
@@ -257,14 +278,14 @@ export function registerTransferTools(server: McpServer): void {
 
       const transferId = validateNumericId(args.transfer_id, 'transfer_id');
       const transfer = await wiseFetch<WiseTransfer>(
-        credentials.apiToken,
+        credentials,
         `/v1/transfers/${transferId}/cancel`,
         { method: 'PUT' },
       );
 
       return JSON.stringify({
         ok: true,
-        message: `Transfer ${transferId} cancelled (status: ${transfer.status ?? 'cancelled'}).`,
+        message: `Transfer ${transferId} cancelled.`,
         transfer: wrapTransfer(transfer),
       });
     }),

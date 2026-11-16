@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Run `agent-browser` in the connector's own folder, so a project `agent-browser.json` in the folder the host started the connector from is no longer loaded. That file can choose which program the CLI launches. Your own `~/.agent-browser/config.json` still applies, and `AGENT_BROWSER_CONFIG` still picks a config file. Relative paths in agent-browser settings now resolve from the connector's own folder (where its package is installed) instead of the host's folder, so give full paths.
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+
 ## [0.2.6] - 2026-11-06
 
 ### Changed

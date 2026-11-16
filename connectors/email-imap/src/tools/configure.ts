@@ -7,8 +7,15 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
 import { detectProviderFromEmail, getPreset, listPresetKeys } from '../presets.js';
 import { EmailImapError } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { initClients } from './index.js';
+
+// Bridge warning/error text and request-failure messages are not the
+// connector's own prose, so they reach the model enveloped.
+function wrapBridgeText(text: string): string {
+  return wrapUntrusted(text, 'email-imap:host-bridge') ?? text;
+}
 
 /**
  * Mutable env-level credential state.
@@ -112,13 +119,13 @@ export function registerConfigureTools(server: McpServer): void {
             const preset = getPreset(provider);
             const providerName = preset?.name ?? provider;
             const message = result.warning
-              ? `Email IMAP configured successfully. Note: ${result.warning}`
+              ? `Email IMAP configured successfully. Note: ${wrapBridgeText(result.warning)}`
               : `Email IMAP configured successfully for ${providerName}.`;
             return JSON.stringify({ ok: true, message, provider });
           }
           // Bridge returned failure — surface as error, do NOT fall through
           throw new EmailImapError(
-            result.error || 'Bridge configuration failed',
+            result.error ? wrapBridgeText(result.error) : 'Bridge configuration failed',
             'BRIDGE_ERROR',
             'The host app bridge rejected the configuration request. Check the host app logs.',
           );
@@ -126,7 +133,7 @@ export function registerConfigureTools(server: McpServer): void {
           if (error instanceof EmailImapError) throw error;
           // Bridge request failed (network, timeout, etc.) — surface as error
           throw new EmailImapError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            `Bridge request failed: ${wrapBridgeText(error instanceof Error ? error.message : String(error))}`,
             'BRIDGE_ERROR',
             'Could not reach the host app bridge. Ensure the host app is running.',
           );

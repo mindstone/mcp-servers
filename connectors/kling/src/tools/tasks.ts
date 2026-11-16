@@ -49,7 +49,7 @@ export function registerTaskListTools(server: McpServer): void {
       // The response is schema-validated inside klingFetch (fail-closed); a
       // non-array payload surfaces as a generic INVALID_RESPONSE error.
       const data = await klingFetch(
-        `${TASK_TYPE_PATHS[taskType]}?pageNum=${page}&pageSize=${pageSize}`,
+        `${TASK_TYPE_PATHS[taskType]}?${new URLSearchParams({ pageNum: String(page), pageSize: String(pageSize) })}`,
         taskListResponseSchema,
       );
 

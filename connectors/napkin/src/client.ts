@@ -19,6 +19,7 @@ import {
   type CreateVisualResponse,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { pathSegment } from './utils.js';
 
 /** Envelope source label for vendor-authored HTTP error text (invariant #6). */
 const VENDOR_ERROR_SOURCE = 'napkin-api-error';
@@ -331,7 +332,7 @@ export async function getVisualStatus(
   apiKey: string,
   requestId: string,
 ): Promise<VisualStatusResponse> {
-  return napkinFetch(apiKey, `/visual/${requestId}/status`, {}, visualStatusResponseSchema);
+  return napkinFetch(apiKey, `/visual/${pathSegment(requestId)}/status`, {}, visualStatusResponseSchema);
 }
 
 /**

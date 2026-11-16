@@ -88,20 +88,47 @@ describe('compose_slack_message producer contract', () => {
     expect(result.structuredContent).toEqual(structuredContent);
   });
 
-  it('resolves and locks an intended_recipient for a DM (D…) target', async () => {
+  it('binds a person target to their user id and labels it with their name', async () => {
+    const result = await client.client.callTool({
+      name: 'compose_slack_message',
+      arguments: { target: 'testuser@example.com', text: 'Ping' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    // The iframe shows the name but sends the resolved user id, which
+    // post_slack_message opens a DM with at send time. The name comes from
+    // their profile, so it stays enveloped; the form unwraps it to show it.
+    const label = '<untrusted-content source="slack:user-profile">Test User</untrusted-content>';
+    expect(result.structuredContent).toEqual({
+      target: 'U123',
+      text: 'Ping',
+      recipient_label: label,
+    });
+    const ui = (result._meta as { ui: Record<string, unknown> }).ui;
+    expect(ui.viewSummary).toBe('Slack message draft to the direct message with U123.');
+    expect(ui.structuredFallback).toEqual({
+      kind: 'plain',
+      payload: { markdown: 'Message to the direct message with U123:\n\nPing' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text ?? '';
+    expect(text).toBe(
+      `Drafting a Slack message to ${label} (U123)\n\n${JSON.stringify(result.structuredContent)}\n\n[View: ui://slack/compose-message]`,
+    );
+  });
+
+  it('refuses a bare DM channel id instead of deriving who is in it', async () => {
     const result = await client.client.callTool({
       name: 'compose_slack_message',
       arguments: { target: 'D999TEST', text: 'Ping' },
     });
 
-    expect(result.isError).toBeFalsy();
-    // The DM recipient (U123) rides hidden + locked into the draft so the
-    // eventual post_slack_message send passes DM verification.
-    expect(result.structuredContent).toEqual({
-      target: 'D999TEST',
-      text: 'Ping',
-      intended_recipient: 'U123',
-    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text ?? '';
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    expect(parsed.ok).toBe(false);
+    expect(parsed.next_step).toBe('lookup_user_by_email');
+    expect(text).not.toContain('U123');
   });
 
   it('sanitizes and truncates the viewSummary and fallback', async () => {

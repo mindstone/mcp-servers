@@ -14,15 +14,18 @@ const FILTER_VALUE_DESCRIPTION = 'Filter value. A date (2026-01-31) or a datetim
 // regexes.
 //
 // The walker is QUOTE-AWARE: characters inside a SOQL single-quoted string
-// literal are preserved verbatim. SOQL escapes an embedded apostrophe as `\'`.
-// The walker also tolerates a doubled `''` in caller-written text, which SOQL
-// itself does not support, so that it never strips inside what the caller
-// meant as a literal. Generic backslash-escapes (`\\`, `\n`, etc.) simply
-// consume the next character. Without quote-awareness, a
+// literal are preserved verbatim. Generic backslash-escapes (`\'`, `\\`, `\n`,
+// etc.) simply consume the next character. Without quote-awareness, a
 // query like `WHERE Website = 'https://example.com/path'` would be
 // corrupted to `WHERE Website = 'https:` (unterminated literal), since
 // the naive global regex would treat the `//` inside the quoted span as
 // a line comment.
+//
+// It also repairs two SQL quoting habits that Salesforce refuses: a doubled
+// quote inside a literal (`'O''Brien'`) becomes SOQL's backslash escape
+// (`'O\'Brien'`), and a double-quoted string (`"Acme"`), which SOQL lacks,
+// becomes a single-quoted one with any apostrophe inside escaped. An empty
+// `''` stays as it is.
 //
 // The walker also reports whether the input ended INSIDE an unterminated
 // string literal, which the caller needs to decide whether a trailing `;` is
@@ -35,11 +38,10 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
   while (i < n) {
     const ch = query[i];
 
-    // Inside a single-quoted SOQL string literal: copy verbatim until the
-    // matching close-quote, honouring backslash escapes and tolerating a
-    // doubled apostrophe ('').
-    if (ch === "'") {
-      out += ch;
+    // Inside a quoted string: copy it as a single-quoted SOQL literal until
+    // the matching close-quote, honouring backslash escapes.
+    if (ch === "'" || ch === '"') {
+      out += "'";
       i++;
       let closed = false;
       while (i < n) {
@@ -50,10 +52,10 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
           i += 2;
           continue;
         }
-        if (c === "'") {
-          // Tolerated doubled apostrophe: stays inside the literal.
-          if (i + 1 < n && query[i + 1] === "'") {
-            out += "''";
+        if (c === ch) {
+          // Doubled quote (SQL's escape): one escaped quote character.
+          if (i + 1 < n && query[i + 1] === ch) {
+            out += `\\${ch}`;
             i += 2;
             continue;
           }
@@ -63,7 +65,8 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
           closed = true;
           break;
         }
-        out += c;
+        // An apostrophe inside a double-quoted string.
+        out += c === "'" ? "\\'" : c;
         i++;
       }
       if (!closed) endedInLiteral = true;
@@ -100,7 +103,7 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
 
 /** Blank literals and nested subqueries while preserving character positions. */
 function queryKeywordView(query: string): string {
-  const withoutLiterals = query.replace(/'(?:\\[\s\S]|''|[^'\\])*'?/g, (literal) => ' '.repeat(literal.length));
+  const withoutLiterals = query.replace(/'(?:\\[\s\S]|[^'\\])*'?/g, (literal) => ' '.repeat(literal.length));
   const view = withoutLiterals.split('');
   let subqueryDepth = 0;
   for (let i = 0; i < view.length; i++) {

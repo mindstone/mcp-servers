@@ -3,15 +3,21 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-elevenlabs.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface.
+Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.
+
+Use it when you want your assistant to produce narration, voiceovers or transcripts, or to set up and test an ElevenLabs voice agent, without leaving the conversation.
 
 ## Status
 
-- **Version:** [0.5.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
+- **Version:** [0.6.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [32](./src/tools/) (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries)
+- **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+The API tools also cover crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl creation asks the provider to fetch a URL and may consume credits. Cancelling a crawl also deletes its associated documents and folders, so cancellation, like index and bulk deletion, uses the delete tool.
+
+Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements
 
@@ -52,21 +58,30 @@ After clicking the button, your host will prompt you to fill: `ELEVENLABS_API_KE
 
 ## Quick Start
 
+Use the one-click install links above or the `npx` command below to install the
+connector. The API tools cover the first supported operations for voice-agent
+configuration, webhook tools, knowledge documents and saved tests, not every
+ElevenLabs API operation.
+
 ### Install & build
 
+From the `mcp-servers` folder of your source checkout:
+
 ```bash
-cd <path-to-repo>/connectors/elevenlabs
-npm install
+cd connectors/elevenlabs
+npm ci --ignore-scripts --userconfig ../../.npmrc
 npm run build
 ```
 
-### npx (once published)
+### npx (published npm package)
 
 ```bash
 npx -y @mindstone/mcp-server-elevenlabs
 ```
 
 ### Local
+
+After building, run from the same `connectors/elevenlabs` folder:
 
 ```bash
 node dist/index.js
@@ -114,7 +129,164 @@ node dist/index.js
 }
 ```
 
-## Tools (32)
+## Tools (39)
+
+### Agents, tools, knowledge and saved Tests
+
+Use these tools to create and manage an interactive voice agent: configure its
+language model, voice and greeting, attach knowledge documents or webhook tools,
+and create and run saved Tests for its responses and tool calls. Choose them when
+you need to set up or maintain an agent that responds in a conversation. Use the
+audio tools below for direct speech generation, transcription and audio processing.
+
+The seven API tools cover **174 admitted operations in source** (40 in the published 0.6.0 release) from the
+2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
+this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
+ledger below. Existing audio tool definitions remain unchanged. This is the first
+portion of a broader API expansion, not a claim of complete provider
+coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
+515 operations: 174 admitted, 232 planned and 109 excluded, with reasons and
+existing package coverage tracked separately. Source additions include tags, analysis items,
+settings, environments, test folders and summaries, invocation names, conversation users,
+live counts, tool executions, LLM usage estimates and agent knowledge-base size.
+The usage calculators and test-summary lookup use reviewed read-only POST requests;
+they do not run tests or generate audio. Deletion stays in the delete profile.
+
+Agent lifecycle coverage includes branches, drafts, version metadata, deployments,
+merge proposals, procedures and agent links, widgets, topics and assignable users.
+Merge and rebase previews are reads. Merges, rebases, deployment traffic changes
+and replacement review verdicts use the destructive change profile. The legacy
+procedure compiler is a dry-run that persists nothing; saving or publishing already
+compiles procedures. Branch lists accept a result limit; deployment history accepts
+page and page_size. Inspect returned metadata; pagination is caller-managed.
+
+Conversation coverage includes reference resolution, full transcripts, lightweight
+summaries, transcript search, SIP messages, tags and triage tickets across the workspace
+or one agent. Audio recordings are saved inside the workspace; receipts contain the
+local path, byte length and declared media type, with no audio bytes in model text.
+Analysis and evaluation reruns can replace stored results and may consume credits.
+Ticket creation for a conversation can update an existing open ticket, so it uses the
+change tool. Ticket merging keeps source tickets marked as merged. Unused-file
+removal, tag unassignment and custom hold-audio removal use the delete tool.
+Conversation file uploads accept images, PDFs and text and return a file ID for use in
+that conversation. Audio is not accepted by this route.
+
+Agent summaries take `query_params.agent_ids`, not test IDs, and return a map of
+per-agent summaries or failure details. Avatar and custom hold-audio uploads use
+the change tool because they replace existing media. Avatars accept PNG, JPEG,
+GIF or WebP. Hold audio accepts MP3 or WAV up to 40 MB; the provider also limits
+clips to 180 seconds. The snapshot gives no avatar size limit, so the runtime
+buffer limit applies. These uploads use the same file authorization and opened
+descriptor checks as document uploads; a canonical filename determines the type.
+
+| Tool | Operations | Effect |
+| --- | --- | --- |
+| `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
+| `elevenlabs_read_resource` | 78 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 27 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 40 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 25 deletes | Destructive |
+| `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
+| `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
+
+Receipt follow-ups name required path and query parameters; optional filters matching
+known request IDs are marked optional. Other listed operation IDs are names only. Before the
+first call to each operation in a conversation, discover its contract unless a
+tool description or receipt already gives the exact parameter names and locations.
+Branch and version metadata receipts point to the agent configuration read.
+Do not infer path parameters, query parameters or body fields from operation names.
+Start with local discovery, then send the operation to its declared tool:
+
+```json
+{"query":"create agent","family":"agents"}
+```
+
+```json
+{"operation_id":"create_agent_route"}
+```
+
+For example, `elevenlabs_create_resource` accepts:
+
+```json
+{"operation_id":"create_agent_route","body":{"name":"Acme guide","conversation_config":{"agent":{"prompt":{"llm":"gemini-3.5-flash","prompt":"Answer questions about the guide."}},"tts":{"voice_id":"voice_example"}}}}
+```
+
+Use `list_voices` to obtain a real voice ID. Discovery can inspect named schemas
+using `definition`, for example `KnowledgeBaseLocator` with
+`operation_id: "create_agent_route"`. Provider constraints and typed enums remain
+pinned to 2026-11-08; a new value at a typed position requires a reviewed catalogue
+refresh. Free-form provider fields stay free-form. The connector rejects the
+aliases `llm_model` and `knowledge_base_document_ids` only at the documented agent
+prompt anchors (including Test overrides); use `llm` and structured
+`knowledge_base` locators there. Those spellings remain valid data keys elsewhere.
+
+Local document uploads send file bytes plus other fields in a multipart request.
+Use `files` separately from scalar `body` fields:
+
+```json
+{"operation_id":"create_file_document_route","body":{"name":"Pricing"},"files":[{"field":"file","file_path":"/workspace/pricing.pdf"}]}
+```
+
+`update_file_document_route` uses the same file operand on
+`elevenlabs_change_resource`, with `path_params.documentation_id`. It replaces the
+source file and can overwrite manual content edits. Only the declared `file`
+binding is accepted; body-hidden paths are never read. Files must pass the same
+negotiated or standalone authorization described below, plus regular-file,
+descriptor identity and runtime-size checks. Document MIME types include PDF,
+text, Markdown, HTML, Word and EPUB, with `application/octet-stream` fallback;
+the provider still determines supported content and account limits. No remote
+URL fallback is attempted. Use `create_url_document_route` to ask the provider
+to fetch a URL, or `create_text_document_route` for inline text. Uploading does
+not write a local output artifact.
+
+To replace the deprecated combined upload/attachment route, create a file **or
+URL** document (name is optional), explicitly read the document and current
+agent, then call `patch_agent_settings_route` with a caller-authored
+`knowledge_base` array containing the prior structured locators and the new
+`{"type":"file","name":"Pricing","id":"doc_example"}` locator (use type
+`url` for URL documents). These are separate requests, not an atomic replacement.
+The connector never fetches/merges configuration, retries writes, polls Tests,
+or cleans up resources automatically. Preserve existing arrays and configuration
+explicitly; for PATCH update requests, the provider determines which omitted
+fields are retained.
+
+A saved Test is a reusable check stored by ElevenLabs for an agent's responses,
+tool calls or simulated conversations. To use substitute tool responses in a
+simulation, explicitly create a saved simulation Test with
+`tool_mock_config: {"mocking_strategy":"all","fallback_strategy":"raise_error"}`
+and suitable `tool_mock_overrides`. In the pinned provider schema, `"all"` mocks
+every mockable tool; `"raise_error"` selects an error when no mock matches a tool
+call, instead of the `"call_real_tool"` fallback. `tool_mock_overrides` supplies
+test-specific responses keyed by tool ID, only for tools selected for mocking.
+These settings do not guarantee a run has no real effects. Inspect the saved Test,
+agent and referenced tools before running it. A run request does not configure
+mocks; the caller owns those settings. Tests may consume credits and use real
+integrations. Cancellation does not undo prior effects. After a lost run response,
+use `list_test_invocations_route` with the known
+`query_params.agent_id`, then inspect a returned invocation ID before deciding
+whether to retry.
+
+Each execution makes one provider request and returns a checked receipt with
+operation, status, declared content type, effect annotations and enveloped data.
+Discovery notes that `update_settings_route` and `update_dashboard_settings_route`
+change settings for the whole workspace.
+If response fields the connector does not use differ from the pinned schema,
+their data is retained with a `response_contract` warning; check the affected
+fields before relying on them. Malformed fields the connector actually uses
+(such as pagination fields), or an unexpected response format, cause an error.
+Timeout or invalid-success-response errors can follow a completed write. Follow
+the read/list guidance in the error through `elevenlabs_read_resource`, and compare
+saved state with the intended change before retrying. If a detail read needs an ID
+the lost response never supplied, discover and use the matching resource-list
+operation first; avoid blind duplicate writes. Callback errors use structured
+`ok:false` receipts; strict argument/protocol rejections before a callback keep
+the SDK's native errors. Discovery contracts and external response text are
+untrusted content, not instructions. RAG retrieval has its own read-only tool
+and credit disclosure; it does not create conversations or place calls.
+
+Secrets, environment variables and MCP server configurations are also available through discovery.
+Submitted secret values and MCP credentials are write-only: receipts and errors redact them, including provider echoes.
+MCP approval changes use the change profile; removals, including environment-value removal by update, use delete.
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key
@@ -169,6 +341,22 @@ node dist/index.js
 - `transcribe_audio` — Transcribe speech from an audio file to text, with optional speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`include_word_timestamps`); `scribe_v1` and `scribe_v2` models
 
 For standalone clients, including clients that do not negotiate `files/readModes` version 1, local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). With negotiated version 1, the host selects a mode for each call: in central mode, input reads use only the host-authorized canonical path described under [Host-authorized local inputs](#host-authorized-local-inputs); in standalone mode, the standalone restrictions apply. See `src/tools/file-input.ts`. In every mode, generated and downloaded files (speech audio, subtitles, history/dubbing downloads, voice-design previews) are written into the canonical workspace root with exclusive creation — existing files are never overwritten. See `src/tools/path-safety.ts`.
+
+## Maintainer notes: API catalogue
+
+The API catalogue generator produces the pinned contracts used by the seven API
+tools. Regenerate with `npm run api:generate -- --spec <pinned.json-or-gzip>` and
+verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. The input must match
+the recorded original-byte pin; the whole provider snapshot is not distributed
+with this package and is never fetched at runtime. Ajv and ajv-formats interpret
+the retained JSON Schema graph; Zod validates tool envelopes and consumed fields.
+Schema nodes containing `unevaluatedProperties`
+are rejected during generation and loading because the pinned validator cannot
+reliably enforce that construct. Support requires a reviewed validator correction;
+the constraint is never silently removed. The keyword is absent from the complete
+2026-11-08 provider snapshot (515 operations and 1,846 component schemas), so this
+boundary loses no capability in that pin. The same spelling in property names,
+examples, defaults and enum data remains unchanged.
 
 ## Licence
 

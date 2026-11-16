@@ -248,4 +248,39 @@ describe('opus_download_clip', () => {
     expect(fs.readFileSync(out)).toEqual(Buffer.from(CLIP_BYTES));
     expect(fs.readdirSync(workspace)).toEqual(['clip.mp4']);
   });
+
+  describe.skipIf(process.platform === 'win32')('owner-only file mode', () => {
+    let previousUmask: number;
+
+    beforeEach(() => {
+      previousUmask = process.umask(0o022);
+    });
+
+    afterEach(() => {
+      process.umask(previousUmask);
+    });
+
+    it('creates a new clip readable only by its owner', async () => {
+      serveClip();
+      const client = await freshClient();
+      const out = path.join(workspace, 'clip.mp4');
+      const result = await client.callTool('opus_download_clip', { url: CLIP_URL, output_path: out });
+      expect(result.isError).toBeFalsy();
+      expect(fs.statSync(out).mode & 0o777).toBe(0o600);
+    });
+
+    it('leaves an overwritten clip readable only by its owner', async () => {
+      serveClip();
+      const client = await freshClient();
+      const out = path.join(workspace, 'clip.mp4');
+      fs.writeFileSync(out, 'pre-existing');
+      const result = await client.callTool('opus_download_clip', {
+        url: CLIP_URL,
+        output_path: out,
+        overwrite: true,
+      });
+      expect(result.isError).toBeFalsy();
+      expect(fs.statSync(out).mode & 0o777).toBe(0o600);
+    });
+  });
 });

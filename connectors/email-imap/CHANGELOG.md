@@ -16,6 +16,44 @@ to end the label early.
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-13
+
+### Changed
+
+- Values passed back exactly as the connector returned them are now unwrapped, so replies thread and recipients are real. Mailbox names and bridge text are enveloped; errors say what to do next.
+
+### Security
+
+- Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Mailbox names returned by `email_get_mailbox_status`, `email_create_mailbox`,
+  `email_rename_mailbox` and `email_delete_mailbox` are now wrapped in
+  untrusted-content envelopes, like every other mailbox name the connector
+  returns; passing them back to another tool still works.
+- `configure_email_imap` checks the shape of the host bridge's reply and
+  rejects a malformed one with `BRIDGE_ERROR`; warning, error and
+  request-failure text from the bridge is now enveloped.
+
+### Changed
+
+- Unexpected errors now carry `code: "INTERNAL_ERROR"` and a `resolution`,
+  like the connector's other errors. The resolution asks the caller to check
+  whether the operation partly completed before retrying.
+
+### Fixed
+
+- Values the connector returns inside untrusted-content envelopes, such as a
+  message's `messageId` and addresses, can be passed back to any tool as they
+  are: every argument that is wholly one envelope (whitespace around it
+  ignored) is unwrapped before the tool runs. A reply sent with an enveloped `reply_to_message_id` used to carry the
+  envelope in its `In-Reply-To` and `References` headers, so it did not thread,
+  and an enveloped address became a garbage recipient.
+- `email_send` counts recipients with the same address parser that sends the
+  message, so semicolon-separated lists and groups count every address and a
+  quoted display name containing a comma counts once. The recipient cap itself
+  is unchanged.
+- The plain-text fallback for HTML-only messages strips tags in linear time and
+  keeps a stray `<` in the text instead of dropping what follows it.
+
 ## [0.3.3] - 2026-11-08
 
 ### Changed

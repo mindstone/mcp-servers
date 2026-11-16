@@ -27,7 +27,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrustedJsonValues } from './untrusted-content.js';
 import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -787,7 +787,7 @@ const undoForTool = (name, annotations) => {
 const toMcpResult = (result) => {
   const source = result?.[UNTRUSTED_SOURCE];
   const { app = 'office', action = 'unknown' } = result?.[RESULT_CONTEXT] || {};
-  const wrap = (value) => source ? wrapUntrustedJsonStrings(value, source) : value;
+  const wrap = (value) => source ? wrapUntrustedJsonValues(value, source) : value;
   // Non-identifier keys can contain document-authored instructions, just like string values.
   const guardDataKeys = (value) => {
     if (!source) return value;

@@ -1,5 +1,15 @@
 import * as fs from 'fs';
-import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
+import { z } from 'zod';
+import { type BridgeState, EmailImapError, REQUEST_TIMEOUT_MS } from './types.js';
+
+// Unknown fields (e.g. a host's `message`) are allowed and dropped.
+const BridgeResponseSchema = z.object({
+  success: z.boolean(),
+  warning: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type BridgeResponse = z.infer<typeof BridgeResponseSchema>;
 
 /**
  * Path to bridge state file, supporting both current and legacy env vars.
@@ -26,7 +36,7 @@ const loadBridgeState = (): BridgeState | null => {
 export const bridgeRequest = async (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
+): Promise<BridgeResponse> => {
   const bridge = loadBridgeState();
   if (!bridge) {
     return { success: false, error: 'Bridge not available' };
@@ -45,5 +55,27 @@ export const bridgeRequest = async (
     return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
   }
 
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
+  const unexpectedFormat = () =>
+    new EmailImapError(
+      'The host app bridge returned a response in an unexpected format.',
+      'BRIDGE_ERROR',
+      'The host app may be out of date with this connector. Update the host app and try again.',
+    );
+
+  let reply: unknown;
+  try {
+    reply = await response.json();
+  } catch (error) {
+    // Only a body that is not JSON is an unexpected format; a read failure
+    // (connection dropped, timeout) propagates as an unreachable bridge.
+    if (error instanceof SyntaxError) {
+      throw unexpectedFormat();
+    }
+    throw error;
+  }
+  const parsed = BridgeResponseSchema.safeParse(reply);
+  if (!parsed.success) {
+    throw unexpectedFormat();
+  }
+  return parsed.data;
 };

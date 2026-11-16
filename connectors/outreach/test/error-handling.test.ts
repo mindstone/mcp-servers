@@ -259,7 +259,8 @@ describe('Error handling — Outreach MCP server', () => {
     expect(error.endsWith(UNTRUSTED_CLOSE_TAG)).toBe(true);
     const inner = error.slice(start + API_ERROR_OPEN_TAG.length, -UNTRUSTED_CLOSE_TAG.length);
     // The injected close-tag variant is neutralised, not left raw.
-    expect(inner).toContain('<\\/untrusted-content>');
+    expect(inner).toMatch(/<\\\/untrusted-content/i);
+    expect(inner).not.toMatch(/<\/untrusted-content/i);
     expect(inner.toLowerCase()).not.toMatch(/<\/untrusted-content\s*>/);
   });
 
@@ -316,7 +317,8 @@ describe('Error handling — Outreach MCP server', () => {
       expect(error.length).toBeLessThan(700);
       const start = error.indexOf(API_ERROR_OPEN_TAG);
       const inner = error.slice(start + API_ERROR_OPEN_TAG.length, -UNTRUSTED_CLOSE_TAG.length);
-      expect(inner).toContain('<\\/untrusted-content>');
+      expect(inner).toMatch(/<\\\/untrusted-content/i);
+      expect(inner).not.toMatch(/<\/untrusted-content/i);
       expect(inner.toLowerCase()).not.toMatch(/<\/untrusted-content\s*>/);
     } finally {
       errSpy.mockRestore();
@@ -370,7 +372,8 @@ describe('Error handling — Outreach MCP server', () => {
       expect(error.length).toBeLessThan(700);
       const start = error.indexOf(API_ERROR_OPEN_TAG);
       const inner = error.slice(start + API_ERROR_OPEN_TAG.length, -UNTRUSTED_CLOSE_TAG.length);
-      expect(inner).toContain('<\\/untrusted-content>');
+      expect(inner).toMatch(/<\\\/untrusted-content/i);
+      expect(inner).not.toMatch(/<\/untrusted-content/i);
       expect(inner.toLowerCase()).not.toMatch(/<\/untrusted-content\s*>/);
     } finally {
       errSpy.mockRestore();

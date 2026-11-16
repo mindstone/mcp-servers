@@ -1,0 +1,53 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createInMemoryTestClient } from '@mindstone/mcp-test-harness';
+import { http, HttpResponse } from 'msw';
+import type { ApiCatalog } from '../src/api-catalog.js';
+import { mswServer } from './helpers/setup.js';
+
+afterEach(() => {
+  vi.doUnmock('../src/generated/api-catalog.js');
+  vi.resetModules();
+});
+
+describe('family fallback without a same-route read or usable follow-up', () => {
+  it.each([
+    ['agents', 'get_agents_route'], ['llm', 'list_available_llms'],
+    ['tools', 'get_tools_route'], ['knowledge-base', 'get_knowledge_base_list_route'],
+    ['agent-testing', 'list_chat_response_tests_route'], ['test-invocations', 'list_test_invocations_route'],
+    ['tags', 'list_conversation_tags_route'], ['analysis-items', 'list_analysis_items_route'],
+    ['settings', 'get_settings_route'], ['environments', 'list_environments'],
+    ['analytics', 'get_live_count'], ['users', 'get_conversation_users_route'],
+    ['agent', 'get_agents_route'], ['llm-usage', 'list_available_llms'],
+  ])('%s uses its policy read %s once, without retrying', async (family, read) => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: unknown }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog) as ApiCatalog;
+    const source = raw.operations.find(op => op.family === family && op.profile !== 'tests')!;
+    const op = {
+      ...source, operation_id: 'retry_case', path: '/v1/convai/retry-case', method: 'POST' as const,
+      profile: 'create' as const, tool: 'elevenlabs_create_resource',
+      effects: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      parameters: { path: { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const },
+        query: { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const }, query_serialization: {} },
+      request: { media_type: null, required: false }, responses: [{ status: 200, media_type: null }],
+      pagination: null, follow_ups: [], examples: [],
+    };
+    delete op.reviewed_post_read;
+    raw.operations.push(op);
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const { setApiKey } = await import('../src/auth.js');
+    const { createServer } = await import('../src/server.js');
+    setApiKey('synthetic-retry-key');
+    let requests = 0;
+    mswServer.use(http.post('https://api.elevenlabs.io/v1/convai/retry-case', () => {
+      requests++;
+      return HttpResponse.json({ detail: 'Unavailable' }, { status: 503 });
+    }));
+    const pair = await createInMemoryTestClient({ createServer });
+    try {
+      const result = await pair.callTool('elevenlabs_create_resource', { operation_id: 'retry_case' });
+      expect(result.json).toMatchObject({ code: 'HTTP_503', resolution: `The provider reported a server error. Check the result with ${read} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs. Check provider availability. No automatic retry was made.` });
+      expect(requests).toBe(1);
+    } finally { await pair.close(); setApiKey(''); }
+  });
+});
