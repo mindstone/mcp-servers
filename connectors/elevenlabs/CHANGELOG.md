@@ -27,6 +27,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Overrides of an existing MCP server tool now require the destructive change tool, including input overrides and response mocks.
+
 - Saving an agent draft now uses the change tool and warns that it can replace your unpublished draft. Merge, acceptance and rebase guidance explains when callers hear the result immediately.
 
 - Success receipts and retry guidance now name follow-up parameters and their path or query locations from the API contract.
@@ -34,7 +36,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 
-- Secret values and MCP credentials stay out of receipts and errors, even when the provider repeats them back. Credentials stored in MCP server settings are hidden when those settings are read.
+- Argument and local file errors from the seven API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
 
 ## [0.6.0] - 2026-11-14
 

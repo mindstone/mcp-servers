@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import policyInput from '../api/operation-policy.json' with { type: 'json' };
@@ -21,14 +22,14 @@ describe('knowledge-base admission and discovery', () => {
       expect(op.deprecated).toBe(false);
       expect(catalog.operations.find(candidate => candidate.operation_id === op.check_before_retry))
         .toMatchObject({ method: 'GET', profile: 'read' });
-      const receipt = await createSuccessReceipt(wire.id, wire.status, wire.media, wire.response);
+      const receipt = await createSuccessReceipt(wire.id, wire.status, wire.media, wire.response, createRedactor([]));
       expect(receipt.response_contract).toBe('matched');
       for (const id of op.follow_ups) {
         expect(id).not.toBe(wire.id);
         const next = catalog.operations.find(candidate => candidate.operation_id === id)!;
         expect(next.profile).toBe('read');
         const parameters = Object.fromEntries(next.parameters.path.required.map(name => [name, 'example_id']));
-        await expect(validateRequest('read', { operation_id: id, path_params: parameters })).resolves.toMatchObject({ operation_id: id });
+        await expect(validateRequest('read', { operation_id: id, path_params: parameters }, createRedactor([]))).resolves.toMatchObject({ operation_id: id });
       }
     }
   });
@@ -78,6 +79,6 @@ describe('knowledge-base admission and discovery', () => {
     const args = operation_id === 'post_knowledge_base_move_route'
       ? { path_params: { document_id: 'doc_example' }, body: {} }
       : { body: { document_ids: ['doc_example'] } };
-    await expect(validateRequest('change', { operation_id, ...args })).resolves.toMatchObject({ operation_id });
+    await expect(validateRequest('change', { operation_id, ...args }, createRedactor([]))).resolves.toMatchObject({ operation_id });
   });
 });

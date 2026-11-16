@@ -1,3 +1,4 @@
+import { createRedactor } from './api-sensitive.js';
 import { z } from 'zod';
 import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
@@ -16,15 +17,31 @@ export const API_TOOLS = {
 export interface ValidationIssue { path: string[]; keyword: string; message: string }
 export function inputIssues(issues: z.ZodIssue[], allowedFields: (path: string[]) => string[]): ValidationIssue[] {
   return issues.flatMap((issue): ValidationIssue[] => {
-    const path = issue.path.map(String);
-    if (issue.code === 'unrecognized_keys') return issue.keys.map(key => ({
-      path: [...path, key], keyword: issue.code, message: `Allowed fields here: ${allowedFields(path).join(', ')}.`,
-    }));
+    const trusted = issue.code === 'custom' && issue.params?.keyword;
+    const path: string[] = [];
+    for (const part of issue.path.map(String)) {
+      if (!trusted && !allowedFields(path).includes(part) && typeof issue.path[path.length] !== 'number') { path.push('[REDACTED]'); break; }
+      path.push(part);
+    }
+    if (issue.code === 'unrecognized_keys') return [{
+      path: [...path, '[REDACTED]'], keyword: issue.code, message: `An undeclared field is present. Allowed fields here: ${allowedFields(path).join(', ')}.`,
+    }];
     const message = issue.code === 'invalid_type' ? `Expected ${issue.expected}.`
       : issue.code === 'invalid_enum_value' ? `Allowed values: ${issue.options.join(', ')}.`
-      : issue.message;
-    return [{ path, keyword: issue.code === 'custom' ? String(issue.params?.keyword ?? issue.code) : issue.code, message }];
+      : issue.code === 'custom' && !trusted ? 'The field value [REDACTED] does not satisfy the declared contract.' : issue.message;
+    return [{ path, keyword: trusted ? String(trusted) : issue.code, message }];
   });
+}
+/** Preserve the published schema, but give SDK validation only connector-owned diagnostics. */
+export function privateInputSchema<S extends z.AnyZodObject>(schema: S, fields: (path: string[]) => string[]) {
+  const guarded = schema.extend({});
+  guarded.safeParseAsync = async (value, params) => {
+    const parsed = await schema.safeParseAsync(value, params);
+    if (parsed.success) return parsed;
+    return { success: false, error: new z.ZodError(inputIssues(parsed.error.issues, fields)
+      .map(issue => ({ code: 'custom', path: issue.path, message: issue.message }))) };
+  };
+  return guarded;
 }
 export class ApiBoundaryError extends ElevenLabsError {
   constructor(code: string, message: string, resolution: string, readonly issues: ValidationIssue[] = []) {
@@ -278,7 +295,7 @@ export const discoveryInputSchema = z.object({
   cursor: z.string().regex(/^(0|[1-9][0-9]*)$/, 'Use next_cursor from the previous discovery result.').refine(value => Number.isSafeInteger(Number(value)), 'Use next_cursor from the previous discovery result.').optional(),
   limit: z.number().int().min(1).max(25).default(10),
 }).strict().superRefine((value, ctx) => {
-  if (value.definition && !value.operation_id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['definition'], message: 'definition requires operation_id.' });
+  if (value.definition && !value.operation_id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['definition'], message: 'definition requires operation_id.', params: { keyword: 'contract' } });
 });
 export const discoveryFamilyDescription = discoveryFamilies.join(', ');
 export const operationContractGuidance = 'Operation IDs listed here or in receipts are names only. Before the first call to each operation in this conversation, call elevenlabs_discover_api with that operation_id to read its contract, unless a tool description or receipt already supplies the exact parameter names and locations. Never infer path_params, query_params or body fields from an operation name.';
@@ -341,7 +358,7 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
   const { examplesForOperation, validateRequest } = await import('./api-validation.js');
   const examples = examplesForOperation(op);
   for (const example of examples) {
-    try { await validateRequest(op.profile, example); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
+    try { await validateRequest(op.profile, example, createRedactor([])); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
   const files = ['create', 'change'].includes(op.profile) ? op.request.files : undefined;
   const effectNote = op.effect_note ? ` ${op.effect_note}` : '';

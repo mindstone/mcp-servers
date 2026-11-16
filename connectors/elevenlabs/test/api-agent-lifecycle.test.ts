@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -21,7 +22,7 @@ describe('agent lifecycle admission and effects', () => {
     for (const id of ids) {
       const op = catalog.operations.find(op => op.operation_id === id)!;
       expect(op.deprecated, id).toBe(false);
-      for (const example of op.examples) await expect(validateRequest(op.profile, example)).resolves.toMatchObject({ operation_id: id });
+      for (const example of op.examples) await expect(validateRequest(op.profile, example, createRedactor([]))).resolves.toMatchObject({ operation_id: id });
       for (const followUp of op.follow_ups) {
         expect(followUp).not.toBe(id);
         expect(catalog.operations.find(candidate => candidate.operation_id === followUp)?.profile).toBe('read');
@@ -50,17 +51,17 @@ describe('agent lifecycle admission and effects', () => {
     ['get_version_metadata_route', 'version_id'],
   ])('%s leads from metadata to the selected configuration', async (operation_id, selector) => {
     const wire = lifecycleCases.find(row => row.id === operation_id)!;
-    const receipt = await createSuccessReceipt(operation_id, wire.status, wire.media, wire.response);
+    const receipt = await createSuccessReceipt(operation_id, wire.status, wire.media, wire.response, createRedactor([]));
     expect(receipt.response_contract).toBe('matched');
     expect(receipt.follow_up_operations).toEqual(['get_agent_route']);
     expect(receipt.next_step).toContain(`get_agent_route (path_params.agent_id, query_params.${selector} optional)`);
-    await expect(validateRequest('read', { operation_id: 'get_agent_route', path_params: { agent_id: 'agent_example' }, query_params: { [selector]: 'selected_example' } }))
+    await expect(validateRequest('read', { operation_id: 'get_agent_route', path_params: { agent_id: 'agent_example' }, query_params: { [selector]: 'selected_example' } }, createRedactor([])))
       .resolves.toMatchObject({ query_params: { [selector]: 'selected_example' } });
   });
 
   it('leads from the branch list to branch metadata and agent configuration', async () => {
     const wire = lifecycleCases.find(row => row.id === 'get_branches_route')!;
-    const receipt = await createSuccessReceipt(wire.id, wire.status, wire.media, wire.response);
+    const receipt = await createSuccessReceipt(wire.id, wire.status, wire.media, wire.response, createRedactor([]));
     expect(receipt.response_contract).toBe('matched');
     expect(receipt.follow_up_operations).toEqual(['get_branch_route', 'get_agent_route']);
     expect(receipt.next_step).toContain('get_branch_route (path_params.agent_id, path_params.branch_id)');

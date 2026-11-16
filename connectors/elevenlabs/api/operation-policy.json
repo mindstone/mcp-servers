@@ -322,14 +322,14 @@
       "status": "admitted",
       "milestone": 7,
       "family": "mcp-servers",
-      "profile": "create",
+      "profile": "change",
       "effects": {
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "effect_reason": "Creates per-tool configuration overrides.",
+      "effect_reason": "Changes the effective inputs, execution settings or responses of an existing MCP server tool.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],

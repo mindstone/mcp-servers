@@ -257,7 +257,7 @@ describe('pinned operation policy and public artifacts', () => {
       if (floors[row.method]) expect(row.profile).toBe(row.operation_id === 'update_environment_variable' ? 'delete' : floors[row.method]);
       counts[row.profile] = (counts[row.profile] ?? 0) + 1;
     }
-    expect(counts).toEqual({ read: 78, create: 27, change: 40, delete: 25, tests: 3, query_knowledge: 1 });
+    expect(counts).toEqual({ read: 78, create: 26, change: 41, delete: 25, tests: 3, query_knowledge: 1 });
     expect(apiCatalog.operations.filter(row => row.profile === 'query_knowledge').map(row => row.operation_id)).toEqual(['query_agent_knowledge_base_rag_route']);
     expect(apiCatalog.operations.some(row => ['elevenlabs_run_job', 'elevenlabs_place_call'].includes(row.tool))).toBe(false);
     expect(legacyTools).toHaveLength(32);

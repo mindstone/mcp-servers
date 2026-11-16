@@ -1,7 +1,7 @@
 {
   "id": "bundled-elevenlabs",
   "name": "ElevenLabs",
-  "description": "Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.",
+  "description": "Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also builds and manages ElevenLabs voice agents, the AI assistants that talk with people on calls or a website: their versions, tools, reference documents, tests and conversations, plus the stored keys and connected servers they use. Changes are made in your ElevenLabs account and follow your permission settings.",
   "category": "media",
   "icon": "music",
   "maturity": "stable",

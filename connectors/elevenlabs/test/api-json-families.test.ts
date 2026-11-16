@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import policyInput from '../api/operation-policy.json' with { type: 'json' };
@@ -22,7 +23,7 @@ describe('additional JSON family admission boundaries', () => {
     for (const op of additions) {
       expect(op.deprecated, op.operation_id).toBe(false);
       expect(op.examples.length, op.operation_id).toBeGreaterThan(0);
-      for (const example of op.examples) await expect(validateRequest(op.profile, example)).resolves.toMatchObject({ operation_id: op.operation_id });
+      for (const example of op.examples) await expect(validateRequest(op.profile, example, createRedactor([]))).resolves.toMatchObject({ operation_id: op.operation_id });
       for (const followUp of op.follow_ups) expect(catalog.operations.find(candidate => candidate.operation_id === followUp)?.profile).toBe('read');
       expect(op.effects.destructiveHint).toBe(['change', 'delete'].includes(op.profile));
       if (op.method === 'DELETE') expect(op.profile).toBe('delete');

@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-test-harness';
@@ -100,7 +101,7 @@ describe('actual SDK definitions and independent admission census', () => {
       const example = JSON.parse(definition.description!.match(/^EXAMPLE: (.+)$/m)![1]);
       if (name !== 'elevenlabs_discover_api') {
         const profile = profiles.find(profile => tools[profile] === name)!;
-        await expect(validateRequest(profile, example)).resolves.toMatchObject({ operation_id: example.operation_id });
+        await expect(validateRequest(profile, example, createRedactor([]))).resolves.toMatchObject({ operation_id: example.operation_id });
       }
       const files = name === tools.create || name === tools.change;
       expect(Object.hasOwn(definition.inputSchema.properties ?? {}, 'files')).toBe(files);

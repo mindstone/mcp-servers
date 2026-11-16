@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-test-harness';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -119,8 +120,8 @@ describe('isolated lazy catalogue loading', () => {
       expect(failure).toMatchObject({ code: 'CATALOG_INVALID', resolution: expect.stringContaining('connector maintainer'), issues: [{ message: `Unsupported schema keyword unevaluatedProperties at ${location}; support requires a reviewed validator correction.` }] });
       await expect(api.discoverOperations({})).rejects.toBe(failure);
       await expect(api.describeOperation(op.operation_id)).rejects.toBe(failure);
-      await expect(validateRequest('create', { operation_id: op.operation_id, body: {} })).rejects.toBe(failure);
-      await expect(createSuccessReceipt(op.operation_id, 200, 'application/json', {})).rejects.toBe(failure);
+      await expect(validateRequest('create', { operation_id: op.operation_id, body: {} }, createRedactor([]))).rejects.toBe(failure);
+      await expect(createSuccessReceipt(op.operation_id, 200, 'application/json', {}, createRedactor([]))).rejects.toBe(failure);
       await expectIsolatedCalls(client, `Unsupported schema keyword unevaluatedProperties at ${location}`);
       expect(load).toHaveBeenCalledTimes(1);
       expect(raw).toEqual(before);
@@ -134,6 +135,7 @@ describe('isolated lazy catalogue loading', () => {
     const raw = structuredClone(actual.apiCatalog) as ApiCatalog;
     const op = raw.operations.find(candidate => candidate.operation_id === 'create_agent_route')!;
     const data = { unevaluatedProperties: false };
+    delete op.sensitive_request_fields; // This synthetic schema has no credential operands.
     op.request.schema = { type: 'object', properties: { unevaluatedProperties: { type: 'object', additionalProperties: true } }, example: data, default: data, enum: [data] };
     vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
     const { loadApiCatalog } = await import('../src/api-catalog.js');

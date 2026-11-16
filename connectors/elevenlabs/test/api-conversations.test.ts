@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-test-harness';
 import { http, HttpResponse } from 'msw';
@@ -48,7 +49,7 @@ describe('conversation and ticket contracts', () => {
         expect(id).not.toBe(op.operation_id);
         const read = catalog.operations.find(candidate => candidate.operation_id === id)!;
         expect(read.profile).toBe('read');
-        await expect(validateRequest('read', { operation_id: id, path_params: Object.fromEntries(read.parameters.path.required.map(name => [name, 'example_id'])) }))
+        await expect(validateRequest('read', { operation_id: id, path_params: Object.fromEntries(read.parameters.path.required.map(name => [name, 'example_id'])) }, createRedactor([])))
           .resolves.toMatchObject({ operation_id: id });
       }
       const description = await discoverOperations({ operation_id: op.operation_id });
@@ -56,7 +57,7 @@ describe('conversation and ticket contracts', () => {
       if (wire.profile === 'read') expect(description).toHaveProperty('contract', expect.stringContaining('summary'));
     }
     for (const id of ['get_signed_url_deprecated']) {
-      await expect(validateRequest('create', { operation_id: id })).rejects.toMatchObject({ code: 'UNKNOWN_OPERATION' });
+      await expect(validateRequest('create', { operation_id: id }, createRedactor([]))).rejects.toMatchObject({ code: 'UNKNOWN_OPERATION' });
     }
   });
 
@@ -117,7 +118,7 @@ describe('conversation and ticket contracts', () => {
     const catalog = structuredClone(validateApiCatalog(apiCatalog));
     Object.assign(catalog.operations.find(op => op.operation_id === 'get_conversation_audio_route')!.responses[0], { media_type: 'image/png' });
     expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
-    await expect(createSuccessReceipt('get_conversation_audio_route', 200, 'audio/mpeg', 'raw bytes'))
+    await expect(createSuccessReceipt('get_conversation_audio_route', 200, 'audio/mpeg', 'raw bytes', createRedactor([])))
       .rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 });

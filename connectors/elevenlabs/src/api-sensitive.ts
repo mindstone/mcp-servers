@@ -1,31 +1,44 @@
 import { isRecord } from './api-catalog.js';
-import { escapeUntrustedTags } from './untrusted-content.js';
+import { credentialIdentifiers, isCredentialKey } from './api-credential-keys.mjs';
+import { escapeUntrustedTags, wrapUntrusted } from './untrusted-content.js';
 
-/** Collect string operands before validation; diagnostics may echo them as dictionary keys. */
-export function sensitiveValues(value: unknown, paths: readonly (readonly string[])[]): string[] {
-  const values = new Set<string>();
+type SubmittedSecret = string | number | boolean;
+
+/** Collect before validation, including credential keys in arbitrary open objects. */
+export function sensitiveValues(value: unknown, paths: readonly (readonly string[])[]): SubmittedSecret[] {
+  const values = new Set<SubmittedSecret>();
+  function scalar(item: unknown): void {
+    if ((typeof item === 'string' && item.length) || typeof item === 'number' || typeof item === 'boolean') values.add(item);
+  }
   function visit(item: unknown, path: readonly string[]): void {
     if (!path.length) {
-      // Object alternatives at a leaf are references, not credential values.
-      if (typeof item === 'string' && item.length) values.add(item);
+      // Object alternatives at a declared leaf can be references, not credentials.
+      scalar(item);
       return;
     }
     const [field, ...rest] = path;
     if (field === '*' && (isRecord(item) || Array.isArray(item))) Object.values(item).forEach(child => visit(child, rest));
     else if (isRecord(item) && Object.hasOwn(item, field)) visit(item[field], rest);
   }
+  function openObjects(item: unknown, sensitive = false, entries = false): void {
+    if (Array.isArray(item)) item.forEach(child => openObjects(child, sensitive));
+    else if (isRecord(item)) for (const [key, child] of Object.entries(item)) {
+      // Locators identify an existing secret; they are not its value.
+      if (entries || !credentialIdentifiers.has(key) || isRecord(child) || Array.isArray(child)) {
+        openObjects(child, sensitive || isCredentialKey(key), /^(request_headers|request_meta)$/i.test(key));
+      }
+    }
+    else if (sensitive) scalar(item);
+  }
   paths.forEach(path => visit(value, path));
+  openObjects(value);
   return [...values];
 }
 
-/**
- * Replace string leaves at declared paths only; their values are workspace data, not something the caller submitted.
- * A stored value the provider repeats outside its declared path is not caught, because replacing short stored values
- * everywhere damaged IDs, URLs and policies. Non-string leaves (a numeric meta value) are left as they are.
- */
+/** Stored credentials are hidden only at declared paths, preserving unrelated workspace data. */
 export function redactAtPaths(value: unknown, paths: readonly (readonly string[])[]): unknown {
   function visit(item: unknown, path: readonly string[]): unknown {
-    if (!path.length) return typeof item === 'string' && item.length ? '[REDACTED]' : item;
+    if (!path.length) return ['string', 'number', 'boolean'].includes(typeof item) ? '[REDACTED]' : item;
     const [field, ...rest] = path;
     if (field === '*' && Array.isArray(item)) return item.map(child => visit(child, rest));
     if (field === '*' && isRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, visit(child, rest)]));
@@ -38,19 +51,101 @@ export function redactAtPaths(value: unknown, paths: readonly (readonly string[]
 function uriSpelling(value: string): string {
   try { return encodeURIComponent(value); } catch { return value; }
 }
+const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** The API key and submitted credentials share one redaction path, including JSON keys. */
-export function redactSensitive(value: unknown, secrets: readonly string[]): unknown {
-  const spellings = [...new Set(secrets.filter(Boolean).flatMap(secret => [
-    secret, uriSpelling(secret), JSON.stringify(secret).slice(1, -1), escapeUntrustedTags(secret),
-    JSON.stringify(escapeUntrustedTags(secret)).slice(1, -1),
-  ]))].sort((a, b) => b.length - a.length);
-  const text = (input: string) => spellings.reduce((result, secret) => result.split(secret).join('[REDACTED]'), input);
-  function scrub(item: unknown): unknown {
-    if (typeof item === 'string') return text(item);
-    if (Array.isArray(item)) return item.map(scrub);
-    if (isRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) => [text(key), scrub(child)]));
-    return item;
+export interface Redactor {
+  include(value: string): void;
+  redact(value: unknown): unknown;
+  text(value: string): string;
+  wrap(value: string, source: string): string;
+}
+
+/**
+ * Replaces each complete JSON-style quoted literal, reading every character once.
+ * An unterminated literal ends the scan: no later quote can close one, because it
+ * would read the remaining text in the same escape phase.
+ */
+function replaceQuotedLiterals(input: string, replace: (literal: string) => string): string {
+  let output = '';
+  let copied = 0;
+  for (let start = input.indexOf('"'); start !== -1; start = input.indexOf('"', copied)) {
+    let end = start + 1;
+    while (end < input.length && input[end] !== '"') end += input[end] === '\\' ? 2 : 1;
+    if (end >= input.length) break;
+    output += input.slice(copied, start) + replace(input.slice(start, end + 1));
+    copied = end + 1;
   }
-  return scrub(value);
+  return copied === 0 ? input : output + input.slice(copied);
+}
+
+/** Layers of JSON encoding decoded before matching; deeper echoes are matched only as they appear. */
+const MAX_DECODE_DEPTH = 16;
+
+/** The secrets stay in this closure; every output uses the same type-independent matcher. */
+export function createRedactor(secrets: readonly SubmittedSecret[]): Redactor {
+  function redact(value: unknown): unknown {
+    const patterns = new Set<string>();
+    for (const secret of secrets) {
+      const raw = String(secret);
+      if (!raw) continue;
+      const uri = uriSpelling(raw);
+      for (const base of new Set([raw, escapeUntrustedTags(raw), uri])) {
+        let pattern = regexEscape(base).replace(/%[0-9a-f]{2}/gi,
+          escape => escape.replace(/[a-f]/gi, letter => `[${letter.toLowerCase()}${letter.toUpperCase()}]`));
+        if (base === uri) {
+          const formEscapes: Record<string, string> = { '!': '%21', "'": '%27', '\\(': '%28', '\\)': '%29', '~': '%7[eE]' };
+          pattern = pattern.replace(/%20|!|'|\\\(|\\\)|~/g, character => character === '%20'
+            ? '(?: |%20|\\+)' : `(?:${character}|${formEscapes[character]})`);
+        }
+        // Scalars and short strings match whole tokens, preserving larger words and decimals.
+        if (typeof secret !== 'string' || secret.length < 8 || /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw)) pattern = `(?<![\\p{L}\\p{N}_]|\\d\\.)${pattern}(?![\\p{L}\\p{N}_]|\\.\\d)`;
+        patterns.add(pattern);
+      }
+    }
+    const pattern = patterns.size ? new RegExp([...patterns].sort((a, b) => b.length - a.length).join('|'), 'gu') : undefined;
+    // Each (layer, depth) pair is decoded and scrubbed once per call, so nested encodings cost linear work.
+    const memo = new Map<string, string>();
+    function text(input: string, depth = MAX_DECODE_DEPTH): string {
+      if (!pattern) return input;
+      const key = `${depth}:${input}`;
+      const known = memo.get(key);
+      if (known !== undefined) return known;
+      const result = decodeAndMatch(input, depth);
+      memo.set(key, result);
+      return result;
+    }
+    function decodeAndMatch(input: string, depth: number): string {
+      function document(literal: string): string {
+        if (depth <= 0) return literal;
+        let parsed: unknown;
+        try { parsed = JSON.parse(literal); } catch { return literal; }
+        const clean = scrub(parsed, depth - 1);
+        return JSON.stringify(clean) !== JSON.stringify(parsed) ? JSON.stringify(clean) : literal;
+      }
+      if (/^\s*["{[]/.test(input)) {
+        const clean = document(input);
+        if (clean !== input) return clean;
+      }
+      // Quoted literals are scrubbed in place; the text around them still goes through every step below.
+      const current = replaceQuotedLiterals(input, document);
+      // Also accept isolated JSON string content without its enclosing quotes.
+      // Unchanged strings retain their exact bytes.
+      const decoded = current.replace(/\\(?:u[\da-fA-F]{4}|["\\/bfnrt])/g, escape => JSON.parse(`"${escape}"`) as string);
+      if (depth > 0 && decoded.length < current.length) {
+        const clean = text(decoded, depth - 1);
+        if (clean !== decoded) return clean;
+      }
+      return current.replace(pattern!, '[REDACTED]');
+    }
+    function scrub(item: unknown, depth = MAX_DECODE_DEPTH): unknown {
+      if (typeof item === 'string') return text(item, depth);
+      if (typeof item === 'number' || typeof item === 'boolean') return text(String(item), depth) === String(item) ? item : '[REDACTED]';
+      if (Array.isArray(item)) return item.map(child => scrub(child, depth));
+      if (isRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) => [text(key, depth), scrub(child, depth)]));
+      return item;
+    }
+    return scrub(value);
+  }
+  const text = (value: string) => String(redact(value));
+  return { include: value => { secrets = [...secrets, value]; }, redact, text, wrap: (value, source) => wrapUntrusted(text(value), source)! };
 }

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
 
 export const PINNED_SOURCE = Object.freeze({
   url: 'https://api.elevenlabs.io/openapi.json',
@@ -38,8 +39,8 @@ const idsByProfile = {
 const stage76Profiles = { read: 'get_agent_summaries_route', create: 'upload_file_route', change: 'post_agent_avatar_route post_agent_hold_audio_route' };
 const stage75Profiles = {
   read: 'get_secret_dependencies_route get_secret_route get_secrets_route get_environment_variable list_environment_variables get_mcp_route get_mcp_tool_config_override_route list_mcp_server_tools_route list_mcp_servers_route',
-  create: 'create_secret_route create_environment_variable add_mcp_tool_config_override_route',
-  change: 'update_secret_route add_mcp_server_tool_approval_route create_mcp_server_route update_mcp_server_approval_policy_route update_mcp_server_config_route update_mcp_tool_config_override_route',
+  create: 'create_secret_route create_environment_variable',
+  change: 'add_mcp_tool_config_override_route update_secret_route add_mcp_server_tool_approval_route create_mcp_server_route update_mcp_server_approval_policy_route update_mcp_server_config_route update_mcp_tool_config_override_route',
   delete: 'delete_secret_route delete_environment_variable update_environment_variable delete_mcp_server_route remove_mcp_server_tool_approval_route remove_mcp_tool_config_override_route',
 };
 const stage7Profiles = {
@@ -486,6 +487,33 @@ export function hasSensitivePath(schema, path, defs, seen = new Set()) {
   if (field === '*') return [schema.items, schema.additionalProperties].some(child => hasSensitivePath(child, rest, defs));
   return Object.hasOwn(schema.properties ?? {}, field) && hasSensitivePath(schema.properties[field], rest, defs);
 }
+// Derive credential operands wherever a request reaches them, not per operation.
+export function credentialRequestPaths(schema, defs, path = [], seen = new Set(), component = '') {
+  if (schema === null || typeof schema !== 'object') return [];
+  if (schema.$ref) {
+    if (seen.has(schema.$ref)) return [];
+    const next = new Set(seen); next.add(schema.$ref);
+    const name = schema.$ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
+    return credentialRequestPaths(defs[name], defs, path, next, name);
+  }
+  const paths = [];
+  for (const [key, child] of Object.entries(schema.properties ?? {})) {
+    if (credentialIdentifiers.has(key)) continue;
+    const operand = [...path, key];
+    if (['request_headers', 'request_meta'].includes(key)) paths.push([...operand, '*']);
+    else if (isCredentialKey(key)
+      || (key === 'value' && /secret/i.test(component))) paths.push(operand);
+    else paths.push(...credentialRequestPaths(child, defs, operand, new Set(seen), component));
+  }
+  for (const key of ['allOf', 'anyOf', 'oneOf']) for (const child of schema[key] ?? []) {
+    paths.push(...credentialRequestPaths(child, defs, path, new Set(seen), component));
+  }
+  for (const child of [schema.items, schema.additionalProperties]) {
+    if (child && typeof child === 'object') paths.push(...credentialRequestPaths(child, defs, [...path, '*'], new Set(seen), component));
+  }
+  return paths;
+}
+
 function checkSensitivePaths(paths, schemas, defs, id) {
   const unique = new Set();
   for (const path of paths ?? []) {
@@ -572,13 +600,14 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     const responses = successDescriptors(operation, transform, id);
     checkSensitivePaths(row.sensitive_request_fields, [request.schema], defs, id);
     checkSensitivePaths(row.sensitive_response_fields, responses.map(response => response.schema), defs, id);
+    const sensitiveRequests = [...new Map([...(row.sensitive_request_fields ?? []), ...credentialRequestPaths(request.schema, defs)].map(path => [JSON.stringify(path), path])).values()];
     descriptors.push({
       operation_id: id, method: row.method, path: row.path, family: row.family, milestone: row.milestone,
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
       ...(row.reviewed_patch_delete ? { reviewed_patch_delete: row.reviewed_patch_delete } : {}),
-      ...(row.sensitive_request_fields ? { sensitive_request_fields: row.sensitive_request_fields } : {}),
+      ...(sensitiveRequests.length ? { sensitive_request_fields: sensitiveRequests } : {}),
       ...(row.sensitive_response_fields ? { sensitive_response_fields: row.sensitive_response_fields } : {}),
       ...(row.effect_note ? { effect_note: row.effect_note } : {}),
       ...(row.manual_pagination ? { manual_pagination: row.manual_pagination } : {}),
@@ -621,7 +650,7 @@ export function renderCoverage(rawPolicy, rosters) {
     `Source: ${policy.source.url}`, `Retrieved: ${policy.source.retrieved_at}`, `SHA-256 (original decompressed bytes): \`${policy.source.sha256}\``,
     `Source census: ${policy.source.paths} paths; ${policy.source.operations} HTTP operation IDs; ${policy.source.bytes.toLocaleString('en-US')} bytes.`, '',
     `Partition: **${counts.admitted} admitted + ${counts.planned} planned + ${counts.excluded} excluded = ${rows.length}**.`, '',
-    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; additional admitted operations are available in source until the next release. Later versions are unset.', '',
+    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.', '',
     `Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.`, '',
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',

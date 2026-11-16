@@ -9,7 +9,7 @@ Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
 Partition: **174 admitted + 232 planned + 109 excluded = 515**.
 
-Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; additional admitted operations are available in source until the next release. Later versions are unset.
+Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
 Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the 174 admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.
 
@@ -46,7 +46,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | add_from_rules | POST | /v1/pronunciation-dictionaries/add-from-rules | planned | 9 | pronunciation-dictionaries | — | partial | @mindstone/mcp-server-elevenlabs:add_pronunciation_dictionary | Supports name, description and rules; provider workspace permission options are not exposed. |
 | add_language | POST | /v1/dubbing/resource/{dubbing_id}/language | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_mcp_server_tool_approval_route | POST | /v1/convai/mcp-servers/{mcp_server_id}/tool-approvals | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| add_mcp_tool_config_override_route | POST | /v1/convai/mcp-servers/{mcp_server_id}/tool-configs | admitted | 7 | mcp-servers | create | missing | — | No existing tool maps to this exact HTTP operation. |
+| add_mcp_tool_config_override_route | POST | /v1/convai/mcp-servers/{mcp_server_id}/tool-configs | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_member | POST | /v1/workspace/groups/{group_id}/members | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | add_merge_proposal_comment_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/comments | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_project | POST | /v1/studio/projects | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |

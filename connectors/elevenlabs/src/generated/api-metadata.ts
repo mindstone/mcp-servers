@@ -103,7 +103,6 @@ export const profileOperationIds = {
     "text_search_conversation_messages_route"
   ],
   "create": [
-    "add_mcp_tool_config_override_route",
     "add_merge_proposal_comment_route",
     "add_ticket_comment_route",
     "add_tool_route",
@@ -134,6 +133,7 @@ export const profileOperationIds = {
   "change": [
     "accept_merge_proposal_route",
     "add_mcp_server_tool_approval_route",
+    "add_mcp_tool_config_override_route",
     "agent_testing_bulk_move_route",
     "assign_conversation_tags_route",
     "create_agent_conversation_ticket_route",

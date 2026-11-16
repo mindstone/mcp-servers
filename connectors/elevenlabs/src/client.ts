@@ -9,6 +9,7 @@
  * Voices URL: https://api.elevenlabs.io/v2/voices
  */
 
+import { createRedactor, type Redactor } from './api-sensitive.js';
 import * as crypto from 'crypto';
 import {
   ElevenLabsError,
@@ -23,12 +24,15 @@ import { writeWorkspaceArtifact } from './tools/path-safety.js';
 export interface ElevenLabsFetchOptions extends RequestInit {
   /** Per-call timeout override (default REQUEST_TIMEOUT_MS). Explicit `signal` wins. */
   timeoutMs?: number;
+  redactor?: Redactor;
 }
 
 /**
  * Make an authenticated request to the ElevenLabs API.
  * Returns a raw Response object.
  */
+export function elevenLabsFetch(apiKey: string, urlPath: string, options: ElevenLabsFetchOptions & { redactor: Redactor }, operationId: string): Promise<Response>;
+export function elevenLabsFetch(apiKey: string, urlPath: string, options?: ElevenLabsFetchOptions): Promise<Response>;
 export async function elevenLabsFetch(
   apiKey: string,
   urlPath: string,
@@ -47,7 +51,7 @@ export async function elevenLabsFetch(
     ? urlPath
     : `${ELEVENLABS_API_V1_BASE}${urlPath}`;
 
-  const { timeoutMs, ...fetchOptions } = options;
+  const { timeoutMs, redactor = createRedactor([apiKey]), ...fetchOptions } = options;
 
   const headers: Record<string, string> = {
     'xi-api-key': apiKey,
@@ -79,7 +83,7 @@ export async function elevenLabsFetch(
         'The request took too long. Try again or check if the ElevenLabs API is available.',
       );
     }
-    throw error;
+    throw new ElevenLabsError('The request to ElevenLabs failed.', 'NETWORK_ERROR', 'Check connectivity and provider availability.');
   }
 
   if (logLabel !== undefined) console.error(`[ElevenLabs API] ${logLabel} HTTP ${response.status}`);
@@ -101,12 +105,12 @@ export async function elevenLabsFetch(
   if (response.status === 401) {
     const detail = await extractErrorDetail(response);
     const isMissingPermission = detail.includes('missing_permissions');
-    const envelopedDetail = detail ? envelopeApiErrorDetail(detail) : '';
+    const envelopedDetail = detail ? envelopeApiErrorDetail(detail, redactor) : '';
     throw new ElevenLabsError(
       isMissingPermission
         ? `API key missing required permission: ${envelopedDetail}`
         : detail
-          ? formatApiErrorMessage('Authentication failed', detail)
+          ? formatApiErrorMessage('Authentication failed', detail, redactor)
           : 'Authentication failed',
       isMissingPermission ? 'MISSING_PERMISSION' : 'AUTH_FAILED',
       isMissingPermission
@@ -119,10 +123,10 @@ export async function elevenLabsFetch(
     const detail = await extractErrorDetail(response);
     throw new ElevenLabsError(
       detail
-        ? formatApiErrorMessage('Access forbidden', detail)
+        ? formatApiErrorMessage('Access forbidden', detail, redactor)
         : 'Access forbidden: insufficient permissions or quota',
       'AUTH_FAILED',
-      getErrorResolution(403, detail),
+      getErrorResolution(403, detail, redactor),
     );
   }
 
@@ -130,14 +134,14 @@ export async function elevenLabsFetch(
   if (!response.ok) {
     const detail = await extractErrorDetail(response);
     const statusText = response.statusText
-      ? envelopeApiErrorDetail(response.statusText)
+      ? envelopeApiErrorDetail(response.statusText, redactor)
       : '';
     throw new ElevenLabsError(
       detail
-        ? `ElevenLabs API error (HTTP ${response.status}): ${envelopeApiErrorDetail(detail)}`
+        ? `ElevenLabs API error (HTTP ${response.status}): ${envelopeApiErrorDetail(detail, redactor)}`
         : `ElevenLabs API error (HTTP ${response.status})${statusText ? `: ${statusText}` : ''}`,
       `HTTP_${response.status}`,
-      getErrorResolution(response.status, detail),
+      getErrorResolution(response.status, detail, redactor),
     );
   }
 
@@ -282,6 +286,7 @@ export async function elevenLabsBinaryDownload(
   urlPath: string,
   options: ElevenLabsFetchOptions = {},
 ): Promise<AudioResult> {
+  const redactor = options.redactor ?? createRedactor([apiKey]);
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   const contentType = response.headers.get('content-type') ?? '';
 
@@ -289,10 +294,10 @@ export async function elevenLabsBinaryDownload(
     const detail = await extractErrorDetail(response);
     throw new ElevenLabsError(
       detail
-        ? formatApiErrorMessage('Download failed', detail)
+        ? formatApiErrorMessage('Download failed', detail, redactor)
         : 'Download failed: API returned JSON instead of audio',
       'DOWNLOAD_FAILED',
-      detail ? getErrorResolution(422, detail) : 'Verify dubbing status with get_dubbing before downloading.',
+      detail ? getErrorResolution(422, detail, redactor) : 'Verify dubbing status with get_dubbing before downloading.',
     );
   }
 

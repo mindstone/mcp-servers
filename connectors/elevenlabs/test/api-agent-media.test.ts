@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'node:os';
@@ -72,7 +73,7 @@ describe('agent media contracts', () => {
       for (const follow of op.follow_ups) {
         expect(follow).not.toBe(id);
         const read = catalog.operations.find(read => read.operation_id === follow)!;
-        await expect(validateRequest('read', { operation_id: follow, path_params: Object.fromEntries(read.parameters.path.required.map(key => [key, 'example_id'])) })).resolves.toMatchObject({ operation_id: follow });
+        await expect(validateRequest('read', { operation_id: follow, path_params: Object.fromEntries(read.parameters.path.required.map(key => [key, 'example_id'])) }, createRedactor([]))).resolves.toMatchObject({ operation_id: follow });
       }
     }
     for (const id of ['post_agent_avatar_route', 'post_agent_hold_audio_route']) {

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-elevenlabs.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.
+Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also builds and manages ElevenLabs voice agents, the AI assistants that talk with people on calls or a website: their versions, tools, reference documents, tests and conversations, plus the stored keys and connected servers they use. Changes are made in your ElevenLabs account and follow your permission settings.
 
 Use it when you want your assistant to produce narration, voiceovers or transcripts, or to set up and test an ElevenLabs voice agent, without leaving the conversation.
 
@@ -11,7 +11,7 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 
 - **Version:** [0.6.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests)
+- **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -183,8 +183,8 @@ descriptor checks as document uploads; a canonical filename determines the type.
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
 | `elevenlabs_read_resource` | 78 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 27 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 40 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_create_resource` | 26 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 41 edits, including file replacement | May overwrite content, configuration or arrays |
 | `elevenlabs_delete_resource` | 25 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
@@ -285,8 +285,9 @@ untrusted content, not instructions. RAG retrieval has its own read-only tool
 and credit disclosure; it does not create conversations or place calls.
 
 Secrets, environment variables and MCP server configurations are also available through discovery.
-Submitted secret values and MCP credentials are write-only: receipts and errors redact them, including provider echoes.
-MCP approval changes use the change profile; removals, including environment-value removal by update, use delete.
+Agent-link tokens and signed source-file URLs delegate access the read already has to whoever holds them; they are intentionally returned by those reads.
+Argument and local file errors from the seven API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
+MCP approval changes and overrides of existing MCP tools use the change profile; removals, including environment-value removal by update, use delete.
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key

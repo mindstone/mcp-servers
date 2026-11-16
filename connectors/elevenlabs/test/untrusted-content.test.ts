@@ -582,7 +582,7 @@ describe('tool sources reach the envelope helper (mechanical guard on the source
     }
   });
 
-  it('error-detail helper imports wrapUntrusted for API error paths', async () => {
+  it('error-detail helper reaches the redactor and canonical envelope helper', async () => {
     const nodeFs = await import('node:fs');
     const nodePath = await import('node:path');
     const nodeUrl = await import('node:url');
@@ -591,7 +591,10 @@ describe('tool sources reach the envelope helper (mechanical guard on the source
       nodePath.join(dir, '..', 'src', 'error-detail.ts'),
       'utf-8',
     );
-    expect(contents).toContain("from './untrusted-content.js'");
-    expect(contents).toMatch(/wrapUntrusted\(/);
+    expect(contents).toContain("from './api-sensitive.js'");
+    expect(contents).toContain('redactor.wrap(');
+    const redactor = nodeFs.readFileSync(nodePath.join(dir, '..', 'src', 'api-sensitive.ts'), 'utf-8');
+    expect(redactor).toContain("from './untrusted-content.js'");
+    expect(redactor).toMatch(/wrapUntrusted\(/);
   });
 });

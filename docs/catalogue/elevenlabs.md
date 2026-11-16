@@ -5,7 +5,7 @@ title: elevenlabs — mcp-servers catalogue
 
 # elevenlabs
 
-Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also configures voice agents, webhook tools, knowledge documents and saved tests through the first supported ElevenLabs API operations.
+Generate speech, music and sound effects, browse and create voices, and transcribe and process audio with ElevenLabs. It also builds and manages ElevenLabs voice agents, the AI assistants that talk with people on calls or a website: their versions, tools, reference documents, tests and conversations, plus the stored keys and connected servers they use. Changes are made in your ElevenLabs account and follow your permission settings.
 
 
 
@@ -15,7 +15,7 @@ Generate speech, music and sound effects, browse and create voices, and transcri
 |-------|-------|
 | Version | 0.6.0 |
 | Auth | API key (`ELEVENLABS_API_KEY`) |
-| Tools | 39 (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent configuration, webhook tools, knowledge documents and saved tests) |
+| Tools | 39 (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers) |
 | Surface | cloud API |
 
 ## Evidence

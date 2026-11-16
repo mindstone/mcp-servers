@@ -104,6 +104,7 @@ export interface DialogueInput {
   voice_id: string;
 }
 
+import type { Redactor } from './api-sensitive.js';
 import { envelopeApiErrorDetail } from './error-detail.js';
 
 /** Actionable resolution when a voice_id or voice_name cannot be resolved. */
@@ -113,7 +114,9 @@ export const VOICE_NOT_FOUND_RESOLUTION =
 /**
  * Resolve an error status code to an actionable resolution string.
  */
-export function getErrorResolution(status: number, detail?: string): string {
+export function getErrorResolution(status: number): string;
+export function getErrorResolution(status: number, detail: string, redactor: Redactor): string;
+export function getErrorResolution(status: number, detail?: string, redactor?: Redactor): string {
   const msg = (detail || '').toLowerCase();
   if (status === 401 || msg.includes('unauthorized') || msg.includes('invalid api key')) {
     return 'Authentication failed. Check your ElevenLabs API key in Settings. Get one at https://elevenlabs.io/app/settings/api-keys';
@@ -127,7 +130,7 @@ export function getErrorResolution(status: number, detail?: string): string {
   if (status === 422 || msg.includes('validation')) {
     const base = 'Invalid request parameters. Check the input values and try again.';
     if (detail) {
-      return `${base} Field issues: ${envelopeApiErrorDetail(detail)}`;
+      return `${base} Field issues: ${envelopeApiErrorDetail(detail, redactor!)}`;
     }
     return base;
   }

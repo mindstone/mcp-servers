@@ -1,3 +1,4 @@
+import { createRedactor } from '../src/api-sensitive.js';
 import { describe, expect, it } from 'vitest';
 import { apiCatalog as generated } from '../src/generated/api-catalog.js';
 import {
@@ -138,7 +139,7 @@ describe('discovery', () => {
     expect(contract.example_notes.join(' ')).toContain('Replace *_example IDs');
     expect(result.instructions).toContain('elevenlabs_discover_api({operation_id:"create_agent_route"})');
     expect(contract.examples[0].body.conversation_config.agent.prompt).toMatchObject({ llm: 'gemini-3.5-flash', knowledge_base: [{ type: 'file', name: 'Guide', id: 'document_example' }] });
-    for (const example of contract.examples) await expect(validateRequest('create', example)).resolves.toBeDefined();
+    for (const example of contract.examples) await expect(validateRequest('create', example, createRedactor([]))).resolves.toBeDefined();
     expect(result).not.toHaveProperty('summary');
     expect(result).not.toHaveProperty('description');
   });
@@ -157,7 +158,7 @@ describe('discovery', () => {
       const result = await describeOperation(id);
       const contract = JSON.parse(unwrapUntrusted(result.contract));
       expect(contract.examples).toHaveLength(1);
-      for (const example of contract.examples) await expect(validateRequest(result.profile, example)).resolves.toBeDefined();
+      for (const example of contract.examples) await expect(validateRequest(result.profile, example, createRedactor([]))).resolves.toBeDefined();
       if (id === 'create_agent_response_test_route') {
         expect(contract.examples[0].body.tool_mock_config).toEqual({ mocking_strategy: 'all', fallback_strategy: 'raise_error' });
         expect(contract.example_notes.join(' ')).toMatch(/configured tool results instead of real tool calls.*tool_mock_config.*tool_mock_overrides.*does not itself configure mocks/);

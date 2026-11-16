@@ -642,7 +642,7 @@
   },
   {
     "id": "add_mcp_tool_config_override_route",
-    "profile": "create",
+    "profile": "change",
     "args": {
       "path_params": {
         "mcp_server_id": "mcp/a ?#"

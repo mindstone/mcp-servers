@@ -1859,11 +1859,11 @@
     "method": "DELETE"
   },
   "add_mcp_tool_config_override_route": {
-    "profile": "create",
-    "tool": "elevenlabs_create_resource",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
     "effects": {
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false,
       "openWorldHint": true
     },

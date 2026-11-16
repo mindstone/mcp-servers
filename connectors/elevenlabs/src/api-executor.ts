@@ -1,4 +1,4 @@
-import { redactSensitive, sensitiveValues } from './api-sensitive.js';
+import { createRedactor, sensitiveValues, type Redactor } from './api-sensitive.js';
 import { getApiKey } from './auth.js';
 import { z } from 'zod';
 import { ApiBoundaryError, getOperation, isBinaryResponseMedia, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
@@ -56,10 +56,10 @@ async function responseFailure(op: ApiOperation, message: string): Promise<ApiBo
     `A 2xx request may have completed even though its response is invalid. ${await checkBeforeRetry(op)} Report the operation_id, status and media type to the connector maintainer; keep raw response content private.`);
 }
 
-async function fetchFailure(error: unknown, op: ApiOperation, secrets: readonly string[], signal: AbortSignal): Promise<ElevenLabsError> {
+async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSignal, redactor: Redactor): Promise<ElevenLabsError> {
   if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof ElevenLabsError && error.code === 'TIMEOUT')) return timeoutFailure(op);
-  if (!(error instanceof ElevenLabsError)) return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
-    `${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
+  if (!(error instanceof ElevenLabsError) || error.code === 'NETWORK_ERROR') return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
+    `The operation may have completed after dispatch. ${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
 
   let resolution = error.resolution;
   if (error.code === 'HTTP_422') resolution = 'The provider rejected the request parameters. Correct the reported loc: msg field issues; inspect this operation with elevenlabs_discover_api. Do not repeat the unchanged request.';
@@ -67,9 +67,8 @@ async function fetchFailure(error: unknown, op: ApiOperation, secrets: readonly 
   else if (/^HTTP_3\d\d$/.test(error.code)) resolution = 'The provider returned a redirect. It was not followed. Report the operation_id and status to the connector maintainer; do not send the API key to the redirect target.';
   else if (/^HTTP_5\d\d$/.test(error.code)) resolution = `The provider reported a server error. ${await checkBeforeRetry(op)} Check provider availability. No automatic retry was made.`;
   else if (error.code === 'RATE_LIMITED') resolution = getErrorResolution(429);
-  // The legacy client already extracts loc/msg without FastAPI's raw input field.
-  // Re-enveloping also contains any provider-authored text in legacy diagnostics.
-  return new ApiBoundaryError(error.code, wrapUntrusted(String(redactSensitive(error.message, secrets)), `elevenlabs:api:${op.operation_id}`)!, String(redactSensitive(resolution, secrets)));
+  // Redact provider error text before constructing this boundary envelope.
+  return new ApiBoundaryError(error.code, wrapUntrusted(redactor.text(error.message), `elevenlabs:api:${op.operation_id}`)!, resolution);
 }
 
 /** Shared production path for all six profiles; file context is resolved only after validation. */
@@ -78,24 +77,15 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
   // Resolve policy before validation, without authentication or network access.
   const op = isRecord(normalized) && typeof normalized.operation_id === 'string'
     ? await getOperation(normalized.operation_id) : undefined;
-  const secrets = [
+  const redactor = createRedactor([
     ...sensitiveValues(isRecord(rawInput) ? rawInput.body : undefined, op?.sensitive_request_fields ?? []),
     ...sensitiveValues(isRecord(normalized) ? normalized.body : undefined, op?.sensitive_request_fields ?? []),
-  ];
-  try {
-    return redactSensitive(await executeValidated(profile, normalized, secrets, readContext), secrets);
-  } catch (error) {
-    if (error instanceof ApiBoundaryError) throw new ApiBoundaryError(error.code,
-      String(redactSensitive(error.message, secrets)), String(redactSensitive(error.resolution, secrets)),
-      redactSensitive(error.issues, secrets) as typeof error.issues);
-    if (error instanceof ElevenLabsError) throw new ElevenLabsError(String(redactSensitive(error.message, secrets)),
-      error.code, String(redactSensitive(error.resolution, secrets)));
-    throw error;
-  }
+  ]);
+  return executeValidated(profile, normalized, redactor, readContext);
 }
 
-async function executeValidated(profile: ApiProfile, rawInput: unknown, secrets: string[], readContext?: () => FileReadContext) {
-  const input = await validateRequest(profile, rawInput);
+async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor: Redactor, readContext?: () => FileReadContext) {
+  const input = await validateRequest(profile, rawInput, redactor);
   const op = await getOperation(input.operation_id, profile);
   let path: string;
   let body: string | FormData | undefined;
@@ -126,22 +116,29 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, secrets:
     }
     for (const [index, operand] of (input.files ?? []).entries()) {
       const binding = op.request.files!.find(file => file.field === operand.field)!;
-      const file = readSandboxedFile(operand.file_path, reads, ['files', index, 'file_path'], binding.kind, binding);
+      let file: ReturnType<typeof readSandboxedFile>;
+      try {
+        file = readSandboxedFile(operand.file_path, reads, ['files', index, 'file_path'], binding.kind, binding);
+      } catch (error) {
+        if (error instanceof ElevenLabsError) throw new ElevenLabsError(wrapUntrusted('The files.file_path operand [REDACTED] could not be read safely. File operands must be local paths. Check files.field and files.file_path against the declared file contract and host authorization.', `elevenlabs:api:${op.operation_id}`)!, error.code, 'Provide an authorized file matching the declared type and size.');
+        throw error;
+      }
       form.append(operand.field, new Blob([new Uint8Array(file.buffer)], { type: fileMimeTypeForFileName(file.fileName, binding.kind) }), file.fileName);
     }
     body = form;
   }
   const key = getApiKey();
-  secrets.push(key);
+  redactor.include(key);
   const signal = AbortSignal.timeout(op.timeout === 'long' ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
     response = await elevenLabsFetch(key, `https://api.elevenlabs.io${path}${suffix ? `?${suffix}` : ''}`, {
       method: op.method, redirect: 'manual', signal, ...(body === undefined ? {} : { body }),
+      redactor,
       ...(typeof body === 'string' ? { headers: { 'Content-Type': op.request.media_type! } } : {}),
     }, op.operation_id);
   } catch (error) {
-    throw await fetchFailure(error, op, secrets, signal);
+    throw await fetchFailure(error, op, signal, redactor);
   }
 
   const declared = op.responses.filter(candidate => candidate.status === response.status);
@@ -167,9 +164,12 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, secrets:
     data = { file_path: filePath, size_bytes: binary.length, media_type: descriptor.media_type };
   }
   try {
-    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, data, secrets);
+    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, data, redactor);
   } catch (error) {
-    if (error instanceof ElevenLabsError && error.code === 'INVALID_RESPONSE') throw await responseFailure(op, 'The provider response has invalid fields required by the connector.');
-    throw error;
+    let message = 'The provider returned success, but the connector could not safely process its response.';
+    try {
+      if (error instanceof ApiBoundaryError && error.code === 'INVALID_RESPONSE') message = redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`);
+    } catch { /* Keep the safe post-dispatch guidance when redaction itself failed. */ }
+    throw await responseFailure(op, message);
   }
 }

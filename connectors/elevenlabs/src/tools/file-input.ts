@@ -24,12 +24,12 @@ const CHANGED_RESOLUTION =
  * MCP_WORKSPACE_PATH sandbox (os.tmpdir() when unset). Document mode adds
  * regular-file, descriptor identity and runtime buffer-size checks.
  *
- * Security invariants (R1 — see planning doc Refactor Assessment):
- * 1. Remote URL inputs bypass the sandbox → FILE_NOT_FOUND at existsSync.
- * 2. Out-of-root lexical path → PATH_SANDBOX_VIOLATION before any disk read.
- * 3. In-root-but-missing file → FILE_NOT_FOUND.
- * 4. Symlink inside root pointing outside root → refused.
- * 5. Last-moment realpathSync re-canonicalisation before read (TOCTOU).
+ * Generic uploads reject remote URLs before disk access. Negotiated reads use
+ * the host-authorized canonical path for this exact operand, including outside
+ * the standalone root. Standalone reads enforce canonical root containment.
+ * Only curated legacy audio keeps URL-shaped inputs as FILE_NOT_FOUND at existsSync.
+ * Regular-file, descriptor identity and size checks protect generic uploads;
+ * curated audio retains its existing last-moment canonicalization checks.
  *
  * Callers own multipart field naming (`file` vs `audio`); this helper
  * returns `{ buffer, fileName, verifiedPath }` only.

@@ -1,4 +1,4 @@
-import { redactAtPaths, redactSensitive } from './api-sensitive.js';
+import { redactAtPaths, type Redactor } from './api-sensitive.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import formats = require('ajv-formats');
@@ -40,13 +40,14 @@ function ownData(value: unknown): unknown {
 function pointerParts(pointer: string): string[] {
   return pointer.split('/').slice(1).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
 }
-function graphIssues(errors: ErrorObject[] | null | undefined, prefix: string[], enumAdvice: string): ValidationIssue[] {
+function graphIssues(errors: ErrorObject[] | null | undefined, prefix: string[], enumAdvice: string, fields: Set<string>): ValidationIssue[] {
   return (errors ?? []).map(error => ({
-    path: [...prefix, ...pointerParts(error.instancePath), ...(['required', 'additionalProperties'].includes(error.keyword) ? [String(error.params.missingProperty ?? error.params.additionalProperty)] : [])],
+    path: [...prefix, ...pointerParts(error.instancePath).filter(part => fields.has(part)), ...(error.keyword === 'required' ? [String(error.params.missingProperty)] : error.keyword === 'additionalProperties' ? ['[REDACTED]'] : [])],
     keyword: error.keyword, message: error.keyword === 'enum' ? enumAdvice : `Provider constraint ${error.keyword} failed.`,
   }));
 }
-function argumentFailure(issues: ValidationIssue[]): ApiBoundaryError {
+function argumentFailure(issues: ValidationIssue[], redactor: Redactor): ApiBoundaryError {
+  issues = issues.map(issue => ({ ...issue, path: redactor.redact(issue.path) as string[], message: redactor.text(issue.message) }));
   return new ApiBoundaryError('VALIDATION_ERROR', 'The API arguments do not satisfy the local contract.', 'Correct the reported fields. Inspect allowed values with elevenlabs_discover_api using this operation_id; use a bare name from contract.definitions for a definition lookup. Ask the connector maintainer to refresh the reviewed catalogue dated 2026-11-08 if the provider added a value. If unsure who that is, contact whoever manages your connector installation.', issues);
 }
 function executionIssues(issues: z.ZodIssue[]): ValidationIssue[] {
@@ -87,12 +88,21 @@ function compilationSchema(schema: JsonSchema): JsonSchema {
 
 export class ApiValidator {
   private readonly ajv: Ajv2020;
+  private readonly fields = new Set<string>();
   private readonly compiled = new Map<string, ValidateFunction>();
   private readonly requests = new Map<string, ReturnType<typeof executionInputSchema.superRefine>>();
   private readonly roots: Record<string, JsonSchema>;
   private readonly graphId = 'urn:elevenlabs:api:catalogue';
 
   constructor(private readonly catalog: ApiCatalog) {
+    const collect = (value: unknown): void => {
+      if (Array.isArray(value)) value.forEach(collect);
+      else if (isRecord(value)) {
+        if (isRecord(value.properties)) Object.keys(value.properties).forEach(name => this.fields.add(name));
+        Object.values(value).forEach(collect);
+      }
+    };
+    collect(catalog);
     this.ajv = new Ajv2020({ ...catalog.validator_options, ownProperties: true });
     formats.default(this.ajv, { mode: 'full', formats: ['date', 'date-time', 'uri'] });
     this.ajv.addFormat('zoneinfo', { type: 'string', validate(value: string) {
@@ -152,7 +162,7 @@ export class ApiValidator {
         else if (value === undefined && op.request.media_type === 'multipart/form-data') value = {};
         if (root.suffix === 'body' && value === undefined && !op.request.required) continue;
         if (!root.validate(ownData(value))) {
-          for (const error of graphIssues(root.validate.errors, [root.field], enumGuidance(this.catalog))) issue(error.path, error.message, error.keyword);
+          for (const error of graphIssues(root.validate.errors, [root.field], enumGuidance(this.catalog), this.fields)) issue(error.path, error.message, error.keyword);
         }
       }
       if (op.request.media_type === null && Object.hasOwn(input, 'body')) issue(['body'], 'This operation declares no request body.');
@@ -183,9 +193,9 @@ export class ApiValidator {
     this.requests.set(op.operation_id, schema);
     return schema;
   }
-  validateRequest(op: ApiOperation, input: unknown): ApiExecutionInput {
+  validateRequest(op: ApiOperation, input: unknown, redactor: Redactor): ApiExecutionInput {
     const result = this.requestSchema(op).safeParse(input);
-    if (!result.success) throw argumentFailure(executionIssues(result.error.issues));
+    if (!result.success) throw argumentFailure(executionIssues(result.error.issues), redactor);
     return result.data;
   }
   responseDescriptor(op: ApiOperation, status: number, media: string | null): ApiResponseDescriptor {
@@ -193,25 +203,25 @@ export class ApiValidator {
     if (!response) throw new ApiBoundaryError('INVALID_RESPONSE', 'The response status or media does not match a declared success response.', responseRepair);
     return response;
   }
-  validateResponse(op: ApiOperation, status: number, media: string | null, data: unknown): ResponseContract {
+  validateResponse(op: ApiOperation, status: number, media: string | null, data: unknown, redactor: Redactor): ResponseContract {
     const response = this.responseDescriptor(op, status, media);
     if ((media === null && data !== null) || ((media === 'text/plain' || media === 'text/html') && typeof data !== 'string')) throw new ApiBoundaryError('INVALID_RESPONSE', 'The response data does not match its declared media.', responseRepair);
     if (response.schema === undefined) return 'matched';
     const validate = this.compile(op, this.responseRoot(op, op.responses.indexOf(response)));
     if (validate(ownData(data))) return 'matched';
-    const paths = [...new Set(graphIssues(validate.errors, [], enumGuidance(this.catalog)).map(issue => issue.path.join('.')))].slice(0, 5);
-    return { mismatch: wrapUntrusted(JSON.stringify({ message: 'Response data remains available, but the listed fields differ from the pinned schema. Check affected fields before relying on them; unaffected data remains usable. Report operation_id, status, content_type and response_contract to the connector maintainer or whoever manages your connector installation; keep raw data private. Do not blindly retry a mutation. Any pagination fields used by the connector are checked separately.', paths }), `elevenlabs:api:${op.operation_id}`)! };
+    const paths = [...new Set(graphIssues(validate.errors, [], enumGuidance(this.catalog), this.fields).map(issue => issue.path.join('.')))].slice(0, 5);
+    return { mismatch: redactor.wrap(JSON.stringify({ message: 'Response data remains available, but the listed fields differ from the pinned schema. Check affected fields before relying on them; unaffected data remains usable. Report operation_id, status, content_type and response_contract to the connector maintainer or whoever manages your connector installation; keep raw data private. Do not blindly retry a mutation. Any pagination fields used by the connector are checked separately.', paths }), `elevenlabs:api:${op.operation_id}`)! };
   }
 }
 let validatorPromise: Promise<ApiValidator> | undefined;
 export function loadApiValidator(): Promise<ApiValidator> {
   return validatorPromise ??= loadApiCatalog().then(catalog => new ApiValidator(catalog));
 }
-export async function validateRequest(profile: ApiProfile, input: unknown): Promise<ApiExecutionInput> {
+export async function validateRequest(profile: ApiProfile, input: unknown, redactor: Redactor): Promise<ApiExecutionInput> {
   const envelope = executionInputSchema.safeParse(input);
-  if (!envelope.success) throw argumentFailure(executionIssues(envelope.error.issues));
+  if (!envelope.success) throw argumentFailure(executionIssues(envelope.error.issues), redactor);
   const op = await getOperation(envelope.data.operation_id, profile);
-  return (await loadApiValidator()).validateRequest(op, input);
+  return (await loadApiValidator()).validateRequest(op, input, redactor);
 }
 
 const paginationSchemas = new WeakMap<ApiOperation, z.ZodType<{ has_more?: boolean; next_cursor?: string | null }>>();
@@ -262,16 +272,15 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
   });
 }
-export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, submittedSecrets: readonly string[] = []) {
+export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor) {
   const op = await getOperation(operationId);
-  // Submitted values and the key may be echoed anywhere; declared response fields are replaced only where they sit.
-  parsedData = redactSensitive(redactAtPaths(parsedData, op.sensitive_response_fields ?? []), submittedSecrets);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media);
   const binary = isBinaryResponseMedia(descriptor.media_type);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
-  const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData);
+  const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
+  if (!binary) parsedData = redactor.redact(redactAtPaths(parsedData, op.sensitive_response_fields ?? []));
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: descriptor.media_type,
