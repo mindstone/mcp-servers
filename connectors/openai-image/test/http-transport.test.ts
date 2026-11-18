@@ -162,22 +162,13 @@ describe('HTTP admission', () => {
   });
 
   it.each([
-    '127.0.0.1', '127.0.0.1:4312', 'localhost', 'localhost:4312', 'LOCALHOST', '[::1]', '[::1]:4312',
+    '127.0.0.1', '127.0.0.1:4312', 'localhost', 'localhost:4312', 'LOCALHOST', 'LOCALHOST:4312', '[::1]', '[::1]:4312',
   ])('preserves allowed Host %s', async host => {
     const connector = await importConnectorModule();
-    const port = await listen(connector);
-    expectToolIdentity(rpcResult(await post(port, listRequest, { host })));
-  });
-
-  // Current third-party adapter limitation: uppercase Host plus port gets an empty 400; flip this test when fixed upstream.
-  it('preserves pre-existing adapter rejection of uppercase Host LOCALHOST:4312 after outer guard admission', async () => {
-    const connector = await importConnectorModule({ OPENAI_API_KEY: 'sk-test-Acme-adapter-host' });
     const provider = fakeProvider();
-    const host = 'LOCALHOST:4312';
+    const port = await listen(connector);
     expect(connector.isLoopbackHost(host)).toBe(true);
-    const response = await post(await listen(connector), listRequest, { host });
-    expect(response.status).toBe(400);
-    expect(response.text).toBe('');
+    expectToolIdentity(rpcResult(await post(port, listRequest, { host })));
     expect(provider).not.toHaveBeenCalled();
   });
 
