@@ -1,7 +1,7 @@
 import { FILE_READ_CAPABILITIES, fileReadContext } from '../file-read-context.js';
 import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createStdioTransport } from "./stdio-transport.js";
 import logger from '../utils/logger.js';
 import { GOOGLE_RATE_LIMIT_NEXT_STEP, isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../utils/google-retry.js';
 import { describeApiErrorUntrusted } from '../utils/apiError.js';
@@ -359,10 +359,7 @@ export class GSuiteServer {
       {
         capabilities: {
           ...FILE_READ_CAPABILITIES,
-          tools: {
-            list: true,
-            call: true
-          },
+          tools: {},
           resources: {}
         }
       }
@@ -1223,7 +1220,7 @@ export class GSuiteServer {
       this.server.onerror = (error) => console.error('MCP Error:', error);
       
       // Connect transport
-      const transport = new StdioServerTransport();
+      const transport = createStdioTransport();
       await this.server.connect(transport);
       logger.info('Google Workspace MCP server running on stdio');
     } catch (error) {

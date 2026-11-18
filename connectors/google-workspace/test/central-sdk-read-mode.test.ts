@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
-// Resolve every SDK class from this connector's 0.7 installation.
+// Resolve every SDK class from this connector's own SDK installation.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -151,7 +151,7 @@ describe('Google SDK request-scoped file read metadata', () => {
   async function callTool(params: CallToolRequest['params']) {
     if (!client) throw new Error('SDK client has not initialized');
     const result = await client.request({ method: 'tools/call', params }, CallToolResultSchema);
-    expect(wireSend).toHaveBeenCalledWith(expect.objectContaining({ method: 'tools/call', params }));
+    expect(wireSend).toHaveBeenCalledWith(expect.objectContaining({ method: 'tools/call', params }), expect.anything());
     expect(unexpectedRequests).toEqual([]);
     return result;
   }
