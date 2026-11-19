@@ -111,7 +111,13 @@ node dist/index.js
   the returned file); accumulated `email-imap-attachment-*` directories are
   safe to delete once the files are no longer needed. Defaults to the system
   temp directory when unset.
-- `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
+- `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management.
+  When it is set, `configure_email_imap` asks the host app to save the account.
+  The file is read with the shared hardened bridge reader: a symlink, a file
+  that is not a regular file, one over 64 KiB, or one that does not parse is
+  refused with one line on stderr. When the variable is unset or the file is
+  refused, `configure_email_imap` configures the account for this session only
+  and says so in its reply.
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
 #### Send-side caps (`email_send`)
@@ -263,7 +269,7 @@ confirmation as `email_send`.
 
 ### Messages
 - `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination (returns at most 50 messages when `limit` is omitted; `hasMore: true` signals more results)
-- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes)
+- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes). Each text and HTML body is capped at 1 MiB (1048576 bytes); the rest of a longer body is not downloaded, and the result's `bodyTruncated` field lists the cut bodies and the cap
 - `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`); writes are exclusive-create, so existing files are never overwritten
 - `email_move_messages` — Move emails between folders (fallback expunge of the source is gated on a verified-complete copy; destructive)
 - `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; aborts with an error if the Trash move fails; destructive)

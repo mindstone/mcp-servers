@@ -4,15 +4,15 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { BRIDGE_NOT_AVAILABLE, bridgeRequest } from '../bridge.js';
 import { detectProviderFromEmail, getPreset, listPresetKeys } from '../presets.js';
 import { EmailImapError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { initClients } from './index.js';
 
-// Bridge warning/error text and request-failure messages are not the
-// connector's own prose, so they reach the model enveloped.
+// A bridge request-failure message is not the connector's own prose, so it
+// reaches the model enveloped (the reader envelopes the host's own text).
 function wrapBridgeText(text: string): string {
   return wrapUntrusted(text, 'email-imap:host-bridge') ?? text;
 }
@@ -89,72 +89,71 @@ export function registerConfigureTools(server: McpServer): void {
       }
 
       // For known providers, validate the preset
-      if (provider !== 'custom') {
-        const preset = getPreset(provider);
-        if (!preset) {
-          throw new EmailImapError(
-            `Unsupported provider "${provider}". Supported providers: icloud, yahoo, custom.`,
-            'INVALID_PROVIDER',
-            'Use one of the supported providers or "custom" with explicit IMAP/SMTP settings.',
-          );
-        }
+      const preset = getPreset(provider);
+      if (provider !== 'custom' && !preset) {
+        throw new EmailImapError(
+          `Unsupported provider "${provider}". Supported providers: icloud, yahoo, custom.`,
+          'INVALID_PROVIDER',
+          'Use one of the supported providers or "custom" with explicit IMAP/SMTP settings.',
+        );
+      }
+      const providerName = preset?.name ?? provider;
+
+      // Ask the host app to save the account. Without a host app (or when the
+      // reader refused the host's state file) the connector is configured for
+      // this process only, and says so.
+      let result: Awaited<ReturnType<typeof bridgeRequest>>;
+      try {
+        result = await bridgeRequest('/bundled/email-imap/configure', {
+          email,
+          password,
+          provider,
+        });
+      } catch (error) {
+        // Bridge request failed (network, timeout, etc.) — surface as error
+        throw new EmailImapError(
+          `Bridge request failed: ${wrapBridgeText(error instanceof Error ? error.message : String(error))}`,
+          'BRIDGE_ERROR',
+          'Could not reach the host app bridge. Ensure the host app is running.',
+        );
       }
 
-      // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await bridgeRequest('/bundled/email-imap/configure', {
-            email,
-            password,
-            provider,
-          });
-          if (result.success) {
-            setCredentials(email, password, provider);
-            await initClients({
-              email,
-              password,
-              provider,
-            });
-
-            const preset = getPreset(provider);
-            const providerName = preset?.name ?? provider;
-            const message = result.warning
-              ? `Email IMAP configured successfully. Note: ${wrapBridgeText(result.warning)}`
-              : `Email IMAP configured successfully for ${providerName}.`;
-            return JSON.stringify({ ok: true, message, provider });
-          }
-          // Bridge returned failure — surface as error, do NOT fall through
-          throw new EmailImapError(
-            result.error ? wrapBridgeText(result.error) : 'Bridge configuration failed',
-            'BRIDGE_ERROR',
-            'The host app bridge rejected the configuration request. Check the host app logs.',
-          );
-        } catch (error) {
-          if (error instanceof EmailImapError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
-          throw new EmailImapError(
-            `Bridge request failed: ${wrapBridgeText(error instanceof Error ? error.message : String(error))}`,
-            'BRIDGE_ERROR',
-            'Could not reach the host app bridge. Ensure the host app is running.',
-          );
-        }
+      if (!result.success && result.error === BRIDGE_NOT_AVAILABLE) {
+        setCredentials(email, password, provider);
+        await initClients({
+          email,
+          password,
+          provider,
+        });
+        return JSON.stringify({
+          ok: true,
+          message:
+            `Email IMAP configured for ${providerName} for this session only: no host app ` +
+            'saved the password, so configure again after the connector restarts.',
+          provider,
+        });
       }
 
-      // No bridge — configure directly
+      if (!result.success) {
+        // Bridge returned failure — surface as error, do NOT fall through.
+        // The reader has already enveloped any text the host sent.
+        throw new EmailImapError(
+          result.error ?? 'Bridge configuration failed',
+          'BRIDGE_ERROR',
+          'The host app bridge rejected the configuration request. Check the host app logs.',
+        );
+      }
+
       setCredentials(email, password, provider);
       await initClients({
         email,
         password,
         provider,
       });
-
-      const preset = getPreset(provider);
-      const providerName = preset?.name ?? provider;
-      return JSON.stringify({
-        ok: true,
-        message: `Email IMAP configured successfully for ${providerName}.`,
-        provider,
-      });
+      const message = result.warning
+        ? `Email IMAP configured successfully. Note: ${result.warning}`
+        : `Email IMAP configured successfully for ${providerName}.`;
+      return JSON.stringify({ ok: true, message, provider });
     }),
   );
 }

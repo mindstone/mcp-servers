@@ -168,13 +168,61 @@ export async function streamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 /**
- * Download a message part as text by UID and part number.
+ * Cap on each text or HTML body part `email_get_message` returns. A message
+ * body is sender-controlled and otherwise unbounded; past this the rest of the
+ * part is not downloaded, and the result says the body was cut.
  */
-export async function downloadPartAsText(uid: number, part: string): Promise<string> {
+export const MAX_BODY_PART_BYTES = 1024 * 1024;
+
+export interface DownloadedText {
+  text: string;
+  /** True when the part was longer than the cap and was cut there. */
+  truncated: boolean;
+}
+
+/**
+ * Download a message part as text by UID and part number, decoded, at most
+ * `maxBytes` bytes. One byte past the cap is asked for, so a part of exactly
+ * `maxBytes` is not reported as cut. A cut can split a multi-byte character;
+ * that partial character is dropped.
+ *
+ * imapflow caps the input, not just the output, of the stages that buffer a
+ * whole part (format=flowed unwrapping and the Japanese charset decoder), and
+ * those stages can shrink text, so the output length alone can miss a cut.
+ * For those parts, one whose encoded size is over the cap is reported as cut:
+ * the encoded size bounds the input those stages see, so this never misses a
+ * cut, though it can flag a part that only just fitted.
+ */
+export async function downloadPartAsText(
+  uid: number,
+  part: string,
+  maxBytes: number = MAX_BODY_PART_BYTES,
+): Promise<DownloadedText> {
   const client = await getConnection();
-  const partData = await client.download(uid, part, { uid: true });
+  const partData = await client.download(uid, part, { uid: true, maxBytes: maxBytes + 1 });
   const content = await streamToBuffer(partData.content);
-  return content.toString('utf8');
+  if (content.length <= maxBytes) {
+    return {
+      text: content.toString('utf8'),
+      truncated: inputMayHaveBeenCut(partData.meta, maxBytes),
+    };
+  }
+  const text = new TextDecoder('utf-8').decode(content.subarray(0, maxBytes), { stream: true });
+  return { text, truncated: true };
+}
+
+/** Charsets imapflow decodes with its whole-part-buffering Japanese decoder. */
+const BUFFERED_CHARSET = /^jis|^iso-?2022-?jp|^euc-?jp/;
+
+function inputMayHaveBeenCut(
+  meta: { expectedSize?: number; flowed?: boolean; charset?: string } | undefined,
+  maxBytes: number,
+): boolean {
+  if (!meta || typeof meta.expectedSize !== 'number' || meta.expectedSize <= maxBytes) {
+    return false;
+  }
+  const charset = (meta.charset ?? '').trim().toLowerCase();
+  return meta.flowed === true || BUFFERED_CHARSET.test(charset);
 }
 
 /**

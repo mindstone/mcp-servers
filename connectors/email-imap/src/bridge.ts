@@ -1,81 +1,26 @@
-import * as fs from 'fs';
-import { z } from 'zod';
-import { type BridgeState, EmailImapError, REQUEST_TIMEOUT_MS } from './types.js';
+import { REQUEST_TIMEOUT_MS } from './types.js';
+import { type BridgeResponse, postToBridge } from './bridge-reader.js';
 
-// Unknown fields (e.g. a host's `message`) are allowed and dropped.
-const BridgeResponseSchema = z.object({
-  success: z.boolean(),
-  warning: z.string().optional(),
-  error: z.string().optional(),
-});
-
-export type BridgeResponse = z.infer<typeof BridgeResponseSchema>;
+export type { BridgeResponse };
 
 /**
- * Path to bridge state file, supporting both current and legacy env vars.
+ * The vendored reader's own answer when no host app runs this connector. It
+ * gives the same answer when a host-supplied state file is refused (and logs
+ * one stderr line), so the two cannot be told apart here. Host-sent error text
+ * is always enveloped, so it never equals this.
  */
-export const BRIDGE_STATE_PATH =
-  process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
-
-const loadBridgeState = (): BridgeState | null => {
-  if (!BRIDGE_STATE_PATH) return null;
-  try {
-    const raw = fs.readFileSync(BRIDGE_STATE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
+export const BRIDGE_NOT_AVAILABLE = 'Bridge not available';
 
 /**
- * Send a request to the host app bridge.
- *
- * The bridge is an HTTP server running inside the host app (e.g. the host application)
- * that handles credential management and other cross-process operations.
+ * POST to the host app bridge, a loopback HTTP server inside the host app that
+ * saves the account's credentials. `bridge-reader.ts` is the vendored hardened
+ * reader: keep it byte-identical to `test-harness/src/bridge-reader.ts`
+ * (`scripts/check-bridge-reader.mjs` enforces this) and read the bridge only
+ * through it. Its `error` and `warning` text from the host comes back already
+ * enveloped; network failures and timeouts are thrown.
  */
-export const bridgeRequest = async (
+export const bridgeRequest = (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<BridgeResponse> => {
-  const bridge = loadBridgeState();
-  if (!bridge) {
-    return { success: false, error: 'Bridge not available' };
-  }
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bridge.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
-  }
-
-  const unexpectedFormat = () =>
-    new EmailImapError(
-      'The host app bridge returned a response in an unexpected format.',
-      'BRIDGE_ERROR',
-      'The host app may be out of date with this connector. Update the host app and try again.',
-    );
-
-  let reply: unknown;
-  try {
-    reply = await response.json();
-  } catch (error) {
-    // Only a body that is not JSON is an unexpected format; a read failure
-    // (connection dropped, timeout) propagates as an unreachable bridge.
-    if (error instanceof SyntaxError) {
-      throw unexpectedFormat();
-    }
-    throw error;
-  }
-  const parsed = BridgeResponseSchema.safeParse(reply);
-  if (!parsed.success) {
-    throw unexpectedFormat();
-  }
-  return parsed.data;
-};
+): Promise<BridgeResponse> =>
+  postToBridge(urlPath, body, { connector: 'email-imap', timeoutMs: REQUEST_TIMEOUT_MS });

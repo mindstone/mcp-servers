@@ -42,6 +42,8 @@ export interface MockMessageData {
    * If unset for a given part, download() falls back to a generic placeholder.
    */
   bodyByPart?: Record<string, string>;
+  /** download() `meta` for a part, as imapflow reports it (encoded size, flowed, charset). */
+  metaByPart?: Record<string, { expectedSize?: number; flowed?: boolean; charset?: string }>;
 }
 
 export interface ImapMockOptions {
@@ -96,6 +98,8 @@ export function createImapMock(options: ImapMockOptions = {}) {
   };
   /** Flag arguments seen by messageFlagsAdd/messageFlagsRemove, in order. */
   const flagsCalls: string[][] = [];
+  /** Options passed to download(), in order. */
+  const downloadOpts: Array<{ maxBytes?: number }> = [];
   /** Mailbox paths seen by getMailboxLock, in order. */
   const mailboxLocks: string[] = [];
   /** Operands seen by status/mailboxCreate/mailboxRename/mailboxDelete, in order. */
@@ -244,12 +248,16 @@ export function createImapMock(options: ImapMockOptions = {}) {
       };
     }
 
-    async download(uid: number, part: string, _opts?: unknown) {
+    async download(uid: number, part: string, opts?: { maxBytes?: number }) {
       const { Readable } = await import('node:stream');
+      downloadOpts.push(opts ?? {});
       const msg = messages.find((m) => m.uid === uid);
-      const body = msg?.bodyByPart?.[part] ?? 'Test email body content';
+      const body = Buffer.from(msg?.bodyByPart?.[part] ?? 'Test email body content');
+      // Like imapflow, `maxBytes` caps the decoded content and stops there.
+      const content = opts?.maxBytes !== undefined ? body.subarray(0, opts.maxBytes) : body;
       return {
-        content: Readable.from([Buffer.from(body)]),
+        meta: msg?.metaByPart?.[part] ?? { expectedSize: body.length },
+        content: Readable.from([content]),
       };
     }
 
@@ -318,6 +326,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     constructorCalls,
     calls,
     flagsCalls,
+    downloadOpts,
     mailboxLocks,
     mailboxOps,
     behavior,
