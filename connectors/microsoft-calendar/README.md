@@ -171,7 +171,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `get_event` | Get detailed information about a specific calendar event (optionally including attachment metadata; `attachmentsTruncated` flags further pages). |
 | `create_event` | Create a new calendar event (with optional Teams meeting and recurrence). |
 | `update_event` | Update an existing calendar event (including adding/removing attendees and recurrence). |
-| `delete_event` | Delete a calendar event. |
+| `delete_event` | Delete an event (moves to Deleted Items); attendees get a cancellation when the user is the organizer. |
 | `cancel_event` | Cancel a meeting as organizer with an optional message to attendees. |
 | `respond_to_event` | Accept, decline, or tentatively accept an event invitation. |
 | `get_free_busy` | Check availability/free-busy status for users. |

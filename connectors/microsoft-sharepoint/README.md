@@ -188,6 +188,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 
 ## Security notes
 
+- IDs and paths are passed plain, not pre-encoded. IDs containing `?`, `#`, `%`, `\` or a `.`/`..` segment, or paths containing `\`, control characters or a `.`/`..` segment, are refused with an error naming the field without echoing the value; opaque site IDs also refuse `/`; file names containing `#` or `%` work. `get_sites_delta` accepts only links from Graph v1.0.
 - `authenticate_sharepoint` is the SharePoint-specific incremental-consent setup tool; the rest of the cohort's base auth comes from [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `authenticate_microsoft_account`.
 - Manual error payloads include `action_required` and `next_step` recovery fields while preserving the existing `auth_required` and success shapes.
 - The bundled silent SharePoint page-content fallback was removed — handler errors now surface the actual failure rather than returning a stale page body.

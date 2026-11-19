@@ -6,9 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- The descriptions of the tools that send, delete or change what other people see now say plainly what happens: who gets the email, that it is sent straight away and this tool cannot recall it, and where a deleted email goes. `delete_email` with `permanent: true` now says it is deleted with Microsoft's delete request instead of being moved to Deleted Items; Microsoft may still keep it for a time (in Deleted Items or its recoverable items), so this is not a guaranteed permanent erase. `reply_to_email` says a reply goes to the Reply-To address when the email has one, and `set_automatic_replies` says settings left out keep their current values.
+- `send_email`, `reply_to_email`, `forward_email`, `send_draft` and `set_automatic_replies` are marked `destructiveHint: true`, because each reaches other people and cannot be taken back. Drafts, moves, flags and read marks stay non-destructive: they change only the user's own mailbox and can be undone.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Message, attachment and folder IDs are now checked and percent-encoded before they go into a Microsoft Graph address, and an ID that could point the request at another resource (for example one containing `..`, `?` or `#`) is refused with an error that names the argument but not its value. A caller-written `filter`, the search text and the conversation ID are encoded so they cannot add or change query parameters.
 
 ## [0.4.1] - 2026-11-06
 

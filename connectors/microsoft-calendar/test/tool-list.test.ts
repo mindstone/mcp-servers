@@ -42,6 +42,14 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   list_calendars: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
+const DESTRUCTIVE_TOOLS = [
+  'create_event',
+  'update_event',
+  'delete_event',
+  'cancel_event',
+  'respond_to_event',
+];
+
 describe('microsoft-calendar tools/list', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;
@@ -84,6 +92,58 @@ describe('microsoft-calendar tools/list', () => {
           `${tool.name}.${key}`,
         ).toBe(value);
       }
+    }
+  });
+
+  it('does not instruct the model to confirm or ask first in tool descriptions', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(
+        /confirm with the user|ask the user (first|before)/i,
+      );
+    }
+  });
+
+  it('marks every send, delete, or cancellation tool as destructive', async () => {
+    const response = await client.client.listTools();
+    for (const name of DESTRUCTIVE_TOOLS) {
+      const tool = response.tools.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.annotations?.destructiveHint, name).toBe(true);
+    }
+  });
+
+  it('names other tools only by their plain name', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(/[a-z0-9]+(__|\.|:)[a-z]+_[a-z_]+/);
+    }
+  });
+});
+
+describe('microsoft-calendar description regression proof', () => {
+  it('explains declined-event removal and attendee-only notifications', async () => {
+    const cfg = createMicrosoftConfigDir();
+    const client = await createTestClient({
+      env: { MS_CLIENT_ID: 'mock-client-id', MS_CONFIG_DIR: cfg.configPath },
+    });
+
+    try {
+      const response = await client.client.listTools();
+      const descriptions = new Map(response.tools.map((tool) => [tool.name, tool.description ?? '']));
+
+      expect(descriptions.get('respond_to_event')).toContain(
+        'a declined event is normally removed from the user\'s calendar',
+      );
+      expect(descriptions.get('respond_to_event')).toContain(
+        'after a decline the event may be gone, so changing it may not be possible here',
+      );
+      expect(descriptions.get('update_event')).toContain(
+        'a change that only adds or removes attendees normally notifies just those people',
+      );
+    } finally {
+      await client.close();
+      cfg.cleanup();
     }
   });
 });

@@ -190,6 +190,15 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(call).toBeDefined();
   });
 
+  it('delete_library_item missing arguments warns that the item goes to the recycle bin', async () => {
+    const result = await client.callTool('delete_library_item', { driveId: 'drive-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain("site's recycle bin");
+    expect(json.error).not.toContain('permanently deletes');
+  });
+
   it('read_site_page returns page text from web parts', async () => {
     const result = await client.callTool('read_site_page', { siteId: 'site-1', pageId: 'page-1' });
     expect(result.isError).not.toBe(true);

@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "@microsoft/microsoft-graph-client": "^3.0.7",
-    "isomorphic-fetch": "^3.0.0"
+    "isomorphic-fetch": "^3.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22",

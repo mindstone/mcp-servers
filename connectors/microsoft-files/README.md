@@ -172,16 +172,16 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | ---- | ----------- |
 | `list_files` | List files and folders in OneDrive (root by default). |
 | `get_file` | Get metadata for a specific file or folder. |
-| `download_file` | Get a short-lived download URL for a file. |
+| `download_file` | Get a short-lived download link for a file; it works without sign-in, so it should not be shared. |
 | `search_files` | Search for files in OneDrive by name or content. |
 | `upload_file` | Upload a file to OneDrive (text up to 4 MB; binary as base64 up to 10 MB via a resumable upload session). |
 | `create_folder` | Create a new folder in OneDrive. |
-| `delete_file` | Delete a file or folder. |
+| `delete_file` | Delete a file or folder (moves to the OneDrive recycle bin). |
 | `move_file` | Move a file or folder to a new location. |
 | `copy_file` | Copy a file or folder to a new location. |
 | `get_recent` | List recently accessed files. |
 | `get_shared` | List files shared with you by others. |
-| `share_file` | Create a sharing link for a file or folder. |
+| `share_file` | Create a sharing link for a file or folder (default: anyone in the organization with the link can view). |
 | `read_text_file` | Read the contents of a text file. |
 | `invite_to_file` | Share a file or folder with specific people by email (read or write). |
 | `list_file_permissions` | List the sharing permissions granted on a file or folder. |
@@ -193,6 +193,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 
 ## Security notes
 
+- IDs and paths are passed plain, not pre-encoded. IDs containing `?`, `#`, `%`, `\` or a `.`/`..` segment, or paths containing `\`, control characters or a `.`/`..` segment, are refused with an error naming the field without echoing the value; file names containing `#` or `%` work. Path-addressed share links, permissions, versions, and copy actions now work.
 - No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
 - Token-provider refresh failures map to the structured `auth_required` response so the host can drive reauth without crashing.
 - `upload_file` enforces empty-content validation in line with the bundled connector to reject zero-byte uploads as a misuse.

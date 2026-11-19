@@ -2,10 +2,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createLogger, redactEmail } from './logger.js';
 import { atomicCredentialWrite, sweepStaleTemps } from './utils/atomicCredentialWrite.js';
+import {
+  MicrosoftCredentialFileError,
+  parseCredentialJson,
+  readGuardedCredentialFile,
+} from './guardedCredentialRead.js';
+import { z } from 'zod';
 
-import type { MicrosoftAccount, AccountsConfig } from './types.js';
+import type { MicrosoftAccount } from './types.js';
+import type { MicrosoftCredentialFileKind, MicrosoftCredentialFileReason } from './guardedCredentialRead.js';
 
-export type { MicrosoftAccount };
+export type { MicrosoftAccount, MicrosoftCredentialFileKind, MicrosoftCredentialFileReason };
+export { MicrosoftCredentialFileError };
 
 const log = createLogger('microsoft-token');
 
@@ -17,12 +25,38 @@ export interface TokenData {
   scope?: string;
 }
 
-type RawTokenData = Partial<TokenData> & {
-  expires_at?: number | string;
-  expiresAt?: number | string;
-  expires_in?: number | string;
-  token_type?: string;
-};
+const expiryValueSchema = z.union([z.number(), z.string()]).nullish();
+
+// Accepts every shape the host writes (pretty-printed, `expires_at: null` when a
+// refresh response omitted expires_in, extra keys spread from an older token).
+const rawTokenSchema = z
+  .object({
+    access_token: z.string().optional(),
+    refresh_token: z.string().nullish(),
+    token_type: z.string().nullish(),
+    scope: z.string().nullish(),
+    expires_at: expiryValueSchema,
+    expiresAt: expiryValueSchema,
+    expires_in: expiryValueSchema,
+  })
+  .passthrough();
+
+type RawTokenData = z.infer<typeof rawTokenSchema>;
+
+const accountsFileSchema = z
+  .object({
+    accounts: z
+      .array(
+        z
+          .object({
+            email: z.string().min(1),
+            displayName: z.string().nullish(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
 
 export type MicrosoftRefreshDisabledReason = 'token_expired' | 'refresh_failed';
 
@@ -43,13 +77,29 @@ function isRefreshDisabled(): boolean {
   return process.env.MICROSOFT_DISABLE_REFRESH === '1';
 }
 
-function isMissingFileError(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code?: unknown }).code === 'ENOENT'
-  );
+/**
+ * Read and schema-check a credential file. `null` means the file does not exist;
+ * every other problem throws `MicrosoftCredentialFileError` (fixed message, no path or content).
+ */
+async function readCredentialFile<T>(
+  filePath: string,
+  kind: MicrosoftCredentialFileKind,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+): Promise<T | null> {
+  try {
+    const text = await readGuardedCredentialFile(filePath, kind);
+    if (text === null) return null;
+    const parsed = schema.safeParse(parseCredentialJson(text, kind));
+    if (!parsed.success) {
+      throw new MicrosoftCredentialFileError(kind, 'invalid_shape');
+    }
+    return parsed.data;
+  } catch (err) {
+    if (err instanceof MicrosoftCredentialFileError) {
+      log.warn('Refused Microsoft credential file', { kind, reason: err.reason });
+    }
+    throw err;
+  }
 }
 
 function sanitizeEmail(email: string): string {
@@ -85,14 +135,10 @@ export class TokenProvider {
     return path.join(this.configDir, 'accounts.json');
   }
 
+  /** `[]` when accounts.json is missing; throws `MicrosoftCredentialFileError` when it is refused or invalid. */
   async loadAccounts(): Promise<MicrosoftAccount[]> {
-    try {
-      const data = await fs.readFile(this.getAccountsPath(), 'utf-8');
-      const config = JSON.parse(data) as AccountsConfig;
-      return config.accounts || [];
-    } catch {
-      return [];
-    }
+    const config = await readCredentialFile(this.getAccountsPath(), 'accounts', accountsFileSchema);
+    return (config?.accounts ?? []) as MicrosoftAccount[];
   }
 
   async getDefaultAccount(): Promise<string | null> {
@@ -117,10 +163,10 @@ export class TokenProvider {
 
     return {
       access_token: raw.access_token,
-      refresh_token: raw.refresh_token,
+      refresh_token: raw.refresh_token ?? undefined,
       expires_at: expiresAt,
       token_type: raw.token_type ?? 'Bearer',
-      scope: raw.scope,
+      scope: raw.scope ?? undefined,
     };
   }
 
@@ -142,7 +188,7 @@ export class TokenProvider {
       }
     }
 
-    if (raw.expires_in !== undefined) {
+    if (raw.expires_in !== undefined && raw.expires_in !== null) {
       const expiresIn = typeof raw.expires_in === 'string' ? Number(raw.expires_in) : raw.expires_in;
       if (typeof expiresIn === 'number' && Number.isFinite(expiresIn)) {
         return Date.now() + expiresIn * 1000;
@@ -152,30 +198,26 @@ export class TokenProvider {
     return 0;
   }
 
+  /**
+   * The per-account token, else the legacy `tokens.json`, else `null` when neither exists.
+   * A refused or invalid file throws `MicrosoftCredentialFileError` and is not skipped over.
+   */
   async loadToken(email?: string): Promise<TokenData | null> {
     const resolvedEmail = await this.resolveEmail(email);
 
-    try {
-      const tokenPath = this.getTokenPath(resolvedEmail);
-      const data = await fs.readFile(tokenPath, 'utf-8');
-      this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
+    const raw = await readCredentialFile(this.getTokenPath(resolvedEmail), 'token', rawTokenSchema);
+    if (raw !== null) {
+      this.cachedToken = this.normalizeToken(raw);
       return this.cachedToken;
-    } catch (err) {
-      if (!isMissingFileError(err)) {
-        throw err;
-      }
-      try {
-        const data = await fs.readFile(this.getLegacyTokenPath(), 'utf-8');
-        this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
-        log.info('Loaded token from legacy tokens.json');
-        return this.cachedToken;
-      } catch (legacyErr) {
-        if (isMissingFileError(legacyErr)) {
-          return null;
-        }
-        throw legacyErr;
-      }
     }
+
+    const legacyRaw = await readCredentialFile(this.getLegacyTokenPath(), 'token', rawTokenSchema);
+    if (legacyRaw === null) {
+      return null;
+    }
+    this.cachedToken = this.normalizeToken(legacyRaw);
+    log.info('Loaded token from legacy tokens.json');
+    return this.cachedToken;
   }
 
   invalidateCachedToken(): void {

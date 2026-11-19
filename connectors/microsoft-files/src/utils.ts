@@ -6,6 +6,7 @@ import {
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { AUTH_TOOL_NAME, FilesBusinessError, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { GraphRequestTargetError } from './graph-request-target.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /**
@@ -193,6 +194,15 @@ function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null 
  * generic recovery-guidance envelope otherwise.
  */
 export function buildErrorResponse(err: unknown): CallToolResult {
+  // A refused ID, path or query value: the message names the field only,
+  // never the value, and re-authenticating cannot help.
+  if (err instanceof GraphRequestTargetError) {
+    return errorResponse({
+      error: err.message,
+      action_required: err.actionRequired,
+      next_step: err.nextStep,
+    });
+  }
   if (err instanceof FilesBusinessError) {
     return errorResponse({
       error: err.message,

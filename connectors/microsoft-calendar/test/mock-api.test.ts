@@ -361,17 +361,31 @@ describe('microsoft-calendar mock-API integration', () => {
   // -------------------------------------------------------------------------
   // respond_to_event
   // -------------------------------------------------------------------------
-  it('respond_to_event POSTs to /me/events/{id}/{response}', async () => {
-    await client.callTool('respond_to_event', {
-      id: 'event-1',
-      response: 'accept',
-      comment: 'See you there!',
-    });
-    const call = state.requests.find(
-      (r) => r.method === 'POST' && r.pathname.endsWith('/me/events/event-1/accept'),
-    );
-    expect(call?.body).toMatchObject({ sendResponse: true, comment: 'See you there!' });
-  });
+  it.each([
+    ['accept', 'accept', 'Event accepted'],
+    ['decline', 'decline', 'Event declined'],
+    ['tentative', 'tentativelyAccept', 'Event tentatively accepted'],
+  ] as const)(
+    'respond_to_event maps %s to the Graph %s action and encodes the event ID',
+    async (response, action, expectedMessage) => {
+      const result = await client.callTool('respond_to_event', {
+        id: 'AAMk/AGI+2==',
+        response,
+        comment: 'See you there!',
+      });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { success: boolean; message: string };
+      expect(json.success).toBe(true);
+      expect(json.message).toBe(expectedMessage);
+      const call = state.requests.find(
+        (r) =>
+          r.method === 'POST' &&
+          r.pathname.endsWith(`/me/events/AAMk%2FAGI%2B2%3D%3D/${action}`),
+      );
+      expect(call).toBeDefined();
+      expect(call?.body).toMatchObject({ sendResponse: true, comment: 'See you there!' });
+    },
+  );
 
   it('respond_to_event rejects missing id or response', async () => {
     const result = await client.callTool('respond_to_event', { id: 'event-1' });

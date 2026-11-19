@@ -4,9 +4,14 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The descriptions of the tools that send messages, create chats or set presence now say plainly that the message goes out straight away and who sees it. These externally visible actions are marked `destructiveHint: true`.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Chat, team, channel and message IDs are now checked and percent-encoded before they go into a Microsoft Graph address; an ID containing `?`, `#`, `%`, `\` or a `.`/`..` segment is refused, while user IDs also refuse `/`, `?`, `%`, `\`, control characters and `.`/`..` segments (guest principal names may contain `#`). `find_user` search text is encoded so it cannot add query parameters.
 
 ## [0.3.3] - 2026-11-06
 

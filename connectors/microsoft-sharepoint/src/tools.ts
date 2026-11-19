@@ -230,7 +230,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
       path: z
         .string()
         .optional()
-        .describe('Folder path within the library (e.g., "General/Reports"). Omit for root.'),
+        .describe('Folder path within the library (plain names, not URL-encoded; e.g., "General/Reports"). Omit for root.'),
       top: z.number().optional().describe('Max items to return (default: 50)'),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
@@ -248,7 +248,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'download_library_file',
-    description: 'Get a download URL for a file in a SharePoint document library (valid for a short period).',
+    description:
+      'Get a temporary download link for a file in a SharePoint document library. Anyone who has the link can download the file without signing in, for a short time, so do not share it or show it to anyone beyond what the user asked for. The file itself is not changed.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File item ID'),
@@ -281,13 +282,14 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'upload_library_file',
-    description: 'Upload a text file to a SharePoint document library (max 4MB).',
+    description:
+      'Upload a text file to a SharePoint document library (max 4MB). If a file already exists at that path it is replaced; the library normally keeps the old content in its version history (see list_file_versions). Everyone with access to the library can see the file.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       path: z
         .string()
         .optional()
-        .describe('Destination path including filename (e.g., "General/notes.txt")'),
+        .describe('Destination path including filename (plain names, not URL-encoded; e.g., "General/notes.txt")'),
       content: z.string().optional().describe('File content (text)'),
     }),
     annotations: WRITE_ANNOTATIONS,
@@ -297,13 +299,15 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     name: 'upload_library_file_binary',
     description:
       'Upload a binary or large file (base64-encoded content, up to 100MB decoded) to a SharePoint document library using a resumable upload session. ' +
+      'If a file with the same name exists, by default the new one is saved under a different name; conflictBehavior "replace" overwrites the existing file (its earlier content is normally kept in the file\'s version history). ' +
+      'Everyone with access to the library can see the file. ' +
       'Use upload_library_file instead for small text files.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       path: z
         .string()
         .optional()
-        .describe('Destination path including filename (e.g., "General/report.pdf")'),
+        .describe('Destination path including filename (plain names, not URL-encoded; e.g., "General/report.pdf")'),
       contentBase64: z.string().optional().describe('File content, base64-encoded'),
       conflictBehavior: z
         .enum(['fail', 'rename', 'replace'])
@@ -315,17 +319,19 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'create_library_folder',
-    description: 'Create a new folder in a SharePoint document library.',
+    description:
+      'Create a new folder in a SharePoint document library. Fails if something with that name already exists there; nothing is replaced. Everyone with access to the library can see it. It can be removed with delete_library_item.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
-      path: z.string().optional().describe('Full path for new folder (e.g., "General/NewFolder")'),
+      path: z.string().optional().describe('Full path for new folder (plain names, not URL-encoded; e.g., "General/NewFolder")'),
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: createLibraryFolder as SharePointHandler,
   },
   {
     name: 'delete_library_item',
-    description: 'Delete a file or folder from a SharePoint document library.',
+    description:
+      'Delete a file or folder (and everything in it) from a SharePoint document library. It moves to the site\'s recycle bin, where it can be restored for a limited time; it disappears for everyone with access to the library.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID'),
@@ -335,7 +341,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'move_library_item',
-    description: 'Move a file or folder to a new location in a SharePoint document library.',
+    description:
+      'Move a file or folder to another folder in the same library, optionally renaming it. It cannot move items to a different library. It disappears from its old location for everyone, and who can see it may change with the new location. It can be moved back.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Source document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID to move'),
@@ -343,7 +350,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
       destinationDriveId: z
         .string()
         .optional()
-        .describe('Destination drive ID (if moving between libraries)'),
+        .describe('Only the source library (drive) ID is accepted; a different library is refused'),
       newName: z.string().optional().describe('Optional new name for the item'),
     }),
     annotations: IDP_WRITE_ANNOTATIONS,
@@ -351,7 +358,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'copy_library_item',
-    description: 'Copy a file or folder to a new location in a SharePoint document library.',
+    description:
+      'Copy a file or folder to another folder or library, optionally under a new name. The original is not changed. The copy runs in the background and appears shortly; everyone with access to the destination can see it. It can be removed with delete_library_item once it has appeared.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Source document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID to copy'),
@@ -391,7 +399,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     name: 'create_site_page',
     description:
       'Create a new SharePoint site page as a draft, optionally with simple HTML body content. ' +
-      'Call publish_site_page afterwards to make it visible. ' +
+      'Readers do not see it until publish_site_page is called; other site editors can. The page can be deleted or unpublished in SharePoint. ' +
       'Requires Sites.ReadWrite.All — an admin may need to approve this permission.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
@@ -417,7 +425,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'update_site_page',
     description:
-      'Update a SharePoint site page\'s metadata (title, description, or promotion kind). Does not edit page body content.',
+      'Update a SharePoint site page\'s metadata (title, description, or promotion kind). Does not edit page body content. On a published page readers see the change once it is published again with publish_site_page; promotionKind "newsPost" makes it a news post on the site. The old values are not kept here; to undo, update them back by hand.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
       pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
@@ -434,7 +442,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'publish_site_page',
     description:
-      'Publish a draft SharePoint site page so it becomes visible to readers. If a page approval flow is active, the page publishes after approval completes.',
+      'Publish a draft SharePoint site page so everyone who can read the site sees it; a news post also appears in the site\'s news. If a page approval flow is active, the page publishes after approval completes. Publishing makes it visible to site visitors and cannot be undone here.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
       pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
@@ -481,7 +489,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'create_list_item',
-    description: 'Create a new item in a SharePoint list.',
+    description:
+      'Create a new item in a SharePoint list. Everyone with access to the list sees it, and rules or workflows set up on the list may notify people. It can be removed later with delete_list_item.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
       listId: z.string().optional().describe('List ID'),
@@ -495,7 +504,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'update_list_item',
-    description: 'Update an existing item in a SharePoint list.',
+    description:
+      'Update an existing item in a SharePoint list, overwriting the given column values. Everyone with access to the list sees the change, and rules or workflows set up on the list may notify people; earlier values are kept only if the list has versioning on.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
       listId: z.string().optional().describe('List ID'),
@@ -510,7 +520,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'delete_list_item',
-    description: 'Delete an item from a SharePoint list.',
+    description:
+      'Delete an item from a SharePoint list. It moves to the site\'s recycle bin, where it can be restored for a limited time; it disappears for everyone with access to the list.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
       listId: z.string().optional().describe('List ID'),
@@ -533,7 +544,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'create_site_list',
     description:
-      'Create a new SharePoint list in a site, optionally with a column schema. ' +
+      'Create a new SharePoint list in a site, optionally with a column schema. Everyone with access to the site can see the new list. This connector cannot delete a list; that has to be done in SharePoint. ' +
       'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
     inputSchema: z.object({
       siteId: z.string().optional().describe('SharePoint site ID'),
@@ -575,7 +586,8 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   },
   {
     name: 'rename_library_item',
-    description: 'Rename a file or folder in a SharePoint document library.',
+    description:
+      'Rename a file or folder in a SharePoint document library. Everyone with access sees the new name, and links or bookmarks that use its old path may stop working. It can be renamed back.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID'),
@@ -587,12 +599,14 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'create_sharing_link',
     description:
-      'Create a sharing link for a file or folder in a SharePoint document library. Returns a URL that can be shared with others.',
+      'Create a sharing link for a file or folder in a SharePoint document library and return its URL. By default anyone in the user\'s organization who has the link can use it; scope "anonymous" lets anyone with the link open it without signing in, and type "edit" lets them change it. The link works until it is removed (see revoke_item_permission) or until it expires under the organization\'s sharing policy. Include the link type and scope when you do.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID'),
       type: SharingTypeEnum.optional().describe('Link type: "view" for read-only, "edit" for read-write'),
-      scope: SharingScopeEnum.optional().describe('Who can use the link (default: "organization")'),
+      scope: SharingScopeEnum.optional().describe(
+        'Who can use the link: "organization" (anyone in the organization who has it) or "anonymous" (anyone who has it, no sign-in). Default: "organization"',
+      ),
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: createSharingLink as SharePointHandler,
@@ -625,6 +639,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     description:
       'Grant specific people access to a file or folder in a SharePoint document library by email address. ' +
       'Defaults to read-only access and does NOT send a notification email unless sendInvitation is true. ' +
+      'Access starts straight away and can be removed later with revoke_item_permission. ' +
       'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
@@ -649,7 +664,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'revoke_item_permission',
     description:
-      'Revoke a sharing permission from a file or folder in a SharePoint document library. Use list_item_permissions to find permission IDs.',
+      'Remove a sharing permission from a file or folder in a SharePoint document library. Access through that one permission ends straight away and nobody is notified; people may keep access through another link, a group or an inherited permission; a removed link cannot be brought back, only replaced by a new one. Use list_item_permissions to find permission IDs.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID'),
@@ -708,7 +723,7 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'update_file_metadata',
     description:
-      'Update custom metadata (SharePoint column values) for a file or folder. Set values for custom fields like Department, Status, Category, etc.',
+      'Update custom metadata (SharePoint column values) for a file or folder. Set values for custom fields like Department, Status, Category, etc. The given values overwrite the current ones for everyone with access, and can change views, rules or workflows that use those columns. The old values are not kept here; to undo, set them back by hand.',
     inputSchema: z.object({
       driveId: z.string().optional().describe('Document library (drive) ID'),
       itemId: z.string().optional().describe('File or folder item ID'),

@@ -48,6 +48,15 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   set_presence: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 };
 
+const DESTRUCTIVE_TOOLS = [
+  'send_chat_message',
+  'reply_to_message',
+  'create_chat',
+  'send_channel_message',
+  'reply_to_channel_message',
+  'set_presence',
+];
+
 describe('microsoft-teams tools/list', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;
@@ -90,6 +99,31 @@ describe('microsoft-teams tools/list', () => {
           `${tool.name}.${key}`,
         ).toBe(value);
       }
+    }
+  });
+
+  it('does not instruct the model to confirm or ask first in tool descriptions', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(
+        /confirm with the user|ask the user (first|before)/i,
+      );
+    }
+  });
+
+  it('marks every send or externally visible change as destructive', async () => {
+    const response = await client.client.listTools();
+    for (const name of DESTRUCTIVE_TOOLS) {
+      const tool = response.tools.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.annotations?.destructiveHint, name).toBe(true);
+    }
+  });
+
+  it('names other tools only by their plain name', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(/[a-z0-9]+(__|\.|:)[a-z]+_[a-z_]+/);
     }
   });
 });

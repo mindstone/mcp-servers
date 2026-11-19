@@ -40,7 +40,7 @@ export function registerFilesTools(server: McpServer): void {
         path: z
           .string()
           .optional()
-          .describe('Folder path (e.g., "/Documents") or item ID'),
+          .describe('Folder path (plain names, not URL-encoded; e.g., "/Documents") or item ID'),
         top: z.number().int().positive().optional().describe('Max items to return (default: 50)'),
       }).shape,
       annotations: {
@@ -65,7 +65,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'Get metadata for a specific file or folder.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File path or item ID'),
+        path: z.string().optional().describe('File path (plain names, not URL-encoded) or item ID'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -95,9 +95,10 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'download_file',
     {
-      description: 'Get a download URL for a file (valid for short period).',
+      description:
+        'Get a temporary download link for a file. Anyone who has the link can download the file without signing in, for a short time, so do not share it or show it to anyone beyond what the user asked for. The file itself is not changed.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File path or item ID'),
+        path: z.string().optional().describe('File path (plain names, not URL-encoded) or item ID'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -109,7 +110,7 @@ export function registerFilesTools(server: McpServer): void {
       if (!args.path) {
         return errorResponse({
           error:
-            'Missing required parameter: "path" (file to download). Example: { "path": "/Documents/report.pdf" }. Returns a temporary download URL.',
+            'Missing required parameter: "path" (file to download). Example: { "path": "/Documents/report.pdf" }. Returns a temporary download link that works without sign-in.',
           action_required: 'Provide the file path or item ID.',
           next_step: 'list_files',
         });
@@ -161,12 +162,12 @@ export function registerFilesTools(server: McpServer): void {
     'upload_file',
     {
       description:
-        'Upload a file to OneDrive. Text content up to 4MB; binary content as base64 up to 10MB (uploads over 4MB use a resumable upload session).',
+        'Upload a file to OneDrive at the given path. If a file already exists there it is replaced; OneDrive normally keeps the old content in its version history (see list_file_versions). Anyone the destination folder is shared with can see the file. Text content up to 4MB; binary content as base64 up to 10MB (uploads over 4MB use a resumable upload session).',
       inputSchema: z.object({
         path: z
           .string()
           .optional()
-          .describe('Destination path including filename (e.g., "/Documents/note.txt")'),
+          .describe('Destination path including filename (plain names, not URL-encoded; e.g., "/Documents/note.txt")'),
         content: z
           .string()
           .optional()
@@ -208,12 +209,13 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'create_folder',
     {
-      description: 'Create a new folder in OneDrive.',
+      description:
+        'Create a new folder in OneDrive. Fails if something with that name already exists there; nothing is replaced. Anyone the parent folder is shared with can see it. It can be removed with delete_file.',
       inputSchema: z.object({
         path: z
           .string()
           .optional()
-          .describe('Full path for new folder (e.g., "/Documents/NewFolder")'),
+          .describe('Full path for new folder (plain names, not URL-encoded; e.g., "/Documents/NewFolder")'),
       }).shape,
       annotations: {
         readOnlyHint: false,
@@ -243,9 +245,10 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'delete_file',
     {
-      description: 'Delete a file or folder from OneDrive.',
+      description:
+        'Delete a file or folder (and everything in it) from OneDrive. It moves to the OneDrive recycle bin, where it can be restored for a limited time; people it was shared with lose access.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File/folder path or item ID'),
+        path: z.string().optional().describe('File/folder path (plain names, not URL-encoded) or item ID'),
       }).shape,
       annotations: {
         readOnlyHint: false,
@@ -257,7 +260,7 @@ export function registerFilesTools(server: McpServer): void {
       if (!args.path) {
         return errorResponse({
           error:
-            'Missing required parameter: "path" (file/folder to delete). Example: { "path": "/Documents/old-file.txt" }. WARNING: This permanently deletes the item.',
+            'Missing required parameter: "path" (file/folder to delete). Example: { "path": "/Documents/old-file.txt" }. WARNING: this deletes the item; it moves to the OneDrive recycle bin, where it can be restored for a limited time.',
           action_required: 'Provide the path or item ID to delete.',
           next_step: 'list_files',
         });
@@ -275,10 +278,11 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'move_file',
     {
-      description: 'Move a file or folder to a new location.',
+      description:
+        'Move a file or folder to a new folder, optionally renaming it. Who can see it may change: it takes on the sharing of its new folder. It can be moved back.',
       inputSchema: z.object({
-        sourcePath: z.string().optional().describe('Current file/folder path or ID'),
-        destinationPath: z.string().optional().describe('New parent folder path'),
+        sourcePath: z.string().optional().describe('Current file/folder path (plain names, not URL-encoded) or ID'),
+        destinationPath: z.string().optional().describe('New parent folder path (plain names, not URL-encoded)'),
         newName: z.string().optional().describe('Optional new name'),
       }).shape,
       annotations: {
@@ -317,10 +321,11 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'copy_file',
     {
-      description: 'Copy a file or folder to a new location.',
+      description:
+        'Copy a file or folder into another folder, optionally under a new name. The original is not changed. The copy runs in the background and appears shortly; anyone the destination folder is shared with can see it. It can be removed with delete_file once it has appeared.',
       inputSchema: z.object({
-        sourcePath: z.string().optional().describe('Current file/folder path or ID'),
-        destinationPath: z.string().optional().describe('Destination folder path'),
+        sourcePath: z.string().optional().describe('Current file/folder path (plain names, not URL-encoded) or ID'),
+        destinationPath: z.string().optional().describe('Destination folder path (plain names, not URL-encoded)'),
         newName: z.string().optional().describe('Optional new name'),
       }).shape,
       annotations: {
@@ -407,12 +412,13 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'share_file',
     {
-      description: 'Create a sharing link for a file or folder.',
+      description:
+        'Create a sharing link for a file or folder. By default anyone in the user\'s organization who has the link can view it; scope "anonymous" lets anyone with the link open it without signing in, and type "edit" lets them change it. The link works until it is removed (see revoke_file_permission) or until it expires under the organization\'s sharing policy.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File/folder path or ID'),
-        type: LinkTypeEnum.optional().describe('Link type (default: view)'),
+        path: z.string().optional().describe('File/folder path (plain names, not URL-encoded) or ID'),
+        type: LinkTypeEnum.optional().describe('Link type: "view" or "edit" (default: view)'),
         scope: LinkScopeEnum.optional().describe(
-          'Who can access (default: organization)',
+          'Who can use the link: "organization" (anyone in the organization who has it) or "anonymous" (anyone who has it, no sign-in). Default: organization',
         ),
       }).shape,
       annotations: {
@@ -445,7 +451,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'Read the contents of a text file directly.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File path or ID'),
+        path: z.string().optional().describe('File path (plain names, not URL-encoded) or ID'),
         maxSize: z
           .number()
           .int()
@@ -482,9 +488,9 @@ export function registerFilesTools(server: McpServer): void {
     'invite_to_file',
     {
       description:
-        'Share a file or folder with specific people by email (grants read or write permission).',
+        'Share a file or folder with specific people by email, giving them read or write access straight away; they must sign in to open it. They are emailed about it only when sendInvitation is true. Access can be removed later with revoke_file_permission.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File/folder path or item ID'),
+        path: z.string().optional().describe('File/folder path (plain names, not URL-encoded) or item ID'),
         recipients: z
           .array(z.string().email())
           .min(1)
@@ -543,7 +549,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'List the sharing permissions granted on a file or folder.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File/folder path or item ID'),
+        path: z.string().optional().describe('File/folder path (plain names, not URL-encoded) or item ID'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -574,9 +580,9 @@ export function registerFilesTools(server: McpServer): void {
     'revoke_file_permission',
     {
       description:
-        'Revoke a sharing permission from a file or folder. Use list_file_permissions to find the permission ID.',
+        'Remove a sharing permission from a file or folder. Access through that one permission ends straight away and nobody is notified; people may keep access through another link, a group or an inherited permission; a removed link cannot be brought back, only replaced by a new one. Use list_file_permissions to find the permission ID.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File/folder path or item ID'),
+        path: z.string().optional().describe('File/folder path (plain names, not URL-encoded) or item ID'),
         permissionId: z
           .string()
           .optional()
@@ -616,7 +622,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'List the version history of a file.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File path or item ID'),
+        path: z.string().optional().describe('File path (plain names, not URL-encoded) or item ID'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -647,9 +653,9 @@ export function registerFilesTools(server: McpServer): void {
     'restore_file_version',
     {
       description:
-        'Restore a previous version of a file, replacing the current content. Use list_file_versions to find the version ID.',
+        'Restore a previous version of a file, replacing the current content for everyone who can open it. The content being replaced is kept as a version, so this can be undone by restoring that one. Use list_file_versions to find the version ID.',
       inputSchema: z.object({
-        path: z.string().optional().describe('File path or item ID'),
+        path: z.string().optional().describe('File path (plain names, not URL-encoded) or item ID'),
         versionId: z
           .string()
           .optional()
@@ -689,7 +695,7 @@ export function registerFilesTools(server: McpServer): void {
         path: z
           .string()
           .optional()
-          .describe('File/folder path or item ID (omit for drive-wide activity)'),
+          .describe('File/folder path (plain names, not URL-encoded) or item ID (omit for drive-wide activity)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -714,7 +720,7 @@ export function registerFilesTools(server: McpServer): void {
       description:
         'Extract the text of a Word (.docx) or PowerPoint (.pptx) document directly, without downloading it. Use read_text_file for plain-text files.',
       inputSchema: z.object({
-        path: z.string().optional().describe('Document path or item ID'),
+        path: z.string().optional().describe('Document path (plain names, not URL-encoded) or item ID'),
         maxSize: z
           .number()
           .int()

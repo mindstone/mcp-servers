@@ -171,7 +171,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `list_chats` | List recent Teams chats. |
 | `get_chat` | Get details about a specific chat. |
 | `list_chat_messages` | List recent messages from a chat. |
-| `send_chat_message` | Send a message to a chat. |
+| `send_chat_message` | Send a message to a chat straight away; everyone in the chat sees it. |
 | `reply_to_message` | Reply to a specific chat message, creating a threaded reply. |
 | `compose_chat_message` | Open an inline editable compose form before sending; the form posts via `send_chat_message` when the user clicks Send. |
 | `find_user` | Look up people by display name or email. Requires `User.ReadBasic.All`. |
@@ -198,6 +198,7 @@ Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting h
 
 ## Security notes
 
+- IDs are passed plain, not pre-encoded. Chat, team, channel and message IDs containing `?`, `#`, `%`, `\` or a `.`/`..` segment are refused with an error naming the field without echoing the value; user IDs also refuse `/`, `?`, `%`, `\`, control characters and `.`/`..` segments (guest principal names may contain `#`).
 - No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
 

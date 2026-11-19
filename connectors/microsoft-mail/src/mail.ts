@@ -6,6 +6,11 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
 import { wrapUntrusted, wrapUntrustedJsonValues } from './untrusted-content.js';
+import { graphIdSegment, graphQueryValue, odataStringLiteral } from './graph-request-target.js';
+
+function messageSegment(id: string): string {
+  return graphIdSegment(id, 'id', 'list_emails');
+}
 
 // Graph response payloads are cast by the SDK; the tools added here validate
 // the fields they consume with Zod at the boundary (planned tightening —
@@ -100,6 +105,7 @@ export function resolveFolder(folder: string): string {
   return WELL_KNOWN_FOLDERS[trimmed.toLowerCase()] ?? trimmed;
 }
 
+
 function ensureArray(value: string | string[] | undefined): string[] | undefined {
   if (value == null) return undefined;
   return Array.isArray(value) ? value : [value];
@@ -119,7 +125,7 @@ export async function listEmails(
   const folder = resolveFolder(args.folder ?? 'Inbox');
   const top = Math.min(args.top ?? 25, 100);
 
-  let endpoint = `/me/mailFolders/${folder}/messages`;
+  let endpoint = `/me/mailFolders/${graphIdSegment(folder, 'folder', 'list_folders')}/messages`;
   const queryParams: string[] = [
     `$top=${top}`,
     '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments,importance',
@@ -129,7 +135,8 @@ export async function listEmails(
   // InefficientFilter), like the $search limitation noted in searchEmails.
   // With a filter present, results are sorted client-side below instead.
   if (args.filter) {
-    queryParams.push(`$filter=${args.filter}`);
+    // Caller-written OData, encoded whole so it stays one $filter value.
+    queryParams.push(`$filter=${graphQueryValue(args.filter)}`);
   } else {
     queryParams.push('$orderby=receivedDateTime desc');
   }
@@ -172,7 +179,7 @@ export async function getEmail(
   signal: AbortSignal,
 ): Promise<unknown> {
   const email = await client
-    .api(`/me/messages/${args.id}`)
+    .api(`/me/messages/${messageSegment(args.id)}`)
     .options({ signal })
     .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,isRead,hasAttachments,importance')
     .get();
@@ -259,7 +266,7 @@ export async function searchEmails(
   const response = await client
     .api('/me/messages')
     .options({ signal })
-    .search(`"${args.query}"`)
+    .search(graphQueryValue(`"${args.query}"`))
     .top(top)
     .select('id,subject,from,receivedDateTime,bodyPreview,isRead')
     .get();
@@ -294,8 +301,8 @@ export async function replyToEmail(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = args.replyAll
-    ? `/me/messages/${args.id}/replyAll`
-    : `/me/messages/${args.id}/reply`;
+    ? `/me/messages/${messageSegment(args.id)}/replyAll`
+    : `/me/messages/${messageSegment(args.id)}/reply`;
 
   await client.api(endpoint).options({ signal }).post({
     comment: args.body,
@@ -320,7 +327,7 @@ export async function forwardEmail(
 ): Promise<unknown> {
   const toList = ensureArray(args.to) ?? [];
 
-  await client.api(`/me/messages/${args.id}/forward`).options({ signal }).post({
+  await client.api(`/me/messages/${messageSegment(args.id)}/forward`).options({ signal }).post({
     comment: args.comment ?? '',
     toRecipients: toList.map((email) => ({
       emailAddress: { address: email },
@@ -344,11 +351,11 @@ export async function deleteEmail(
   signal: AbortSignal,
 ): Promise<unknown> {
   if (args.permanent) {
-    await client.api(`/me/messages/${args.id}`).options({ signal }).delete();
-    return { success: true, message: 'Email permanently deleted' };
+    await client.api(`/me/messages/${messageSegment(args.id)}`).options({ signal }).delete();
+    return { success: true, message: 'Email deleted' };
   }
 
-  await client.api(`/me/messages/${args.id}/move`).options({ signal }).post({
+  await client.api(`/me/messages/${messageSegment(args.id)}/move`).options({ signal }).post({
     destinationId: 'deleteditems',
   });
 
@@ -398,7 +405,7 @@ export async function moveEmail(
 ): Promise<unknown> {
   const folderId = resolveFolder(args.destinationFolder);
 
-  await client.api(`/me/messages/${args.id}/move`).options({ signal }).post({
+  await client.api(`/me/messages/${messageSegment(args.id)}/move`).options({ signal }).post({
     destinationId: folderId,
   });
 
@@ -420,8 +427,8 @@ export async function createReplyDraft(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = args.replyAll
-    ? `/me/messages/${args.id}/createReplyAll`
-    : `/me/messages/${args.id}/createReply`;
+    ? `/me/messages/${messageSegment(args.id)}/createReplyAll`
+    : `/me/messages/${messageSegment(args.id)}/createReply`;
 
   const requestBody: Record<string, unknown> = {};
   if (args.body) {
@@ -498,7 +505,7 @@ export async function listAttachments(
   signal: AbortSignal,
 ): Promise<unknown> {
   const response = await client
-    .api(`/me/messages/${args.id}/attachments`)
+    .api(`/me/messages/${messageSegment(args.id)}/attachments`)
     .options({ signal })
     .get();
   const parsed = GraphAttachmentListSchema.parse(response);
@@ -756,7 +763,7 @@ export async function downloadAttachment(
   // default projection would silently fail the guard open.
   const metaBody = await getStreamDrainingErrorBody(
     client,
-    `/me/messages/${args.id}/attachments/${args.attachmentId}`,
+    `/me/messages/${messageSegment(args.id)}/attachments/${graphIdSegment(args.attachmentId, 'attachmentId', 'list_attachments')}`,
     signal,
     'id,name,contentType,size,isInline,@odata.type',
   );
@@ -808,7 +815,7 @@ export async function downloadAttachment(
 
   const body = await getStreamDrainingErrorBody(
     client,
-    `/me/messages/${args.id}/attachments/${args.attachmentId}/$value`,
+    `/me/messages/${messageSegment(args.id)}/attachments/${graphIdSegment(args.attachmentId, 'attachmentId', 'list_attachments')}/$value`,
     signal,
   );
   const content = await readStreamWithCap(body, MAX_ATTACHMENT_BYTES, () => new Error(sizeLimitMessage));
@@ -841,7 +848,7 @@ export async function sendDraft(
   args: SendDraftArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  await client.api(`/me/messages/${args.id}/send`).options({ signal }).post({});
+  await client.api(`/me/messages/${messageSegment(args.id)}/send`).options({ signal }).post({});
 
   return {
     success: true,
@@ -883,7 +890,7 @@ export async function updateDraft(
   if (args.importance !== undefined) patch.importance = args.importance;
 
   const response = await client
-    .api(`/me/messages/${args.id}`)
+    .api(`/me/messages/${messageSegment(args.id)}`)
     .options({ signal })
     .patch(patch);
   const updated = GraphMessageMutationSchema.parse(response);
@@ -909,7 +916,7 @@ export async function markEmailRead(
   const isRead = args.isRead ?? true;
 
   const response = await client
-    .api(`/me/messages/${args.id}`)
+    .api(`/me/messages/${messageSegment(args.id)}`)
     .options({ signal })
     .patch({ isRead });
   const updated = GraphMessageMutationSchema.parse(response);
@@ -933,7 +940,7 @@ export async function setEmailFlag(
   signal: AbortSignal,
 ): Promise<unknown> {
   const response = await client
-    .api(`/me/messages/${args.id}`)
+    .api(`/me/messages/${messageSegment(args.id)}`)
     .options({ signal })
     .patch({ flag: { flagStatus: args.flag } });
   const updated = GraphMessageMutationSchema.parse(response);
@@ -966,7 +973,7 @@ export async function getConversation(
   let conversationId = args.conversationId;
   if (!conversationId && args.id) {
     const message = await client
-      .api(`/me/messages/${args.id}`)
+      .api(`/me/messages/${messageSegment(args.id)}`)
       .options({ signal })
       .select('conversationId')
       .get();
@@ -974,11 +981,6 @@ export async function getConversation(
   }
   if (!conversationId) {
     throw new Error('A message id or conversationId is required to load a conversation.');
-  }
-  // The conversation ID is embedded in an OData $filter literal; refuse values
-  // that could break out of the quoted string.
-  if (conversationId.includes("'")) {
-    throw new Error('Invalid conversationId: must not contain single quotes.');
   }
 
   const top = Math.min(args.top ?? 25, 100);
@@ -988,7 +990,7 @@ export async function getConversation(
   const endpoint =
     '/me/messages?' +
     [
-      `$filter=conversationId eq '${conversationId}'`,
+      `$filter=${graphQueryValue('conversationId eq ')}${odataStringLiteral(conversationId)}`,
       `$top=${top}`,
       '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments',
     ].join('&');

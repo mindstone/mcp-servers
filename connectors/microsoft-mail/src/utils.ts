@@ -8,6 +8,7 @@ import {
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { GraphRequestTargetError } from './graph-request-target.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 const log = createLogger('microsoft-mail-mcp');
@@ -251,6 +252,15 @@ function formatGenericGraphError(err: unknown): string {
  * generic recovery-guidance envelope otherwise.
  */
 export function buildErrorResponse(err: unknown): CallToolResult {
+  // A refused ID, path or query value: the message names the field only,
+  // never the value, and re-authenticating cannot help.
+  if (err instanceof GraphRequestTargetError) {
+    return errorResponse({
+      error: err.message,
+      action_required: err.actionRequired,
+      next_step: err.nextStep,
+    });
+  }
   if (isRefreshDisabledError(err)) {
     return {
       content: [{ type: 'text', text: authRequiredJson() }],

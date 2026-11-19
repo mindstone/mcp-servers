@@ -1083,7 +1083,17 @@ export async function respondToEvent(
   signal: AbortSignal,
 ): Promise<unknown> {
   assertGraphIdSegment(args.id, 'id', 'respond_to_event');
-  const endpoint = `/me/events/${encodeURIComponent(args.id)}/${args.response}`;
+  const graphActionByResponse = {
+    accept: 'accept',
+    decline: 'decline',
+    tentative: 'tentativelyAccept',
+  } as const;
+  const responseMessageByResponse = {
+    accept: 'Event accepted',
+    decline: 'Event declined',
+    tentative: 'Event tentatively accepted',
+  } as const;
+  const endpoint = `/me/events/${encodeURIComponent(args.id)}/${graphActionByResponse[args.response]}`;
   const body: Record<string, unknown> = {
     sendResponse: args.sendResponse ?? true,
   };
@@ -1096,7 +1106,7 @@ export async function respondToEvent(
 
   return {
     success: true,
-    message: `Event ${args.response}ed successfully`,
+    message: responseMessageByResponse[args.response],
   };
 }
 

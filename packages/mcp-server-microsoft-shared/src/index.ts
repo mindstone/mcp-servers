@@ -13,6 +13,9 @@ export {
   MicrosoftAccount,
   MicrosoftRefreshDisabledError,
   MicrosoftRefreshDisabledReason,
+  MicrosoftCredentialFileError,
+  MicrosoftCredentialFileKind,
+  MicrosoftCredentialFileReason,
 } from './tokenProvider.js';
 export { MicrosoftLogger, createLogger, redactEmail } from './logger.js';
 export { windowsToIanaTimezone } from './timezoneMapping.js';

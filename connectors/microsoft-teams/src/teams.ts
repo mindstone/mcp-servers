@@ -1,5 +1,6 @@
 import type { Chat, ChatMessage, Client } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
+import { graphIdSegment, graphQueryValue, graphUserSegment } from './graph-request-target.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 export class TeamsBusinessError extends Error {
@@ -166,8 +167,9 @@ export async function getChat(
   signal: AbortSignal,
 ): Promise<unknown> {
   const chatId = requireStringArg(args, 'chatId', 'chat ID', 'get_chat');
+  const chatIdSegment = graphIdSegment(chatId, 'chatId', 'list_chats');
   const chat = (await client
-    .api(`/me/chats/${chatId}`)
+    .api(`/me/chats/${chatIdSegment}`)
     .options({ signal })
     .expand('members')
     .get()) as ChatWithMembers;
@@ -194,10 +196,11 @@ export async function listChatMessages(
   signal: AbortSignal,
 ): Promise<unknown> {
   const chatId = requireStringArg(args, 'chatId', 'chat ID', 'list_chat_messages');
+  const chatIdSegment = graphIdSegment(chatId, 'chatId', 'list_chats');
   const top = clampTop(numberArg(args, 'top'), 50, 50);
 
   const response = (await client
-    .api(`/me/chats/${chatId}/messages`)
+    .api(`/me/chats/${chatIdSegment}/messages`)
     .options({ signal })
     .top(top)
     .get()) as MaybeValue<ChatMessage>;
@@ -216,9 +219,10 @@ export async function sendChatMessage(
   signal: AbortSignal,
 ): Promise<unknown> {
   const chatId = requireStringArg(args, 'chatId', 'chat ID', 'send_chat_message');
+  const chatIdSegment = graphIdSegment(chatId, 'chatId', 'list_chats');
   const content = requireStringArg(args, 'content', 'message body', 'send_chat_message');
   const response = sendMessageResponseSchema.parse(
-    await client.api(`/me/chats/${chatId}/messages`).options({ signal }).post({
+    await client.api(`/me/chats/${chatIdSegment}/messages`).options({ signal }).post({
       body: {
         contentType: content.includes('<') ? 'html' : 'text',
         content,
@@ -283,8 +287,9 @@ export async function listChannels(
   signal: AbortSignal,
 ): Promise<unknown> {
   const teamId = requireStringArg(args, 'teamId', 'team ID', 'list_channels');
+  const teamIdSegment = graphIdSegment(teamId, 'teamId', 'list_teams');
   const response = (await client
-    .api(`/teams/${teamId}/channels`)
+    .api(`/teams/${teamIdSegment}/channels`)
     .options({ signal })
     .select('id,displayName,description,membershipType')
     .get()) as MaybeValue<Channel>;
@@ -345,7 +350,7 @@ export async function getUserPresence(
 ): Promise<unknown> {
   const userId = requireStringArg(args, 'userId', 'user ID or email', 'get_user_presence');
   const presence = presenceSchema.parse(
-    await client.api(`/users/${encodeURIComponent(userId)}/presence`).options({ signal }).get(),
+    await client.api(`/users/${graphUserSegment(userId, 'userId', 'find_user')}/presence`).options({ signal }).get(),
   );
   return {
     userId,
@@ -464,12 +469,14 @@ export async function listChannelMessages(
   signal: AbortSignal,
 ): Promise<unknown> {
   const teamId = requireStringArg(args, 'teamId', 'team ID', 'list_channel_messages');
+  const teamIdSegment = graphIdSegment(teamId, 'teamId', 'list_teams');
   const channelId = requireStringArg(args, 'channelId', 'channel ID', 'list_channel_messages');
+  const channelIdSegment = graphIdSegment(channelId, 'channelId', 'list_channels');
   const top = clampTop(numberArg(args, 'top'), 25, 50);
 
   const response = graphMessageCollectionSchema.parse(
     await client
-      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .api(`/teams/${teamIdSegment}/channels/${channelIdSegment}/messages`)
       .options({ signal })
       .top(top)
       .get(),
@@ -494,12 +501,14 @@ export async function sendChannelMessage(
   signal: AbortSignal,
 ): Promise<unknown> {
   const teamId = requireStringArg(args, 'teamId', 'team ID', 'send_channel_message');
+  const teamIdSegment = graphIdSegment(teamId, 'teamId', 'list_teams');
   const channelId = requireStringArg(args, 'channelId', 'channel ID', 'send_channel_message');
+  const channelIdSegment = graphIdSegment(channelId, 'channelId', 'list_channels');
   const content = requireStringArg(args, 'content', 'message body', 'send_channel_message');
 
   const response = sendMessageResponseSchema.parse(
     await client
-      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .api(`/teams/${teamIdSegment}/channels/${channelIdSegment}/messages`)
       .options({ signal })
       .post(messagePostBody(content)),
   );
@@ -517,13 +526,16 @@ export async function replyToChannelMessage(
   signal: AbortSignal,
 ): Promise<unknown> {
   const teamId = requireStringArg(args, 'teamId', 'team ID', 'reply_to_channel_message');
+  const teamIdSegment = graphIdSegment(teamId, 'teamId', 'list_teams');
   const channelId = requireStringArg(args, 'channelId', 'channel ID', 'reply_to_channel_message');
+  const channelIdSegment = graphIdSegment(channelId, 'channelId', 'list_channels');
   const messageId = requireStringArg(args, 'messageId', 'channel message ID', 'reply_to_channel_message');
+  const messageIdSegment = graphIdSegment(messageId, 'messageId', 'list_channel_messages');
   const content = requireStringArg(args, 'content', 'reply body', 'reply_to_channel_message');
 
   const response = sendMessageResponseSchema.parse(
     await client
-      .api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`)
+      .api(`/teams/${teamIdSegment}/channels/${channelIdSegment}/messages/${messageIdSegment}/replies`)
       .options({ signal })
       .post(messagePostBody(content)),
   );
@@ -541,12 +553,14 @@ export async function replyToChatMessage(
   signal: AbortSignal,
 ): Promise<unknown> {
   const chatId = requireStringArg(args, 'chatId', 'chat ID', 'reply_to_message');
+  const chatIdSegment = graphIdSegment(chatId, 'chatId', 'list_chats');
   const messageId = requireStringArg(args, 'messageId', 'message ID', 'reply_to_message');
+  const messageIdSegment = graphIdSegment(messageId, 'messageId', 'list_chat_messages');
   const content = requireStringArg(args, 'content', 'reply body', 'reply_to_message');
 
   const response = sendMessageResponseSchema.parse(
     await client
-      .api(`/me/chats/${chatId}/messages/${messageId}/replies`)
+      .api(`/me/chats/${chatIdSegment}/messages/${messageIdSegment}/replies`)
       .options({ signal })
       .post(messagePostBody(content)),
   );
@@ -677,7 +691,7 @@ export async function findUser(
     try {
       const user = graphUserSchema.parse(
         await client
-          .api(`/users/${encodeURIComponent(query)}`)
+          .api(`/users/${graphUserSegment(query, 'query', 'find_user')}`)
           .options({ signal })
           .select('id,displayName,mail,userPrincipalName')
           .get(),
@@ -700,7 +714,7 @@ export async function findUser(
       .api('/users')
       .options({ signal })
       .header('ConsistencyLevel', 'eventual')
-      .search(`"displayName:${safeQuery}"`)
+      .search(graphQueryValue(`"displayName:${safeQuery}"`))
       .select('id,displayName,mail,userPrincipalName')
       .top(10)
       .get(),
@@ -740,6 +754,8 @@ export async function createChat(
   signal: AbortSignal,
 ): Promise<unknown> {
   const members = [...new Set(requireStringArrayArg(args, 'members', 'chat participants', 'create_chat'))];
+  // Checked before any request; each member becomes a /users/{id} bind URL.
+  const memberSegments = members.map((member) => graphUserSegment(member, 'members', 'find_user'));
   const topic = stringArg(args, 'topic');
   const chatType = members.length === 1 ? 'oneOnOne' : 'group';
 
@@ -749,10 +765,10 @@ export async function createChat(
       roles: ['owner'],
       'user@odata.bind': 'https://graph.microsoft.com/v1.0/me',
     },
-    ...members.map((member) => ({
+    ...memberSegments.map((member) => ({
       '@odata.type': '#microsoft.graph.aadUserConversationMember',
       roles: ['owner'],
-      'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(member)}`,
+      'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${member}`,
     })),
   ];
 

@@ -224,7 +224,8 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
   server.registerTool(
     'send_chat_message',
     {
-      description: 'Send a message to a chat.',
+      description:
+        'Send a message now to a Teams chat, as the user; everyone in the chat sees it straight away. It cannot be unsent from here. To let the user review and edit it first, use compose_chat_message.',
       inputSchema: z.object({
         chatId: z.string().describe('Chat ID'),
         content: z.string().describe('Message content (HTML supported)'),
@@ -239,7 +240,8 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
   server.registerTool(
     'reply_to_message',
     {
-      description: 'Reply to a specific message in a chat, creating a threaded reply.',
+      description:
+        'Send a reply now to a specific message in a Teams chat, as the user; everyone in the chat sees it. It cannot be unsent from here.',
       inputSchema: z
         .object({
           chatId: z.string().describe('Chat ID'),
@@ -295,7 +297,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     'create_chat',
     {
       description:
-        'Create a new 1:1 or group chat with one or more colleagues (by email address or user ID) and return the new chat ID, which can then be used with send_chat_message.',
+        'Create a new 1:1 or group chat with one or more colleagues (by email address or user ID) and return the new chat ID, which can then be used with send_chat_message. The chat, and any topic, is visible to everyone added to it; no message is sent. A chat cannot be deleted by this connector.',
       inputSchema: z
         .object({
           members: z
@@ -364,7 +366,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     'send_channel_message',
     {
       description:
-        'Post a new message to a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+        'Post a new message now to a Teams channel, as the user; everyone in the channel can see it and may be notified. It cannot be unsent from here. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
       inputSchema: z
         .object({
           teamId: z.string().describe('Team ID'),
@@ -385,7 +387,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     'reply_to_channel_message',
     {
       description:
-        'Reply to an existing message in a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+        'Send a reply now to an existing message in a Teams channel, as the user; everyone in the channel can see it, and people in that thread may be notified. It cannot be unsent from here. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
       inputSchema: z
         .object({
           teamId: z.string().describe('Team ID'),
@@ -438,7 +440,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     'set_presence',
     {
       description:
-        'Set your own presence status (e.g. Busy, DoNotDisturb, Away), optionally for a limited duration. Requires the Presence.ReadWrite Graph permission.',
+        'Set your own presence status (e.g. Busy, DoNotDisturb, Away), optionally for a limited duration; colleagues see the new status in Teams, and DoNotDisturb silences the user\'s notifications. It can be changed back by calling this tool again. Requires the Presence.ReadWrite Graph permission.',
       inputSchema: z
         .object({
           availability: z

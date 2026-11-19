@@ -151,7 +151,8 @@ export function registerCalendarTools(server: McpServer): void {
   server.registerTool(
     'create_event',
     {
-      description: 'Create a new calendar event.',
+      description:
+        'Create a new event on the user\'s calendar. If attendees are given, Microsoft sends them an invitation straight away, from the user; without attendees no one is invited, but people the user shares their calendar with (or delegates) can still see it. It can be removed later with delete_event or cancel_event.',
       inputSchema: CreateEventSchema,
       annotations: {
         readOnlyHint: false,
@@ -228,7 +229,8 @@ export function registerCalendarTools(server: McpServer): void {
   server.registerTool(
     'update_event',
     {
-      description: 'Update an existing calendar event.',
+      description:
+        'Update an existing event on the user\'s calendar. If the user organizes a meeting with attendees, Microsoft sends them the update straight away, and added or removed attendees get an invitation or a cancellation; a change that only adds or removes attendees normally notifies just those people. The old values are not kept.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
         subject: z.string().optional().describe('New title'),
@@ -298,13 +300,16 @@ export function registerCalendarTools(server: McpServer): void {
   server.registerTool(
     'delete_event',
     {
-      description: 'Delete a calendar event.',
+      description:
+        'Delete an event from the user\'s calendar; it moves to Deleted Items. If the user is the organizer of a meeting, Microsoft sends every attendee a cancellation; if the user is an attendee, it is removed only from their own calendar and the organizer is not told. To cancel with a message to attendees, use cancel_event.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
         notifyAttendees: z
           .boolean()
           .optional()
-          .describe('Send cancellation to attendees (default: true)'),
+          .describe(
+            'Has no effect: when the organizer deletes a meeting, Microsoft always sends attendees a cancellation',
+          ),
       }).shape,
       annotations: {
         readOnlyHint: false,
@@ -316,7 +321,7 @@ export function registerCalendarTools(server: McpServer): void {
       if (!args.id) {
         return errorResponse({
           error:
-            'Missing required parameter: "id" (event to delete). Example: { "id": "AAMkAGI2..." }. WARNING: This will cancel the event and notify attendees.',
+            'Missing required parameter: "id" (event to delete). Example: { "id": "AAMkAGI2..." }. WARNING: If the user organizes this meeting, attendees are sent a cancellation.',
           action_required: 'Provide the event ID.',
           next_step: 'list_events',
         });
@@ -335,7 +340,7 @@ export function registerCalendarTools(server: McpServer): void {
     'cancel_event',
     {
       description:
-        'Cancel a meeting as its organizer, optionally sending a cancellation message to all attendees. The event moves to the Deleted Items folder. Prefer this over delete_event for meetings with attendees so they are notified.',
+        'Cancel a meeting the user organizes: every attendee is sent a cancellation straight away, with the optional comment, and the event moves to the Deleted Items folder. It cannot be undone; the meeting would have to be created again. Prefer this over delete_event for meetings with attendees, so they get the message. Only the organizer can cancel; an attendee should use respond_to_event to decline.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
         comment: z
@@ -371,11 +376,12 @@ export function registerCalendarTools(server: McpServer): void {
   server.registerTool(
     'respond_to_event',
     {
-      description: 'Accept, decline, or tentatively accept an event invitation.',
+      description:
+        'Accept, decline, or tentatively accept an event invitation. By default the organizer is sent the response, with the optional comment, straight away; a declined event is normally removed from the user\'s calendar. An accept or tentative response can be changed by calling this tool again; after a decline the event may be gone, so changing it may not be possible here.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
         response: ResponseEnum.optional().describe('Your response'),
-        comment: z.string().optional().describe('Optional response message'),
+        comment: z.string().optional().describe('Optional message sent to the organizer with the response'),
         sendResponse: z
           .boolean()
           .optional()

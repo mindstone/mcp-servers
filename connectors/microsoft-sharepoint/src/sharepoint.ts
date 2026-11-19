@@ -10,6 +10,13 @@ import {
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import {
+  graphDrivePath,
+  graphIdSegment,
+  graphQueryValue,
+  graphSiteId,
+  odataStringLiteral,
+} from './graph-request-target.js';
 
 // -- Graph response schemas (Zod-validated at the boundary for new tools) --
 
@@ -299,19 +306,40 @@ function formatDrive(drive: SharePointDrive, sourceTool: string) {
   };
 }
 
-function buildDriveEndpoint(driveId: string, itemId: string): string {
-  return `/drives/${driveId}/items/${itemId}`;
+// Every model-supplied ID and path goes through graph-request-target.ts
+// before it reaches a Graph URL; a refusal throws GraphRequestTargetError,
+// which buildErrorResponse turns into a fixed error naming the field.
+
+function driveSegment(driveId: unknown): string {
+  return graphIdSegment(driveId, 'driveId', 'list_site_document_libraries');
 }
 
+function listSegment(listId: unknown): string {
+  return graphIdSegment(listId, 'listId', 'list_site_lists');
+}
+
+function pageSegment(pageId: unknown): string {
+  return graphIdSegment(pageId, 'pageId', 'list_site_pages');
+}
+
+/**
+ * `/sites/{site-id}` plus an optional suffix. The `hostname:/path` form is
+ * closed with `:` before a suffix so Graph reads the suffix as a segment
+ * after the site; on its own it is sent as today, without the closing `:`.
+ */
+function siteEndpoint(siteId: unknown, suffix = ''): string {
+  const site = graphSiteId(siteId, 'siteId', 'list_sharepoint_sites');
+  if (suffix) return `/sites/${site}${suffix}`;
+  return `/sites/${site.endsWith(':') ? site.slice(0, -1) : site}`;
+}
+
+function buildDriveEndpoint(driveId: unknown, itemId: unknown, itemField = 'itemId'): string {
+  return `/drives/${driveSegment(driveId)}/items/${graphIdSegment(itemId, itemField, 'list_library_files')}`;
+}
+
+/** A library path, encoded per segment, without a leading `/` (`''` for the root). */
 function encodeDrivePath(path: string): string {
-  const trimmedPath = path.trim().replace(/^\/+/u, '').replace(/\/+$/u, '');
-  if (!trimmedPath) {
-    return '';
-  }
-  return trimmedPath
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
+  return graphDrivePath(path.trim(), 'path', 'list_library_files').slice(1);
 }
 
 // -- Tool implementations --
@@ -363,7 +391,7 @@ export async function getSharePointSite(
   }
 
   const site = await client
-    .api(`/sites/${args.siteId}`)
+    .api(siteEndpoint(args.siteId))
     .options({ signal })
     .select('id,displayName,name,webUrl,description,createdDateTime,lastModifiedDateTime,root,siteCollection')
     .get();
@@ -392,7 +420,7 @@ export async function listSiteDocumentLibraries(
   const top = Math.min(args.top ?? 50, 200);
 
   const response = await client
-    .api(`/sites/${args.siteId}/drives`)
+    .api(siteEndpoint(args.siteId, `/drives`))
     .options({ signal })
     .top(top)
     .select('id,name,description,driveType,webUrl,createdDateTime,lastModifiedDateTime,quota')
@@ -432,10 +460,10 @@ export async function listLibraryFiles(
   if (args.path) {
     const encodedPath = encodeDrivePath(args.path);
     endpoint = encodedPath
-      ? `/drives/${args.driveId}/root:/${encodedPath}:/children`
-      : `/drives/${args.driveId}/root/children`;
+      ? `/drives/${driveSegment(args.driveId)}/root:/${encodedPath}:/children`
+      : `/drives/${driveSegment(args.driveId)}/root/children`;
   } else {
-    endpoint = `/drives/${args.driveId}/root/children`;
+    endpoint = `/drives/${driveSegment(args.driveId)}/root/children`;
   }
 
   const response = await client
@@ -535,11 +563,9 @@ export async function searchLibraryFiles(
   }
 
   const top = Math.min(args.top ?? 25, 100);
-  // Escape single quotes for OData query syntax
-  const escapedQuery = args.query.replace(/'/g, "''");
 
   const response = await client
-    .api(`/drives/${args.driveId}/root/search(q='${escapedQuery}')`)
+    .api(`/drives/${driveSegment(args.driveId)}/root/search(q=${odataStringLiteral(args.query)})`)
     .options({ signal })
     .top(top)
     .select('id,name,size,createdDateTime,lastModifiedDateTime,webUrl,folder,file,parentReference')
@@ -605,7 +631,7 @@ export async function readLibraryTextFile(
   }
 
   // Download content via /content endpoint (returns file bytes directly)
-  const contentEndpoint = `/drives/${args.driveId}/items/${args.itemId}/content`;
+  const contentEndpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/content`;
   const rawContent = await client.api(contentEndpoint).options({ signal }).get();
   let content = typeof rawContent === 'string' ? rawContent : rawContent.toString();
 
@@ -648,7 +674,7 @@ export async function uploadLibraryFile(
   }
 
   const encodedPath = encodeDrivePath(args.path);
-  const endpoint = `/drives/${args.driveId}/root:/${encodedPath}:/content`;
+  const endpoint = `/drives/${driveSegment(args.driveId)}/root:/${encodedPath}:/content`;
   const response = await client
     .api(endpoint)
     .options({ signal })
@@ -706,7 +732,7 @@ export async function uploadLibraryFileBinary(
 
   const encodedPath = encodeDrivePath(args.path);
   const sessionResponse = await client
-    .api(`/drives/${args.driveId}/root:/${encodedPath}:/createUploadSession`)
+    .api(`/drives/${driveSegment(args.driveId)}/root:/${encodedPath}:/createUploadSession`)
     .options({ signal })
     .post({
       item: {
@@ -793,6 +819,8 @@ export async function createLibraryFolder(
     );
   }
 
+  // Checked whole first so a dot segment anywhere refuses the call.
+  encodeDrivePath(args.path);
   const pathParts = args.path.split('/').filter(Boolean);
   const folderName = pathParts.pop();
   const parentPath = pathParts.join('/');
@@ -803,10 +831,10 @@ export async function createLibraryFolder(
 
   let endpoint: string;
   if (!parentPath) {
-    endpoint = `/drives/${args.driveId}/root/children`;
+    endpoint = `/drives/${driveSegment(args.driveId)}/root/children`;
   } else {
     const encodedParent = encodeDrivePath(parentPath);
-    endpoint = `/drives/${args.driveId}/root:/${encodedParent}:/children`;
+    endpoint = `/drives/${driveSegment(args.driveId)}/root:/${encodedParent}:/children`;
   }
 
   const response = await client.api(endpoint).options({ signal }).post({
@@ -838,7 +866,7 @@ export async function deleteLibraryItem(
     return errorResult(
       'Missing required parameters: "driveId" and "itemId" (file/folder to delete). ' +
       'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF..." }. ' +
-      'WARNING: This permanently deletes the item.',
+      'WARNING: This moves the item to the site\'s recycle bin, where it can be restored for a limited time.',
     );
   }
 
@@ -873,8 +901,8 @@ export async function moveLibraryItem(
 
   if (args.destinationDriveId && args.destinationDriveId !== args.driveId) {
     return errorResult(
-      'Cannot move items between different drives/libraries. ' +
-      'Use copy_library_item + delete_library_item instead for cross-library moves.',
+      'Moving an item to a different library is not supported. ' +
+      'If you want a copy there, use copy_library_item and delete the original only after the copy has appeared.',
     );
   }
 
@@ -960,7 +988,7 @@ export async function listSitePages(
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
-    .api(`/sites/${args.siteId}/pages`)
+    .api(siteEndpoint(args.siteId, `/pages`))
     .options({ signal })
     .top(top)
     .select('id,title,name,webUrl,description,createdDateTime,lastModifiedDateTime,createdBy,lastModifiedBy')
@@ -1024,7 +1052,7 @@ export async function readSitePage(
   }
 
   // The /microsoft.graph.sitePage type cast is required for page-specific APIs
-  const pageBase = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage`;
+  const pageBase = siteEndpoint(args.siteId, `/pages/${pageSegment(args.pageId)}/microsoft.graph.sitePage`);
 
   // Get page metadata
   const page = await client
@@ -1153,7 +1181,7 @@ export async function createSitePage(
     ...(args.contentHtml ? { canvasLayout: buildTextCanvasLayout(args.contentHtml) } : {}),
   };
 
-  const response = await client.api(`/sites/${args.siteId}/pages`).options({ signal }).post(body);
+  const response = await client.api(siteEndpoint(args.siteId, `/pages`)).options({ signal }).post(body);
   const page = GraphSitePageSchema.parse(response);
 
   return successResult({
@@ -1201,7 +1229,7 @@ export async function updateSitePage(
     );
   }
 
-  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage`;
+  const endpoint = siteEndpoint(args.siteId, `/pages/${pageSegment(args.pageId)}/microsoft.graph.sitePage`);
   const response = await client.api(endpoint).options({ signal }).patch(updates);
   const page = GraphSitePageSchema.parse(response);
 
@@ -1235,7 +1263,7 @@ export async function publishSitePage(
     );
   }
 
-  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage/publish`;
+  const endpoint = siteEndpoint(args.siteId, `/pages/${pageSegment(args.pageId)}/microsoft.graph.sitePage/publish`);
   await client.api(endpoint).options({ signal }).post({});
 
   return successResult({
@@ -1269,7 +1297,7 @@ export async function listSiteLists(
   const top = Math.min(args.top ?? 50, 200);
 
   const response = await client
-    .api(`/sites/${args.siteId}/lists`)
+    .api(siteEndpoint(args.siteId, `/lists`))
     .options({ signal })
     .top(top)
     .select('id,displayName,description,webUrl,createdDateTime,lastModifiedDateTime,list')
@@ -1327,13 +1355,13 @@ export async function listListItems(
   const top = Math.min(args.top ?? 50, 200);
 
   let request = client
-    .api(`/sites/${args.siteId}/lists/${args.listId}/items`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/items`))
     .options({ signal })
     .expand('fields')
     .top(top);
 
   if (args.filter) {
-    request = request.filter(args.filter);
+    request = request.filter(graphQueryValue(args.filter));
   }
 
   const response = await request.get();
@@ -1373,7 +1401,7 @@ export async function getListItem(
   }
 
   const item = await client
-    .api(`/sites/${args.siteId}/lists/${args.listId}/items/${args.itemId}`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/items/${graphIdSegment(args.itemId, 'itemId', 'list_list_items')}`))
     .options({ signal })
     .expand('fields')
     .get();
@@ -1407,7 +1435,7 @@ export async function createListItem(
 
   try {
     const response = await client
-      .api(`/sites/${args.siteId}/lists/${args.listId}/items`)
+      .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/items`))
       .options({ signal })
       .post({ fields: args.fields });
 
@@ -1453,7 +1481,7 @@ export async function updateListItem(
   }
 
   await client
-    .api(`/sites/${args.siteId}/lists/${args.listId}/items/${args.itemId}/fields`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/items/${graphIdSegment(args.itemId, 'itemId', 'list_list_items')}/fields`))
     .options({ signal })
     .patch(args.fields);
 
@@ -1482,7 +1510,7 @@ export async function deleteListItem(
   }
 
   await client
-    .api(`/sites/${args.siteId}/lists/${args.listId}/items/${args.itemId}`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/items/${graphIdSegment(args.itemId, 'itemId', 'list_list_items')}`))
     .options({ signal })
     .delete();
 
@@ -1513,7 +1541,7 @@ export async function listListColumns(
   }
 
   const response = await client
-    .api(`/sites/${args.siteId}/lists/${args.listId}/columns`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/columns`))
     .options({ signal })
     .get();
   const { items: columns, truncated } = await fetchGraphCollection(
@@ -1615,7 +1643,7 @@ export async function createSiteList(
       : {}),
   };
 
-  const response = await client.api(`/sites/${args.siteId}/lists`).options({ signal }).post(body);
+  const response = await client.api(siteEndpoint(args.siteId, `/lists`)).options({ signal }).post(body);
   const created = GraphListSchema.parse(response);
 
   return successResult({
@@ -1937,7 +1965,7 @@ export async function revokeItemPermission(
     );
   }
 
-  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions/${args.permissionId}`;
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions/${graphIdSegment(args.permissionId, 'permissionId', 'list_item_permissions')}`;
   await client.api(endpoint).options({ signal }).delete();
 
   return successResult({
@@ -1968,7 +1996,7 @@ export async function listSubsites(
   const top = Math.min(args.top ?? 50, 200);
 
   const response = await client
-    .api(`/sites/${args.siteId}/sites`)
+    .api(siteEndpoint(args.siteId, `/sites`))
     .options({ signal })
     .top(top)
     .select('id,displayName,name,webUrl,description,createdDateTime,lastModifiedDateTime')
@@ -2060,7 +2088,7 @@ export async function getSiteDrive(
   }
 
   const drive = await client
-    .api(`/sites/${args.siteId}/drives/${args.driveId}`)
+    .api(siteEndpoint(args.siteId, `/drives/${driveSegment(args.driveId)}`))
     .options({ signal })
     .select('id,name,driveType,owner,quota,webUrl,createdDateTime,lastModifiedDateTime')
     .get();
@@ -2089,7 +2117,7 @@ export async function listSiteItems(
 
   try {
     const response = await client
-      .api(`/sites/${args.siteId}/items`)
+      .api(siteEndpoint(args.siteId, `/items`))
       .options({ signal })
       .top(top)
       .get();
@@ -2147,7 +2175,7 @@ export async function getSiteItem(
 
   try {
     const item = await client
-      .api(`/sites/${args.siteId}/items/${args.itemId}`)
+      .api(siteEndpoint(args.siteId, `/items/${graphIdSegment(args.itemId, 'itemId', 'list_site_items')}`))
       .options({ signal })
       .get();
 
@@ -2193,7 +2221,7 @@ export async function getSiteList(
   }
 
   const list = await client
-    .api(`/sites/${args.siteId}/lists/${args.listId}`)
+    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}`))
     .options({ signal })
     .select('id,displayName,name,description,webUrl,createdDateTime,lastModifiedDateTime,list')
     .get();
@@ -2232,9 +2260,11 @@ export async function getSiteByPath(
     );
   }
 
-  const p = args.path.startsWith('/') ? args.path : `/${args.path}`;
+  // Encoded per segment, then quotes doubled for the OData string literal
+  // (encodeURIComponent leaves ' as is).
+  const p = (graphDrivePath(args.path, 'path', 'list_subsites') || '/').replace(/'/g, "''");
   const site = await client
-    .api(`/sites/${args.siteId}/getByPath(path='${p}')`)
+    .api(siteEndpoint(args.siteId, `/getByPath(path='${p}')`))
     .options({ signal })
     .select('id,displayName,name,webUrl,description,createdDateTime,lastModifiedDateTime,root,siteCollection')
     .get();
@@ -2267,9 +2297,11 @@ export async function getSitesDelta(
     // must be the sites delta endpoint itself: Graph issues continuation
     // URLs paren-less (`/v1.0/sites/delta?$deltatoken=...`), while the
     // bound-function form `/sites/delta()` is accepted for compatibility.
-    if (!/^\/(v1\.0|beta)\/sites\/delta(\(\))?$/.test(deltaUrl.pathname)) {
+    // Only v1.0: this connector never calls beta, so a v1.0 call is only
+    // ever handed v1.0 links, and a beta link would leave the tested surface.
+    if (!/^\/v1\.0\/sites\/delta(\(\))?$/.test(deltaUrl.pathname)) {
       return errorResult(
-        'Invalid "deltaLink": provide the HTTPS deltaLink/nextLink URL returned by a previous get_sites_delta call (Graph /sites/delta endpoint).',
+        'Invalid "deltaLink": provide the HTTPS deltaLink/nextLink URL returned by a previous get_sites_delta call (Graph v1.0 /sites/delta endpoint).',
       );
     }
     endpoint = args.deltaLink;
@@ -2338,8 +2370,8 @@ async function buildTree(
   signal: AbortSignal,
 ): Promise<TreeNode[]> {
   const endpoint = folderId
-    ? `/drives/${driveId}/items/${folderId}/children`
-    : `/drives/${driveId}/root/children`;
+    ? `${buildDriveEndpoint(driveId, folderId, 'folderId')}/children`
+    : `/drives/${driveSegment(driveId)}/root/children`;
 
   const response = await client
     .api(endpoint)

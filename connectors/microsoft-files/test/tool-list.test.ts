@@ -52,6 +52,18 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   read_document: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
+const DESTRUCTIVE_TOOLS = [
+  'create_folder',
+  'upload_file',
+  'delete_file',
+  'move_file',
+  'copy_file',
+  'share_file',
+  'invite_to_file',
+  'revoke_file_permission',
+  'restore_file_version',
+];
+
 describe('microsoft-files tools/list', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;
@@ -94,6 +106,55 @@ describe('microsoft-files tools/list', () => {
           `${tool.name}.${key}`,
         ).toBe(value);
       }
+    }
+  });
+
+  it('does not instruct the model to confirm or ask first in tool descriptions', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(
+        /confirm with the user|ask the user (first|before)/i,
+      );
+    }
+  });
+
+  it('marks every send, delete, or sharing-invite tool as destructive', async () => {
+    const response = await client.client.listTools();
+    for (const name of DESTRUCTIVE_TOOLS) {
+      const tool = response.tools.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.annotations?.destructiveHint, name).toBe(true);
+    }
+  });
+
+  it('names other tools only by their plain name', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(/[a-z0-9]+(__|\.|:)[a-z]+_[a-z_]+/);
+    }
+  });
+});
+
+describe('microsoft-files description regression proof', () => {
+  it('pins link expiry and residual access guidance', async () => {
+    const cfg = createMicrosoftConfigDir();
+    const client = await createTestClient({
+      env: { MS_CLIENT_ID: 'mock-client-id', MS_CONFIG_DIR: cfg.configPath },
+    });
+
+    try {
+      const response = await client.client.listTools();
+      const descriptions = new Map(response.tools.map((tool) => [tool.name, tool.description ?? '']));
+
+      expect(descriptions.get('share_file')).toContain(
+        'or until it expires under the organization\'s sharing policy',
+      );
+      expect(descriptions.get('revoke_file_permission')).toContain(
+        'people may keep access through another link, a group or an inherited permission',
+      );
+    } finally {
+      await client.close();
+      cfg.cleanup();
     }
   });
 });

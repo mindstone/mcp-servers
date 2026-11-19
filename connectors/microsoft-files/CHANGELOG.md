@@ -6,9 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- The descriptions of the tools that create, upload, delete, move, copy, share or change permissions now say plainly what happens, who can see it, and whether it can be undone. These externally visible write actions are marked `destructiveHint: true`. `delete_file` now says the item goes to the OneDrive recycle bin (its missing-argument message used to say it was deleted permanently), `share_file` says the default link works for anyone in the organization and may expire under the organization's sharing policy, `revoke_file_permission` says people may keep access through another grant, and `download_file` says its link works without sign-in for a short time and should not be shared.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- File and folder paths, item IDs, permission IDs and version IDs are now checked and percent-encoded before they go into a Microsoft Graph address. A path or ID that could point the request at another resource (a `..` segment, a backslash, or for IDs `?`, `#` or `%`) is refused with an error that names the argument but not its value. Search text is now an escaped OData string, so a `'` in it cannot end the search early.
+
+### Fixed
+
+- Tools that address a file by path and act on it (sharing links, invitations, permissions, versions, activity, copy) now reach that file. They used to send the action as part of the file name, so Graph looked for the wrong item.
 
 ## [0.2.1] - 2026-08-10
 

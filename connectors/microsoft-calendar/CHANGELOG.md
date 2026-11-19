@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- The descriptions of `create_event`, `update_event`, `delete_event`, `cancel_event` and `respond_to_event` now say who is notified (invitations, updates, cancellations, responses to the organizer) and whether it can be undone. These send, delete and cancellation actions are marked `destructiveHint: true`. `delete_event`'s `notifyAttendees` argument now says it has no effect: when the organizer deletes a meeting, Microsoft always sends attendees a cancellation.
+
+### Fixed
+
+- Tentatively accepting an invitation now works; it called a Microsoft address that does not exist.
+- Replying to an invitation now says plainly what was done ('declined', 'tentatively accepted'), instead of a garbled word.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.

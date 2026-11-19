@@ -313,11 +313,11 @@ sign-in, Microsoft 365 tools become available.`,
     'send_email',
     {
       description:
-        'Send a new email message. "to", "cc", and "bcc" accept a string or an array of strings. Prefer arrays for multiple recipients (e.g. ["alice@example.com"]).',
+        'Send a new email now, from the user\'s mailbox to everyone in "to", "cc" and "bcc"; a copy is saved to Sent Items. This tool cannot recall it after sending. To save it without sending, use create_draft; to let the user review and edit it first, use compose_email. "to", "cc", and "bcc" accept a string or an array of strings. Prefer arrays for multiple recipients (e.g. ["alice@example.com"]).',
       inputSchema: SendEmailSchema,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: true,
       },
     },
@@ -434,18 +434,19 @@ sign-in, Microsoft 365 tools become available.`,
   server.registerTool(
     'reply_to_email',
     {
-      description: 'Reply to an email message.',
+      description:
+        'Send a reply now to the sender of an email (or the Reply-To address, if the email has one), or with replyAll also to the original To and Cc recipients; a copy is saved to Sent Items. This tool cannot recall it after sending. To save a reply without sending it, use create_reply_draft.',
       inputSchema: z.object({
         id: z.string().optional().describe('Original email message ID'),
         body: z.string().optional().describe('Reply body (HTML supported)'),
         replyAll: z
           .boolean()
           .optional()
-          .describe('Reply to all recipients (default: false)'),
+          .describe('Also send the reply to the original To and Cc recipients (default: false: only the sender, or the Reply-To address if the email has one)'),
       }).shape,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: true,
       },
     },
@@ -471,15 +472,16 @@ sign-in, Microsoft 365 tools become available.`,
   server.registerTool(
     'forward_email',
     {
-      description: 'Forward an email to other recipients.',
+      description:
+        'Forward an email now to the "to" recipients, with its original content and attachments and an optional comment; a copy is saved to Sent Items. This tool cannot recall it after sending.',
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID to forward'),
         to: RecipientField.optional().describe('Recipient(s) to forward to'),
-        comment: z.string().optional().describe('Optional comment to add'),
+        comment: z.string().optional().describe('Optional comment added above the forwarded email'),
       }).shape,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: true,
       },
     },
@@ -510,14 +512,15 @@ sign-in, Microsoft 365 tools become available.`,
   server.registerTool(
     'delete_email',
     {
-      description: 'Delete or move an email to trash.',
+      description:
+        "Delete an email. By default it is moved to Deleted Items, where the user can restore it. With permanent: true it is deleted with Microsoft's delete request instead of being moved to Deleted Items. Microsoft may still keep it for a time (in Deleted Items or its recoverable items), so this is not a guaranteed permanent erase. Nobody else is notified.",
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID'),
         permanent: z
           .boolean()
           .optional()
           .describe(
-            'Permanently delete (default: false, moves to Deleted Items)',
+            "Delete it with Microsoft's delete request instead of moving it to Deleted Items; not a guaranteed permanent erase (default: false)",
           ),
       }).shape,
       annotations: {
@@ -530,7 +533,7 @@ sign-in, Microsoft 365 tools become available.`,
       if (!args.id) {
         return errorResponse({
           error:
-            'Missing required parameter: "id" (email to delete). Example: { "id": "AAMkAGI2...", "permanent": false }. Set "permanent": true to permanently delete instead of moving to Deleted Items.',
+            'Missing required parameter: "id" (email to delete). Example: { "id": "AAMkAGI2...", "permanent": false }. Set "permanent": true to delete it with Microsoft\'s delete request instead of being moved to Deleted Items. Microsoft may still keep it for a time (in Deleted Items or its recoverable items), so this is not a guaranteed permanent erase.',
           action_required: 'Provide the message ID.',
           next_step: 'delete_email',
         });
@@ -574,7 +577,8 @@ sign-in, Microsoft 365 tools become available.`,
   server.registerTool(
     'move_email',
     {
-      description: 'Move an email to a different folder.',
+      description:
+        'Move an email to a different folder in the user\'s mailbox. Nobody else is notified, and it can be moved back.',
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID'),
         destinationFolder: z
@@ -614,7 +618,7 @@ sign-in, Microsoft 365 tools become available.`,
     'create_reply_draft',
     {
       description:
-        'Create a draft reply to an existing email, threaded in the same conversation. The draft is saved in Drafts and can be reviewed in Outlook before sending.',
+        'Create a draft reply to an existing email, threaded in the same conversation. Nothing is sent: the draft is saved in Drafts, where the user can review it in Outlook, and only send_draft sends it.',
       inputSchema: z.object({
         id: z.string().optional().describe('Original email message ID to reply to'),
         body: z
@@ -657,7 +661,7 @@ sign-in, Microsoft 365 tools become available.`,
     'create_draft',
     {
       description:
-        'Create a new standalone draft email (saved but not sent). For replying to an existing thread, use create_reply_draft instead.',
+        'Create a new standalone draft email. Nothing is sent: it is saved in Drafts, and only send_draft sends it. For replying to an existing thread, use create_reply_draft instead.',
       inputSchema: z.object({
         to: RecipientField.optional().describe('Recipient email address(es)'),
         subject: z.string().optional().describe('Email subject'),
@@ -703,7 +707,8 @@ sign-in, Microsoft 365 tools become available.`,
   server.registerTool(
     'mark_email_read',
     {
-      description: 'Mark an email as read or unread.',
+      description:
+        'Mark an email as read or unread in the user\'s mailbox. Nobody else is notified, and it can be changed back.',
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID'),
         isRead: z
@@ -741,7 +746,7 @@ sign-in, Microsoft 365 tools become available.`,
     'set_email_flag',
     {
       description:
-        'Flag an email for follow-up, mark a follow-up complete, or clear the flag.',
+        'Flag an email for follow-up, mark a follow-up complete, or clear the flag, in the user\'s mailbox. Nobody else is notified, and it can be changed back.',
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID'),
         flag: z
@@ -781,13 +786,13 @@ sign-in, Microsoft 365 tools become available.`,
     'send_draft',
     {
       description:
-        'Send an existing draft email (created by create_draft or create_reply_draft). The draft is sent and saved to Sent Items.',
+        'Send an existing draft email now (created by create_draft or create_reply_draft) to the recipients saved on the draft; it moves to Sent Items. This tool cannot recall it after sending.',
       inputSchema: z.object({
         id: z.string().optional().describe('Draft message ID (draftId from create_draft)'),
       }).shape,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: true,
       },
     },
@@ -814,7 +819,7 @@ sign-in, Microsoft 365 tools become available.`,
     'update_draft',
     {
       description:
-        'Update an existing draft email. Only the provided fields are changed (subject, body, to, cc, importance). Use send_draft to send it afterwards.',
+        'Update an existing draft email. Only the provided fields are changed (subject, body, to, cc, importance). Nothing is sent; use send_draft to send it afterwards.',
       inputSchema: z.object({
         id: z.string().optional().describe('Draft message ID (draftId from create_draft)'),
         to: RecipientField.optional().describe('Replace the recipient list'),
@@ -901,7 +906,7 @@ sign-in, Microsoft 365 tools become available.`,
     'set_automatic_replies',
     {
       description:
-        'Turn out-of-office (automatic replies) on, off, or schedule it. Status "scheduled" requires scheduledStart and scheduledEnd. Requires the MailboxSettings.ReadWrite permission.',
+        'Turn out-of-office (automatic replies) on, off, or schedule it. While it is on, people who email the user get the reply message automatically: everyone inside the organization, and people outside it as externalAudience says. Only the settings given are changed; any left out keep their current values. It can be changed again by calling this tool. Status "scheduled" requires scheduledStart and scheduledEnd. Requires the MailboxSettings.ReadWrite permission.',
       inputSchema: z.object({
         status: z
           .enum(['disabled', 'alwaysEnabled', 'scheduled'])
@@ -920,7 +925,7 @@ sign-in, Microsoft 365 tools become available.`,
         externalAudience: z
           .enum(['none', 'contactsOnly', 'all'])
           .optional()
-          .describe('Who outside the organization receives the external reply (default: none)'),
+          .describe('Who outside the organization receives the external reply; left out, the current setting stays as it is'),
         scheduledStart: z
           .string()
           .optional()
@@ -936,7 +941,7 @@ sign-in, Microsoft 365 tools become available.`,
       }).shape,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },

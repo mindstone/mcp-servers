@@ -9,6 +9,7 @@ import {
 import { wrapUntrusted } from './untrusted-content.js';
 import { validateContentRedirectUrl, validateUploadSessionUrl } from './upload-url.js';
 import { FilesBusinessError } from './types.js';
+import { graphDrivePath, graphIdSegment, odataStringLiteral } from './graph-request-target.js';
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (ported 1:1 from bundled microsoft-files)
@@ -37,11 +38,28 @@ function formatItem(item: DriveItem, sourceTool: string) {
   };
 }
 
-function buildDriveItemEndpoint(path: string, suffix = ''): string {
+/**
+ * A drive item addressed by path (`/Folder/file.txt`) or by item ID. A path
+ * is checked and encoded per segment; with a suffix it is closed with `:` so
+ * Graph reads the suffix as a segment after the item, not part of its name.
+ * The drive root (`/`) maps to `/me/drive/root`.
+ */
+function buildDriveItemEndpoint(path: string, suffix = '', field = 'path'): string {
   if (path.startsWith('/')) {
-    return `/me/drive/root:${path}${suffix}`;
+    const drivePath = graphDrivePath(path, field, 'list_files');
+    if (drivePath === '') return `/me/drive/root${suffix}`;
+    return suffix ? `/me/drive/root:${drivePath}:${suffix}` : `/me/drive/root:${drivePath}`;
   }
-  return `/me/drive/items/${path}${suffix}`;
+  return `/me/drive/items/${graphIdSegment(path, field, 'list_files')}${suffix}`;
+}
+
+/** A drive path that must name an item below the root (upload targets). */
+function nonRootDrivePath(path: string, nextStep: string): string {
+  const drivePath = graphDrivePath(path, 'path', nextStep);
+  if (drivePath === '') {
+    throw new FilesBusinessError('"path" must name a file, not the drive root.', nextStep);
+  }
+  return drivePath;
 }
 
 /**
@@ -387,11 +405,7 @@ export async function listFiles(
   let endpoint: string;
 
   if (args.path) {
-    if (args.path.startsWith('/')) {
-      endpoint = `/me/drive/root:${args.path}:/children`;
-    } else {
-      endpoint = `/me/drive/items/${args.path}/children`;
-    }
+    endpoint = buildDriveItemEndpoint(args.path, '/children');
   } else {
     endpoint = '/me/drive/root/children';
   }
@@ -463,7 +477,7 @@ export async function searchFiles(
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
-    .api(`/me/drive/root/search(q='${encodeURIComponent(args.query)}')`)
+    .api(`/me/drive/root/search(q=${odataStringLiteral(args.query)})`)
     .options({ signal })
     .top(top)
     .select('id,name,size,createdDateTime,lastModifiedDateTime,webUrl,folder,file,parentReference')
@@ -484,6 +498,7 @@ export async function uploadFile(
   signal: AbortSignal,
 ): Promise<unknown> {
   const encoding = args.encoding ?? 'utf8';
+  const drivePath = nonRootDrivePath(args.path, 'upload_file');
 
   if (encoding === 'base64') {
     if (!isValidBase64(args.content)) {
@@ -503,12 +518,12 @@ export async function uploadFile(
       bytes.length <= SIMPLE_UPLOAD_MAX_BYTES
         ? GraphUploadedItemSchema.parse(
             await client
-              .api(`/me/drive/root:${args.path}:/content`)
+              .api(`/me/drive/root:${drivePath}:/content`)
               .options({ signal })
               .header('Content-Type', 'application/octet-stream')
               .put(bytes),
           )
-        : await uploadViaSession(client, args.path, bytes, signal);
+        : await uploadViaSession(client, drivePath, bytes, signal);
     return formatUploadedItem(item);
   }
 
@@ -520,7 +535,7 @@ export async function uploadFile(
     );
   }
 
-  const endpoint = `/me/drive/root:${args.path}:/content`;
+  const endpoint = `/me/drive/root:${drivePath}:/content`;
   const response = await client
     .api(endpoint)
     .options({ signal })
@@ -550,12 +565,12 @@ function formatUploadedItem(item: z.infer<typeof GraphUploadedItemSchema>) {
  */
 async function uploadViaSession(
   client: Client,
-  path: string,
+  drivePath: string,
   bytes: Buffer,
   signal: AbortSignal,
 ): Promise<z.infer<typeof GraphUploadedItemSchema>> {
   const sessionResponse = await client
-    .api(`/me/drive/root:${path}:/createUploadSession`)
+    .api(`/me/drive/root:${drivePath}:/createUploadSession`)
     .options({ signal })
     .post({
       item: { '@microsoft.graph.conflictBehavior': 'replace' },
@@ -610,20 +625,16 @@ export async function createFolder(
   args: CreateFolderArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  // Checked whole first so a dot segment anywhere refuses the call.
+  graphDrivePath(args.path, 'path', 'list_files');
   const pathParts = args.path.split('/').filter(Boolean);
   const folderName = pathParts.pop();
-  const parentPath = '/' + pathParts.join('/');
 
   if (!folderName) {
     throw new FilesBusinessError('Invalid folder path', 'create_folder');
   }
 
-  let endpoint: string;
-  if (parentPath === '/') {
-    endpoint = '/me/drive/root/children';
-  } else {
-    endpoint = `/me/drive/root:${parentPath}:/children`;
-  }
+  const endpoint = buildDriveItemEndpoint('/' + pathParts.join('/'), '/children');
 
   const response = await client.api(endpoint).options({ signal }).post({
     name: folderName,
@@ -659,12 +670,10 @@ export async function moveFile(
   args: MoveFileArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const destEndpoint = args.destinationPath.startsWith('/')
-    ? `/me/drive/root:${args.destinationPath}`
-    : `/me/drive/items/${args.destinationPath}`;
+  const destEndpoint = buildDriveItemEndpoint(args.destinationPath, '', 'destinationPath');
+  const sourceEndpoint = buildDriveItemEndpoint(args.sourcePath, '', 'sourcePath');
   const destFolder = await client.api(destEndpoint).options({ signal }).select('id').get();
 
-  const sourceEndpoint = buildDriveItemEndpoint(args.sourcePath);
   const update: Record<string, unknown> = {
     parentReference: { id: destFolder.id },
   };
@@ -689,19 +698,18 @@ export async function copyFile(
   args: CopyFileArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const sourceEndpoint = buildDriveItemEndpoint(args.sourcePath);
+  const sourceEndpoint = buildDriveItemEndpoint(args.sourcePath, '', 'sourcePath');
+  const copyEndpoint = buildDriveItemEndpoint(args.sourcePath, '/copy', 'sourcePath');
+  const destEndpoint = buildDriveItemEndpoint(args.destinationPath, '', 'destinationPath');
   const sourceItem = await client
     .api(sourceEndpoint)
     .options({ signal })
     .select('id,name')
     .get();
 
-  const destEndpoint = args.destinationPath.startsWith('/')
-    ? `/me/drive/root:${args.destinationPath}`
-    : `/me/drive/items/${args.destinationPath}`;
   const destFolder = await client.api(destEndpoint).options({ signal }).select('id').get();
 
-  await client.api(`${sourceEndpoint}/copy`).options({ signal }).post({
+  await client.api(copyEndpoint).options({ signal }).post({
     parentReference: { id: destFolder.id },
     name: args.newName ?? sourceItem.name,
   });
@@ -960,7 +968,7 @@ export async function revokeFilePermission(
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(
     args.path,
-    `/permissions/${encodeURIComponent(args.permissionId)}`,
+    `/permissions/${graphIdSegment(args.permissionId, 'permissionId', 'list_file_permissions')}`,
   );
   await client.api(endpoint).options({ signal }).delete();
 
@@ -1015,7 +1023,7 @@ export async function restoreFileVersion(
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(
     args.path,
-    `/versions/${encodeURIComponent(args.versionId)}/restoreVersion`,
+    `/versions/${graphIdSegment(args.versionId, 'versionId', 'list_file_versions')}/restoreVersion`,
   );
   await client.api(endpoint).options({ signal }).post({});
 

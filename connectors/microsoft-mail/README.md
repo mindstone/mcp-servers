@@ -184,7 +184,7 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | `get_conversation` | List messages in a thread, oldest first (see ordering note below). |
 | `reply_to_email` | Reply (or reply-all) to an existing email. |
 | `forward_email` | Forward an email to additional recipients. |
-| `delete_email` | Move an email to Deleted Items, or hard-delete it. |
+| `delete_email` | Move an email to Deleted Items, or with `permanent: true` delete it with Microsoft's delete request instead of being moved to Deleted Items; Microsoft may still keep it for a time (in Deleted Items or its recoverable items), so this is not a guaranteed permanent erase. |
 | `list_folders` | List mail folders. |
 | `move_email` | Move an email to a different folder. |
 | `create_reply_draft` | Save a draft reply to an existing email. |
@@ -216,6 +216,7 @@ Mail tools run on the `Mail.ReadWrite` + `Mail.Send` delegated grants. The autom
 
 ## Security notes
 
+- IDs are passed plain, not pre-encoded. IDs containing `?`, `#`, `%`, `\` or a `.`/`..` segment are refused with an error naming the field without echoing the value.
 - Token files are written by the host with mode `0600`; this server reads them via the cohort-shared library, which fails closed on malformed files.
 - `MICROSOFT_DISABLE_REFRESH=1` is the default on cloud surfaces so the desktop session remains the sole refresh-token authority and avoids racing for single-use refresh tokens.
 - Successful tool responses drop the OSS-only `ok:true` wrapper to match the bundled `successResult` shape; manual validation/business errors return `isError:true` with a `{ ok:false, error, action_required, next_step }` payload so the host's recovery layer can act on them.

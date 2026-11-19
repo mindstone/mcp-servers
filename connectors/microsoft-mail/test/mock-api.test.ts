@@ -360,7 +360,9 @@ describe('microsoft-mail mock-API integration', () => {
   });
 
   it('delete_email with permanent=true issues DELETE on the message', async () => {
-    await client.callTool('delete_email', { id: 'msg-2', permanent: true });
+    const result = await client.callTool('delete_email', { id: 'msg-2', permanent: true });
+    expect(result.isError).not.toBe(true);
+    expect((result.json as { message: string }).message).toBe('Email deleted');
     const deleteCall = state.requests.find(
       (r) => r.method === 'DELETE' && r.pathname.endsWith('/me/messages/msg-2'),
     );

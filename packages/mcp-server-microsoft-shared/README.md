@@ -19,6 +19,9 @@ npm install @mindstone/mcp-server-microsoft-shared@0.1.0
   refresh-race protection, host-injected refresh-disable gate).
 - `MicrosoftRefreshDisabledError` — thrown by `TokenProvider.getAccessToken`
   when the access token is expired and the host has set `MICROSOFT_DISABLE_REFRESH=1`.
+- `MicrosoftCredentialFileError` — thrown by `TokenProvider.loadToken` /
+  `loadAccounts` (and so `getAccessToken`) when a token or accounts file is
+  refused or invalid; carries a fixed message and a `reason` code.
 - `createGraphClient`, `createGraphClientWithRetry`, `listMicrosoftAccounts`,
   `getTokenProvider`, `checkGraphConnection` — Microsoft Graph client factory.
 - `createLogger` — structured stderr logger.
@@ -61,6 +64,12 @@ Host-injected environment variables interpreted by this library:
   refresh-token rotation; in that mode the connector throws a structured
   `MicrosoftRefreshDisabledError` which callers translate into the host-neutral
   `auth_required` envelope.
+- Token and account reads refuse symlinks, non-regular files (directories,
+  FIFOs, devices), a file whose opened identity differs from its path, and
+  files over 64 KiB, then schema-check the JSON. A refused or corrupt file
+  throws `MicrosoftCredentialFileError`, whose message names no path or file
+  content (its `reason` code says why, for logs). A missing file still reads
+  as no accounts / no token.
 
 ## Attribution
 

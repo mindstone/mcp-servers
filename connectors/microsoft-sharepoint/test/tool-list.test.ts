@@ -133,6 +133,27 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   get_sites_delta: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
+const DESTRUCTIVE_TOOLS = [
+  'upload_library_file',
+  'upload_library_file_binary',
+  'create_library_folder',
+  'delete_library_item',
+  'move_library_item',
+  'copy_library_item',
+  'create_site_page',
+  'update_site_page',
+  'publish_site_page',
+  'create_list_item',
+  'update_list_item',
+  'delete_list_item',
+  'create_site_list',
+  'rename_library_item',
+  'create_sharing_link',
+  'invite_item_collaborators',
+  'revoke_item_permission',
+  'update_file_metadata',
+];
+
 describe('microsoft-sharepoint tools/list', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;
@@ -175,6 +196,85 @@ describe('microsoft-sharepoint tools/list', () => {
           `${tool.name}.${key}`,
         ).toBe(value);
       }
+    }
+  });
+
+  it('does not instruct the model to confirm or ask first in tool descriptions', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(
+        /confirm with the user|ask the user (first|before)/i,
+      );
+    }
+  });
+
+  it('marks every send, delete, or sharing-invite tool as destructive', async () => {
+    const response = await client.client.listTools();
+    for (const name of DESTRUCTIVE_TOOLS) {
+      const tool = response.tools.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.annotations?.destructiveHint, name).toBe(true);
+    }
+  });
+
+  it('names other tools only by their plain name', async () => {
+    const response = await client.client.listTools();
+    for (const tool of response.tools) {
+      expect(tool.description ?? '', tool.name).not.toMatch(/[a-z0-9]+(__|\.|:)[a-z]+_[a-z_]+/);
+    }
+  });
+});
+
+describe('microsoft-sharepoint description regression proof for 28d870fd4c', () => {
+  it('limits moves to one library and does not suggest copy-then-delete', async () => {
+    const cfg = createMicrosoftConfigDir();
+    const client = await createTestClient({
+      env: { MS_CLIENT_ID: 'mock-client-id', MS_CONFIG_DIR: cfg.configPath },
+    });
+
+    try {
+      const response = await client.client.listTools();
+      const moveDescription = response.tools.find((tool) => tool.name === 'move_library_item')?.description ?? '';
+
+      expect(moveDescription).toContain('to another folder in the same library');
+      expect(moveDescription).toContain('It cannot move items to a different library.');
+      expect(moveDescription).not.toContain('copy with copy_library_item');
+    } finally {
+      await client.close();
+      cfg.cleanup();
+    }
+  });
+});
+
+describe('microsoft-sharepoint description regression proof for aa6e7b13de', () => {
+  it('pins visibility, sharing-expiry, and residual-access guidance', async () => {
+    const cfg = createMicrosoftConfigDir();
+    const client = await createTestClient({
+      env: { MS_CLIENT_ID: 'mock-client-id', MS_CONFIG_DIR: cfg.configPath },
+    });
+
+    try {
+      const response = await client.client.listTools();
+      const descriptions = new Map(response.tools.map((tool) => [tool.name, tool.description ?? '']));
+
+      expect(descriptions.get('create_library_folder')).toContain(
+        'Everyone with access to the library can see it.',
+      );
+      expect(descriptions.get('copy_library_item')).toContain(
+        'everyone with access to the destination can see it',
+      );
+      expect(descriptions.get('create_site_page')).toContain(
+        'Readers do not see it until publish_site_page is called',
+      );
+      expect(descriptions.get('create_sharing_link')).toContain(
+        'or until it expires under the organization\'s sharing policy',
+      );
+      expect(descriptions.get('revoke_item_permission')).toContain(
+        'people may keep access through another link, a group or an inherited permission',
+      );
+    } finally {
+      await client.close();
+      cfg.cleanup();
     }
   });
 });

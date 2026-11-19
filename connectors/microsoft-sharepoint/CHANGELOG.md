@@ -6,9 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- The descriptions of the tools that create, upload, delete, move, copy, rename, publish, share, change permissions or change list items and metadata now say plainly what happens, who sees it, and whether it can be undone. These externally visible write actions are marked `destructiveHint: true`. `delete_library_item` and `delete_list_item` say the item goes to the site's recycle bin, `move_library_item` says it moves only within the same library, `create_sharing_link` says the default link works for anyone in the organization and may expire under the organization's sharing policy, `revoke_item_permission` says people may keep access through another grant, and `download_library_file` says its link works without sign-in for a short time and should not be shared.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Site, library, item, list, page, folder and permission IDs and library paths are now checked and percent-encoded before they go into a Microsoft Graph address, and a value that could point the request at another resource (for example a `..` segment) is refused with an error that names the argument but not its value. Site IDs work in both the `hostname,siteCollectionId,webId` and `hostname:/sites/name` forms. Search text, the `get_site_by_path` path and a caller-written list `filter` are escaped or encoded so they cannot change the request.
+- `get_sites_delta` now follows only Graph v1.0 delta links and refuses beta ones.
 
 ## [0.2.1] - 2026-08-10
 
