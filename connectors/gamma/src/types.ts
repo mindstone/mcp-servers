@@ -53,11 +53,6 @@ export const EXPORT_POLL_MAX_ATTEMPTS = parseInt(
   10,
 );
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class GammaError extends Error {
   constructor(
     message: string,

@@ -324,11 +324,10 @@ describe('Bridge integration', () => {
 
     // Use a handler that returns 401 for ALL bridge requests (no Bearer token check)
     mswServer.use(
+      // Bodyless: the reader cancels a 401/403 body, and an msw-mocked body
+      // never settles that cancel (a real loopback reply does).
       http.post(`http://127.0.0.1:${bridgePort}/bundled/workday/configure`, () =>
-        HttpResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 },
-        ),
+        new HttpResponse(null, { status: 401 }),
       ),
       http.post(TOKEN_URL, async () =>
         HttpResponse.json(createTokenResponse()),

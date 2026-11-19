@@ -162,6 +162,7 @@ node dist/index.js
 - **Strict pagination.** `limit` must be an integer 1-100 and `offset` a non-negative integer; out-of-range or fractional values are rejected rather than silently clamped. `worker_id` arguments must be non-blank.
 - **Bounded errors & no redirect following.** API and token errors return connector-authored messages (never raw vendor error bodies), and HTTP redirects are refused rather than followed, so credentials can never be replayed to a redirect target. The configured host is validated against loopback/private ranges (including non-canonical IP spellings and IPv6 forms) and re-resolved via DNS before credentials are sent.
 - **ISU security domains.** Workday gates each REST family behind Integration System User domain permissions; a 403 from `list_workday_time_off`, `list_workday_job_requisitions`, or `list_workday_jobs` means the ISU's security group needs the corresponding domain (Absence Management, Recruiting, Payroll).
+- **Host bridge state.** The bridge state file (`MCP_HOST_BRIDGE_STATE`) is read through the shared hardened reader: the file must be a regular file (not a symlink), at most 64 KiB, with a numeric `port` and a printable `token`, or the bridge is treated as unavailable and the reason is logged to stderr. Bridge requests go only to `127.0.0.1`, and any warning or error text the bridge returns is wrapped in an `<untrusted-content>` envelope.
 
 ## Licence
 

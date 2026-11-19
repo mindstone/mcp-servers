@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, setApiKey, getDomain, setDomain, normalizeTalentLmsSubdomainInput, isValidSubdomain } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { bridgeRequest, isBridgeConfigured } from '../bridge.js';
 import { TalentLMSError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -39,7 +39,7 @@ export function registerConfigureTools(server: McpServer): void {
       }
 
       // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
+      if (isBridgeConfigured()) {
         try {
           const result = await bridgeRequest('/bundled/talentlms/configure', { apiKey, domain });
           if (result.success) {

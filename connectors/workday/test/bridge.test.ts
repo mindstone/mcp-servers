@@ -53,7 +53,7 @@ async function runConfigureWithBridgePath(bridgeStatePath: string) {
     });
     const warnings = consoleSpy.mock.calls
       .map((call) => call.map(String).join(' '))
-      .filter((line) => line.startsWith('[Workday]'));
+      .filter((line) => line.startsWith('[workday]'));
     const json = result.json as Record<string, unknown>;
     await testClient.close();
     return { json, warnings };
@@ -86,7 +86,7 @@ describe('bridge state file hardening', () => {
       const { json, warnings } = await runConfigureWithBridgePath(statePath);
       expect(json.ok).toBe(false);
       expect(json.code).toBe('BRIDGE_ERROR');
-      expect(warnings.some((line) => line.includes('Failed to load bridge state file'))).toBe(true);
+      expect(warnings.some((line) => line.includes('[workday] bridge state rejected: malformed JSON'))).toBe(true);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -101,7 +101,7 @@ describe('bridge state file hardening', () => {
       const { json, warnings } = await runConfigureWithBridgePath(statePath);
       expect(json.ok).toBe(false);
       expect(json.code).toBe('BRIDGE_ERROR');
-      expect(warnings.some((line) => line.includes('"port" is not an integer'))).toBe(true);
+      expect(warnings.some((line) => line.includes('bridge state rejected: content failed schema validation'))).toBe(true);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -116,29 +116,51 @@ describe('bridge state file hardening', () => {
       const { json, warnings } = await runConfigureWithBridgePath(statePath);
       expect(json.ok).toBe(false);
       expect(json.code).toBe('BRIDGE_ERROR');
-      expect(warnings.some((line) => line.includes('"token" is not a non-empty string'))).toBe(true);
+      expect(warnings.some((line) => line.includes('bridge state rejected: content failed schema validation'))).toBe(true);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it('relative path is refused with an observable warning', async () => {
-    const { json, warnings } = await runConfigureWithBridgePath('bridge-state.json');
-    expect(json.ok).toBe(false);
-    expect(json.code).toBe('BRIDGE_ERROR');
-    expect(warnings.some((line) => line.includes('not an absolute, normalized path'))).toBe(true);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'symlinked state file is refused with an observable warning',
+    async () => {
+      const { fs, path } = await makeTmpDir();
+      try {
+        const target = path.join(tmpDir, 'real-state.json');
+        fs.writeFileSync(target, JSON.stringify({ port: 19876, token: 'test-token' }));
+        const link = path.join(tmpDir, 'bridge-state.json');
+        fs.symlinkSync(target, link);
 
-  it('path with a traversal segment is refused with an observable warning', async () => {
-    const os = await import('os');
-    // Literal '..' segment — path.join would normalize it away.
-    const traversal = `${os.tmpdir()}/workday-bridge-test/../bridge-state.json`;
+        const { json, warnings } = await runConfigureWithBridgePath(link);
+        expect(json.ok).toBe(false);
+        expect(json.code).toBe('BRIDGE_ERROR');
+        expect(json.error).toBe('Bridge not available');
+        expect(warnings.some((line) => line.includes('bridge state rejected: state path is a symbolic link'))).toBe(true);
+      } finally {
+        (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
+      }
+    },
+  );
 
-    const { json, warnings } = await runConfigureWithBridgePath(traversal);
-    expect(json.ok).toBe(false);
-    expect(json.code).toBe('BRIDGE_ERROR');
-    expect(warnings.some((line) => line.includes('not an absolute, normalized path'))).toBe(true);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'FIFO at the state path is refused without blocking',
+    async () => {
+      const { fs, path } = await makeTmpDir();
+      const { execFileSync } = await import('child_process');
+      try {
+        const fifo = path.join(tmpDir, 'bridge-state.json');
+        execFileSync('mkfifo', [fifo]);
+
+        const { json, warnings } = await runConfigureWithBridgePath(fifo);
+        expect(json.ok).toBe(false);
+        expect(json.code).toBe('BRIDGE_ERROR');
+        expect(warnings.some((line) => line.includes('bridge state rejected: not a regular file'))).toBe(true);
+      } finally {
+        (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('oversized state file is refused with an observable warning', async () => {
     const { fs, path } = await makeTmpDir();
@@ -149,7 +171,7 @@ describe('bridge state file hardening', () => {
       const { json, warnings } = await runConfigureWithBridgePath(statePath);
       expect(json.ok).toBe(false);
       expect(json.code).toBe('BRIDGE_ERROR');
-      expect(warnings.some((line) => line.includes('exceeds'))).toBe(true);
+      expect(warnings.some((line) => line.includes('bridge state rejected: state file is too large'))).toBe(true);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -164,7 +186,10 @@ describe('bridge state file hardening', () => {
       const { json, warnings } = await runConfigureWithBridgePath(dirPath);
       expect(json.ok).toBe(false);
       expect(json.code).toBe('BRIDGE_ERROR');
-      expect(warnings.some((line) => line.includes('not a regular file'))).toBe(true);
+      // Directories are refused at open() or by the regular-file check, by platform.
+      expect(
+        warnings.some((line) => /bridge state rejected: (not a regular file|state file could not be read)/.test(line)),
+      ).toBe(true);
     } finally {
       (await import('fs')).rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -257,7 +282,7 @@ describe('bridge response handling', () => {
       const closeMatches = result.text.match(/<\/untrusted-content/gi) ?? [];
       expect(closeMatches.length).toBe(1);
       const errorText = json.error as string;
-      expect(errorText.startsWith('<untrusted-content source="workday-bridge">')).toBe(true);
+      expect(errorText.startsWith('<untrusted-content source="workday:bridge.error">')).toBe(true);
       expect(errorText).toMatch(/<\\\/untrusted-content/i);
       expect(errorText.match(/<\/untrusted-content/gi)).toHaveLength(1);
     } finally {
@@ -284,7 +309,7 @@ describe('bridge response handling', () => {
       const closeMatches = result.text.match(/<\/untrusted-content/gi) ?? [];
       expect(closeMatches.length).toBe(1);
       const message = json.message as string;
-      expect(message).toContain('<untrusted-content source="workday-bridge">');
+      expect(message).toContain('<untrusted-content source="workday:bridge.warning">');
       expect(message).toMatch(/<\\\/untrusted-content/i);
       expect(message.match(/<\/untrusted-content/gi)).toHaveLength(1);
     } finally {

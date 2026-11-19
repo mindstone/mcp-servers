@@ -172,6 +172,7 @@ List tools paginate: TalentLMS returns 20 items per page by default — pass `pa
 
 - **Untrusted-content envelopes:** text authored inside TalentLMS (course and group descriptions, user names/bios/custom fields, test and survey answers, etc.) is returned inside `<untrusted-content source="...">` envelopes so the host model treats it as data, not instructions. Ids, statuses, timestamps, and other metadata are deliberately left raw so tool chaining (e.g. copying a `user_id` into the next call) keeps working.
 - **Privilege guard:** `create_talentlms_user` and `update_talentlms_user` only accept the non-privileged `Learner`/`Trainer` user types — Administrator/SuperAdmin accounts must be managed in the TalentLMS UI.
+- **Host bridge state.** The bridge state file (`MCP_HOST_BRIDGE_STATE`) is read through the shared hardened reader: the file must be a regular file (not a symlink), at most 64 KiB, with a numeric `port` and a printable `token`, or the bridge is treated as unavailable and the reason is logged to stderr. Bridge requests go only to `127.0.0.1`, and any warning or error text the bridge returns is wrapped in an `<untrusted-content>` envelope.
 
 ## Licence
 

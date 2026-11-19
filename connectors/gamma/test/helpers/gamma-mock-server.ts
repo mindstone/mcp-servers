@@ -134,10 +134,9 @@ export function createGammaBridgeHandlers(port: number, token: string) {
 export function createGammaBridge401Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/gamma/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+      // Bodyless: the reader cancels a 401/403 body, and an msw-mocked body
+      // never settles that cancel (a real loopback reply does).
+      return new HttpResponse(null, { status: 401 });
     }),
   ];
 }
@@ -148,10 +147,9 @@ export function createGammaBridge401Handlers(port: number) {
 export function createGammaBridge403Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/gamma/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 },
-      );
+      // Bodyless: the reader cancels a 401/403 body, and an msw-mocked body
+      // never settles that cancel (a real loopback reply does).
+      return new HttpResponse(null, { status: 403 });
     }),
   ];
 }

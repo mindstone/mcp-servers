@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- The connector now reads the host app's bridge state file through the shared hardened reader. It refuses a state file that is a symlink, is not a regular file, is larger than 64 KiB or does not match the expected shape (each refusal is logged to stderr with a fixed reason). When the bridge is configured but its state is unusable, the connector reports the bridge as unavailable rather than falling back to an in-memory setup. Text the host bridge sends back (warnings and errors) is now wrapped in an untrusted-content envelope, and a 401 or 403 from the bridge gives a fixed message. Wrapping of the bridge's errors and warnings moves from the configure tool into the shared reader, so they are wrapped once. The old checks that refused a relative or `..` state path are replaced by the symlink and non-regular-file refusals, which the path checks did not cover. When the bridge declines to save a rotated refresh token, a fixed line is now logged to stderr instead of the refusal going unnoticed.
 
 ## [0.3.2] - 2026-10-13
 

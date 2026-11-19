@@ -5,11 +5,11 @@ import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import {
-  type MeetingsListResponse,
+  MeetingsListResponseSchema,
   type MeetingItem,
-  type TranscriptResponse,
+  TranscriptResponseSchema,
   type TranscriptEntry,
-  type SummaryResponse,
+  SummaryResponseSchema,
   FathomError,
 } from '../types.js';
 
@@ -43,7 +43,7 @@ async function findMeetingByRecordingId(
     if (cursor) params.set('cursor', cursor);
     const qs = params.toString();
     const path = qs ? `/meetings?${qs}` : '/meetings';
-    const response = await fathomFetch<MeetingsListResponse>(path);
+    const response = await fathomFetch(path, MeetingsListResponseSchema);
     pageCount++;
 
     const found = response.items.find((item) => item.recording_id === recordingId);
@@ -57,7 +57,7 @@ async function findMeetingByRecordingId(
 
 function formatTimestamp(entry: TranscriptEntry): string {
   if (entry.timestamp) return entry.timestamp;
-  if (entry.start_time !== undefined) {
+  if (entry.start_time != null) {
     const totalSeconds = Math.floor(entry.start_time);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -177,7 +177,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
         if (cursor) params.set('cursor', cursor);
         const qs = params.toString();
         const path = qs ? `/meetings?${qs}` : '/meetings';
-        const response = await fathomFetch<MeetingsListResponse>(path);
+        const response = await fathomFetch(path, MeetingsListResponseSchema);
         meetings.push(...response.items);
         cursor = response.next_cursor || undefined;
         if (meetings.length > limit) {
@@ -245,18 +245,24 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       let summary = meeting.default_summary || null;
       if (!summary) {
         try {
-          const summaryResponse = await fathomFetch<SummaryResponse>(
+          const summaryResponse = await fathomFetch(
             `/recordings/${recordingId}/summary`,
+            SummaryResponseSchema,
           );
-          if (summaryResponse?.summary) {
+          if (summaryResponse.summary) {
             summary = {
               template_name: summaryResponse.summary.template_name,
               markdown_formatted: summaryResponse.summary.markdown_formatted,
             };
           }
         } catch (err) {
-          // Re-throw rate limit errors; swallow not-found (summary may not exist yet)
-          if (err instanceof FathomError && err.code === 'RATE_LIMITED') throw err;
+          // A 404 is taken to mean the summary has not been generated yet and
+          // is shown as null. That is this connector's assumption: Fathom's
+          // docs say some meetings have no summary but not which status the
+          // summary endpoint returns for them. Any other failure (rate limit,
+          // an unexpected reply, auth, timeout, server error) is reported
+          // rather than hidden.
+          if (!(err instanceof FathomError && err.code === 'NOT_FOUND')) throw err;
           summary = null;
         }
       }
@@ -320,8 +326,9 @@ Use list_fathom_meetings first to find the recording_id.`,
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
 
-      const response = await fathomFetch<TranscriptResponse>(
+      const response = await fathomFetch(
         `/recordings/${args.recording_id}/transcript`,
+        TranscriptResponseSchema,
       );
 
       let entries = response.transcript || [];
@@ -507,7 +514,7 @@ Rate limit: May use 1-10 API calls depending on filters and result volume.`,
 
       do {
         if (cursor) params.set('cursor', cursor);
-        const response = await fathomFetch<MeetingsListResponse>(`/meetings?${params.toString()}`);
+        const response = await fathomFetch(`/meetings?${params.toString()}`, MeetingsListResponseSchema);
         pageCount++;
 
         for (const meeting of response.items || []) {

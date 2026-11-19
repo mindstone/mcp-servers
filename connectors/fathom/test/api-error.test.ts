@@ -67,7 +67,7 @@ describe('API error body handling', () => {
     expect(json.error.length).toBeLessThan(700);
   });
 
-  it('envelopes JSON.parse diagnostics from a malformed success body', async () => {
+  it('reports a malformed success body with a fixed error, echoing none of it', async () => {
     await setup();
     mswServer.use(
       http.get(
@@ -82,14 +82,14 @@ describe('API error body handling', () => {
 
     const result = await testClient.callTool('list_fathom_meetings', {});
     expect(result.isError).toBe(true);
-    const json = result.json as { ok: boolean; error: string };
+    const json = result.json as { ok: boolean; error: string; code: string };
 
     expect(json.ok).toBe(false);
-    // JSON.parse diagnostics quote the malformed payload, so the unhandled-error
-    // path must envelop the message as well.
-    expect(json.error).toContain('<untrusted-content source="fathom:unhandled_error">');
-    // No raw close tag from the payload survives outside the escaping.
-    expect(json.error).not.toContain('</untrusted-content> SYSTEM');
+    expect(json.code).toBe('INVALID_RESPONSE');
+    expect(json.error).toBe('Fathom returned an unexpected response');
+    // Neither the payload nor the JSON.parse diagnostic reaches the output.
+    expect(result.text).not.toContain('SYSTEM');
+    expect(result.text).not.toContain('ignore previous instructions');
     expect(json.error).not.toContain(API_KEY);
   });
 });

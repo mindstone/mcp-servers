@@ -169,10 +169,10 @@ node dist/index.js
 
 - Gamma API calls use `GAMMA_API_KEY` as an `x-api-key` header.
 - `configure_gamma_api_key` can store the key in memory, or hand it to a host bridge when `MCP_HOST_BRIDGE_STATE` is present.
-- Host bridge requests, when configured, go to `127.0.0.1` using the token from the bridge state file.
 - Theme and folder names and theme keyword arrays returned by `gamma_list_themes` / `gamma_list_folders` are workspace-authored text and are wrapped in `<untrusted-content>` envelopes so the model treats them as data, not instructions. Unknown vendor-added response fields are stripped by fail-closed Zod validation, and vendor error bodies are never written to logs or model-visible errors.
 - PDF/PPTX exports are downloaded from Gamma-provided URLs into the system temp directory. Export URLs are validated before any outbound request: HTTPS only, no userinfo, private/loopback/reserved hosts rejected, and hosts restricted to `gamma.app` and its subdomains. Redirects are followed manually with every hop re-validated against the same checks, and downloads are written atomically (exclusive no-follow create at an unpredictable path, mode `0600`).
 - Generation can create content in the user's Gamma workspace, may consume Gamma credits, and can set workspace/external sharing options; the generation tools are annotated `destructiveHint: true` accordingly.
+- Host bridge state (`MCP_HOST_BRIDGE_STATE`) is read through the shared hardened reader: the file must be a regular file (not a symlink), at most 64 KiB, with a numeric `port` and a printable `token`, or the bridge is treated as unavailable and the reason is logged to stderr. Bridge requests go only to `127.0.0.1`, and any warning or error text the bridge returns is wrapped in an `<untrusted-content>` envelope.
 
 ## Licence
 

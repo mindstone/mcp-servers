@@ -67,7 +67,7 @@ function rotatingTokenEndpoint(
 }
 
 /** A bridge that records what each route was sent. */
-function recordingBridge() {
+function recordingBridge(rotationReply: Record<string, unknown> = { success: true }) {
   const configureBodies: Array<Record<string, unknown>> = [];
   const rotationBodies: Array<Record<string, unknown>> = [];
   const handlers = [
@@ -77,7 +77,7 @@ function recordingBridge() {
     }),
     http.post(`http://127.0.0.1:${BRIDGE_PORT}/bundled/workday/update-refresh-token`, async ({ request }) => {
       rotationBodies.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json({ success: true });
+      return HttpResponse.json(rotationReply);
     }),
   ];
   return { handlers, configureBodies, rotationBodies };
@@ -210,6 +210,36 @@ describe('configure_workday_credentials keeps a rotated refresh token', () => {
     await vi.waitFor(() => {
       expect(bridge.rotationBodies.at(-1)?.refreshToken).toBe(endpoint.current());
     });
+  });
+
+  it('logs a fixed line, without the reply text, when the bridge declines to persist a rotation', async () => {
+    const endpoint = rotatingTokenEndpoint('typed-refresh-token', { expiresIn: 60 });
+    const bridge = recordingBridge({ success: false, error: 'host-said-no-REPLY-TEXT' });
+    mswServer.use(endpoint.handler, ...bridge.handlers, ...createWorkdayHandlers());
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const client = await startClient({
+        WORKDAY_HOST: MOCK_HOST,
+        WORKDAY_TENANT: MOCK_TENANT,
+        WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+        WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+        WORKDAY_REFRESH_TOKEN: 'typed-refresh-token',
+      });
+
+      const listed = await client.callTool('list_workday_workers', {});
+
+      // Persistence is best-effort: the call itself still succeeds.
+      expect((listed.json as Record<string, unknown>).ok).toBe(true);
+      await vi.waitFor(() => {
+        const lines = consoleSpy.mock.calls.map((call) => call.map(String).join(' '));
+        expect(lines).toContain('[Workday] Bridge declined to persist the rotated refresh token.');
+      });
+      const logged = consoleSpy.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+      expect(logged).not.toContain('host-said-no-REPLY-TEXT');
+      expect(logged).not.toContain(endpoint.current());
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 
   it('setup then later refreshes present the rotated token each time', async () => {

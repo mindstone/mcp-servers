@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, setApiKey } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { bridgeRequest, isBridgeConfigured } from '../bridge.js';
 import { GammaError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -21,7 +21,7 @@ export function registerConfigureTools(server: McpServer): void {
       const key = args.api_key.trim();
 
       // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
+      if (isBridgeConfigured()) {
         try {
           const result = await bridgeRequest('/bundled/gamma/configure', { apiKey: key });
           if (result.success) {
@@ -39,9 +39,10 @@ export function registerConfigureTools(server: McpServer): void {
           );
         } catch (error) {
           if (error instanceof GammaError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
+          // Bridge request failed (network, timeout, etc.) — surface a fixed error;
+          // the exception text is not shown, as it may carry bridge-controlled content
           throw new GammaError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            'Bridge request failed',
             'BRIDGE_ERROR',
             'Could not reach the host app bridge. Ensure the host app is running.',
           );

@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { z } from 'zod';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -14,11 +15,6 @@ export const SERVER_NAME = 'outreach-mcp-server';
  *  it cannot drift from the published npm version. */
 export const SERVER_VERSION = pkg.version;
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class ConnectorError extends Error {
   constructor(
     message: string,
@@ -32,24 +28,34 @@ export class ConnectorError extends Error {
 
 export type AuthMode = 'bridge' | 'standalone_oauth' | 'manual_token' | 'unconfigured';
 
-export interface OutreachTokenData {
-  access_token: string;
-  refresh_token: string;
-  expires_at: number;
-  scope: string;
-  created_at: number;
-  username?: string;
-}
+// Stored credential files are parsed with these schemas, never cast. Older
+// files may lack `refresh_token` (an exchange reply without one was written
+// with the key dropped), so it defaults to '' and refresh then asks the user
+// to reconnect, exactly as before.
+export const outreachTokenDataSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().default(''),
+  expires_at: z.number(),
+  scope: z.string().default(''),
+  created_at: z.number().default(0),
+  username: z.string().optional(),
+});
 
-export interface OutreachAccount {
-  id: string;
-  username: string;
-  connected_at: string;
-}
+export type OutreachTokenData = z.infer<typeof outreachTokenDataSchema>;
 
-export interface OutreachAccountsConfig {
-  accounts: OutreachAccount[];
-}
+export const outreachAccountSchema = z.object({
+  id: z.string().min(1),
+  username: z.string(),
+  connected_at: z.string(),
+});
+
+export type OutreachAccount = z.infer<typeof outreachAccountSchema>;
+
+export const outreachAccountsConfigSchema = z.object({
+  accounts: z.array(outreachAccountSchema),
+});
+
+export type OutreachAccountsConfig = z.infer<typeof outreachAccountsConfigSchema>;
 
 export interface JsonApiResource {
   id: string;

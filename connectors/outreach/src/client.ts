@@ -64,6 +64,38 @@ export const outreachIdSchema = z
   .string()
   .regex(/^\d+$/, 'Outreach resource IDs are numeric');
 
+// JSON:API error bodies: only the first error's detail/title is read. Any
+// other body is never shown, since it can echo request headers or tokens.
+const jsonApiErrorBodySchema = z
+  .object({
+    errors: z
+      .array(
+        z
+          .object({ detail: z.string().nullish(), title: z.string().nullish() })
+          .passthrough(),
+      )
+      .min(1),
+  })
+  .passthrough();
+
+/**
+ * The detail text of a non-2xx reply: the first JSON:API error's detail or
+ * title, otherwise '' (the caller then shows only the HTTP status text). The
+ * caller bounds and envelopes it.
+ */
+async function readVendorErrorDetail(response: Response): Promise<string> {
+  let json: unknown;
+  try {
+    json = JSON.parse(await response.text());
+  } catch {
+    return '';
+  }
+  const parsed = jsonApiErrorBodySchema.safeParse(json);
+  if (!parsed.success) return '';
+  const first = parsed.data.errors[0];
+  return first.detail || first.title || '';
+}
+
 function getErrorResolution(status: number, detail?: string): string {
   const msg = (detail || '').toLowerCase();
   if (status === 401 || msg.includes('unauthorized') || msg.includes('invalid')) {
@@ -140,21 +172,10 @@ export async function outreachFetch(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
-      let detail = '';
-      try {
-        const errBody = (await response.json()) as Record<string, unknown>;
-        const errors = errBody.errors as Array<{ detail?: string; title?: string }> | undefined;
-        detail = errors?.[0]?.detail || errors?.[0]?.title || '';
-      } catch {
-        try {
-          detail = await response.text();
-        } catch {
-          /* empty */
-        }
-      }
+      const detail = await readVendorErrorDetail(response);
 
-      // Vendor-authored error text (JSON error details or a raw non-JSON body)
-      // is external content: bound it and wrap it in an untrusted-content
+      // Vendor-authored error text (a JSON:API error detail/title, or the
+      // status text) is external content: bound it and wrap it in an untrusted-content
       // envelope (AGENTS.md invariant #6) before it reaches model context via
       // the error message. getErrorResolution keeps the raw detail — its
       // keyword matching stays internal and its output is fixed strings.
@@ -172,14 +193,22 @@ export async function outreachFetch(
       return { data: [] } as unknown as JsonApiResponse;
     }
 
-    const parsed = jsonApiResponseSchema.safeParse(await response.json());
-    if (!parsed.success) {
-      throw new ConnectorError(
+    const invalidResponse = () =>
+      new ConnectorError(
         'Outreach API returned an unexpected response shape',
         'INVALID_RESPONSE',
         'The API response did not match the expected JSON:API structure. Try again; if it persists, reconnect with outreach_connect_account.',
       );
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch (error) {
+      // A JSON decode error quotes the body; report the fixed error instead.
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      throw invalidResponse();
     }
+    const parsed = jsonApiResponseSchema.safeParse(body);
+    if (!parsed.success) throw invalidResponse();
     return parsed.data as JsonApiResponse;
   } catch (error) {
     if (error instanceof ConnectorError) throw error;

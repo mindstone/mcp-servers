@@ -67,7 +67,9 @@ describe('Bridge integration', () => {
     // Set up a custom bridge handler that always returns 401
     mswServer.use(
       http.post('http://127.0.0.1:19877/*', () => {
-        return HttpResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        // Bodyless: the reader cancels a 401/403 body, and an msw-mocked body
+        // never settles that cancel (a real loopback reply does).
+        return new HttpResponse(null, { status: 401 });
       }),
     );
 
@@ -316,7 +318,9 @@ describe('Bridge integration', () => {
       expect(result.isError).toBe(true);
       expect(data.error).toContain('Bridge not available');
       expect(
-        stderrSpy.mock.calls.some((call) => String(call[0]).includes('[talentlms] Bridge state file')),
+        stderrSpy.mock.calls.some((call) =>
+          String(call[0]).includes('[talentlms] bridge state rejected: content failed schema validation'),
+        ),
       ).toBe(true);
     });
 
@@ -331,8 +335,39 @@ describe('Bridge integration', () => {
 
       expect(result.isError).toBe(true);
       expect(data.error).toContain('Bridge not available');
-      expect(stderrSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(
+        stderrSpy.mock.calls.some((call) =>
+          String(call[0]).includes('[talentlms] bridge state rejected: state file is too large'),
+        ),
+      ).toBe(true);
     });
+
+    it.skipIf(process.platform === 'win32')(
+      'refuses a symlinked state file and does not fall back to in-memory credentials',
+      async () => {
+        const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mswServer.use(...createBridgeHandlers(19884));
+        const result = await configureWithStateFile((dir) => {
+          const target = path.join(dir, 'real-state.json');
+          fs.writeFileSync(target, JSON.stringify({ port: 19884, token: 'test-bridge-token' }));
+          const link = path.join(dir, 'bridge-state.json');
+          fs.symlinkSync(target, link);
+          return link;
+        });
+        const data = JSON.parse(result.content[0].text as string);
+
+        expect(result.isError).toBe(true);
+        expect(data.error).toContain('Bridge not available');
+        expect(
+          stderrSpy.mock.calls.some((call) =>
+            String(call[0]).includes('[talentlms] bridge state rejected: state path is a symbolic link'),
+          ),
+        ).toBe(true);
+        const { getApiKey, getDomain } = await import('../src/auth.js');
+        expect(getApiKey()).toBe('');
+        expect(getDomain()).toBe('');
+      },
+    );
 
     it('rejects an unreadable state path (missing file), observably', async () => {
       const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

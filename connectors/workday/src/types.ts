@@ -9,11 +9,6 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 // Derived from package.json so the UA can never drift from the release version.
 export const USER_AGENT = `mcp-server-workday/${pkg.version}`;
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class WorkdayError extends Error {
   constructor(
     message: string,

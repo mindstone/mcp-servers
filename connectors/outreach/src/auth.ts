@@ -3,17 +3,20 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import * as http from 'node:http';
+import { z } from 'zod';
 import {
   type AuthMode,
   type OutreachTokenData,
   type OutreachAccountsConfig,
   type OutreachAccount,
+  outreachAccountsConfigSchema,
+  outreachTokenDataSchema,
   ConnectorError,
   MAX_VENDOR_ERROR_CHARS,
   OUTREACH_OAUTH_URL,
   OUTREACH_AUTHORIZE_URL,
 } from './types.js';
-import { BRIDGE_STATE_PATH } from './bridge.js';
+import { isBridgeConfigured } from './bridge.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /**
@@ -38,7 +41,7 @@ let resolvedMode: AuthMode | null = null;
 export function resolveAuthMode(): AuthMode {
   if (resolvedMode !== null) return resolvedMode;
 
-  const hasBridge = !!BRIDGE_STATE_PATH;
+  const hasBridge = isBridgeConfigured();
   const hasClientId = !!process.env.OUTREACH_CLIENT_ID;
   const hasClientSecret = !!process.env.OUTREACH_CLIENT_SECRET;
   const hasManualToken = !!process.env.OUTREACH_ACCESS_TOKEN;
@@ -113,7 +116,12 @@ function getTokenPath(accountId: string): string {
 }
 
 /**
- * Atomic write: write to temp file then rename.
+ * Atomic write: write to a fresh temp file, then rename it over the target.
+ *
+ * The temp file is created exclusively (O_EXCL, plus O_NOFOLLOW where the
+ * platform has it), so a file or symlink already sitting at the temp path is
+ * refused with EEXIST and left untouched, rather than followed or truncated.
+ * Once the temp file exists, any failure removes it before rethrowing.
  */
 function atomicWriteFile(filePath: string, data: string): void {
   const dir = path.dirname(filePath);
@@ -121,14 +129,68 @@ function atomicWriteFile(filePath: string, data: string): void {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   const tmpPath = `${filePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  const fd = fs.openSync(tmpPath, 'w', 0o600);
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_EXCL |
+    (fs.constants.O_NOFOLLOW ?? 0);
+  const fd = fs.openSync(tmpPath, flags, 0o600);
+  let fdOpen = true;
   try {
     fs.writeSync(fd, data);
     fs.fsyncSync(fd);
-  } finally {
+    fdOpen = false;
     fs.closeSync(fd);
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    if (fdOpen) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // The original failure is the one worth reporting; the unlink below
+        // still removes the temp file.
+      }
+    }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (unlinkErr) {
+      if ((unlinkErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[Outreach MCP] Could not remove a temporary credentials file after a failed write.');
+      }
+    }
+    throw err;
   }
-  fs.renameSync(tmpPath, filePath);
+}
+
+/**
+ * Read and validate a stored JSON file. A missing file gives `undefined`
+ * silently; an unreadable, corrupt or wrong-shaped file gives `undefined` and
+ * one fixed stderr line (never the file's content).
+ */
+function readStoredJson<T>(filePath: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, label: string): T | undefined {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      console.error(`[Outreach MCP] Stored ${label} file could not be read (${code ?? 'unknown error'}); ignoring it.`);
+    }
+    return undefined;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    console.error(`[Outreach MCP] Stored ${label} file is not valid JSON; ignoring it.`);
+    return undefined;
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    console.error(`[Outreach MCP] Stored ${label} file has an unexpected shape; ignoring it.`);
+    return undefined;
+  }
+  return parsed.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +199,7 @@ function atomicWriteFile(filePath: string, data: string): void {
 
 export function loadAccounts(): OutreachAccountsConfig {
   ensureDirectories();
-  try {
-    const data = fs.readFileSync(getAccountsPath(), 'utf-8');
-    return JSON.parse(data) as OutreachAccountsConfig;
-  } catch {
-    return { accounts: [] };
-  }
+  return readStoredJson(getAccountsPath(), outreachAccountsConfigSchema, 'accounts') ?? { accounts: [] };
 }
 
 export function saveAccounts(config: OutreachAccountsConfig): void {
@@ -151,12 +208,7 @@ export function saveAccounts(config: OutreachAccountsConfig): void {
 }
 
 export function loadToken(accountId: string): OutreachTokenData | null {
-  try {
-    const data = fs.readFileSync(getTokenPath(accountId), 'utf-8');
-    return JSON.parse(data) as OutreachTokenData;
-  } catch {
-    return null;
-  }
+  return readStoredJson(getTokenPath(accountId), outreachTokenDataSchema, 'credentials') ?? null;
 }
 
 export function saveToken(accountId: string, token: OutreachTokenData): void {
@@ -170,6 +222,56 @@ export function deleteToken(accountId: string): void {
   } catch {
     // Token file may not exist
   }
+}
+
+// ---------------------------------------------------------------------------
+// OAuth token endpoint replies
+// ---------------------------------------------------------------------------
+
+// Optional fields accept null as well as absence, and fall back to the same
+// defaults as before. Unknown keys are dropped.
+const oauthTokenReplyBase = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().positive().nullish(),
+  scope: z.string().nullish(),
+  created_at: z.number().nullish(),
+});
+
+/** Refresh replies may omit refresh_token; the stored one is kept then. */
+const refreshTokenReplySchema = oauthTokenReplyBase.extend({
+  refresh_token: z.string().nullish(),
+});
+
+/** The authorization-code grant always returns a refresh token. */
+const exchangeTokenReplySchema = oauthTokenReplyBase.extend({
+  refresh_token: z.string().min(1),
+  email: z.string().nullish(),
+});
+
+/**
+ * Parse a 2xx token-endpoint reply. Invalid JSON or an unexpected shape gives
+ * a fixed error that echoes no vendor text and no schema issue text.
+ */
+async function parseTokenReply<T>(
+  response: Response,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  code: 'REFRESH_FAILED' | 'EXCHANGE_FAILED',
+): Promise<T> {
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    json = undefined;
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    throw new ConnectorError(
+      'Outreach returned an unexpected reply from its sign-in service',
+      code,
+      'Try calling outreach_connect_account to reconnect.',
+    );
+  }
+  return parsed.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,13 +382,13 @@ export async function refreshTokenIfNeeded(
     );
   }
 
-  const data = (await response.json()) as Record<string, unknown>;
+  const data = await parseTokenReply(response, refreshTokenReplySchema, 'REFRESH_FAILED');
   const refreshed: OutreachTokenData = {
-    access_token: data.access_token as string,
-    refresh_token: (data.refresh_token as string) || token.refresh_token,
-    expires_at: Date.now() + ((data.expires_in as number) || 7200) * 1000,
-    scope: (data.scope as string) || token.scope,
-    created_at: (data.created_at as number) || Date.now(),
+    access_token: data.access_token,
+    refresh_token: data.refresh_token || token.refresh_token,
+    expires_at: Date.now() + (data.expires_in || 7200) * 1000,
+    scope: data.scope || token.scope,
+    created_at: data.created_at || Date.now(),
     username: token.username,
   };
   saveToken(accountId, refreshed);
@@ -416,15 +518,15 @@ async function runOAuthCallbackServer(
           return;
         }
 
-        const tokenData = (await tokenResponse.json()) as Record<string, unknown>;
-        const username = (tokenData.email as string) || `user-${Date.now()}`;
+        const tokenData = await parseTokenReply(tokenResponse, exchangeTokenReplySchema, 'EXCHANGE_FAILED');
+        const username = tokenData.email || `user-${Date.now()}`;
         const accountId = sanitizeFilename(username);
 
         const token: OutreachTokenData = {
-          access_token: tokenData.access_token as string,
-          refresh_token: tokenData.refresh_token as string,
-          expires_at: Date.now() + ((tokenData.expires_in as number) || 7200) * 1000,
-          scope: (tokenData.scope as string) || '',
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          expires_at: Date.now() + (tokenData.expires_in || 7200) * 1000,
+          scope: tokenData.scope || '',
           created_at: Date.now(),
           username,
         };
@@ -453,9 +555,9 @@ async function runOAuthCallbackServer(
         res.writeHead(500, { 'Content-Type': 'text/html' });
         res.end('<html><body><h2>Authentication error</h2><p>You can close this window.</p></body></html>');
         cleanup();
-        // A thrown message can embed vendor text (a non-JSON token-endpoint
-        // body surfaces inside Node's JSON.parse error), so bound and envelope
-        // it like any other external text (invariant #6).
+        // Token replies are schema-checked with fixed errors, but other thrown
+        // messages (network, filesystem) are bounded and enveloped anyway so
+        // no unexpected text reaches model context raw (invariant #6).
         const detail = err instanceof Error ? err.message : String(err);
         const enveloped =
           wrapUntrusted(detail.slice(0, MAX_VENDOR_ERROR_CHARS), 'outreach:api-error') ??

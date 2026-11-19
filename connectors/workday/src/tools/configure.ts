@@ -24,7 +24,6 @@ import {
   setRefreshToken,
 } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
-import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
@@ -197,11 +196,9 @@ COMMON MISTAKES:
       });
 
       if (!result.success) {
-        // Bridge-authored error text crosses a process boundary — envelope it
-        // like any other non-connector-authored string before it reaches the
-        // model.
+        // The bridge reader has already enveloped any bridge-authored text.
         throw new WorkdayError(
-          wrapUntrusted(result.error, 'workday-bridge') ?? 'Failed to configure Workday via bridge.',
+          result.error ?? 'Failed to configure Workday via bridge.',
           'BRIDGE_ERROR',
           'Check that the host application is running and bridge is available.',
         );
@@ -217,7 +214,7 @@ COMMON MISTAKES:
       adoptTokenResponse(tokenData);
 
       const message = result.warning
-        ? `Workday configured successfully. Note: ${wrapUntrusted(result.warning, 'workday-bridge')}`
+        ? `Workday configured successfully. Note: ${result.warning}`
         : 'Workday configured successfully! Try list_workday_workers to browse your team.';
       return JSON.stringify({ ok: true, message });
     }),

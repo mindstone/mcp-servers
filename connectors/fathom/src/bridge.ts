@@ -1,112 +1,18 @@
-import * as fs from 'fs';
-import { z } from 'zod';
-import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
+import { REQUEST_TIMEOUT_MS } from './types.js';
+import { type BridgeResponse, postToBridge } from './bridge-reader.js';
+
+export type { BridgeResponse };
+export { isBridgeConfigured } from './bridge-reader.js';
 
 /**
- * Path to bridge state file, supporting both current and legacy env vars.
- *
- * Threat-model note (AGENTS.md security invariant #5): this path is
- * host-injected configuration — the host app sets the env var when it spawns
- * this server, and it points at the host's own state directory (NOT
- * `MCP_WORKSPACE_PATH` or `os.tmpdir()`), so workspace containment does not
- * apply the way it does for model-supplied file paths. The model cannot
- * influence this path. The read is still hardened below:
- *
- * - `O_NOFOLLOW` on the open, so a symlinked FINAL path component is refused
- *   atomically (no check-then-use race) on POSIX. Symlinked ANCESTORS stay
- *   allowed on purpose: legitimate host state dirs resolve through symlinks
- *   (e.g. macOS temp dirs under /var -> /private/var).
- * - An `lstat` pre-check plus a post-open canonical cross-check
- *   (realpath inode vs opened-fd inode) for platforms where `O_NOFOLLOW` is
- *   not honoured — a swap raced against the open is detected and refused
- *   rather than silently read.
- * - Same-descriptor fstat + read-through-fd (regular files only; no
- *   check-then-use race on the content itself).
- * - Strict schema validation of the content — a non-integer `port`, for
- *   example, would otherwise be interpolated into the loopback URL and could
- *   redirect the request off-host.
+ * Send a request to the host app bridge, a loopback HTTP server inside the host
+ * app that handles credential management. `bridge-reader.ts` is the vendored
+ * hardened reader: keep it byte-identical to `test-harness/src/bridge-reader.ts`
+ * (`scripts/check-bridge-reader.mjs` enforces this) and read the bridge only
+ * through it.
  */
-export const BRIDGE_STATE_PATH =
-  process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
-
-const bridgeStateSchema = z.object({
-  port: z.number().int().min(1).max(65535),
-  token: z.string().min(1),
-});
-
-const loadBridgeState = (): BridgeState | null => {
-  if (!BRIDGE_STATE_PATH) return null;
-  let fd: number | null = null;
-  try {
-    // Best-effort pre-check (the atomic refusal is O_NOFOLLOW below; this
-    // gives a clear stderr signal and covers platforms without O_NOFOLLOW).
-    if (fs.lstatSync(BRIDGE_STATE_PATH).isSymbolicLink()) {
-      console.error('[fathom] bridge state rejected: state path is a symbolic link');
-      return null;
-    }
-    fd = fs.openSync(BRIDGE_STATE_PATH, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    const opened = fs.fstatSync(fd);
-    if (!opened.isFile()) {
-      console.error('[fathom] bridge state rejected: not a regular file');
-      return null;
-    }
-    // Detect-and-refuse a swap raced against the open: the canonical path
-    // must resolve to the same file we actually opened.
-    const canonical = fs.statSync(fs.realpathSync(BRIDGE_STATE_PATH));
-    if (canonical.dev !== opened.dev || canonical.ino !== opened.ino) {
-      console.error('[fathom] bridge state rejected: path resolved to a different file than was opened');
-      return null;
-    }
-    const raw = fs.readFileSync(fd, 'utf8');
-    const parsed = bridgeStateSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
-      console.error('[fathom] bridge state rejected: content failed schema validation');
-      return null;
-    }
-    return parsed.data;
-  } catch {
-    // Unreadable, non-JSON, or symlink (ELOOP under O_NOFOLLOW) state file —
-    // bridge is simply unavailable; the caller surfaces an observable
-    // "Bridge not available" error.
-    return null;
-  } finally {
-    if (fd !== null) {
-      try {
-        fs.closeSync(fd);
-      } catch {
-        // ignore close errors
-      }
-    }
-  }
-};
-
-/**
- * Send a request to the host app bridge.
- *
- * The bridge is an HTTP server running inside the host app (e.g. the host application)
- * that handles credential management and other cross-process operations.
- */
-export const bridgeRequest = async (
+export const bridgeRequest = (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
-  const bridge = loadBridgeState();
-  if (!bridge) {
-    return { success: false, error: 'Bridge not available' };
-  }
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bridge.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
-  }
-
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
-};
+): Promise<BridgeResponse> =>
+  postToBridge(urlPath, body, { connector: 'fathom', timeoutMs: REQUEST_TIMEOUT_MS });

@@ -4,13 +4,8 @@
   "gappedConnectors": [
     "elevenlabs",
     "elevenlabs-agents",
-    "fathom",
-    "gamma",
     "mixmax",
-    "outreach",
     "servicenow",
-    "talentlms",
-    "wise",
-    "workday"
+    "wise"
   ]
 }

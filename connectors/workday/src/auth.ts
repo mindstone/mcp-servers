@@ -572,7 +572,12 @@ export async function getAccessToken(): Promise<string> {
   if (adopted.rotated) {
     bridgeRequest('/bundled/workday/update-refresh-token', {
       refreshToken: adopted.refreshToken,
-    }).catch(() => {
+    }).then((reply) => {
+      if (!reply.success) {
+        // Fixed text only: the reply's own error text is not logged.
+        console.error('[Workday] Bridge declined to persist the rotated refresh token.');
+      }
+    }, () => {
       // The rotated token stays in memory and is used for this process'
       // lifetime; only cross-restart persistence failed. Log a bounded,
       // connector-authored message — never an arbitrary thrown error string.

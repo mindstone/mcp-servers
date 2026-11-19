@@ -177,6 +177,16 @@ wrapped in `<untrusted-content>` envelopes so the host treats meeting content as
 data, not instructions. The same applies to vendor API error bodies surfaced in
 tool errors, which are additionally truncated.
 
+Every reply from Fathom is checked against the shape this connector expects
+before any tool uses it. A reply that is not valid JSON, or does not match,
+fails with a fixed `INVALID_RESPONSE` error that repeats none of the reply.
+Only fields a tool actually uses are checked, so dates, ids and other values
+passed through are kept as Fathom sent them, as are fields the connector does
+not know about. A created webhook must come back with its `id` and `secret`,
+and a download request with its `download_id`.
+
+Host bridge state (`MCP_HOST_BRIDGE_STATE`) is read through the shared hardened reader: the file must be a regular file (not a symlink), at most 64 KiB, with a numeric `port` and a printable `token`, or the bridge is treated as unavailable and the reason is logged to stderr. Bridge requests go only to `127.0.0.1`, and any warning or error text the bridge returns is wrapped in an `<untrusted-content>` envelope.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

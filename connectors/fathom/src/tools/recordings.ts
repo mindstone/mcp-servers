@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { RecordingDownload } from '../types.js';
+import { type RecordingDownload, RecordingDownloadRequestSchema, RecordingDownloadSchema } from '../types.js';
 
 function noApiKeyError(): string {
   return JSON.stringify({
@@ -54,8 +54,9 @@ Rate limit: download requests have their own budget (30 per minute).`,
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
 
-      const download = await fathomFetch<RecordingDownload>(
+      const download = await fathomFetch(
         `/recordings/${args.recording_id}/download`,
+        RecordingDownloadRequestSchema,
         { method: 'POST', body: JSON.stringify({}) },
       );
 
@@ -88,8 +89,9 @@ Rate limit: polling counts against the global 60 calls/minute budget.`,
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
 
-      const download = await fathomFetch<RecordingDownload>(
+      const download = await fathomFetch(
         `/recordings/${args.recording_id}/downloads/${encodeURIComponent(args.download_id)}`,
+        RecordingDownloadSchema,
       );
 
       return JSON.stringify({ ok: true, ...formatDownload(download) });

@@ -66,4 +66,40 @@ describe('Fathom rate-limit retry', () => {
     expect(requestCount).toBe(4);
     expect(result.text).not.toContain(API_KEY);
   });
+
+  it('does not echo a non-numeric Retry-After header in the exhausted-retry error', async () => {
+    mswServer.use(
+      http.get(`${BASE}/meetings`, () =>
+        HttpResponse.json(
+          { error: 'Rate limited' },
+          { status: 429, headers: { 'Retry-After': '0 INJECTED-MARKER' } },
+        ),
+      ),
+    );
+    await setup();
+
+    const result = await testClient.callTool('list_fathom_meetings', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; code: string; error: string };
+    expect(json.code).toBe('RATE_LIMITED');
+    expect(json.error).toContain('a moment');
+    expect(result.text).not.toContain('INJECTED-MARKER');
+  });
+
+  it('keeps a plain integer Retry-After in the exhausted-retry error', async () => {
+    mswServer.use(
+      http.get(`${BASE}/meetings`, () =>
+        HttpResponse.json(
+          { error: 'Rate limited' },
+          { status: 429, headers: { 'Retry-After': '0' } },
+        ),
+      ),
+    );
+    await setup();
+
+    const result = await testClient.callTool('list_fathom_meetings', {});
+    const json = result.json as { code: string; error: string };
+    expect(json.code).toBe('RATE_LIMITED');
+    expect(json.error).toContain('wait 0 seconds');
+  });
 });

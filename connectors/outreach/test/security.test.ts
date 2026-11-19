@@ -22,18 +22,18 @@ function getAllFiles(dir: string, ext = '.ts'): string[] {
 }
 
 describe('Security audit — Outreach MCP server', () => {
-  it('contains no internal mindstone/rebel/nspr references in source (except bridge.ts legacy env var)', () => {
+  it('contains no internal mindstone/rebel/nspr references in source (except the vendored bridge reader\'s legacy env var)', () => {
     const srcFiles = getAllFiles(SRC_DIR);
     for (const file of srcFiles) {
       const content = fs.readFileSync(file, 'utf-8');
       const basename = path.basename(file);
 
-      // bridge.ts is allowed to have MINDSTONE_REBEL_BRIDGE_STATE as legacy fallback
-      if (basename === 'bridge.ts') {
+      // bridge-reader.ts (the vendored shared reader) is allowed MINDSTONE_REBEL_BRIDGE_STATE as legacy fallback
+      if (basename === 'bridge-reader.ts') {
         const lines = content.split('\n');
         for (const line of lines) {
           if (line.includes('MINDSTONE_REBEL_BRIDGE_STATE')) continue; // allowed legacy fallback
-          expect(line.toLowerCase(), `Unexpected reference in bridge.ts: ${line.trim()}`).not.toMatch(/mindstone|rebel|nspr/);
+          expect(line.toLowerCase(), `Unexpected reference in bridge-reader.ts: ${line.trim()}`).not.toMatch(/mindstone|rebel|nspr/);
         }
         continue;
       }

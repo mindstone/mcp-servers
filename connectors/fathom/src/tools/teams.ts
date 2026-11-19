@@ -4,7 +4,7 @@ import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
-import type { TeamsResponse, TeamMembersResponse } from '../types.js';
+import { TeamsResponseSchema, TeamMembersResponseSchema } from '../types.js';
 
 function noApiKeyError(): string {
   return JSON.stringify({
@@ -32,12 +32,12 @@ Use this to find team names for filtering meetings with list_fathom_meetings or 
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiKeyError();
 
-      const allTeams: Array<{ name: string; created_at?: string | null }> = [];
+      const allTeams: Array<Record<string, unknown>> = [];
       let cursor: string | undefined;
 
       do {
         const path = cursor ? `/teams?cursor=${encodeURIComponent(cursor)}` : '/teams';
-        const response = await fathomFetch<TeamsResponse>(path);
+        const response = await fathomFetch(path, TeamsResponseSchema);
 
         const items = response.items || [];
         for (const item of items) {
@@ -86,7 +86,7 @@ Use list_fathom_teams first to get available team names.`,
         const teamParam = encodeURIComponent(args.team);
         const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
         const path = `/team_members?team=${teamParam}${cursorParam}`;
-        const response = await fathomFetch<TeamMembersResponse>(path);
+        const response = await fathomFetch(path, TeamMembersResponseSchema);
 
         for (const item of response.items || []) {
           members.push({

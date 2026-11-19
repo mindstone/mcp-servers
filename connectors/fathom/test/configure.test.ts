@@ -164,6 +164,39 @@ describe('Fathom configure tools', () => {
     }
   });
 
+  it('configure_fathom_api_key returns a fixed message without the exception text when the bridge request throws', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9998/bundled/fathom/configure', () => HttpResponse.error()),
+      ...createFathomHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fathom-bridge-throw-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9998, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          FATHOM_API_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'mcp-test-fathom-key' });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('BRIDGE_ERROR');
+      expect(json.error).toBe('Bridge request failed');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('configure_fathom_api_key works with bridge available', async () => {
     // Mock bridge endpoint
     mswServer.use(

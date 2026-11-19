@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { fathomFetch } from '../client.js';
+import { fathomFetch, fathomFetchNoContent } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { Webhook } from '../types.js';
+import { WebhookSchema } from '../types.js';
 
 function noApiKeyError(): string {
   return JSON.stringify({
@@ -79,7 +79,7 @@ is only returned at creation time.`,
         });
       }
 
-      const webhook = await fathomFetch<Webhook>('/webhooks', {
+      const webhook = await fathomFetch('/webhooks', WebhookSchema, {
         method: 'POST',
         body: JSON.stringify({
           destination_url: args.destination_url,
@@ -121,7 +121,7 @@ Rate limit: Counts as 1 API call (Fathom allows ~60/minute).`,
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
 
-      await fathomFetch<void>(`/webhooks/${encodeURIComponent(args.webhook_id)}`, {
+      await fathomFetchNoContent(`/webhooks/${encodeURIComponent(args.webhook_id)}`, {
         method: 'DELETE',
       });
 

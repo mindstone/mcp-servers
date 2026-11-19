@@ -10,6 +10,11 @@ import {
   startStandaloneOAuth,
 } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+// The account email comes from Outreach's token endpoint (or, for older
+// files, whatever accounts.json holds), so it is external text.
+const ACCOUNT_USERNAME_SOURCE = 'outreach:oauth.email';
 
 export function registerAuthTools(server: McpServer): void {
   server.registerTool(
@@ -54,10 +59,23 @@ After connecting, verify with outreach_list_connected_accounts.`,
       }
 
       if (mode === 'bridge') {
-        const result = await bridgeRequest(
-          process.env.MCP_BRIDGE_CONFIGURE_ENDPOINT || '/mcp/configure',
-          {},
-        );
+        let result: Awaited<ReturnType<typeof bridgeRequest>>;
+        try {
+          result = await bridgeRequest(
+            process.env.MCP_BRIDGE_CONFIGURE_ENDPOINT || '/mcp/configure',
+            {},
+          );
+        } catch {
+          // Bridge request failed (refused connection, timeout, refused redirect):
+          // surface a fixed error; the exception text is not shown, as it may
+          // carry bridge-controlled content
+          return JSON.stringify({
+            ok: false,
+            error: 'Bridge request failed',
+            action_required:
+              'Could not reach the host app bridge. Make sure the host app is running, then call outreach_connect_account again.',
+          });
+        }
         if (result.success) {
           return JSON.stringify({
             ok: true,
@@ -77,11 +95,12 @@ After connecting, verify with outreach_list_connected_accounts.`,
       // standalone_oauth
       const result = await startStandaloneOAuth();
       if (result.success) {
+        const username = wrapUntrusted(result.username, ACCOUNT_USERNAME_SOURCE);
         return JSON.stringify({
           ok: true,
           status: 'authenticated',
-          message: `Successfully connected Outreach account${result.username ? `: ${result.username}` : ''}`,
-          username: result.username,
+          message: `Successfully connected Outreach account${username ? `: ${username}` : ''}`,
+          username,
           next_step: 'You can now use Outreach tools. Try outreach_list_connected_accounts to verify.',
         });
       }
@@ -156,7 +175,7 @@ Returns auth mode, connection status, and account details.`,
         const hasValidToken = token && token.expires_at > Date.now();
         const hasRefresh = token && !!token.refresh_token;
         return {
-          username: a.username,
+          username: wrapUntrusted(a.username, ACCOUNT_USERNAME_SOURCE),
           status: hasValidToken || hasRefresh ? 'active' : 'expired',
           connected_at: a.connected_at,
         };
@@ -214,7 +233,7 @@ Removes stored credentials. Use when switching accounts or troubleshooting.`,
 
       return JSON.stringify({
         ok: true,
-        message: `Disconnected Outreach account: ${account.username}`,
+        message: `Disconnected Outreach account: ${wrapUntrusted(account.username, ACCOUNT_USERNAME_SOURCE)}`,
         note: 'To reconnect, use outreach_connect_account.',
       });
     }),
