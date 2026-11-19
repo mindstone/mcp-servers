@@ -78,7 +78,9 @@ WORKFLOW:
 COMMON MISTAKES:
 - customerId is required (use list_quickbooks_customers to find it)
 - Each line needs at least description and amount
-- Dates use YYYY-MM-DD format`,
+- Dates use YYYY-MM-DD format
+
+IMPORTANT: Confirm the customer, line items and amounts with the user before calling — this adds a real invoice to the company's books.`,
       inputSchema: z.object({
         customerId: z.string().describe('Customer ID (required)'),
         lines: z.array(z.object({
@@ -134,7 +136,9 @@ Example: { "invoiceId": "123", "dueDate": "2026-04-01" }
 Example: { "invoiceId": "123", "memo": "Net 30", "privateNote": "Chased 2026-03-01" }
 
 If syncToken is omitted the invoice is read
-first to obtain the current one (QuickBooks rejects stale SyncTokens).`,
+first to obtain the current one (QuickBooks rejects stale SyncTokens).
+
+IMPORTANT: Confirm the change with the user before calling — this changes a real invoice record in the company's books.`,
       inputSchema: z.object({
         invoiceId: z.string().describe('Invoice ID (required)'),
         syncToken: z.string().optional()
@@ -181,7 +185,7 @@ WORKFLOW:
 1. Use list_quickbooks_invoices to find the invoice ID
 2. Send to the invoice's billing email, or override with sendTo
 
-Note: this emails a real customer.`,
+IMPORTANT: Confirm with the user before calling — this emails a real customer immediately.`,
       inputSchema: z.object({
         invoiceId: z.string().describe('Invoice ID (required)'),
         sendTo: z.string().email().optional()

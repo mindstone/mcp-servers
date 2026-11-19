@@ -9,7 +9,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
-import { wrapUntrusted } from '../untrusted-content.js';
 import {
   setClientId,
   setClientSecret,
@@ -112,11 +111,11 @@ COMMON MISTAKES:
       });
 
       if (!result.success) {
-        // Bridge-authored text crosses a process boundary — envelope it
-        // (AGENTS.md #6), as the Workday connector does.
+        // Bridge-authored text crosses a process boundary; the bridge reader
+        // has already enveloped it (AGENTS.md #6), so it is passed through as is.
         return JSON.stringify({
           ok: false,
-          error: wrapUntrusted(result.error, 'quickbooks-bridge') ?? 'Failed to configure QuickBooks via bridge.',
+          error: result.error ?? 'Failed to configure QuickBooks via bridge.',
         });
       }
 
@@ -130,7 +129,7 @@ COMMON MISTAKES:
       adoptTokenResponse(grant.token);
 
       const message = result.warning
-        ? `QuickBooks Online configured successfully. Note: ${wrapUntrusted(result.warning, 'quickbooks-bridge')}`
+        ? `QuickBooks Online configured successfully. Note: ${result.warning}`
         : 'QuickBooks Online configured successfully! Try list_quickbooks_invoices or list_quickbooks_customers.';
       return JSON.stringify({ ok: true, message });
     }),

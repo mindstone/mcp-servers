@@ -277,9 +277,17 @@ export async function getAccessToken(): Promise<string> {
   if (adopted.rotated) {
     bridgeRequest('/bundled/quickbooks/update-refresh-token', {
       refreshToken: adopted.refreshToken,
-    }).catch((err) => {
-      console.error('Failed to persist rotated refresh token:', err instanceof Error ? err.message : String(err));
-    });
+    })
+      .then((result) => {
+        // A refused save leaves the old token on disk, so a restart would fail
+        // to authenticate: say so rather than drop it silently.
+        if (!result.success) {
+          console.error('Failed to persist rotated refresh token: the host app did not save it. Re-configure QuickBooks if it stops connecting after a restart.');
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to persist rotated refresh token:', err instanceof Error ? err.message : String(err));
+      });
   }
 
   return result.token.access_token;

@@ -15,11 +15,6 @@ export const QBO_MINOR_VERSION = '75';
 
 export const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class QuickBooksError extends Error {
   constructor(
     message: string,

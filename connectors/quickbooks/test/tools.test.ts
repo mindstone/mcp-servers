@@ -1204,8 +1204,10 @@ describe('Bridge integration', () => {
 
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      // No body: the bridge reader discards a 401 body with body.cancel(), which
+      // never settles on an msw-mocked response (a real server's reply is fine).
       http.post(`http://127.0.0.1:${bridgePort}/bundled/quickbooks/configure`, () =>
-        HttpResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+        new HttpResponse(null, { status: 401 }),
       ),
     );
 
@@ -1499,5 +1501,37 @@ describe('Input validation hardening (adversarial)', () => {
       email: 'billing@example.com',
     });
     expect((customer.json as Record<string, unknown>).ok).toBe(true);
+  });
+});
+
+describe('Write tools ask for confirmation first', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('every write tool except configure tells the model to confirm with the user', async () => {
+    testClient = await createTestClient({ env: defaultEnv() });
+    const { tools } = await testClient.client.listTools();
+    const writeTools = tools.filter(
+      (t) => t.annotations?.readOnlyHint === false && t.name !== 'configure_quickbooks',
+    );
+
+    expect(writeTools.map((t) => t.name).sort()).toEqual([
+      'create_quickbooks_bill',
+      'create_quickbooks_customer',
+      'create_quickbooks_estimate',
+      'create_quickbooks_invoice',
+      'create_quickbooks_vendor',
+      'send_quickbooks_invoice_email',
+      'update_quickbooks_customer',
+      'update_quickbooks_invoice',
+      'update_quickbooks_vendor',
+    ]);
+    for (const tool of writeTools) {
+      expect(tool.description, tool.name).toMatch(/Confirm .*with the user before calling/);
+    }
   });
 });

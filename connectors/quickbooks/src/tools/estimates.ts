@@ -71,7 +71,9 @@ WORKFLOW:
 COMMON MISTAKES:
 - customerId is required (use list_quickbooks_customers to find it)
 - Each line needs at least description and amount
-- Dates use YYYY-MM-DD format`,
+- Dates use YYYY-MM-DD format
+
+IMPORTANT: Confirm the customer, line items and amounts with the user before calling — this adds a real estimate to the company's books.`,
       inputSchema: z.object({
         customerId: z.string().describe('Customer ID (required)'),
         lines: z.array(z.object({

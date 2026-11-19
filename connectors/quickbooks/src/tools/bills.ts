@@ -51,7 +51,9 @@ Example: { "vendorId": "123", "lines": [{ "description": "Office supplies", "amo
 WORKFLOW:
 1. Use list_quickbooks_vendors to find the vendor ID
 2. Use list_quickbooks_accounts to find expense account IDs
-3. Create with line items`,
+3. Create with line items
+
+IMPORTANT: Confirm the vendor, line items and amounts with the user before calling — this adds a real bill to the company's books.`,
       inputSchema: z.object({
         vendorId: z.string().describe('Vendor ID (required)'),
         lines: z.array(z.object({

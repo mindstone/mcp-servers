@@ -55,7 +55,9 @@ Example: { "searchTerm": "Smith" }`,
       description: `Create a new customer in QuickBooks Online.
 
 Example: { "displayName": "Acme Corp" }
-Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555-1234" }`,
+Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555-1234" }
+
+IMPORTANT: Confirm the customer details with the user before calling — this adds a real customer to the company's books.`,
       inputSchema: z.object({
         displayName: z.string().describe('Customer display name (required, must be unique)'),
         email: z.string().email().optional().describe('Primary email address'),
@@ -92,7 +94,9 @@ Example: { "customerId": "123", "active": false }
 
 If syncToken is omitted the customer is read
 first to obtain the current one (QuickBooks rejects stale SyncTokens).
-Setting active to false deactivates the customer.`,
+Setting active to false deactivates the customer.
+
+IMPORTANT: Confirm the change with the user before calling — this changes a real customer record in the company's books.`,
       inputSchema: z.object({
         customerId: z.string().describe('Customer ID (required)'),
         syncToken: z.string().optional()
