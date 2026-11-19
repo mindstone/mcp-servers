@@ -65,7 +65,7 @@ export function registerConfigureTools(server: McpServer): void {
       }
 
       // No bridge — store locally
-      upsertAccount({
+      await upsertAccount({
         domain,
         apiKey,
         authenticatedAt: new Date().toISOString(),
@@ -134,7 +134,7 @@ export function registerConfigureTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const domain = args.domain.trim();
-      const removed = removeAccount(domain);
+      const removed = await removeAccount(domain);
 
       if (!removed) {
         return JSON.stringify({

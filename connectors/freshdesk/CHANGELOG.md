@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 
+- Saving accounts now replaces `accounts.json` atomically, so a crash or kill during a save can no longer leave it empty or half-written and lose every stored key. A save that fails before the new file is in place leaves the old file as it was, and a failed save never changes the connector's loaded accounts.
+- `accounts.json` must be a regular file: a symlink at that path (including one to a missing target) is now refused on read as well as on write, and credentials loaded earlier are dropped once the file is replaced by a link.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ## [0.3.1] - 2026-08-09

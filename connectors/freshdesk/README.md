@@ -150,6 +150,7 @@ node dist/index.js
 
 - Every string returned by the Freshdesk API (names, bodies, tags, emails, phone numbers, company domains, custom-field keys/values, ticket-field metadata, …) is wrapped in `<untrusted-content source="…">` envelopes so the host LLM treats it as data, not instructions. Only numeric connector metadata (IDs, statuses, priorities) is returned raw.
 - Credentials are stored in `accounts.json` under `FRESHDESK_CONFIG_PATH` with `0600` permissions (config directory `0700`).
+- `accounts.json` is replaced atomically on every save (a temp file is written and flushed, then renamed into place), so after an interrupted save the file is always either the whole previous version or the whole new one. It must be a regular file: a symlink at that path is refused when reading and when saving, so if yours is a link, replace it with the file itself.
 - Vendor error bodies, raw `Retry-After` header text, and query-bearing URLs are never written to logs or surfaced in tool errors.
 - Invalid `status`/`priority` values and out-of-range IDs/pagination inputs are rejected before any request is made.
 

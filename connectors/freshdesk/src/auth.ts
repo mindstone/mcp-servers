@@ -8,7 +8,8 @@
  * Auth format: Basic base64(apiKey:X)
  *
  * File permissions:
- * - accounts.json: 0o600 (read/write owner only)
+ * - accounts.json: 0o600 (read/write owner only), a regular file (a symlink
+ *   at that path is refused on read and on write)
  * - config directory: 0o700 (rwx owner only)
  */
 
@@ -17,6 +18,7 @@ import * as path from 'path';
 import * as os from 'os';
 import type { AccountsConfig, AccountInfo, FreshdeskAccount } from './types.js';
 import { FreshdeskError } from './types.js';
+import { atomicCredentialWrite } from './utils/atomicCredentialWrite.js';
 
 const CONFIG_PATH =
   process.env.FRESHDESK_CONFIG_PATH || path.join(os.homedir(), '.mcp', 'freshdesk');
@@ -34,18 +36,24 @@ export function getConfigPath(): string {
  * Load accounts from accounts.json.
  * Called on every getAccount() call to support hot-reload.
  *
- * The file is opened once and read through the file descriptor (open →
- * fstat → read) so it cannot be swapped between a path-level existence
- * check and the read (check-then-use race). The open is non-blocking so a
- * FIFO at the config path cannot stall every tool invocation waiting for
- * a writer. A missing, unreadable, corrupt, or non-regular file fails
- * closed to "no accounts" — including resetting previously loaded
- * credentials — which surfaces as the observable "No Freshdesk account
- * connected" error from every tool.
+ * The path is lstat-ed first, so a symlink (including a dangling one) or any
+ * other non-regular entry is refused rather than followed. The file is then
+ * opened with O_NOFOLLOW where the platform defines it (a link swapped in
+ * after the lstat fails the open with ELOOP) and read through the file
+ * descriptor (open → fstat → read), so the bytes read are those of the
+ * regular file that was checked. The open is non-blocking so a FIFO at the
+ * config path cannot stall every tool invocation waiting for a writer. A
+ * missing, symlinked, unreadable, corrupt, or non-regular file fails closed
+ * to "no accounts" — including resetting previously loaded credentials —
+ * which surfaces as the observable "No Freshdesk account connected" error
+ * from every tool.
  *
  * Returns `true` when the load was healthy — including a legitimately
- * absent file (ENOENT, the normal "no accounts yet" state) — and `false`
- * when the file exists but could not be read or parsed. Write paths
+ * absent file (ENOENT from the lstat, the normal "no accounts yet" state) —
+ * and `false` when anything else is at that path but could not be read or
+ * parsed as a regular accounts file (a symlink, a non-regular file, a read
+ * or parse failure, or an entry that vanished between the lstat and the
+ * open). Write paths
  * (`upsertAccount` / `removeAccount`) MUST refuse to save after a `false`
  * return: the in-memory config has been reset to empty, and saving it
  * would truncate the file and silently destroy every other stored
@@ -53,9 +61,31 @@ export function getConfigPath(): string {
  */
 export function loadAccounts(): boolean {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
+  let entry: fs.Stats;
+  try {
+    entry = fs.lstatSync(accountsPath);
+  } catch (error) {
+    accountsConfig = { accounts: [] };
+    // A legitimately absent file is the normal "no accounts yet" state; any
+    // other failure means the on-disk config may still hold accounts the
+    // in-memory reset would destroy on the next save.
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT'
+    );
+  }
+  if (!entry.isFile()) {
+    accountsConfig = { accounts: [] };
+    return false;
+  }
+
   let fd: number | undefined;
   try {
-    fd = fs.openSync(accountsPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    fd = fs.openSync(
+      accountsPath,
+      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW ?? 0),
+    );
     if (!fs.fstatSync(fd).isFile()) {
       accountsConfig = { accounts: [] };
       return false;
@@ -71,16 +101,12 @@ export function loadAccounts(): boolean {
     }
     accountsConfig = { accounts: [] };
     return false;
-  } catch (error) {
+  } catch {
+    // The lstat saw a regular file, so any failure here (ELOOP from a link
+    // swapped in, or even ENOENT from a file removed since) is unhealthy:
+    // the on-disk config may still hold accounts a save would destroy.
     accountsConfig = { accounts: [] };
-    // A legitimately absent file is the normal "no accounts yet" state; any
-    // other failure means the on-disk config may still hold accounts the
-    // in-memory reset would destroy on the next save.
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      (error as NodeJS.ErrnoException).code === 'ENOENT'
-    );
+    return false;
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
@@ -127,38 +153,18 @@ export function getAccount(domain?: string): FreshdeskAccount | undefined {
 }
 
 /**
- * Save accounts.json with secure file permissions.
+ * Save accounts.json atomically with secure file permissions.
  *
- * The file is opened with O_NOFOLLOW so a symlink planted at accounts.json
- * cannot redirect the write into an attacker-chosen target, and chmodded to
- * 0o600 through the descriptor whether or not the file pre-existed (the
- * mode argument to open applies only at creation). O_NOFOLLOW is
- * unavailable on some platforms (e.g. Windows); the mode enforcement still
- * applies there.
+ * The shared helper writes a temp file (exclusive create, O_NOFOLLOW where
+ * available, mode 0o600) in the 0o700 config directory, fsyncs it, renames
+ * it over accounts.json and fsyncs the directory, so a crash mid-save leaves
+ * the old file whole. It refuses a symlinked accounts.json, and the rename
+ * replaces the directory entry rather than writing through a link. The
+ * in-memory config is updated only once the write has succeeded.
  */
-export function saveAccounts(config: AccountsConfig): void {
-  // Ensure config directory exists with 0o700 permissions
-  if (!fs.existsSync(CONFIG_PATH)) {
-    fs.mkdirSync(CONFIG_PATH, { recursive: true, mode: 0o700 });
-  }
-
+export async function saveAccounts(config: AccountsConfig): Promise<void> {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
-  const fd = fs.openSync(
-    accountsPath,
-    fs.constants.O_WRONLY |
-      fs.constants.O_CREAT |
-      fs.constants.O_TRUNC |
-      (fs.constants.O_NOFOLLOW ?? 0),
-    0o600,
-  );
-  try {
-    fs.fchmodSync(fd, 0o600);
-    fs.writeFileSync(fd, JSON.stringify(config, null, 2));
-  } finally {
-    fs.closeSync(fd);
-  }
-
-  // Update in-memory state
+  await atomicCredentialWrite(accountsPath, JSON.stringify(config, null, 2), { mode: 0o600 });
   accountsConfig = config;
 }
 
@@ -178,43 +184,51 @@ function assertAccountsReadable(): void {
 
 /**
  * Remove an account by domain. Returns true if found and removed.
+ *
+ * The change is made on a copy of the config, so a failed save leaves the
+ * in-memory config as it was.
  */
-export function removeAccount(domain: string): boolean {
+export async function removeAccount(domain: string): Promise<boolean> {
   if (!loadAccounts()) assertAccountsReadable();
 
   const idx = accountsConfig.accounts.findIndex((a) => a.domain === domain);
   if (idx < 0) return false;
 
-  accountsConfig.accounts.splice(idx, 1);
+  const next: AccountsConfig = { ...accountsConfig, accounts: [...accountsConfig.accounts] };
+  next.accounts.splice(idx, 1);
 
   // Update default if the removed domain was the default
-  if (accountsConfig.defaultDomain === domain) {
-    accountsConfig.defaultDomain = accountsConfig.accounts[0]?.domain;
+  if (next.defaultDomain === domain) {
+    next.defaultDomain = next.accounts[0]?.domain;
   }
 
-  saveAccounts(accountsConfig);
+  await saveAccounts(next);
   return true;
 }
 
 /**
  * Add or update an account. Saves to disk with proper permissions.
+ *
+ * The change is made on a copy of the config, so a failed save leaves the
+ * in-memory config as it was.
  */
-export function upsertAccount(info: AccountInfo): void {
+export async function upsertAccount(info: AccountInfo): Promise<void> {
   if (!loadAccounts()) assertAccountsReadable();
 
-  const idx = accountsConfig.accounts.findIndex((a) => a.domain === info.domain);
+  const next: AccountsConfig = { ...accountsConfig, accounts: [...accountsConfig.accounts] };
+  const idx = next.accounts.findIndex((a) => a.domain === info.domain);
   if (idx >= 0) {
-    accountsConfig.accounts[idx] = info;
+    next.accounts[idx] = info;
   } else {
-    accountsConfig.accounts.push(info);
+    next.accounts.push(info);
   }
 
   // Set default if this is the first account
-  if (!accountsConfig.defaultDomain) {
-    accountsConfig.defaultDomain = info.domain;
+  if (!next.defaultDomain) {
+    next.defaultDomain = info.domain;
   }
 
-  saveAccounts(accountsConfig);
+  await saveAccounts(next);
 }
 
 // Initialize accounts on startup
