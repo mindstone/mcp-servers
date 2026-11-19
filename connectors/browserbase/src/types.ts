@@ -63,11 +63,6 @@ export function getRequestTimeoutMs(): number {
   return parseTimeoutEnv('BROWSERBASE_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
 }
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class ConnectorError extends Error {
   constructor(
     message: string,

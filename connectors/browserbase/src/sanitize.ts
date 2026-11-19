@@ -5,8 +5,10 @@
  * Browserbase tool handlers return the API object spread into JSON; the
  * external-text fields are nested inside those objects rather than passed
  * individually. This module is the single, auditable place that enumerates
- * each such field and reaches `wrapUntrusted` (single strings) or the local
- * `wrapJsonValues` (structured blobs, values wrapped/keys raw).
+ * each such field and reaches `wrapUntrusted` (single strings), the local
+ * `wrapJsonValues` (structured blobs, values wrapped/keys raw), or the local
+ * `wrapJsonBlob` (blobs whose keys are externally authored too, serialised
+ * and wrapped whole).
  * Handlers call the matching `sanitize*` helper instead of returning the raw
  * object.
  *
@@ -29,9 +31,10 @@ function wrapStr(v: unknown, source: string): unknown {
 
 /**
  * Recursively wrap every string VALUE inside `value`, leaving object KEYS
- * raw. Use for structured JSON blobs (metadata, results, headers, schemas)
- * where the LLM must still navigate the object shape — wrapping keys (as
- * wrapUntrustedJsonStrings does) would make the data unusable.
+ * raw, so the LLM can still navigate the object shape. Keys stay outside the
+ * envelope, so this is only safe where the keys are not attacker-authored;
+ * where they are (JSON Schema property names, arbitrary metadata keys), use
+ * `wrapJsonBlob` to envelope the whole serialised blob instead.
  */
 function wrapJsonValues(v: unknown, source: string): unknown {
   if (typeof v === 'string') return wrapUntrusted(v, source);
@@ -215,11 +218,42 @@ export function sanitizeExtension(extension: unknown, source: string): unknown {
   return out;
 }
 
-/** Function record: `name` is authored by whoever deployed the function. */
+/**
+ * Serialise a structured blob and envelope it whole. Use where the KEYS are
+ * externally authored too (JSON Schema property names, arbitrary metadata
+ * keys), which `wrapJsonValues` would leave raw. `null`/`undefined` pass
+ * through unchanged.
+ */
+function wrapJsonBlob(v: unknown, source: string): unknown {
+  if (v === undefined || v === null) return v;
+  return wrapStr(JSON.stringify(v), source);
+}
+
+/** Function version: `userParamsSchema` and `sessionCreateParams` are authored
+ * by whoever deployed the function, keys included (schema property names,
+ * `userMetadata` keys), so each comes back as one enveloped JSON string. Ids
+ * and timestamps stay raw. */
+export function sanitizeFunctionVersion(version: unknown, source: string): unknown {
+  if (!isObj(version)) return version;
+  const out: Obj = { ...version };
+  if ('userParamsSchema' in out) {
+    out.userParamsSchema = wrapJsonBlob(out.userParamsSchema, `${source}:version.userParamsSchema`);
+  }
+  if ('sessionCreateParams' in out) {
+    out.sessionCreateParams = wrapJsonBlob(out.sessionCreateParams, `${source}:version.sessionCreateParams`);
+  }
+  return out;
+}
+
+/** Function record: `name` is authored by whoever deployed the function; a
+ * build's function also carries its `createdVersion`. */
 export function sanitizeFunction(fn: unknown, source: string): unknown {
   if (!isObj(fn)) return fn;
   const out: Obj = { ...fn };
   out.name = wrapStr(out.name, `${source}:function.name`);
+  if ('createdVersion' in out) {
+    out.createdVersion = sanitizeFunctionVersion(out.createdVersion, source);
+  }
   return out;
 }
 

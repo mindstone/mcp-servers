@@ -108,7 +108,7 @@ node dist/index.js
 | `BROWSERBASE_REQUEST_TIMEOUT_MS` | No | Per-request timeout for Browserbase API calls in milliseconds (default 30000) |
 | `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded by `upload_session_file`, `upload_extension`, and `upload_certificate`. Defaults to the system temp directory. For standalone clients, file reads are sandboxed to this directory; for negotiated `files/readModes` version 1, see [Host-authorized local inputs](#host-authorized-local-inputs). |
 
-When running inside a host that provides the credential bridge, `configure_browserbase_api_key` persists the key through the host instead of the environment.
+When running inside a host that provides the credential bridge, `configure_browserbase_api_key` persists the key through the host instead of the environment. The connector reads the bridge only through the shared hardened bridge reader (`src/bridge-reader.ts`).
 
 ### MCP Host Configuration
 
@@ -138,7 +138,7 @@ Every `create_session` starts a billable browser (per-minute, 1-minute minimum).
 
 ### External content is always enveloped
 
-Anything authored outside your account — fetched page content, search results, page titles in debug URLs, agent run tasks/results/messages, CDP log bodies, replay playlists, download filenames, function output, error details — is wrapped in `<untrusted-content source="browserbase:…">` envelopes with close-tag breakout escaping before it reaches the model. CDP log `rawBody` values are additionally truncated beyond ~4KB with a truncation note.
+Anything authored outside your account — fetched page content, search results, page titles in debug URLs, agent run tasks/results/messages, CDP log bodies, replay playlists, download filenames, function output, error details — is wrapped in `<untrusted-content source="browserbase:…">` envelopes with close-tag breakout escaping before it reaches the model. A function version's `userParamsSchema` and `sessionCreateParams` are written by the function's author, keys included, so each comes back as one JSON string inside an envelope: unwrap the envelope (and its tag escaping) before parsing the JSON. CDP log `rawBody` values are additionally truncated beyond ~4KB with a truncation note.
 
 ### File uploads are workspace-sandboxed for standalone clients
 
@@ -198,7 +198,7 @@ Anything authored outside your account — fetched page content, search results,
 ### Downloads (files downloaded inside sessions)
 - **list_downloads** — List downloads for a session (offset-paginated, filterable)
 - **get_download_info** — Metadata (size, checksum, MIME type)
-- **get_download_file** — Fetch the bytes as base64 (8MB inline cap)
+- **get_download_file** — Fetch the bytes as base64 (8MB inline cap, enforced while streaming: larger files are refused without being held in memory)
 - **delete_download** — Permanently delete a download
 
 ### Extensions

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { browserbaseFetch, browserbaseFetchBytes, requireApiKey } from '../client.js';
+import { ResponseTooLargeError, browserbaseFetch, browserbaseFetchBytes, requireApiKey } from '../client.js';
 import { ConnectorError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { EPOCH_MS_FIELD_HINT, epochMsField, epochMsToIso } from './common.js';
@@ -162,18 +162,28 @@ RETURNS: id, filename, mime_type, size, encoding ("base64"), content_base64.`,
     },
     withErrorHandling(async (args) => {
       requireApiKey();
-      const { data, contentType, contentLength } = await browserbaseFetchBytes(
-        `/downloads/${encodeURIComponent(args.download_id)}`,
-        { method: 'GET', headers: { 'Accept': 'application/octet-stream' } },
+      const tooLarge = (size: number) => new ConnectorError(
+        `Download ${args.download_id} is too large to return inline (${Math.round(size / 1024 / 1024)}MB > 8MB limit).`,
+        'FILE_TOO_LARGE',
+        'Fetch this file from the Browserbase dashboard instead. Use list_downloads (session_id required) to see its metadata and confirm the file.',
       );
-      const size = contentLength ?? data.length;
-      if (size > MAX_INLINE_DOWNLOAD_BYTES || data.length > MAX_INLINE_DOWNLOAD_BYTES) {
-        throw new ConnectorError(
-          `Download ${args.download_id} is too large to return inline (${Math.round(size / 1024 / 1024)}MB > 8MB limit).`,
-          'FILE_TOO_LARGE',
-          'Fetch this file from the Browserbase dashboard instead. Use list_downloads (session_id required) to see its metadata and confirm the file.',
+      let fetched: Awaited<ReturnType<typeof browserbaseFetchBytes>>;
+      try {
+        // The cap is enforced while streaming: an over-cap declared length is
+        // refused unread, and the body is never buffered past the cap.
+        fetched = await browserbaseFetchBytes(
+          `/downloads/${encodeURIComponent(args.download_id)}`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/octet-stream' },
+            maxBytes: MAX_INLINE_DOWNLOAD_BYTES,
+          },
         );
+      } catch (error) {
+        if (error instanceof ResponseTooLargeError) throw tooLarge(error.observedBytes);
+        throw error;
       }
+      const { data, contentType } = fetched;
       // Filename/mimeType come from the download metadata endpoint; the binary
       // response itself carries no trustworthy name.
       return JSON.stringify({

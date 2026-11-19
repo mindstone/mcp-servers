@@ -225,15 +225,90 @@ export async function browserbaseFetchText(
 }
 
 /**
- * Fetch a binary response (e.g. a downloaded file's bytes).
+ * A binary response larger than the caller's `maxBytes`. Thrown before the
+ * body is read when the declared content-length is over the cap, or as soon as
+ * the bytes received pass it. `observedBytes` is the declared length or the
+ * running total at the point of refusal (a lower bound on the real size).
+ * Callers map it to their own user-facing error.
+ */
+export class ResponseTooLargeError extends ConnectorError {
+  constructor(
+    public readonly maxBytes: number,
+    public readonly observedBytes: number,
+  ) {
+    super(
+      `Browserbase response exceeds the ${maxBytes}-byte limit (at least ${observedBytes} bytes).`,
+      'RESPONSE_TOO_LARGE',
+      'The response is too large to return. Fetch it from the Browserbase dashboard instead.',
+    );
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
+export interface BrowserbaseFetchBytesOptions extends BrowserbaseRequestOptions {
+  /** Refuse (ResponseTooLargeError) a body larger than this many bytes, without
+   * buffering more than `maxBytes` plus one chunk. Unlimited when absent. */
+  maxBytes?: number;
+}
+
+/**
+ * Cancel a refused body without waiting for it: cancelling is connection
+ * hygiene only, and some bodies never settle their cancel promise, which must
+ * not hold up the size refusal. A failure logs one fixed stderr line.
+ */
+function discardBody(cancel: () => Promise<void>): void {
+  cancel().catch(() => {
+    console.error('[browserbase] oversize response body could not be discarded');
+  });
+}
+
+/** Read a body into one Buffer, cancelling the stream once it passes `maxBytes`. */
+async function readBodyCapped(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > maxBytes) {
+        discardBody(() => reader.cancel());
+        throw new ResponseTooLargeError(maxBytes, total + value.byteLength);
+      }
+      total += value.byteLength;
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+/**
+ * Fetch a binary response (e.g. a downloaded file's bytes). With `maxBytes`,
+ * an over-cap declared content-length is refused before the body is read, and
+ * the body is streamed so an absent or understated length cannot exceed the
+ * cap either.
  */
 export async function browserbaseFetchBytes(
   urlPath: string,
-  options: BrowserbaseRequestOptions = {},
+  options: BrowserbaseFetchBytesOptions = {},
 ): Promise<{ data: Buffer; contentType: string | null; contentLength: number | null }> {
-  const response = await browserbaseRequest(urlPath, options);
+  const { maxBytes, ...requestOptions } = options;
+  const response = await browserbaseRequest(urlPath, requestOptions);
   const contentLengthRaw = response.headers.get('content-length');
   const contentLength = contentLengthRaw !== null ? Number(contentLengthRaw) : null;
-  const data = Buffer.from(await response.arrayBuffer());
-  return { data, contentType: response.headers.get('content-type'), contentLength };
+  const contentType = response.headers.get('content-type');
+  if (maxBytes === undefined) {
+    const data = Buffer.from(await response.arrayBuffer());
+    return { data, contentType, contentLength };
+  }
+  if (contentLength !== null && Number.isFinite(contentLength) && contentLength > maxBytes) {
+    const body = response.body;
+    if (body) discardBody(() => body.cancel());
+    throw new ResponseTooLargeError(maxBytes, contentLength);
+  }
+  const data = await readBodyCapped(response, maxBytes);
+  return { data, contentType, contentLength };
 }

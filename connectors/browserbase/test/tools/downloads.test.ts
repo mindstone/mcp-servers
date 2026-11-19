@@ -90,6 +90,110 @@ describe('Download tools — Browserbase', () => {
     expect(parsed.resolution).toContain('list_downloads');
   });
 
+  describe('get_download_file streaming cap (instrumented responses)', () => {
+    const MiB = 1024 * 1024;
+    const CAP = 8 * MiB;
+
+    /**
+     * A download response whose body is pulled one chunk at a time
+     * (highWaterMark 0, so nothing is read ahead), recording how many bytes
+     * the connector actually pulled and whether it cancelled the body.
+     */
+    function instrumentedDownload(chunkSizes: number[], contentLength?: number) {
+      const state = { pulledBytes: 0, pulledChunks: 0, cancelled: false };
+      let next = 0;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (next >= chunkSizes.length) {
+              controller.close();
+              return;
+            }
+            const size = chunkSizes[next++];
+            state.pulledBytes += size;
+            state.pulledChunks += 1;
+            controller.enqueue(new Uint8Array(size).fill(0x61));
+          },
+          cancel() {
+            state.cancelled = true;
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const headers: Record<string, string> = { 'content-type': 'application/pdf' };
+      if (contentLength !== undefined) headers['content-length'] = String(contentLength);
+      const fetchMock = vi.fn(async () => new Response(body, { status: 200, headers }));
+      vi.stubGlobal('fetch', fetchMock);
+      return { state, fetchMock };
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    const expectTooLarge = (result: { isError?: boolean; json: unknown }) => {
+      expect(result.isError).toBe(true);
+      const parsed = result.json as { ok: boolean; code: string; error: string; resolution: string };
+      expect(parsed.ok).toBe(false);
+      expect(parsed.code).toBe('FILE_TOO_LARGE');
+      expect(parsed.error).toContain('too large to return inline');
+      expect(parsed.error).toContain('> 8MB limit');
+      expect(parsed.resolution).toContain('dashboard');
+      expect(parsed.resolution).toContain('list_downloads');
+    };
+
+    it('refuses an over-cap declared length without reading the body, and cancels it', async () => {
+      const client = await makeClient();
+      const { state, fetchMock } = instrumentedDownload([MiB, MiB], 9 * MiB);
+      const result = await client.callTool('get_download_file', { download_id: DOWNLOAD_ID });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expectTooLarge(result);
+      expect(state.pulledChunks).toBe(0);
+      await vi.waitFor(() => expect(state.cancelled).toBe(true));
+    });
+
+    it('stops an unknown-length stream at the first chunk past the cap, and cancels it', async () => {
+      const client = await makeClient();
+      const { state } = instrumentedDownload(Array.from({ length: 20 }, () => MiB));
+      const result = await client.callTool('get_download_file', { download_id: DOWNLOAD_ID });
+      expectTooLarge(result);
+      // 8 chunks reach the cap exactly; the 9th passes it and nothing more is pulled.
+      expect(state.pulledChunks).toBe(9);
+      expect(state.pulledBytes).toBe(9 * MiB);
+      await vi.waitFor(() => expect(state.cancelled).toBe(true));
+    });
+
+    it('returns a file of exactly the cap', async () => {
+      const client = await makeClient();
+      const { state } = instrumentedDownload(Array.from({ length: 8 }, () => MiB));
+      const result = await client.callTool('get_download_file', { download_id: DOWNLOAD_ID });
+      expect(result.isError).toBeFalsy();
+      const parsed = result.json as { ok: boolean; size: number; content_base64: string };
+      expect(parsed.ok).toBe(true);
+      expect(parsed.size).toBe(CAP);
+      expect(Buffer.from(parsed.content_base64, 'base64').length).toBe(CAP);
+      expect(state.cancelled).toBe(false);
+    });
+
+    it('catches an understated declared length while streaming', async () => {
+      const client = await makeClient();
+      const { state } = instrumentedDownload(Array.from({ length: 20 }, () => MiB), 100);
+      const result = await client.callTool('get_download_file', { download_id: DOWNLOAD_ID });
+      expectTooLarge(result);
+      expect(state.pulledBytes).toBe(9 * MiB);
+      await vi.waitFor(() => expect(state.cancelled).toBe(true));
+    });
+
+    it('catches a single chunk that jumps past the cap', async () => {
+      const client = await makeClient();
+      const { state } = instrumentedDownload([MiB, CAP]);
+      const result = await client.callTool('get_download_file', { download_id: DOWNLOAD_ID });
+      expectTooLarge(result);
+      expect(state.pulledChunks).toBe(2);
+      await vi.waitFor(() => expect(state.cancelled).toBe(true));
+    });
+  });
+
   it('delete_download succeeds; 404 maps to NOT_FOUND', async () => {
     const client = await makeClient();
     const deleted = await client.callTool('delete_download', { download_id: DOWNLOAD_ID });

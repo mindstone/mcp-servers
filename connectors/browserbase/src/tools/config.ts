@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { setApiKey } from '../client.js';
-import { postToBridge, BRIDGE_STATE_PATH } from '../bridge.js';
+import { configureViaBridge } from '../bridge.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerConfigTools(server: McpServer): void {
@@ -31,21 +31,20 @@ All other Browserbase tools require a valid API key to work. The key is stored b
         return JSON.stringify({ ok: false, error: 'API key is required.' });
       }
 
-      // If running inside a host app bridge, persist via the bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await postToBridge({ apiKey });
-          if (result.success) {
-            setApiKey(apiKey);
-            const message = result.warning
-              ? `Browserbase API key configured. Note: ${result.warning}`
-              : 'Browserbase API key configured! You can now create browser sessions, run agents, and fetch the web.';
-            return JSON.stringify({ ok: true, message });
-          }
-          // Bridge endpoint not configured or failed — fall through to session-only mode
-        } catch {
-          // Bridge unavailable — fall through to session-only mode
+      // Persist via the host app bridge when one is available; configureViaBridge
+      // reports { success: false } without a bridge, so this falls through.
+      try {
+        const result = await configureViaBridge({ apiKey });
+        if (result.success) {
+          setApiKey(apiKey);
+          const message = result.warning
+            ? `Browserbase API key configured. Note: ${result.warning}`
+            : 'Browserbase API key configured! You can now create browser sessions, run agents, and fetch the web.';
+          return JSON.stringify({ ok: true, message });
         }
+        // Bridge endpoint not configured or failed — fall through to session-only mode
+      } catch {
+        // Bridge unavailable — fall through to session-only mode
       }
 
       // Standalone mode: set key for this session
