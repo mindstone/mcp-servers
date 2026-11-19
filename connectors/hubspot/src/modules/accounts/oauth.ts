@@ -3,6 +3,8 @@ import path from 'node:path';
 import type { CredentialLockOptions } from '../../utils/credentialLock.js';
 import { withHubSpotCredentialLock } from '../../utils/credentialLock.js';
 import logger from '../../utils/logger.js';
+import { readHubSpotResponse } from '../../api/response-parsing.js';
+import { HubSpotResponses } from '../../api/response-schemas.js';
 import {
   getAccountManager,
   type TokenData,
@@ -89,12 +91,6 @@ interface HubSpotTokenErrorResponse {
   error?: string;
   error_description?: string;
   message?: string;
-}
-
-interface HubSpotTokenInfo {
-  user: string;
-  hub_id: number;
-  scopes?: string[];
 }
 
 export class HubSpotOAuthError extends Error {
@@ -305,7 +301,7 @@ export class HubSpotOAuthClient {
     this.clientSecret = clientSecret;
   }
 
-  async getTokenInfo(accessToken: string): Promise<{ user: string; hub_id: number; scopes: string[] }> {
+  async getTokenInfo(accessToken: string): Promise<{ user?: string; hub_id: number; scopes: string[] }> {
     const response = await fetch(`${HUBSPOT_TOKEN_INFO_URL}/${accessToken}`);
     
     if (!response.ok) {
@@ -315,11 +311,11 @@ export class HubSpotOAuthClient {
       );
     }
     
-    const data = await response.json() as HubSpotTokenInfo;
+    const data = await readHubSpotResponse(response, HubSpotResponses.tokenInfo, 'GET token_info');
     return {
       user: data.user,
       hub_id: data.hub_id,
-      scopes: Array.isArray(data.scopes) ? data.scopes : [],
+      scopes: data.scopes ?? [],
     };
   }
 

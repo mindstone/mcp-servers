@@ -227,8 +227,16 @@ export async function handleGetFile(args: GetFileArgs) {
         const signed = await client.getFileSignedUrl(args.fileId);
         return { ...file, signedUrl: signed.url };
       } catch (signedError) {
-        logger.warn(`Failed to get signed URL for file ${args.fileId}:`, signedError);
-        return { ...file, signedUrl: null, signedUrlError: 'Could not generate signed URL (file may be public)' };
+        const parsed = parseFileError(signedError, 'get_file_signed_url');
+        // Reauthentication is needed for the whole tool, not just the signed URL.
+        if ('status' in parsed) throw signedError;
+        logger.warn({ fileId: args.fileId, errorCode: parsed.errorCode }, 'hubspot_signed_url_failed');
+        return {
+          ...file,
+          signedUrl: null,
+          signedUrlError: 'Could not generate signed URL (file may be public)',
+          signedUrlErrorCode: parsed.errorCode,
+        };
       }
     }
 

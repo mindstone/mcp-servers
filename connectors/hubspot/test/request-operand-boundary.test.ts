@@ -47,31 +47,36 @@ describe('pathSegment', () => {
 describe('HubSpot client request paths', () => {
   const client = new HubSpotClient('test-token');
 
-  // Every method that used to interpolate a raw value into its path.
-  const cases: Array<[string, (value: string) => Promise<unknown>, (value: string) => string]> = [
-    ['getOwner', v => client.getOwner(v), v => `/crm/v3/owners/${v}`],
-    ['listPipelines', v => client.listPipelines(v), v => `/crm/v3/pipelines/${v}`],
-    ['getPipeline', v => client.getPipeline('deals', v), v => `/crm/v3/pipelines/deals/${v}`],
-    ['getForm', v => client.getForm(v), v => `/marketing/v3/forms/${v}`],
-    ['getFormSubmissions', v => client.getFormSubmissions(v), v => `/form-integrations/v1/submissions/forms/${v}`],
-    ['getAnalyticsReport', v => client.getAnalyticsReport(v, 'total', '20260101', '20260102'), v => `/analytics/v2/reports/${v}/total`],
-    ['getMarketingEmail', v => client.getMarketingEmail(v), v => `/marketing/v3/emails/${v}`],
-    ['getList', v => client.getList(v), v => `/crm/v3/lists/${v}`],
-    ['getListMembers', v => client.getListMembers(v), v => `/crm/v3/lists/${v}/memberships`],
-    ['getImportStatus', v => client.getImportStatus(v), v => `/files/v3/files/import-from-url/async/tasks/${v}/status`],
-    ['getFile', v => client.getFile(v), v => `/files/v3/files/${v}`],
-    ['getFileSignedUrl', v => client.getFileSignedUrl(v), v => `/files/v3/files/${v}/signed-url`],
-    ['deleteFile', v => client.deleteFile(v), v => `/files/v3/files/${v}`],
+  // Every method that used to interpolate a raw value into its path, with a
+  // minimal reply that the method's schema accepts.
+  const file = {
+    id: 'f-1', access: 'PRIVATE', archived: false,
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  };
+  const cases: Array<[string, (value: string) => Promise<unknown>, (value: string) => string, unknown]> = [
+    ['getOwner', v => client.getOwner(v), v => `/crm/v3/owners/${v}`, { id: 'o-1' }],
+    ['listPipelines', v => client.listPipelines(v), v => `/crm/v3/pipelines/${v}`, { results: [] }],
+    ['getPipeline', v => client.getPipeline('deals', v), v => `/crm/v3/pipelines/deals/${v}`, { id: 'p-1' }],
+    ['getForm', v => client.getForm(v), v => `/marketing/v3/forms/${v}`, { id: 'form-1' }],
+    ['getFormSubmissions', v => client.getFormSubmissions(v), v => `/form-integrations/v1/submissions/forms/${v}`, { results: [] }],
+    ['getAnalyticsReport', v => client.getAnalyticsReport(v, 'total', '20260101', '20260102'), v => `/analytics/v2/reports/${v}/total`, {}],
+    ['getMarketingEmail', v => client.getMarketingEmail(v), v => `/marketing/v3/emails/${v}`, { id: 'e-1' }],
+    ['getList', v => client.getList(v), v => `/crm/v3/lists/${v}`, { list: { listId: 'l-1' } }],
+    ['getListMembers', v => client.getListMembers(v), v => `/crm/v3/lists/${v}/memberships`, { results: [] }],
+    ['getImportStatus', v => client.getImportStatus(v), v => `/files/v3/files/import-from-url/async/tasks/${v}/status`, { status: 'PENDING' }],
+    ['getFile', v => client.getFile(v), v => `/files/v3/files/${v}`, file],
+    ['getFileSignedUrl', v => client.getFileSignedUrl(v), v => `/files/v3/files/${v}/signed-url`, { url: 'https://example.com/f' }],
+    ['deleteFile', v => client.deleteFile(v), v => `/files/v3/files/${v}`, {}],
   ];
 
-  it.each(cases)('%s keeps a normal ID as is', async (_name, call, expected) => {
-    const calls = captureFetch();
+  it.each(cases)('%s keeps a normal ID as is', async (_name, call, expected, reply) => {
+    const calls = captureFetch(reply);
     await call('123456');
     expect(sentPath(calls[0].url)).toBe(expected('123456'));
   });
 
-  it.each(cases)('%s keeps a crafted ID inside its own segment', async (_name, call, expected) => {
-    const calls = captureFetch();
+  it.each(cases)('%s keeps a crafted ID inside its own segment', async (_name, call, expected, reply) => {
+    const calls = captureFetch(reply);
     await call('1/../../../crm/v3/objects/contacts/9?archived=true#x');
     expect(sentPath(calls[0].url)).toBe(
       expected('1%2F..%2F..%2F..%2Fcrm%2Fv3%2Fobjects%2Fcontacts%2F9%3Farchived%3Dtrue%23x')
@@ -85,8 +90,10 @@ describe('HubSpot client request paths', () => {
     expect(calls).toHaveLength(0);
   });
 
+  const engagement = { id: '123', properties: {} };
+
   it('getEngagement keeps properties inside the one properties parameter', async () => {
-    const calls = captureFetch();
+    const calls = captureFetch(engagement);
     await client.getEngagement('calls', '123', ['hs_call_title&archived=true', 'idProperty=other']);
     const sent = new URL(calls[0].url);
     expect(sent.pathname).toBe('/crm/v3/objects/calls/123');
@@ -95,7 +102,7 @@ describe('HubSpot client request paths', () => {
   });
 
   it('getEngagement sends normal properties as before', async () => {
-    const calls = captureFetch();
+    const calls = captureFetch(engagement);
     await client.getEngagement('calls', '123', ['hs_call_title', 'hs_call_body']);
     expect(new URL(calls[0].url).search).toBe('?properties=hs_call_title%2Chs_call_body');
   });
@@ -109,7 +116,10 @@ describe('HubSpot client request paths', () => {
 });
 
 describe('HubSpot knowledge-base GraphQL text', () => {
-  const okArticle = { data: { KB: { knowledge_article: { hs_id: 'kb-1' } } } };
+  const okArticle = { data: { KB: { knowledge_article: {
+    hs_id: 'kb-1', hs_name: null, hs_body: null, hs_path: null,
+    hs_slug: null, hs_language: null, hs_meta_description: null,
+  } } } };
 
   it.each([
     'kb-1',

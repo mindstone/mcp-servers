@@ -843,13 +843,23 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
     // caller via `notes` (a silent gap would make an incomplete timeline look
     // complete).
     const failedAssociationTypes: string[] = [];
+    const partialFailureCodes = new Set<string>();
+    // A degraded lookup keeps its classification: the code goes to the log and
+    // into the caller-visible note. Reauthentication fails the whole tool.
+    const classifyPartialFailure = (error: unknown, operation: string): string => {
+      const parsed = parseSharedHubSpotError(error, { objectType: 'contact_engagements', operation });
+      if ('status' in parsed) throw error;
+      partialFailureCodes.add(parsed.errorCode);
+      return parsed.errorCode;
+    };
     const associationsOrEmpty = async (engagementType: 'calls' | 'emails' | 'meetings') => {
       try {
         return await client.getAssociations('contacts', args.contactId, engagementType);
       } catch (error) {
-        logger.warn(`Contact engagement associations for ${engagementType} failed:`, error);
+        const errorCode = classifyPartialFailure(error, 'list_associations');
+        logger.warn({ engagementType, errorCode }, 'hubspot_contact_engagement_associations_failed');
         failedAssociationTypes.push(engagementType);
-        return { results: [] as Array<{ id: string; type: string }> };
+        return { results: [] };
       }
     };
     const [callAssocs, emailAssocs, meetingAssocs] = await Promise.all([
@@ -879,8 +889,9 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
     ) => {
       const fetched = await Promise.all(
         ids.map(id =>
-          client.getEngagement(engagementType, id, properties).catch((error) => {
-            logger.warn(`Contact engagement fetch for ${engagementType} ${id} failed:`, error);
+          client.getEngagement(engagementType, id, properties).catch((error: unknown) => {
+            const errorCode = classifyPartialFailure(error, 'get_engagement');
+            logger.warn({ engagementType, engagementId: id, errorCode }, 'hubspot_contact_engagement_fetch_failed');
             return null;
           })
         )
@@ -922,6 +933,9 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
       partialFailureNotes.push(
         `Some engagements could not be fetched and were omitted (${droppedParts.join(', ')}); the timeline is incomplete.`,
       );
+    }
+    if (partialFailureNotes.length > 0) {
+      partialFailureNotes.push(`Error codes: ${[...partialFailureCodes].join(', ')}.`);
     }
 
     return attachSalesEmailScopeNote({

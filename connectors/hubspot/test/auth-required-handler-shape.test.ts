@@ -9,6 +9,7 @@ import {
   type McpTestClient,
   type MockApiServer,
 } from './fixtures/mcp-test-harness.js';
+import { allTools } from '../src/tools/definitions.js';
 
 function createExpiredTokenConfigDir(): string {
   const configDir = mkdtempSync(join(tmpdir(), 'hubspot-auth-required-shape-'));
@@ -116,4 +117,18 @@ describe('auth_required error shape from handler catch paths', () => {
     expect(raw.isError).toBe(true);
     assertAuthRequiredPayload(parseToolPayload(raw));
   });
+});
+
+describe('sign-in tool descriptions match host-run sign-in', () => {
+  for (const name of ['authenticate_hubspot_account', 'complete_hubspot_auth']) {
+    it(`${name} describes the auth_required result, not a link or callback`, () => {
+      const tool = allTools.find((t) => t.name === name);
+      expect(tool).toBeDefined();
+      const description = tool!.description;
+      expect(description).toContain('auth_required');
+      expect(description).not.toContain('auth_url');
+      expect(description).not.toContain('auto_complete');
+      expect(description.toLowerCase()).not.toContain('callback');
+    });
+  }
 });

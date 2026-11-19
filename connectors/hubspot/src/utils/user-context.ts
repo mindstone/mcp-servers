@@ -12,7 +12,6 @@ const SOURCE_DETAIL_SUPPORTED_TYPES = new Set([
 interface OwnerInfo {
   ownerId: string;
   fullName: string;
-  email: string;
 }
 
 const ownerCache = new Map<string, Promise<OwnerInfo | null>>();
@@ -35,7 +34,6 @@ async function lookupOwnerByEmail(email: string): Promise<OwnerInfo | null> {
   return {
     ownerId: owner.id,
     fullName,
-    email: owner.email
   };
 }
 

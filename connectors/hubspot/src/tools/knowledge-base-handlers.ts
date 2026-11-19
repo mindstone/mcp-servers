@@ -9,6 +9,11 @@ import {
   summariseHubSpotApiError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import {
+  KbArticleCollectionDataSchema,
+  KbArticleSingleDataSchema,
+  type KbArticle,
+} from '../api/response-schemas.js';
 import { sanitizeHubSpotResponse } from '../sanitize.js';
 
 /**
@@ -40,39 +45,10 @@ interface GetKbArticleArgs {
   articleId: string;
 }
 
-// GraphQL response shapes for KB queries
-// Only fields confirmed in HubSpot's official GraphQL KB docs are included.
-// hs_slug, hs_language, hs_meta_description are unverified but commonly work;
-// hs_url/hs_created/hs_updated do NOT exist — use hs_path instead.
-interface KbArticleGraphQL {
-  hs_id: string;
-  hs_name: string;
-  hs_body?: string;
-  hs_path?: string;
-  hs_slug?: string;
-  hs_language?: string;
-  hs_meta_description?: string;
-}
-
-interface KbArticleCollectionResponse {
-  KB: {
-    knowledge_article_collection: {
-      total: number;
-      items: KbArticleGraphQL[];
-    };
-  };
-}
-
-interface KbArticleSingleResponse {
-  KB: {
-    knowledge_article: KbArticleGraphQL;
-  };
-}
-
 /**
  * Map GraphQL KB article fields (hs_* prefix) to user-friendly names.
  */
-function mapGraphQLArticle(article: KbArticleGraphQL): Record<string, unknown> {
+function mapGraphQLArticle(article: KbArticle): Record<string, unknown> {
   return {
     id: article.hs_id,
     title: article.hs_name,
@@ -227,7 +203,7 @@ export async function handleListKbArticles(args: ListKbArticlesArgs): Promise<{
 }`;
 
     logger.debug('GraphQL KB list query', { limit, offset });
-    const response = await client.graphqlQuery<KbArticleCollectionResponse>(query);
+    const response = await client.graphqlQuery(KbArticleCollectionDataSchema, query);
 
     // Log raw response shape for diagnostics
     if (response.errors) {
@@ -235,22 +211,20 @@ export async function handleListKbArticles(args: ListKbArticlesArgs): Promise<{
     }
     logger.debug('GraphQL KB list response', {
       hasData: !!response.data,
-      hasErrors: !!response.errors,
-      dataKeys: response.data ? Object.keys(response.data) : [],
+      errorCount: response.errors?.length ?? 0,
     });
 
     // CRITICAL: GraphQL returns HTTP 200 even for errors — check errors first
     handleGraphQLErrors(response, 'list_kb_articles');
 
-    const collection = response.data?.KB?.knowledge_article_collection;
+    // A reply without errors has passed the schema, so the collection is there;
+    // this guards the type only.
+    const collection = response.data?.KB.knowledge_article_collection;
     if (!collection) {
-      logger.warn('GraphQL KB list: unexpected response shape — KB.knowledge_article_collection missing', {
-        dataKeys: response.data ? Object.keys(response.data) : [],
-        kbKeys: response.data?.KB ? Object.keys(response.data.KB) : [],
-      });
+      throw new Error('GraphQL KB list reply has neither errors nor data');
     }
-    const items = collection?.items ?? [];
-    const total = collection?.total ?? 0;
+    const items = collection.items ?? [];
+    const total = collection.total ?? 0;
 
     const articles = items.map(mapGraphQLArticle);
 
@@ -290,27 +264,22 @@ export async function handleGetKbArticle(args: GetKbArticleArgs): Promise<Record
 }`;
 
     logger.debug('GraphQL KB get query', { articleId: args.articleId });
-    const response = await client.graphqlQuery<KbArticleSingleResponse>(query);
+    const response = await client.graphqlQuery(KbArticleSingleDataSchema, query);
 
     if (response.errors) {
       logger.warn('GraphQL KB get returned errors', { errorCount: response.errors.length });
     }
     logger.debug('GraphQL KB get response', {
       hasData: !!response.data,
-      hasErrors: !!response.errors,
-      dataKeys: response.data ? Object.keys(response.data) : [],
+      errorCount: response.errors?.length ?? 0,
     });
 
     // CRITICAL: GraphQL returns HTTP 200 even for errors — check errors first
     handleGraphQLErrors(response, 'get_kb_article');
 
-    const article = response.data?.KB?.knowledge_article;
+    const article = response.data?.KB.knowledge_article;
     if (!article) {
-      logger.warn('GraphQL KB get: article not found in response', {
-        articleId: args.articleId,
-        dataKeys: response.data ? Object.keys(response.data) : [],
-        kbKeys: response.data?.KB ? Object.keys(response.data.KB) : [],
-      });
+      logger.warn('GraphQL KB get: article not found', { articleId: args.articleId });
       throw new Error(`KB article ${args.articleId} not found`);
     }
 

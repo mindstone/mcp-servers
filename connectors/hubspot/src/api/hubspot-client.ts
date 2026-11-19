@@ -1,7 +1,41 @@
+import type { z } from 'zod';
 import logger from '../utils/logger.js';
 import { refreshTokenForAccount } from '../modules/accounts/oauth.js';
 import { deriveHubSpotAccountHash } from '../utils/accountHash.js';
 import { summariseHubSpotApiError } from '../utils/error-parser.js';
+import { readHubSpotResponse, type HubSpotResponseSpec } from './response-parsing.js';
+import {
+  HubSpotResponses,
+  NoContentResponse,
+  graphQLResponseSpec,
+  type BlogPost,
+  type BlogSettings,
+  type CrmObject,
+  type GraphQLResponse,
+  type HubSpotReply,
+  type HubSpotFile,
+  type ListResponse,
+  type PropertyGroup,
+  type PropertyResponse,
+  type SiteSearchResponse,
+  type WorkflowDetail,
+  type WorkflowSummary,
+} from './response-schemas.js';
+
+export type {
+  AssociationLabel,
+  BlogPost,
+  BlogSettings,
+  CrmObject,
+  GraphQLResponse,
+  HubSpotFile,
+  ListResponse,
+  PropertyGroup,
+  PropertyResponse,
+  SiteSearchResponse,
+  WorkflowDetail,
+  WorkflowSummary,
+} from './response-schemas.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -174,15 +208,6 @@ export interface HubSpotAccount {
   portalId?: number;
 }
 
-export interface CrmObject {
-  id: string;
-  properties: Record<string, string | null>;
-  createdAt: string;
-  updatedAt: string;
-  archived: boolean;
-  associations?: Record<string, { results: Array<{ id: string; type: string }> }>;
-}
-
 export interface SearchFilter {
   propertyName: string;
   operator: string;
@@ -198,76 +223,12 @@ export interface SearchRequest {
   after?: string;
 }
 
-export interface BatchResponse<T> {
-  results: T[];
-  status?: string;
-}
-
-export interface ListResponse<T> {
-  results: T[];
-  paging?: {
-    next?: {
-      after: string;
-      link: string;
-    };
-  };
-}
-
-type HubSpotListSummary = {
-  listId: string;
-  name: string;
-  processingType: string;
-  objectTypeId: string;
-  size?: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type HubSpotListsApiResponse = {
-  lists?: HubSpotListSummary[];
-  results?: HubSpotListSummary[];
-  paging?: ListResponse<HubSpotListSummary>['paging'];
-};
-
-// v4 Association Labels
-export interface AssociationLabel {
-  category: 'HUBSPOT_DEFINED' | 'USER_DEFINED';
-  typeId: number;
-  label: string | null;
-}
-
 export interface AssociationSpec {
   associationCategory: 'HUBSPOT_DEFINED' | 'USER_DEFINED';
   associationTypeId: number;
 }
 
-// v4 Workflow types (BETA API)
-export interface WorkflowSummary {
-  id: string;
-  name: string;
-  type: string;
-  isEnabled: boolean;
-  insertedAt: string;
-  updatedAt: string;
-}
-
-export interface WorkflowDetail extends WorkflowSummary {
-  actions: Array<{
-    actionId: string;
-    actionTypeId: string;
-    fields?: Record<string, unknown>;
-    connection?: {
-      nextActionId?: string;
-      edgeType?: string;
-    };
-  }>;
-  enrollmentCriteria?: {
-    type: string;
-    eventFilterBranches?: unknown[];
-    shouldReEnroll?: boolean;
-  };
-}
-
+// v4 Workflow request types (BETA API)
 export interface WorkflowActionInput {
   actionTypeId: string;
   fields?: Record<string, unknown>;
@@ -299,26 +260,6 @@ export interface PropertyOption {
   hidden?: boolean;
 }
 
-export interface PropertyResponse {
-  name: string;
-  label: string;
-  type: string;
-  fieldType: string;
-  description?: string;
-  groupName?: string;
-  displayOrder?: number;
-  hasUniqueValue?: boolean;
-  hidden?: boolean;
-  options?: PropertyOption[];
-}
-
-export interface PropertyGroup {
-  name: string;
-  label: string;
-  displayOrder?: number;
-  archived?: boolean;
-}
-
 export interface CreatePropertyRequest {
   name: string;
   label: string;
@@ -339,39 +280,6 @@ export interface CreatePropertyGroupRequest {
   name: string;
   label: string;
   displayOrder?: number;
-}
-
-export interface BlogSettings {
-  id: string;
-  name: string;
-  publicTitle?: string;
-  description?: string;
-  slug?: string;
-  absoluteUrl?: string;
-  language?: string;
-  created?: string;
-  updated?: string;
-}
-
-export interface BlogPost {
-  id: string;
-  contentGroupId: string;
-  name: string;
-  htmlTitle?: string;
-  postBody?: string;
-  slug?: string;
-  absoluteUrl?: string;
-  state?: string;
-  currentState?: string;
-  language?: string;
-  metaDescription?: string;
-  archivedAt?: number;
-  archivedInDashboard?: boolean;
-  publishDate?: string;
-  created?: string;
-  updated?: string;
-  authorName?: string;
-  [key: string]: unknown;
 }
 
 export interface CreateBlogPostRequest {
@@ -396,31 +304,6 @@ export interface UpdateBlogPostRequest {
   language?: string;
   publishDate?: string;
   archivedInDashboard?: boolean;
-}
-
-export interface SiteSearchResult {
-  id?: string;
-  type?: string;
-  title?: string;
-  url?: string;
-  description?: string;
-  [key: string]: unknown;
-}
-
-export interface SiteSearchResponse {
-  results: SiteSearchResult[];
-  total?: number;
-  limit?: number;
-  offset?: number;
-  [key: string]: unknown;
-}
-
-export interface GraphQLResponse<T = unknown> {
-  data?: T;
-  errors?: Array<{
-    message: string;
-    extensions?: Record<string, unknown>;
-  }>;
 }
 
 export class HubSpotApiError extends Error {
@@ -456,22 +339,31 @@ export class HubSpotClient {
   /**
    * The access token legitimately appears in a few request paths (HubSpot's
    * token-info endpoint is addressed BY token). It must never reach logs or
-   * structured error summaries, so every endpoint string that gets recorded
-   * goes through this redaction first.
+   * structured error summaries, so every endpoint string that gets recorded,
+   * and every failed reply body the error keeps, goes through this first.
    */
-  private redactEndpointForLogs(endpoint: string): string {
-    return this.accessToken ? endpoint.split(this.accessToken).join('[REDACTED]') : endpoint;
+  private redactAccessToken(text: string): string {
+    return this.accessToken ? text.split(this.accessToken).join('[REDACTED]') : text;
   }
 
-  private async request<T>(
+  /**
+   * The one network path for every HubSpot API call: the shared timeout and
+   * caller-abort signal, the non-2xx error mapping, and reply parsing against
+   * `spec`. Whether a bodiless (204 or empty) reply is accepted depends on
+   * `spec`: NoContentResponse (void methods) and the workflow-enrollment spec
+   * (an undocumented reply, treated as an acknowledgement) accept one; every
+   * other spec rejects it.
+   */
+  private async send<T>(
     method: string,
     endpoint: string,
-    body?: unknown,
-    options?: { signal?: AbortSignal }
+    spec: HubSpotResponseSpec<T>,
+    payload: { contentType: string; body?: BodyInit },
+    callerSignal?: AbortSignal,
   ): Promise<T> {
     const url = `${HUBSPOT_API_BASE}${endpoint}`;
-    const signal = composeHubSpotRequestSignal(options?.signal);
-    const logSafeEndpoint = this.redactEndpointForLogs(endpoint);
+    const signal = composeHubSpotRequestSignal(callerSignal);
+    const logSafeEndpoint = this.redactAccessToken(endpoint);
 
     logger.debug(`HubSpot API ${method} ${logSafeEndpoint}`);
 
@@ -479,14 +371,16 @@ export class HubSpotClient {
       method,
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json',
+        'Content-Type': payload.contentType,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: payload.body,
       signal,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      // A failed reply can echo the token (the token-info path carries it), and
+      // the error keeps the body, so the token is redacted before parsing.
+      const errorText = this.redactAccessToken(await response.text());
       let errorDetails: unknown = errorText;
       try {
         errorDetails = JSON.parse(errorText);
@@ -512,7 +406,7 @@ export class HubSpotClient {
         'hubspot_api_error',
       );
       throw new HubSpotApiError(
-        `HubSpot API error: ${response.status} ${response.statusText}`,
+        this.redactAccessToken(`HubSpot API error: ${response.status} ${response.statusText}`),
         response.status,
         errorDetails,
         requestId,
@@ -520,11 +414,23 @@ export class HubSpotClient {
       );
     }
 
-    if (response.status === 204) {
-      return {} as T;
-    }
+    return readHubSpotResponse(response, spec, `${method} ${spec.label}`);
+  }
 
-    return response.json() as Promise<T>;
+  private async request<T>(
+    method: string,
+    endpoint: string,
+    spec: HubSpotResponseSpec<T>,
+    body?: unknown,
+    options?: { signal?: AbortSignal }
+  ): Promise<T> {
+    return this.send(
+      method,
+      endpoint,
+      spec,
+      { contentType: 'application/json', body: body ? JSON.stringify(body) : undefined },
+      options?.signal,
+    );
   }
 
   /**
@@ -539,9 +445,9 @@ export class HubSpotClient {
 
   // HubSpot's token-info endpoint is addressed by the token itself, so the
   // secret sits in the request path. The wire format is HubSpot's choice, but
-  // redactEndpointForLogs keeps it out of every log line and error summary.
-  async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number; scopes?: string[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.oauthV1}/access-tokens/${this.accessToken}`);
+  // redactAccessToken keeps it out of every log line and error summary.
+  async getTokenInfo(): Promise<HubSpotReply<'tokenInfo'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.oauthV1}/access-tokens/${this.accessToken}`, HubSpotResponses.tokenInfo);
   }
 
   // Generic CRUD operations for any object type. objectType/objectId reach
@@ -549,7 +455,7 @@ export class HubSpotClient {
   // the segment (same assertion+encoding pairing as the association methods).
   async createObject(objectType: string, properties: Record<string, string>): Promise<CrmObject> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, { properties });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, HubSpotResponses.crmObject, { properties });
   }
 
   async getObject(
@@ -565,19 +471,19 @@ export class HubSpotClient {
     if (associations && associations.length > 0) search.set('associations', associations.join(','));
     const qs = search.toString();
     const suffix = qs ? `?${qs}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}${suffix}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}${suffix}`, HubSpotResponses.crmObject);
   }
 
   async updateObject(objectType: string, objectId: string, properties: Record<string, string>): Promise<CrmObject> {
     assertHubSpotObjectType(objectType, 'objectType');
     assertHubSpotObjectId(objectId, 'objectId');
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`, { properties });
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`, HubSpotResponses.crmObject, { properties });
   }
 
   async deleteObject(objectType: string, objectId: string): Promise<void> {
     assertHubSpotObjectType(objectType, 'objectType');
     assertHubSpotObjectId(objectId, 'objectId');
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/${pathSegment(objectId)}`, NoContentResponse);
   }
 
   async listObjects(objectType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -587,23 +493,23 @@ export class HubSpotClient {
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
 
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}?${params.toString()}`, HubSpotResponses.crmObjectList);
   }
 
   async searchObjects(objectType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/search`, HubSpotResponses.crmObjectList, searchRequest);
   }
 
   // Batch operations
-  async batchCreateObjects(objectType: string, inputs: Array<{ properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
+  async batchCreateObjects(objectType: string, inputs: Array<{ properties: Record<string, string> }>): Promise<HubSpotReply<'crmObjectBatch'>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/create`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/create`, HubSpotResponses.crmObjectBatch, { inputs });
   }
 
-  async batchUpdateObjects(objectType: string, inputs: Array<{ id: string; properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
+  async batchUpdateObjects(objectType: string, inputs: Array<{ id: string; properties: Record<string, string> }>): Promise<HubSpotReply<'crmObjectBatch'>> {
     assertHubSpotObjectType(objectType, 'objectType');
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/update`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}/batch/update`, HubSpotResponses.crmObjectBatch, { inputs });
   }
 
   // Associations
@@ -621,7 +527,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'PUT',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`, NoContentResponse
     );
   }
 
@@ -629,13 +535,13 @@ export class HubSpotClient {
     fromObjectType: string,
     fromObjectId: string,
     toObjectType: string
-  ): Promise<{ results: Array<{ id: string; type: string }> }> {
+  ): Promise<HubSpotReply<'associations'>> {
     assertHubSpotObjectType(fromObjectType, 'fromObjectType');
     assertHubSpotObjectId(fromObjectId, 'fromObjectId');
     assertHubSpotObjectType(toObjectType, 'toObjectType');
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}`, HubSpotResponses.associations
     );
   }
 
@@ -653,7 +559,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'DELETE',
-      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}/${pathSegment(associationType)}`, NoContentResponse
     );
   }
 
@@ -661,10 +567,10 @@ export class HubSpotClient {
   async listAssociationLabels(
     fromObjectType: string,
     toObjectType: string
-  ): Promise<{ results: AssociationLabel[] }> {
+  ): Promise<HubSpotReply<'associationLabels'>> {
     assertHubSpotObjectType(fromObjectType, 'fromObjectType');
     assertHubSpotObjectType(toObjectType, 'toObjectType');
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmAssociationsV4}/${pathSegment(fromObjectType)}/${pathSegment(toObjectType)}/labels`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmAssociationsV4}/${pathSegment(fromObjectType)}/${pathSegment(toObjectType)}/labels`, HubSpotResponses.associationLabels);
   }
 
   async createLabeledAssociation(
@@ -673,14 +579,14 @@ export class HubSpotClient {
     toObjectType: string,
     toObjectId: string,
     associations: AssociationSpec[]
-  ): Promise<{ fromObjectTypeId: string; fromObjectId: number; toObjectTypeId: string; toObjectId: number; labels: string[] }> {
+  ): Promise<HubSpotReply<'labeledAssociation'>> {
     assertHubSpotObjectType(fromObjectType, 'fromObjectType');
     assertHubSpotObjectId(fromObjectId, 'fromObjectId');
     assertHubSpotObjectType(toObjectType, 'toObjectType');
     assertHubSpotObjectId(toObjectId, 'toObjectId');
     return this.request(
       'PUT',
-      `${HUBSPOT_API_PREFIXES.crmObjectsV4}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}`,
+      `${HUBSPOT_API_PREFIXES.crmObjectsV4}/${pathSegment(fromObjectType)}/${pathSegment(fromObjectId)}/associations/${pathSegment(toObjectType)}/${pathSegment(toObjectId)}`, HubSpotResponses.labeledAssociation,
       associations
     );
   }
@@ -690,29 +596,29 @@ export class HubSpotClient {
     const params = new URLSearchParams();
     if (limit) params.set('limit', String(limit));
     const query = params.toString();
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}${query ? `?${query}` : ''}`, HubSpotResponses.workflowList);
   }
 
   async getWorkflow(flowId: string): Promise<WorkflowDetail> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`, HubSpotResponses.workflow);
   }
 
   async createWorkflow(data: CreateWorkflowRequest): Promise<WorkflowDetail> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.automationFlows}`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.automationFlows}`, HubSpotResponses.workflow, data);
   }
 
   async updateWorkflow(flowId: string, data: UpdateWorkflowRequest): Promise<WorkflowDetail> {
-    return this.request('PUT', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`, data);
+    return this.request('PUT', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`, HubSpotResponses.workflow, data);
   }
 
   async deleteWorkflow(flowId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}`, NoContentResponse);
   }
 
-  async enrollInWorkflow(flowId: string, objectIds: string[], objectType = 'contacts'): Promise<unknown> {
+  async enrollInWorkflow(flowId: string, objectIds: string[], objectType = 'contacts'): Promise<HubSpotReply<'workflowEnrollment'>> {
     return this.request(
       'POST',
-      `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}/enrollments/${pathSegment(objectType)}`,
+      `${HUBSPOT_API_PREFIXES.automationFlows}/${pathSegment(flowId)}/enrollments/${pathSegment(objectType)}`, HubSpotResponses.workflowEnrollment,
       {
         inputs: objectIds.map(id => ({ id }))
       }
@@ -720,61 +626,61 @@ export class HubSpotClient {
   }
 
   // Properties
-  async listProperties(objectType: string): Promise<{ results: PropertyResponse[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`);
+  async listProperties(objectType: string): Promise<HubSpotReply<'propertyList'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`, HubSpotResponses.propertyList);
   }
 
   async getProperty(objectType: string, propertyName: string): Promise<PropertyResponse> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`, HubSpotResponses.property);
   }
 
   async createProperty(objectType: string, data: CreatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}`, HubSpotResponses.property, data);
   }
 
   async updateProperty(objectType: string, propertyName: string, data: UpdatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`, HubSpotResponses.property, data);
   }
 
   async deleteProperty(objectType: string, propertyName: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/${pathSegment(propertyName)}`, NoContentResponse);
   }
 
-  async listPropertyGroups(objectType: string): Promise<{ results: PropertyGroup[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`);
+  async listPropertyGroups(objectType: string): Promise<HubSpotReply<'propertyGroupList'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`, HubSpotResponses.propertyGroupList);
   }
 
   async createPropertyGroup(objectType: string, data: CreatePropertyGroupRequest): Promise<PropertyGroup> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${pathSegment(objectType)}/groups`, HubSpotResponses.propertyGroup, data);
   }
 
   // Owners
-  async listOwners(limit = 100, after?: string, email?: string): Promise<ListResponse<{ id: string; email: string; firstName: string; lastName: string; userId: number; teams: Array<{ id: string; name: string }> }>> {
+  async listOwners(limit = 100, after?: string, email?: string): Promise<HubSpotReply<'ownerList'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (email) params.set('email', email);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}?${params.toString()}`, HubSpotResponses.ownerList);
   }
 
-  async getOwner(ownerId: string): Promise<{ id: string; email: string; firstName: string; lastName: string; userId: number; teams: Array<{ id: string; name: string }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}/${pathSegment(ownerId)}`);
+  async getOwner(ownerId: string): Promise<HubSpotReply<'owner'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}/${pathSegment(ownerId)}`, HubSpotResponses.owner);
   }
 
   // Pipelines
-  async listPipelines(objectType: string): Promise<{ results: Array<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}`);
+  async listPipelines(objectType: string): Promise<HubSpotReply<'pipelineList'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}`, HubSpotResponses.pipelineList);
   }
 
-  async getPipeline(objectType: string, pipelineId: string): Promise<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}/${pathSegment(pipelineId)}`);
+  async getPipeline(objectType: string, pipelineId: string): Promise<HubSpotReply<'pipeline'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${pathSegment(objectType)}/${pathSegment(pipelineId)}`, HubSpotResponses.pipeline);
   }
 
   // Engagements (calls, emails, meetings). engagementType is always an
   // internal constant, but engagementId is tool input — validate and encode it
   // like every other caller-controlled path segment.
   async searchEngagements(engagementType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/search`, HubSpotResponses.crmObjectList, searchRequest);
   }
 
   async getEngagement(engagementType: string, engagementId: string, properties?: string[]): Promise<CrmObject> {
@@ -782,7 +688,7 @@ export class HubSpotClient {
     const params = new URLSearchParams();
     if (properties) params.set('properties', properties.join(','));
     const query = params.size > 0 ? `?${params.toString()}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/${pathSegment(engagementId)}${query}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}/${pathSegment(engagementId)}${query}`, HubSpotResponses.crmObject);
   }
 
   async createEngagement(engagementType: string, properties: Record<string, string>, associations?: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }>): Promise<CrmObject> {
@@ -790,7 +696,7 @@ export class HubSpotClient {
     if (associations) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}`, HubSpotResponses.crmObject, body);
   }
 
   async listEngagements(engagementType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -798,7 +704,7 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(engagementType)}?${params.toString()}`, HubSpotResponses.crmObjectList);
   }
 
   // Create object with associations (for line items → deals)
@@ -812,27 +718,27 @@ export class HubSpotClient {
     if (associations && associations.length > 0) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${pathSegment(objectType)}`, HubSpotResponses.crmObject, body);
   }
 
   // Forms API - Marketing v3
-  async listForms(limit = 20, after?: string, formTypes?: string[]): Promise<ListResponse<{ id: string; name: string; formType: string; createdAt: string; updatedAt: string; configuration: Record<string, unknown> }>> {
+  async listForms(limit = 20, after?: string, formTypes?: string[]): Promise<HubSpotReply<'formList'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (formTypes && formTypes.length > 0) params.set('formTypes', formTypes.join(','));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}?${params.toString()}`, HubSpotResponses.formList);
   }
 
-  async getForm(formId: string): Promise<{ id: string; name: string; formType: string; createdAt: string; updatedAt: string; configuration: Record<string, unknown>; fieldGroups: unknown[] }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}/${pathSegment(formId)}`);
+  async getForm(formId: string): Promise<HubSpotReply<'form'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}/${pathSegment(formId)}`, HubSpotResponses.form);
   }
 
-  async getFormSubmissions(formGuid: string, limit = 20, after?: string): Promise<{ results: Array<{ submittedAt: string; values: Array<{ name: string; value: string }>; pageUrl?: string }>; paging?: { next?: { after: string } } }> {
+  async getFormSubmissions(formGuid: string, limit = 20, after?: string): Promise<HubSpotReply<'formSubmissions'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.formSubmissions}/${pathSegment(formGuid)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.formSubmissions}/${pathSegment(formGuid)}?${params.toString()}`, HubSpotResponses.formSubmissions);
   }
 
   // Analytics API v2 - Requires Marketing Hub
@@ -842,57 +748,55 @@ export class HubSpotClient {
     startDate: string,
     endDate: string,
     limit?: number
-  ): Promise<{ totals: Record<string, number>; breakdowns: Array<{ breakdown: string; metrics: Record<string, number> }> }> {
+  ): Promise<HubSpotReply<'analyticsReport'>> {
     const params = new URLSearchParams();
     params.set('start', startDate);
     params.set('end', endDate);
     if (limit) params.set('limit', String(limit));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.analyticsReports}/${pathSegment(breakdownBy)}/${pathSegment(timePeriod)}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.analyticsReports}/${pathSegment(breakdownBy)}/${pathSegment(timePeriod)}?${params.toString()}`, HubSpotResponses.analyticsReport);
   }
 
   // Marketing Emails API v3
-  async listMarketingEmails(limit = 20, after?: string): Promise<ListResponse<{ id: string; name: string; subject: string; state: string; type: string; createdAt: string; stats?: Record<string, number> }>> {
+  async listMarketingEmails(limit = 20, after?: string): Promise<HubSpotReply<'marketingEmailList'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}?${params.toString()}`, HubSpotResponses.marketingEmailList);
   }
 
-  async getMarketingEmail(emailId: string): Promise<{ id: string; name: string; subject: string; previewText?: string; state: string; type: string; templatePath?: string; createdAt: string; updatedAt: string; stats?: Record<string, number> }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/${pathSegment(emailId)}`);
+  async getMarketingEmail(emailId: string): Promise<HubSpotReply<'marketingEmail'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/${pathSegment(emailId)}`, HubSpotResponses.marketingEmail);
   }
 
   async getEmailStatistics(
     startTimestamp?: string,
     endTimestamp?: string,
     emailIds?: string[]
-  ): Promise<{ aggregations: Record<string, number>; emails: Array<{ emailId: string; counters: Record<string, number> }> }> {
+  ): Promise<HubSpotReply<'emailStatistics'>> {
     const params = new URLSearchParams();
     if (startTimestamp) params.set('startTimestamp', startTimestamp);
     if (endTimestamp) params.set('endTimestamp', endTimestamp);
     if (emailIds && emailIds.length > 0) params.set('emailIds', emailIds.join(','));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/statistics/list?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/statistics/list?${params.toString()}`, HubSpotResponses.emailStatistics);
   }
 
   // Lists/Segments API v3
-  async listLists(limit = 20, after?: string): Promise<ListResponse<HubSpotListSummary>> {
+  async listLists(limit = 20, after?: string): Promise<HubSpotReply<'lists'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    // HubSpot Lists API v3 returns { lists: [...] } rather than { results: [...] }
-    const raw = await this.request<HubSpotListsApiResponse>('GET', `${HUBSPOT_API_PREFIXES.crmLists}?${params.toString()}`);
-    return { results: raw.lists ?? raw.results ?? [], paging: raw.paging };
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}?${params.toString()}`, HubSpotResponses.lists);
   }
 
-  async getList(listId: string): Promise<{ listId: string; name: string; processingType: string; objectTypeId: string; filterBranch?: Record<string, unknown>; size?: number; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}`);
+  async getList(listId: string): Promise<HubSpotReply<'list'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}`, HubSpotResponses.list);
   }
 
-  async getListMembers(listId: string, limit = 100, after?: string): Promise<{ results: Array<{ recordId: string; membershipTimestamp?: string }>; paging?: { next?: { after: string } } }> {
+  async getListMembers(listId: string, limit = 100, after?: string): Promise<HubSpotReply<'listMembers'>> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships?${params.toString()}`, HubSpotResponses.listMembers);
   }
 
   // List membership writes. Only MANUAL and SNAPSHOT lists accept membership
@@ -901,13 +805,13 @@ export class HubSpotClient {
   async addListMembers(listId: string, recordIds: string[]): Promise<void> {
     assertHubSpotObjectId(listId, 'listId');
     for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
-    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/add`, recordIds);
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/add`, NoContentResponse, recordIds);
   }
 
   async removeListMembers(listId: string, recordIds: string[]): Promise<void> {
     assertHubSpotObjectId(listId, 'listId');
     for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
-    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/remove`, recordIds);
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${pathSegment(listId)}/memberships/remove`, NoContentResponse, recordIds);
   }
 
   // CMS Blog / Knowledge Base APIs
@@ -916,7 +820,7 @@ export class HubSpotClient {
     if (limit !== undefined) params.set('limit', String(limit));
     if (after) params.set('after', after);
     const query = params.toString();
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogSettings}${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogSettings}${query ? `?${query}` : ''}`, HubSpotResponses.blogSettingsList);
   }
 
   async listBlogPosts(
@@ -931,31 +835,32 @@ export class HubSpotClient {
     if (after) params.set('after', after);
     if (state) params.set('state', state);
     const query = params.toString();
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}${query ? `?${query}` : ''}`, HubSpotResponses.blogPostList);
   }
 
   async getBlogPost(postId: string): Promise<BlogPost> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`, HubSpotResponses.blogPost);
   }
 
   async createBlogPost(data: CreateBlogPostRequest): Promise<BlogPost> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}`, HubSpotResponses.blogPost, data);
   }
 
   async updateBlogPost(postId: string, data: UpdateBlogPostRequest): Promise<BlogPost> {
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`, HubSpotResponses.blogPost, data);
   }
 
   async deleteBlogPost(postId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${pathSegment(postId)}`, NoContentResponse);
   }
 
   // GraphQL API (used for Knowledge Base article queries)
-  async graphqlQuery<T = unknown>(
+  async graphqlQuery<T>(
+    dataSchema: z.ZodType<T, z.ZodTypeDef, unknown>,
     query: string,
     variables?: Record<string, unknown>
   ): Promise<GraphQLResponse<T>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.graphqlCollector}`, {
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.graphqlCollector}`, graphQLResponseSpec('graphql', dataSchema), {
       query,
       variables: variables ?? {},
     });
@@ -972,16 +877,19 @@ export class HubSpotClient {
     if (type) params.set('type', type);
     if (limit !== undefined) params.set('limit', String(limit));
     if (offset !== undefined) params.set('offset', String(offset));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsSiteSearch}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsSiteSearch}?${params.toString()}`, HubSpotResponses.siteSearch);
   }
 
   // Files API
   async uploadFile(
     fileBuffer: Buffer,
     fileName: string,
-    options: { folderPath?: string; access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE' }
-  ): Promise<{ id: string; name: string; path: string; url: string; size: number; access: string }> {
-    const url = `${HUBSPOT_API_BASE}${HUBSPOT_API_PREFIXES.files}`;
+    options: {
+      folderPath?: string;
+      access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE';
+      signal?: AbortSignal;
+    }
+  ): Promise<HubSpotFile> {
     const boundary = `----FormBoundary${Date.now()}`;
 
     const optionsJson = JSON.stringify({ access: options.access || 'PRIVATE' });
@@ -1007,42 +915,20 @@ export class HubSpotClient {
 
     parts.push(enc(`--${boundary}--\r\n`));
 
-    const body = Buffer.concat(parts);
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorDetails: unknown = errorText;
-      try { errorDetails = JSON.parse(errorText); } catch { /* keep as text */ }
-      const requestId =
-        response.headers.get('x-hubspot-correlation-id') ||
-        response.headers.get('x-hubspot-request-id') ||
-        response.headers.get('x-request-id') ||
-        undefined;
-      throw new HubSpotApiError(
-        `HubSpot API error: ${response.status} ${response.statusText}`,
-        response.status,
-        errorDetails,
-        requestId,
-      );
-    }
-
-    return response.json() as Promise<{ id: string; name: string; path: string; url: string; size: number; access: string }>;
+    return this.send(
+      'POST',
+      HUBSPOT_API_PREFIXES.files,
+      HubSpotResponses.fileUpload,
+      { contentType: `multipart/form-data; boundary=${boundary}`, body: Buffer.concat(parts) },
+      options.signal,
+    );
   }
 
   async importFileFromUrl(
     fileUrl: string,
     options: { folderPath?: string; fileName?: string; access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE' }
-  ): Promise<{ id: string; links: Record<string, string>[] }> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async`, {
+  ): Promise<HubSpotReply<'fileImportTask'>> {
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async`, HubSpotResponses.fileImportTask, {
       url: fileUrl,
       access: options.access || 'PRIVATE',
       folderPath: options.folderPath || '/',
@@ -1052,12 +938,8 @@ export class HubSpotClient {
     });
   }
 
-  async getImportStatus(taskId: string): Promise<{
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'CANCELED';
-    result?: { id: string; name: string; path: string; url: string; size: number };
-    errors?: unknown[];
-  }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async/tasks/${pathSegment(taskId)}/status`);
+  async getImportStatus(taskId: string): Promise<HubSpotReply<'fileImportStatus'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async/tasks/${pathSegment(taskId)}/status`, HubSpotResponses.fileImportStatus);
   }
 
   async importFileFromUrlAndWait(
@@ -1065,13 +947,13 @@ export class HubSpotClient {
     options: { folderPath?: string; fileName?: string; access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE' },
     maxWaitMs = 30_000,
     pollIntervalMs = 1_000
-  ): Promise<{ id: string; name: string; path: string; url: string; size: number }> {
+  ): Promise<HubSpotFile> {
     const task = await this.importFileFromUrl(fileUrl, options);
     const deadline = Date.now() + maxWaitMs;
 
     while (Date.now() < deadline) {
       const status = await this.getImportStatus(task.id);
-      if (status.status === 'COMPLETE' && status.result) {
+      if (status.status === 'COMPLETE') {
         return status.result;
       }
       if (status.status === 'CANCELED') {
@@ -1086,27 +968,27 @@ export class HubSpotClient {
     throw new HubSpotApiError(`File import timed out after ${maxWaitMs}ms (task ${task.id})`, 408);
   }
 
-  async getFile(fileId: string): Promise<{ id: string; name: string; path: string; url: string; size: number; type: string; access: string; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`);
+  async getFile(fileId: string): Promise<HubSpotReply<'file'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`, HubSpotResponses.file);
   }
 
-  async getFileSignedUrl(fileId: string): Promise<{ url: string; name: string }> {
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}/signed-url`);
+  async getFileSignedUrl(fileId: string): Promise<HubSpotReply<'fileSignedUrl'>> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}/signed-url`, HubSpotResponses.fileSignedUrl);
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.files}/${pathSegment(fileId)}`, NoContentResponse);
   }
 
   // Batch Read API (for hydrating list member IDs into full contact records)
-  async batchReadContacts(ids: string[], properties?: string[]): Promise<{ results: Array<{ id: string; properties: Record<string, string | null>; createdAt: string; updatedAt: string }> }> {
+  async batchReadContacts(ids: string[], properties?: string[]): Promise<HubSpotReply<'crmObjectBatch'>> {
     const body: { inputs: Array<{ id: string }>; properties?: string[] } = {
       inputs: ids.map(id => ({ id }))
     };
     if (properties && properties.length > 0) {
       body.properties = properties;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/contacts/batch/read`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/contacts/batch/read`, HubSpotResponses.crmObjectBatch, body);
   }
 
   // Conversations Inbox API v3 (read-only — requires `conversations.read` scope)
@@ -1117,7 +999,7 @@ export class HubSpotClient {
     limit?: number;
     after?: string;
     archived?: boolean;
-  }): Promise<ListResponse<Record<string, unknown>>> {
+  }): Promise<HubSpotReply<'conversationList'>> {
     const search = new URLSearchParams();
     if (params.associatedTicketId) search.set('associatedTicketId', params.associatedTicketId);
     if (params.associatedContactId) search.set('associatedContactId', params.associatedContactId);
@@ -1126,30 +1008,30 @@ export class HubSpotClient {
     if (params.after) search.set('after', params.after);
     if (params.archived !== undefined) search.set('archived', String(params.archived));
     const qs = search.toString();
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.conversationThreads}${qs ? `?${qs}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.conversationThreads}${qs ? `?${qs}` : ''}`, HubSpotResponses.conversationList);
   }
 
   async listConversationThreadMessages(
     threadId: string,
     params: { limit?: number; after?: string } = {}
-  ): Promise<ListResponse<Record<string, unknown>>> {
+  ): Promise<HubSpotReply<'conversationList'>> {
     const search = new URLSearchParams();
     if (params.limit !== undefined) search.set('limit', String(params.limit));
     if (params.after) search.set('after', params.after);
     const qs = search.toString();
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages${qs ? `?${qs}` : ''}`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages${qs ? `?${qs}` : ''}`, HubSpotResponses.conversationList
     );
   }
 
   async getConversationThreadMessageOriginalContent(
     threadId: string,
     messageId: string
-  ): Promise<Record<string, unknown>> {
+  ): Promise<HubSpotReply<'conversationContent'>> {
     return this.request(
       'GET',
-      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages/${pathSegment(messageId)}/original-content`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${pathSegment(threadId)}/messages/${pathSegment(messageId)}/original-content`, HubSpotResponses.conversationContent
     );
   }
 }

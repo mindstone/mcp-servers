@@ -46,7 +46,7 @@ Example workflow:
 2. Agent: Call list_hubspot_accounts first
 3. If accounts exist and valid → proceed with search_hubspot_contacts
 4. If no accounts → tell user to connect: "You need to connect your HubSpot account first. Would you like me to start the authentication?"
-5. If auth expired → call authenticate_hubspot_account to refresh`,
+5. If auth expired → call authenticate_hubspot_account so the user can sign in again`,
     aliases: ['get_hubspot_accounts', 'show_hubspot_accounts', 'hubspot_accounts'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -59,10 +59,7 @@ Example workflow:
     category: 'Account Management',
     description: `Connect a new HubSpot account or re-authenticate an existing one.
 
-This tool initiates the OAuth flow to connect a HubSpot account:
-1. Returns an authorization URL that the user must click
-2. User signs into HubSpot and grants permissions
-3. Authentication completes automatically via callback
+This tool asks the app to sign the user in to HubSpot. It returns a result with status "auth_required". The app recognises that result and opens HubSpot sign-in in the user's browser. After the user finishes signing in, the original request is retried.
 
 WHEN TO USE:
 - When list_hubspot_accounts shows no connected accounts
@@ -74,10 +71,8 @@ WHEN NOT TO USE:
 - Without checking list_hubspot_accounts first (wastes user time)
 
 After calling this tool:
-1. Present the auth_url to the user as a clickable link
-2. Tell them to click it and authorize in their browser
-3. Call complete_hubspot_auth to wait for completion
-4. Or if auto_complete is enabled, it will complete automatically`,
+1. Tell the user that HubSpot sign-in will open in their browser
+2. Once they have signed in, retry the request that needed HubSpot`,
     aliases: ['connect_hubspot', 'add_hubspot_account', 'hubspot_login', 'hubspot_auth'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -93,18 +88,11 @@ After calling this tool:
   {
     name: 'complete_hubspot_auth',
     category: 'Account Management',
-    description: `Wait for HubSpot OAuth authorization to complete.
+    description: `Kept for compatibility. Not needed in the current sign-in flow.
 
-Call this AFTER authenticate_hubspot_account has returned an auth_url and the user has clicked it.
+This tool returns the same "auth_required" result as authenticate_hubspot_account. The app then opens HubSpot sign-in in the user's browser. It does not wait for sign-in to finish.
 
-This tool:
-1. Waits for the OAuth callback (up to 2 minutes)
-2. Exchanges the authorization code for access tokens
-3. Saves the account credentials
-4. Returns success with the connected email
-
-IMPORTANT: Only call this if auto_complete was false in authenticate_hubspot_account response.
-If auto_complete was true, authentication completes automatically and you don't need this tool.`,
+Call authenticate_hubspot_account instead.`,
     aliases: ['wait_for_hubspot_auth', 'finish_hubspot_auth'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -2364,9 +2352,11 @@ RETURNS: Full email object including:
     description: `Get aggregated email performance statistics.
 
 RETURNS: {
-  aggregations: {sent, delivered, opened, clicked, bounced, unsubscribed},
-  emails: [{emailId, counters: {...}}]
+  aggregate: {counters: {sent, delivered, open, click, bounce, unsubscribed, ...}, ratios: {...}, deviceBreakdown, qualifierStats},
+  campaignAggregations: {<campaignId>: {counters, ratios, ...}},
+  emails: [<numeric email ID>, ...]
 }
+Every field is optional; HubSpot may omit any of them.
 
 Use this to analyze email campaign performance across multiple emails.`,
     aliases: ['get_email_stats', 'email_performance'],

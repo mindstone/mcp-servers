@@ -7,6 +7,7 @@ import {
 } from '../modules/accounts/oauth.js';
 import { TokenPersistFailedError } from '../modules/accounts/manager.js';
 import { RefreshLockFailedError } from './credentialLock.js';
+import { HubSpotInvalidResponseError } from '../api/response-parsing.js';
 
 export interface HubSpotErrorContext {
   objectType?: string;
@@ -176,7 +177,9 @@ function classifyNonApiError(error: unknown): 'REQUEST_TIMEOUT' | 'NETWORK_ERROR
       : undefined;
   const name = typeof record.name === 'string' ? record.name : undefined;
 
-  if (name === 'AbortError' || code === 'ABORT_ERR') {
+  // AbortSignal.timeout() rejects with TimeoutError; a caller abort or an
+  // older runtime rejects with AbortError.
+  if (name === 'TimeoutError' || name === 'AbortError' || code === 'ABORT_ERR') {
     return 'REQUEST_TIMEOUT';
   }
 
@@ -378,6 +381,15 @@ export function parseHubSpotError(error: unknown, context: HubSpotErrorContext):
       error: 'HubSpot credential lock is busy',
       errorCode: 'REFRESH_LOCK_FAILED',
       suggestion: 'Retry shortly. If this persists, reconnect HubSpot.'
+    };
+  }
+
+  if (error instanceof HubSpotInvalidResponseError) {
+    return {
+      error: 'HubSpot returned an unexpected response',
+      errorCode: 'INVALID_RESPONSE',
+      suggestion: 'Retry in a moment. If it keeps happening, HubSpot may have changed this reply; check for a connector update.',
+      details: { operation: context.operation },
     };
   }
 

@@ -50,6 +50,45 @@ describe('access-token redaction in request logging', () => {
     expect((thrown as Error).message).not.toContain(ACCESS_TOKEN);
   });
 
+  it.each([
+    ['JSON', JSON.stringify({ message: `token ${ACCESS_TOKEN} is invalid`, token: ACCESS_TOKEN })],
+    ['text', `invalid token ${ACCESS_TOKEN}`],
+  ])('redacts the token from a 401 %s body that echoes it', async (_kind, body) => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      body,
+      { status: 401, statusText: 'Unauthorized', headers: { 'content-type': 'application/json' } },
+    )));
+
+    const client = new HubSpotClient(ACCESS_TOKEN);
+    const thrown = await client.getTokenInfo().catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ name: 'HubSpotApiError', statusCode: 401 });
+    expect(JSON.stringify(thrown)).not.toContain(ACCESS_TOKEN);
+    expect(JSON.stringify(thrown)).toContain('[REDACTED]');
+    expect((thrown as Error).message).not.toContain(ACCESS_TOKEN);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(ACCESS_TOKEN);
+  });
+
+  it.each([
+    ['malformed', `{"user":"jane@example.com","note":"${ACCESS_TOKEN}"`],
+    ['schema-invalid', JSON.stringify({ user: ACCESS_TOKEN, hub_id: ACCESS_TOKEN })],
+  ])('keeps the token out of a %s successful token-info reply', async (_kind, body) => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      body,
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )));
+
+    const client = new HubSpotClient(ACCESS_TOKEN);
+    const thrown = await client.getTokenInfo().catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ name: 'HubSpotInvalidResponseError', code: 'INVALID_RESPONSE' });
+    expect((thrown as Error).message).not.toContain(ACCESS_TOKEN);
+    expect(JSON.stringify(thrown)).not.toContain(ACCESS_TOKEN);
+    expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain(ACCESS_TOKEN);
+  });
+
   it('a rejected fetch propagates unwrapped — no token in logs or a wrapped error', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);

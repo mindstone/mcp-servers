@@ -197,8 +197,8 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 
 ### Account & authentication
 - `list_hubspot_accounts` — List connected HubSpot accounts and their auth status.
-- `authenticate_hubspot_account` — Start the OAuth flow to connect a HubSpot account.
-- `complete_hubspot_auth` — Wait for the OAuth callback and persist credentials.
+- `authenticate_hubspot_account` — Returns `auth_required` so the host app opens HubSpot sign-in in the browser; retry the original request afterwards.
+- `complete_hubspot_auth` — Kept for compatibility; returns the same `auth_required` result. Use `authenticate_hubspot_account` instead.
 - `remove_hubspot_account` — Disconnect a HubSpot account and delete stored credentials (destructive).
 
 ### Contacts
@@ -330,7 +330,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 ### Files
 - `upload_hubspot_file` — Upload a local file to HubSpot's file manager (destructive; requires `MCP_WORKSPACE_PATH`).
 - `import_hubspot_file_from_url` — Import a file from a public URL into the file manager (destructive).
-- `get_hubspot_file` — Get file metadata; optionally return a signed viewable URL.
+- `get_hubspot_file` — Get file metadata; optionally return a signed viewable URL. If the signed URL cannot be made, the metadata still returns, with `signedUrl: null` and a `signedUrlErrorCode`.
 - `delete_hubspot_file` — Delete a file from the file manager (destructive).
 - `attach_file_to_record` — Upload/import a file and attach it to records via a note (destructive; `MCP_WORKSPACE_PATH` required when uploading a local file).
 
@@ -351,7 +351,8 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - This server does not run a local OAuth callback server; OAuth is host-orchestrated.
 - Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.
 - All text returned by HubSpot (record properties, note/engagement bodies, conversation messages, KB articles, form submissions, names/labels) is wrapped in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping, so a model consuming tool output treats third-party-authored text as data, not instructions. Identifiers, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips keep working — except inside a record's `properties` bag, where every value is enveloped regardless of property name (custom property names are tenant-defined and untrusted; record IDs round-trip via the top-level `id`). Per-surface exceptions (property-schema `name`/`groupName`/option `value`, form field bindings) are scoped to their documented response shapes.
-- The OAuth access token is redacted from all request logging and error summaries, including the token-info endpoint whose path is addressed by the token itself.
+- The OAuth access token is redacted from all request logging and error summaries, including the token-info endpoint whose path is addressed by the token itself, and from the body a failed reply keeps in its error.
+- Every successful HubSpot reply, including file uploads and token introspection, is checked against the shape the tool expects before it is used. A reply that is not JSON, or lacks a field the tool relies on, fails with `INVALID_RESPONSE`; the error and the logs name only the operation and the schema fields involved, never the reply's own values or keys. That error means HubSpot answered in a shape the connector does not recognise, often a passing HubSpot problem or a change on HubSpot's side. HubSpot has already accepted the request by then, so a read may be retried once, but for a create, update or upload first check in HubSpot whether it went through before repeating it. If it keeps happening for the same tool, report it as a connector issue, giving the tool name and the operation shown in the error's details, if any. Uploads share the `HUBSPOT_REQUEST_TIMEOUT_MS` deadline with every other request.
 
 ## Licence
 

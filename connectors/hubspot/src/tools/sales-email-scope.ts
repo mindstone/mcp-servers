@@ -25,6 +25,7 @@
  * the warning for a token that genuinely lacks the scope (or vice versa).
  */
 import logger from '../utils/logger.js';
+import { parseHubSpotError } from '../utils/error-parser.js';
 
 const SALES_EMAIL_READ_SCOPE = 'sales-email-read';
 
@@ -61,7 +62,9 @@ export async function checkSalesEmailReadScope(
         if (!Array.isArray(info.scopes)) return undefined; // introspection didn't say — caller warns
         return info.scopes.includes(SALES_EMAIL_READ_SCOPE);
       } catch (error) {
-        logger.warn('Token introspection for sales-email-read scope check failed:', error);
+        const parsed = parseHubSpotError(error, { operation: 'sales_email_scope_check' });
+        const errorCode = 'status' in parsed ? parsed.status : parsed.errorCode;
+        logger.warn({ errorCode }, 'hubspot_sales_email_scope_check_failed');
         return undefined;
       }
     })();

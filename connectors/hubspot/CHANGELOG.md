@@ -11,6 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Every successful HubSpot reply, including file uploads and token introspection, is now checked against the shape the tool expects. A reply that is not JSON or is missing a field the tool relies on fails with `INVALID_RESPONSE` instead of passing a half-read value on. Only operations that return nothing, and workflow enrollment, accept an empty (204) reply. A knowledge-base reply missing the queried fields is now `INVALID_RESPONSE` rather than an empty article list.
+- File uploads now use the same `HUBSPOT_REQUEST_TIMEOUT_MS` deadline as every other request, so a stalled upload fails with `REQUEST_TIMEOUT` instead of hanging.
+- Lookups that degrade instead of failing (a file's signed URL, a contact's engagement timeline, the sales-email scope check) now keep the error code, in the log and, where the tool reports the gap, in its result.
+
+### Security
+
+- A failed HubSpot reply that echoes the access token no longer keeps it in the thrown error's details or message.
+- Knowledge-base diagnostics no longer log the key names of HubSpot's reply.
+
 ## [0.5.0] - 2026-11-16
 
 ### Changed
