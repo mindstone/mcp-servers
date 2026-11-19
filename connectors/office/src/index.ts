@@ -27,6 +27,8 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import { readHardenedJsonFile } from './hardened-json-file.js';
 import { wrapUntrustedJsonValues } from './untrusted-content.js';
 import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
 
@@ -134,16 +136,30 @@ const stateFilePath = process.env.MCP_OFFICE_SIDECAR_STATE;
 const stateDir = stateFilePath ? path.dirname(stateFilePath) : null;
 const lastFailureFilePath = stateDir ? path.join(stateDir, 'sidecar-last-failure.json') : null;
 
+const MAX_SIDECAR_STATE_BYTES = 64 * 1024;
+
+// Mirrors `SidecarState` in shared/sidecar/stateFile.ts. Unknown keys are
+// stripped. The token is sent as a bearer credential and the port goes into
+// the request URL, so both are checked strictly.
+const sidecarStateSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+  token: z.string().regex(/^[\x21-\x7e]+$/),
+  pid: z.number().int().positive(),
+  manifestPath: z.string().optional(),
+  lastEagerStartErrorCode: z.string().optional(),
+});
+
+// A missing file is routine (no sidecar running yet, or polled during spawn)
+// and stays silent; any other refusal logs one fixed line, never the path or
+// the content.
 const loadSidecarState = () => {
   if (!stateFilePath) return null;
-  try {
-    const raw = fs.readFileSync(stateFilePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.port !== 'number' || !parsed.token) return null;
-    return parsed;
-  } catch {
-    return null;
+  const result = readHardenedJsonFile(stateFilePath, sidecarStateSchema, MAX_SIDECAR_STATE_BYTES);
+  if (result.ok) return result.value;
+  if (!result.missing) {
+    console.error(`[office] sidecar state rejected: ${result.reason}`);
   }
+  return null;
 };
 
 const loadLastFailureState = () => {
@@ -316,18 +332,10 @@ const readLastEagerStartErrorCode = (fallbackState = null) => {
   const fallbackCode = fallbackState && typeof fallbackState.lastEagerStartErrorCode === 'string'
     ? fallbackState.lastEagerStartErrorCode
     : null;
-  if (!stateFilePath) {
-    return loadLastFailureState()?.code ?? fallbackCode;
-  }
-  try {
-    const raw = fs.readFileSync(stateFilePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return typeof parsed.lastEagerStartErrorCode === 'string'
-      ? parsed.lastEagerStartErrorCode
-      : fallbackCode;
-  } catch {
-    return loadLastFailureState()?.code ?? fallbackCode;
-  }
+  const state = loadSidecarState();
+  return state
+    ? (state.lastEagerStartErrorCode ?? fallbackCode)
+    : (loadLastFailureState()?.code ?? fallbackCode);
 };
 
 const writeFallbackInvokedSentinel = ({ lastEagerStartErrorCode, reason }) => {

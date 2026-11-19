@@ -69,7 +69,9 @@ export async function atomicWriteFile(targetPath: string, payload: string): Prom
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
   const tmpPath = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
-  await fs.writeFile(tmpPath, payload, { encoding: 'utf8', mode: 0o600 });
+  // `wx`: never open a pre-existing tmp path (a planted file or symlink); the
+  // rename then replaces a symlink at the target instead of following it.
+  await fs.writeFile(tmpPath, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 
   try {
     await renameAtomically(tmpPath, targetPath);

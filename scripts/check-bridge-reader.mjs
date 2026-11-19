@@ -21,6 +21,10 @@
 //   - it is not compliant and not listed in scripts/bridge-reader-baseline.json;
 //   - it carries a src/bridge-reader.ts that differs from the canonical file
 //     (a drifted copy fails even when baselined);
+//   - it carries a hardened-json-file.ts (the file primitive bridge-reader.ts
+//     imports, also vendored on its own for a connector's local state files)
+//     that differs from the canonical test-harness/src/hardened-json-file.ts,
+//     whether or not the connector reads the bridge;
 //   - it is compliant but still baselined (ratchet: remove it from the baseline).
 // --all also fails a stale baseline entry (no such connector, or it no longer
 // reads the bridge), and with --base an entry the base ref's baseline does not
@@ -38,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const CANONICAL = readFileSync(join(repoRoot, 'test-harness', 'src', 'bridge-reader.ts'), 'utf8');
+const CANONICAL_FILE_READER = readFileSync(join(repoRoot, 'test-harness', 'src', 'hardened-json-file.ts'), 'utf8');
 const ENV_VARS = /\b(?:MCP_HOST_BRIDGE_STATE|MINDSTONE_REBEL_BRIDGE_STATE)\b/;
 const BYPASS = /\b(?:MCP_HOST_BRIDGE_STATE|MINDSTONE_REBEL_BRIDGE_STATE|readBridgeState|bridgeStatePath)\b/;
 const CALL = /\bpostToBridge\s*\(/;
@@ -159,6 +164,23 @@ function evaluateConnector(connector) {
         `  Copy the canonical file over it; change the canonical file (and every copy) for a real change.`,
     );
   }
+  const driftedFileReaders = texts.filter(([f, t]) => basename(f) === 'hardened-json-file.ts' && t !== CANONICAL_FILE_READER);
+  if (driftedFileReaders.length > 0) {
+    return result(
+      false,
+      `— ${driftedFileReaders.map(([f]) => relative(dir, f)).join(', ')} differs from test-harness/src/hardened-json-file.ts.\n` +
+        `  Copy the canonical file over it; change the canonical file (and every copy) for a real change.`,
+    );
+  }
+  // bridge-reader.ts imports its sibling primitive, so a copy without one cannot build.
+  const missingFileReader = copies.filter(([f]) => !existsSync(join(dirname(f), 'hardened-json-file.ts')));
+  if (missingFileReader.length > 0) {
+    return result(
+      false,
+      `— ${missingFileReader.map(([f]) => relative(dir, f)).join(', ')} has no hardened-json-file.ts beside it.\n` +
+        `  Copy test-harness/src/hardened-json-file.ts next to it unchanged.`,
+    );
+  }
   if (!readsBridge) {
     return baselined
       ? result(false, '— no longer reads the bridge: remove it from gappedConnectors in scripts/bridge-reader-baseline.json')
@@ -183,7 +205,7 @@ function evaluateConnector(connector) {
   return result(
     false,
     `— FAILS: reads the host app bridge but ${why}.\n` +
-      `  Copy test-harness/src/bridge-reader.ts to src/bridge-reader.ts unchanged and send bridge\n` +
+      `  Copy test-harness/src/bridge-reader.ts and test-harness/src/hardened-json-file.ts to src/ unchanged and send bridge\n` +
       `  requests through its postToBridge (connectors/_template/src/bridge.ts shows how).`,
   );
 }
@@ -245,8 +267,14 @@ function runSelfTest() {
   const saved = { connectorsRoot, baseline };
   connectorsRoot = tmp;
   baseline = { gappedConnectors: ['gapped', 'fixed-but-baselined', 'drifted-baselined', 'gone'] };
-  const make = (name, files) => {
-    for (const [rel, text] of Object.entries(files)) {
+  // Every fixture copy of bridge-reader.ts gets its sibling primitive, except where a leg tests its absence.
+  const make = (name, files, { withSibling = true } = {}) => {
+    const all = { ...files };
+    for (const rel of Object.keys(files)) {
+      const sibling = join(dirname(rel), 'hardened-json-file.ts');
+      if (withSibling && basename(rel) === 'bridge-reader.ts' && !(sibling in all)) all[sibling] = CANONICAL_FILE_READER;
+    }
+    for (const [rel, text] of Object.entries(all)) {
       const p = join(tmp, name, 'src', rel);
       mkdirSync(dirname(p), { recursive: true });
       writeFileSync(p, text);
@@ -265,7 +293,8 @@ function runSelfTest() {
   const regexQuote = `${wrapper}const quote = /"/g; const url = "https://example.com"; const p = process.env.MCP_HOST_BRIDGE_STATE;\n`;
   const importOnly = `import { postToBridge } from './bridge-reader.js';\nexport { postToBridge };\n`;
   const commentCall = `// postToBridge('/x', {}, opts)\nexport const x = 1;\n`;
-  make('compliant', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
+  const withFileReader = { 'hardened-json-file.ts': CANONICAL_FILE_READER };
+  make('compliant', { ...withFileReader, 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
   make('comment-mention', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': commented });
   make('after-block-comment', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': afterBlock });
   make('low-level-export', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': lowLevel });
@@ -282,10 +311,18 @@ function runSelfTest() {
   make('gapped', { 'bridge.ts': unsafe });
   make('fixed-but-baselined', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
   make('drifted', { 'bridge-reader.ts': CANONICAL + '\n// local tweak\n', 'bridge.ts': wrapper });
-  make('drifted-baselined', { 'lib/bridge-reader.ts': CANONICAL.replace('O_NOFOLLOW', 'O_RDONLY'), 'bridge.ts': unsafe });
+  make('drifted-baselined', { 'lib/bridge-reader.ts': CANONICAL.replace("redirect: 'error'", "redirect: 'follow'"), 'bridge.ts': unsafe });
   make('copy-plus-bypass', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper, 'auth.ts': unsafe });
   make('bracket-bypass', { 'bridge-reader.ts': CANONICAL, 'auth.ts': `const p = process.env['MINDSTONE_REBEL_BRIDGE_STATE'];\n` });
   make('no-bridge', { 'server.ts': `export const x = fetch('https://example.com');\n` });
+  make('file-reader-only', { ...withFileReader, 'server.ts': 'export const x = 1;\n' });
+  make('file-reader-drifted', { 'hardened-json-file.ts': CANONICAL_FILE_READER.replace('O_NOFOLLOW', 'O_RDONLY'), 'server.ts': 'export const x = 1;\n' });
+  make('bridge-file-reader-drifted', {
+    'bridge-reader.ts': CANONICAL,
+    'lib/hardened-json-file.ts': CANONICAL_FILE_READER + '\n// local tweak\n',
+    'bridge.ts': wrapper,
+  });
+  make('missing-file-reader', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper }, { withSibling: false });
   make('test-only-mention', { 'server.ts': 'export const x = 1;\n', 'server.test.ts': unsafe });
 
   const legs = [
@@ -310,6 +347,10 @@ function runSelfTest() {
     ['identical copy plus a second reader', 'copy-plus-bypass', false],
     ['identical copy plus a bracket-key env read', 'bracket-bypass', false],
     ['no bridge at all', 'no-bridge', true],
+    ['identical file-reader copy, no bridge', 'file-reader-only', true],
+    ['drifted file-reader copy, no bridge', 'file-reader-drifted', false],
+    ['drifted file-reader copy in a subfolder beside a compliant bridge reader', 'bridge-file-reader-drifted', false],
+    ['compliant bridge reader without its hardened-json-file.ts', 'missing-file-reader', false],
     ['env var only in a test file', 'test-only-mention', true],
   ];
   let failures = 0;

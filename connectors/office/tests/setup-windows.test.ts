@@ -114,7 +114,7 @@ describe('Windows setup tool', () => {
     // Exercise the handler's real lazy-start path with the existing spawn seam;
     // no sidecar process or network socket is needed for manifest installation.
     api.setSpawnSidecarAndWaitForTests(async () => {
-      await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', manifestPath }));
+      await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', pid: process.pid, manifestPath }));
     });
     vi.mocked(registerWindowsAddin).mockImplementation(async () => ({
       app: 'all', path: manifestPath, status,
@@ -135,7 +135,7 @@ describe('Windows setup tool', () => {
 it('does not report setup success when registration fails', async () => {
   const api = await connectSetup();
   api.setSpawnSidecarAndWaitForTests(async () => {
-    await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', manifestPath: path.join(stateDir, 'manifest.xml') }));
+    await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', pid: process.pid, manifestPath: path.join(stateDir, 'manifest.xml') }));
   });
   vi.mocked(registerWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Registration denied' });
   expect(await setup('install')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Registration denied') } });

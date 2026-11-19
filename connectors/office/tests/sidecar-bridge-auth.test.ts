@@ -31,7 +31,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startOfficeSidecar, type OfficeSidecar, __resetBridgeAuthCacheForTests } from '../src/sidecar/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +48,8 @@ interface FakeBridge {
   mintCallCount: number;
   /** Last received mint body — for assertions. */
   lastMintBody: { appId: string; clientId: string } | null;
+  /** The clientId of every mint request, in arrival order. */
+  mintClientIds: string[];
   /** Close the fake bridge and clean up. */
   stop: () => Promise<void>;
   /** Override: next mint request will fail with this status. Cleared after use. */
@@ -65,6 +67,7 @@ async function startFakeBridge(): Promise<FakeBridge> {
     startedAt: new Date().toISOString(),
     mintCallCount: 0,
     lastMintBody: null,
+    mintClientIds: [],
     failNextMintWith: null,
     stop: async () => undefined,
     setRouterToken: (next) => {
@@ -93,6 +96,7 @@ async function startFakeBridge(): Promise<FakeBridge> {
         };
         state.mintCallCount += 1;
         state.lastMintBody = { appId: body.appId, clientId: body.clientId };
+        state.mintClientIds.push(body.clientId);
 
         if (state.failNextMintWith !== null) {
           const status = state.failNextMintWith;
@@ -418,5 +422,158 @@ describe('office sidecar — bridge auth wiring', () => {
     // and `bridgeReady` would be false. Getting a true means the sidecar
     // read the new one from the state file.
     expect(config?.bridgeReady).toBe(true);
+  });
+});
+
+describe('office sidecar — hardened state files', () => {
+  const rejections = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('rejected'));
+
+  async function startSidecarFor(sidecarStateDir: string): Promise<OfficeSidecar> {
+    const sidecar = await startOfficeSidecar({
+      stateDirectory: sidecarStateDir,
+      port: 0,
+      installToWefFolders: false,
+      addinDir: path.join(__dirname, '..', 'dist', 'addin'),
+    });
+    sidecars.push(sidecar);
+    return sidecar;
+  }
+
+  async function freshDirs(): Promise<{ userDataDir: string; sidecarStateDir: string; bridgeStateFile: string }> {
+    const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'office-auth-test-'));
+    dirs.push(userDataDir);
+    const sidecarStateDir = path.join(userDataDir, 'mcp', 'rebeloffice');
+    await fs.mkdir(sidecarStateDir, { recursive: true });
+    const bridgeStateFile = path.join(userDataDir, 'mcp', 'rebel-app-bridge', 'state.json');
+    await fs.mkdir(path.dirname(bridgeStateFile), { recursive: true });
+    return { userDataDir, sidecarStateDir, bridgeStateFile };
+  }
+
+  it('still mints from a bridge state larger than 64 KiB with extra keys', async () => {
+    const { sidecarStateDir, bridgeStateFile } = await freshDirs();
+    const bridge = await startFakeBridge();
+    bridges.push(bridge);
+    await fs.writeFile(
+      bridgeStateFile,
+      JSON.stringify({
+        port: bridge.port,
+        pid: process.pid,
+        protocolVersion: '1.0',
+        startedAt: bridge.startedAt,
+        routerToken: bridge.routerToken,
+        appTokens: Array.from({ length: 2000 }, (_, i) => ({ appId: `app-${i}`, token: 'x'.repeat(40) })),
+        installSessionDenylist: [],
+      }),
+    );
+    expect((await fs.stat(bridgeStateFile)).size).toBeGreaterThan(64 * 1024);
+    const sidecar = await startSidecarFor(sidecarStateDir);
+    expect((await readTaskpaneHtmlConfig(sidecar))?.bridgeReady).toBe(true);
+    expect(bridge.mintCallCount).toBe(1);
+  });
+
+  it('stays quiet when the bridge state file is absent', async () => {
+    const errors = vi.spyOn(console, 'error');
+    try {
+      const { sidecarStateDir } = await freshDirs();
+      const sidecar = await startSidecarFor(sidecarStateDir);
+      expect((await readTaskpaneHtmlConfig(sidecar))?.bridgeReady).toBe(false);
+      expect(rejections(errors)).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('refuses a bridge state with an invalid port, with one fixed log line', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { sidecarStateDir, bridgeStateFile } = await freshDirs();
+      const bridge = await startFakeBridge();
+      bridges.push(bridge);
+      await fs.writeFile(
+        bridgeStateFile,
+        JSON.stringify({ port: bridge.port + 0.5, startedAt: bridge.startedAt, routerToken: bridge.routerToken }),
+      );
+      const sidecar = await startSidecarFor(sidecarStateDir);
+      expect((await readTaskpaneHtmlConfig(sidecar))?.bridgeReady).toBe(false);
+      expect(bridge.mintCallCount).toBe(0);
+      expect(rejections(errors)).toEqual(['[office] app bridge state rejected: content failed schema validation']);
+      for (const call of errors.mock.calls) expect(String(call)).not.toContain(bridge.routerToken);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a symlinked bridge state file, sending no token', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { userDataDir, sidecarStateDir, bridgeStateFile } = await freshDirs();
+      const bridge = await startFakeBridge();
+      bridges.push(bridge);
+      const elsewhere = path.join(userDataDir, 'elsewhere.json');
+      await fs.writeFile(
+        elsewhere,
+        JSON.stringify({ port: bridge.port, startedAt: bridge.startedAt, routerToken: bridge.routerToken }),
+      );
+      await fs.symlink(elsewhere, bridgeStateFile);
+      const sidecar = await startSidecarFor(sidecarStateDir);
+      expect((await readTaskpaneHtmlConfig(sidecar))?.bridgeReady).toBe(false);
+      expect(bridge.mintCallCount).toBe(0);
+      expect(rejections(errors)).toEqual(['[office] app bridge state rejected: state path is a symbolic link']);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('writes a well-formed clientId file, owner-only', async () => {
+    const { sidecar, bridge, sidecarStateDir } = await setup();
+    await readTaskpaneHtmlConfig(sidecar);
+    const clientIdFile = path.join(sidecarStateDir, 'office-client-id');
+    const stored = await fs.readFile(clientIdFile, 'utf8');
+    expect(stored).toMatch(/^office-[0-9a-f]{16}$/);
+    expect(bridge.lastMintBody?.clientId).toBe(stored);
+    if (process.platform !== 'win32') {
+      expect((await fs.stat(clientIdFile)).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it('replaces a malformed clientId file with a fresh id', async () => {
+    const { userDataDir, sidecarStateDir } = await freshDirs();
+    const bridge = await startFakeBridge();
+    bridges.push(bridge);
+    await writeBridgeStateFile(userDataDir, bridge);
+    const clientIdFile = path.join(sidecarStateDir, 'office-client-id');
+    await fs.writeFile(clientIdFile, 'not a client id\nX-Injected: 1');
+    const sidecar = await startSidecarFor(sidecarStateDir);
+    await readTaskpaneHtmlConfig(sidecar);
+    const stored = await fs.readFile(clientIdFile, 'utf8');
+    expect(stored).toMatch(/^office-[0-9a-f]{16}$/);
+    expect(bridge.lastMintBody?.clientId).toBe(stored);
+  });
+
+  it.skipIf(process.platform === 'win32')('replaces a symlink planted at the clientId path instead of writing through it', async () => {
+    const { userDataDir, sidecarStateDir } = await freshDirs();
+    const bridge = await startFakeBridge();
+    bridges.push(bridge);
+    await writeBridgeStateFile(userDataDir, bridge);
+    const victim = path.join(userDataDir, 'victim.txt');
+    await fs.writeFile(victim, 'original');
+    const clientIdFile = path.join(sidecarStateDir, 'office-client-id');
+    await fs.symlink(victim, clientIdFile);
+
+    const sidecar = await startSidecarFor(sidecarStateDir);
+    await readTaskpaneHtmlConfig(sidecar);
+
+    expect((await fs.lstat(clientIdFile)).isSymbolicLink()).toBe(false);
+    expect(await fs.readFile(clientIdFile, 'utf8')).toMatch(/^office-[0-9a-f]{16}$/);
+    expect(await fs.readFile(victim, 'utf8')).toBe('original');
+  });
+
+  it('gives overlapping first requests one shared clientId', async () => {
+    const { sidecar, bridge, sidecarStateDir } = await setup();
+    await Promise.all([readTaskpaneHtmlConfig(sidecar), readTaskpaneHtmlConfig(sidecar), readTaskpaneHtmlConfig(sidecar)]);
+    const stored = await fs.readFile(path.join(sidecarStateDir, 'office-client-id'), 'utf8');
+    expect(bridge.mintClientIds.length).toBeGreaterThan(0);
+    expect(new Set(bridge.mintClientIds)).toEqual(new Set([stored]));
   });
 });

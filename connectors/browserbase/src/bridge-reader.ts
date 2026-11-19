@@ -11,22 +11,12 @@
  *
  * The host app sets the state file path when it spawns the server; the model
  * cannot influence it. The read is still hardened, because the file carries the
- * bridge bearer token and its `port` is put into the request URL:
- *
- * - An `lstat` refusal of a symlinked final component, then `O_NOFOLLOW` on the
- *   open where the platform defines it. Symlinked ancestors stay allowed (host
- *   state dirs can resolve through e.g. /var -> /private/var).
- * - `O_NONBLOCK`, so a FIFO at the path is opened and refused instead of
- *   blocking the process waiting for a writer.
- * - Same-descriptor fstat (regular file) and a read through that descriptor of
- *   at most 64 KiB (a larger or growing file is refused), plus a realpath inode
- *   cross-check that refuses the read when the path no
- *   longer names the opened file. Where `O_NOFOLLOW` is unavailable (Windows)
- *   this narrows, but cannot rule out, a symlink swap raced between lstat and
- *   open.
- * - Strict schema validation of the content. The token must be visible ASCII,
- *   so it can never make the `Authorization` header invalid: fetch would quote
- *   the whole header value in its error.
+ * bridge bearer token and its `port` is put into the request URL. The
+ * filesystem checks (symlink, FIFO, regular file, inode cross-check, a 64 KiB
+ * cap) live in `hardened-json-file.ts`, vendored beside this file and
+ * drift-checked the same way. The schema is strict: the token must be visible
+ * ASCII, so it can never make the `Authorization` header invalid: fetch would
+ * quote the whole header value in its error.
  *
  * Any local process able to bind the port can answer a request, and would
  * receive the token and the request body; nothing here can detect that, so it
@@ -42,8 +32,8 @@
  * vars itself. It means "a bridge state path is configured", not "the bridge is
  * readable or reachable": `postToBridge` still validates the file on every call.
  */
-import * as fs from 'fs';
 import { z } from 'zod';
+import { readHardenedJsonFile } from './hardened-json-file.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 export const MAX_BRIDGE_STATE_BYTES = 64 * 1024;
@@ -74,60 +64,15 @@ export function isBridgeConfigured(env: NodeJS.ProcessEnv = process.env): boolea
   return bridgeStatePath(env) !== '';
 }
 
-function refuse(connector: string, reason: string): null {
-  console.error(`[${connector}] bridge state rejected: ${reason}`);
-  return null;
-}
-
 /** Read and validate the bridge state file; `null` (with one stderr line) when it is unusable. */
 export function readBridgeState(statePath: string, connector: string): BridgeState | null {
   if (!statePath) return null;
-  let fd: number | null = null;
-  try {
-    if (fs.lstatSync(statePath).isSymbolicLink()) {
-      return refuse(connector, 'state path is a symbolic link');
-    }
-    fd = fs.openSync(
-      statePath,
-      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
-    );
-    const opened = fs.fstatSync(fd);
-    if (!opened.isFile()) {
-      return refuse(connector, 'not a regular file');
-    }
-    const canonical = fs.statSync(fs.realpathSync(statePath));
-    if (canonical.dev !== opened.dev || canonical.ino !== opened.ino) {
-      return refuse(connector, 'path resolved to a different file than was opened');
-    }
-    const buffer = Buffer.alloc(MAX_BRIDGE_STATE_BYTES + 1);
-    const length = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    if (length > MAX_BRIDGE_STATE_BYTES) {
-      return refuse(connector, 'state file is too large');
-    }
-    const raw = buffer.toString('utf8', 0, length);
-    let json: unknown;
-    try {
-      json = JSON.parse(raw);
-    } catch {
-      return refuse(connector, 'malformed JSON');
-    }
-    const parsed = bridgeStateSchema.safeParse(json);
-    if (!parsed.success) {
-      return refuse(connector, 'content failed schema validation');
-    }
-    return parsed.data;
-  } catch {
-    // Missing, unreadable, or a symlink refused by O_NOFOLLOW (ELOOP).
-    return refuse(connector, 'state file could not be read');
-  } finally {
-    if (fd !== null) {
-      try {
-        fs.closeSync(fd);
-      } catch {
-        // A close failure on a read-only descriptor changes nothing.
-      }
-    }
+  const result = readHardenedJsonFile(statePath, bridgeStateSchema, MAX_BRIDGE_STATE_BYTES);
+  if (!result.ok) {
+    console.error(`[${connector}] bridge state rejected: ${result.reason}`);
+    return null;
   }
+  return result.value;
 }
 
 export interface PostToBridgeOptions {

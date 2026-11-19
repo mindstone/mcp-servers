@@ -3,10 +3,12 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
+import { z } from 'zod';
 import { getHttpsServerOptions } from 'office-addin-dev-certs';
 import { ConnectionManager } from '../shared/appBridge/server/connectionManager.js';
 import { CommandRouter, type CommandResult } from '../shared/appBridge/server/commandRouter.js';
-import { writeStateFile, generateToken } from './auth.js';
+import { atomicWriteFile, writeStateFile, generateToken } from './auth.js';
+import { readHardenedJsonFile } from '../hardened-json-file.js';
 import { constantTimeStringEqual } from '../shared/sidecar/constantTime.js';
 import {
   installManifestsToWefFolders,
@@ -218,39 +220,40 @@ interface AppBridgeStateSnapshot {
   routerToken: string;
 }
 
+// The bridge state carries the router token, so it is read through the hardened
+// primitive. Its other keys (tokens table, bindings, …) are stripped; the cap is
+// generous because that table grows with paired clients.
+const MAX_APP_BRIDGE_STATE_BYTES = 1024 * 1024;
+const appBridgeStateSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+  routerToken: z.string().regex(/^[\x21-\x7e]+$/),
+  startedAt: z.string().min(1),
+});
+
 function readAppBridgeState(
   sidecarStateDir: string | undefined,
 ): AppBridgeStateSnapshot | null {
   if (!sidecarStateDir) return null;
-  try {
-    const bridgeStateFile = path.join(
-      path.dirname(sidecarStateDir),
-      'rebel-app-bridge',
-      'state.json',
-    );
-    const raw = fs.readFileSync(bridgeStateFile, 'utf8');
-    const parsed = JSON.parse(raw) as {
-      port?: unknown;
-      pid?: unknown;
-      routerToken?: unknown;
-      startedAt?: unknown;
-    };
-    if (typeof parsed.port !== 'number' || parsed.port <= 0) return null;
-    if (typeof parsed.routerToken !== 'string' || parsed.routerToken.length === 0) {
-      return null;
+  const bridgeStateFile = path.join(
+    path.dirname(sidecarStateDir),
+    'rebel-app-bridge',
+    'state.json',
+  );
+  const result = readHardenedJsonFile(bridgeStateFile, appBridgeStateSchema, MAX_APP_BRIDGE_STATE_BYTES);
+  if (!result.ok) {
+    // Missing is routine (the app bridge is not running); stay quiet then.
+    if (!result.missing) {
+      console.error(`[office] app bridge state rejected: ${result.reason}`);
     }
-    if (typeof parsed.startedAt !== 'string' || parsed.startedAt.length === 0) {
-      return null;
-    }
-    return {
-      bridgeOrigin: `http://127.0.0.1:${parsed.port}`,
-      port: parsed.port,
-      startedAt: parsed.startedAt,
-      routerToken: parsed.routerToken,
-    };
-  } catch {
     return null;
   }
+  const { port, routerToken, startedAt } = result.value;
+  return {
+    bridgeOrigin: `http://127.0.0.1:${port}`,
+    port,
+    startedAt,
+    routerToken,
+  };
 }
 
 /**
@@ -265,18 +268,32 @@ function readAppBridgeState(
  * until the old one is revoked on next mint).
  */
 const OFFICE_CLIENT_ID_FILE = 'office-client-id';
+const OFFICE_CLIENT_ID_PATTERN = /^office-[0-9a-f]{16}$/;
 
-function resolveOfficeClientId(sidecarStateDir: string | undefined): string {
+// One resolution per state dir, shared by concurrent first callers so they
+// agree on a single id (and a single write).
+const officeClientIds = new Map<string, Promise<string>>();
+
+function resolveOfficeClientId(sidecarStateDir: string | undefined): Promise<string> {
   if (!sidecarStateDir) {
     // No state dir → in-memory only. Still functional; just churns a
     // token slot per restart, but `mintAppTokenForTrustedHost` revokes
     // prior tokens by clientId so it's bounded to one slot-per-session.
-    return generateOfficeClientId();
+    return Promise.resolve(generateOfficeClientId());
   }
+  let pending = officeClientIds.get(sidecarStateDir);
+  if (!pending) {
+    pending = loadOrCreateOfficeClientId(sidecarStateDir);
+    officeClientIds.set(sidecarStateDir, pending);
+  }
+  return pending;
+}
+
+async function loadOrCreateOfficeClientId(sidecarStateDir: string): Promise<string> {
   const filePath = path.join(sidecarStateDir, OFFICE_CLIENT_ID_FILE);
   try {
     const raw = fs.readFileSync(filePath, 'utf8').trim();
-    if (raw.length > 0 && raw.length < 200) {
+    if (OFFICE_CLIENT_ID_PATTERN.test(raw)) {
       return raw;
     }
   } catch {
@@ -284,8 +301,9 @@ function resolveOfficeClientId(sidecarStateDir: string | undefined): string {
   }
   const generated = generateOfficeClientId();
   try {
-    fs.mkdirSync(sidecarStateDir, { recursive: true });
-    fs.writeFileSync(filePath, generated, { encoding: 'utf8', mode: 0o600 });
+    // Owner-only tmp file renamed over the target: a symlink planted at the
+    // path is replaced, never written through.
+    await atomicWriteFile(filePath, generated);
   } catch {
     // Best-effort — still return the id so minting works this session.
   }
@@ -415,7 +433,7 @@ async function ensureBridgeAuth(
     };
   }
 
-  const clientId = resolveOfficeClientId(sidecarStateDir);
+  const clientId = await resolveOfficeClientId(sidecarStateDir);
   const token = await requestMintedAppToken(bridge, clientId);
   if (!token) {
     // Invalidate any stale cache so we don't keep serving a revoked token.
@@ -437,9 +455,10 @@ async function ensureBridgeAuth(
   };
 }
 
-/** Test-only: drop the mint cache so the next request re-mints. */
+/** Test-only: drop the mint cache (and resolved client ids) so the next request re-mints. */
 export function __resetBridgeAuthCacheForTests(): void {
   cachedMintedToken = null;
+  officeClientIds.clear();
 }
 
 /**

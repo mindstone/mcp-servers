@@ -1,7 +1,8 @@
 /**
- * The canonical hardened bridge reader. Every connector's vendored
- * `src/bridge-reader.ts` is byte-identical to it (scripts/check-bridge-reader.mjs),
- * so these tests cover every copy.
+ * The canonical hardened bridge reader and the file primitive under it. Every
+ * connector's vendored `src/bridge-reader.ts` and `src/hardened-json-file.ts`
+ * is byte-identical to these (scripts/check-bridge-reader.mjs), so these tests
+ * cover every copy.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -11,6 +12,7 @@ import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   bridgeStatePath,
   isBridgeConfigured,
@@ -18,6 +20,7 @@ import {
   postToBridge,
   readBridgeState,
 } from '../src/bridge-reader.js';
+import { readHardenedJsonFile } from '../src/hardened-json-file.js';
 
 const TOKEN = 'secret-bridge-token';
 let dir: string;
@@ -152,6 +155,57 @@ describe('readBridgeState', () => {
     execFileSync('mkfifo', [fifo]);
     expect(readBridgeState(fifo, 'demo')).toBeNull();
     expect(errors).toHaveBeenCalledWith('[demo] bridge state rejected: not a regular file');
+  });
+});
+
+describe('readHardenedJsonFile', () => {
+  const schema = z.object({ port: z.number().int(), token: z.string() });
+
+  it('returns the parsed value for a custom schema, extra keys stripped', () => {
+    const p = writeState({ port: 1, token: TOKEN, extra: 'x' });
+    expect(readHardenedJsonFile(p, schema, 1024)).toEqual({ ok: true, value: { port: 1, token: TOKEN } });
+  });
+
+  it('marks a missing file as missing, and logs nothing itself', () => {
+    expect(readHardenedJsonFile(path.join(dir, 'missing.json'), schema, 1024)).toEqual({
+      ok: false,
+      missing: true,
+      reason: 'state file could not be read',
+    });
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('does not mark any other refusal as missing', () => {
+    expect(readHardenedJsonFile(writeState('{'), schema, 1024)).toEqual({
+      ok: false,
+      missing: false,
+      reason: 'malformed JSON',
+    });
+    expect(readHardenedJsonFile(writeState({ port: 'x', token: TOKEN }), schema, 1024)).toEqual({
+      ok: false,
+      missing: false,
+      reason: 'content failed schema validation',
+    });
+    expect(readHardenedJsonFile(dir, schema, 1024)).toMatchObject({ ok: false, missing: false, reason: 'not a regular file' });
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('applies the caller-supplied size cap', () => {
+    const content = JSON.stringify({ port: 1, token: TOKEN, pad: 'x'.repeat(MAX_BRIDGE_STATE_BYTES) });
+    const p = writeState(content);
+    expect(readHardenedJsonFile(p, schema, MAX_BRIDGE_STATE_BYTES)).toMatchObject({ ok: false, reason: 'state file is too large' });
+    expect(readHardenedJsonFile(p, schema, content.length)).toEqual({ ok: true, value: { port: 1, token: TOKEN } });
+    expect(readHardenedJsonFile(p, schema, content.length - 1)).toMatchObject({ ok: false, reason: 'state file is too large' });
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a symlink without marking it missing, even a dangling one', () => {
+    const link = path.join(dir, 'link.json');
+    fs.symlinkSync(path.join(dir, 'nowhere.json'), link);
+    expect(readHardenedJsonFile(link, schema, 1024)).toEqual({
+      ok: false,
+      missing: false,
+      reason: 'state path is a symbolic link',
+    });
   });
 });
 
