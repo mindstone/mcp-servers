@@ -1,4 +1,4 @@
-import { redactAtPaths, type Redactor } from './api-sensitive.js';
+import { type Redactor } from './api-sensitive.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import formats = require('ajv-formats');
@@ -209,6 +209,7 @@ export class ApiValidator {
     if (response.schema === undefined) return 'matched';
     const validate = this.compile(op, this.responseRoot(op, op.responses.indexOf(response)));
     if (validate(ownData(data))) return 'matched';
+    if (op.credential_return_fields) return { mismatch: redactor.wrap('The credential response differs from the pinned schema. Keep raw data private; report operation_id, status and content_type to the connector maintainer. Do not blindly retry.', `elevenlabs:api:${op.operation_id}`)! };
     const paths = [...new Set(graphIssues(validate.errors, [], enumGuidance(this.catalog), this.fields).map(issue => issue.path.join('.')))].slice(0, 5);
     return { mismatch: redactor.wrap(JSON.stringify({ message: 'Response data remains available, but the listed fields differ from the pinned schema. Check affected fields before relying on them; unaffected data remains usable. Report operation_id, status, content_type and response_contract to the connector maintainer or whoever manages your connector installation; keep raw data private. Do not blindly retry a mutation. Any pagination fields used by the connector are checked separately.', paths }), `elevenlabs:api:${op.operation_id}`)! };
   }
@@ -280,7 +281,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
-  if (!binary) parsedData = redactor.redact(redactAtPaths(parsedData, op.sensitive_response_fields ?? []));
+  if (!binary) parsedData = redactor.redact(parsedData, op);
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: descriptor.media_type,

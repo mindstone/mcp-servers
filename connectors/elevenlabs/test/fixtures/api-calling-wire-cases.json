@@ -1,0 +1,523 @@
+[
+  {
+    "id": "handle_twilio_outbound_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "agent_id": "agent_guide",
+        "agent_phone_number_id": "phone_guide",
+        "to_number": "+12025550101",
+        "conversation_initiation_client_data": {
+          "conversation_config_override": {
+            "agent": {
+              "first_message": "Welcome to Acme.",
+              "language": "en",
+              "prompt": {
+                "prompt": "Help with the guide."
+              }
+            }
+          },
+          "custom_llm_extra_body": {
+            "guide_mode": true
+          },
+          "dynamic_variables": {
+            "topic": "guide",
+            "count": 2
+          },
+          "user_id": "person_example",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "procedure_ids": [
+            "procedure_guide"
+          ],
+          "start_procedure_ids": [
+            "procedure_guide"
+          ]
+        },
+        "telephony_call_config": {
+          "ringing_timeout_secs": 45,
+          "twilio_call_recording_enabled": false,
+          "twilio_machine_detection": {
+            "mode": "enable",
+            "actions": []
+          }
+        },
+        "call_recording_enabled": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/twilio/outbound-call",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "success": true,
+      "message": "Request accepted; call outcome pending.",
+      "conversation_id": "conv_example",
+      "callSid": "call_example"
+    },
+    "body": {
+      "agent_id": "agent_guide",
+      "agent_phone_number_id": "phone_guide",
+      "to_number": "+12025550101",
+      "conversation_initiation_client_data": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": "Welcome to Acme.",
+            "language": "en",
+            "prompt": {
+              "prompt": "Help with the guide."
+            }
+          }
+        },
+        "custom_llm_extra_body": {
+          "guide_mode": true
+        },
+        "dynamic_variables": {
+          "topic": "guide",
+          "count": 2
+        },
+        "user_id": "person_example",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "procedure_ids": [
+          "procedure_guide"
+        ],
+        "start_procedure_ids": [
+          "procedure_guide"
+        ]
+      },
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "call_recording_enabled": false
+    }
+  },
+  {
+    "id": "handle_exotel_outbound_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "agent_id": "agent_guide",
+        "agent_phone_number_id": "phone_guide",
+        "to_number": "+12025550101",
+        "conversation_initiation_client_data": {
+          "conversation_config_override": {
+            "agent": {
+              "first_message": "Welcome to Acme.",
+              "language": "en",
+              "prompt": {
+                "prompt": "Help with the guide."
+              }
+            }
+          },
+          "custom_llm_extra_body": {
+            "guide_mode": true
+          },
+          "dynamic_variables": {
+            "topic": "guide",
+            "count": 2
+          },
+          "user_id": "person_example",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "procedure_ids": [
+            "procedure_guide"
+          ],
+          "start_procedure_ids": [
+            "procedure_guide"
+          ]
+        },
+        "telephony_call_config": {
+          "ringing_timeout_secs": 45,
+          "twilio_call_recording_enabled": false,
+          "twilio_machine_detection": {
+            "mode": "enable",
+            "actions": []
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/exotel/outbound-call",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "success": true,
+      "message": "Request accepted; call outcome pending.",
+      "conversation_id": "conv_example",
+      "callSid": "call_example"
+    },
+    "body": {
+      "agent_id": "agent_guide",
+      "agent_phone_number_id": "phone_guide",
+      "to_number": "+12025550101",
+      "conversation_initiation_client_data": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": "Welcome to Acme.",
+            "language": "en",
+            "prompt": {
+              "prompt": "Help with the guide."
+            }
+          }
+        },
+        "custom_llm_extra_body": {
+          "guide_mode": true
+        },
+        "dynamic_variables": {
+          "topic": "guide",
+          "count": 2
+        },
+        "user_id": "person_example",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "procedure_ids": [
+          "procedure_guide"
+        ],
+        "start_procedure_ids": [
+          "procedure_guide"
+        ]
+      },
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      }
+    }
+  },
+  {
+    "id": "handle_sip_trunk_outbound_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "agent_id": "agent_guide",
+        "agent_phone_number_id": "phone_guide",
+        "to_number": "+12025550101",
+        "conversation_initiation_client_data": {
+          "conversation_config_override": {
+            "agent": {
+              "first_message": "Welcome to Acme.",
+              "language": "en",
+              "prompt": {
+                "prompt": "Help with the guide."
+              }
+            }
+          },
+          "custom_llm_extra_body": {
+            "guide_mode": true
+          },
+          "dynamic_variables": {
+            "topic": "guide",
+            "count": 2
+          },
+          "user_id": "person_example",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "procedure_ids": [
+            "procedure_guide"
+          ],
+          "start_procedure_ids": [
+            "procedure_guide"
+          ]
+        },
+        "telephony_call_config": {
+          "ringing_timeout_secs": 45,
+          "twilio_call_recording_enabled": false,
+          "twilio_machine_detection": {
+            "mode": "enable",
+            "actions": []
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/sip-trunk/outbound-call",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "success": true,
+      "message": "Request accepted; call outcome pending.",
+      "conversation_id": "conv_example",
+      "sip_call_id": "call_example"
+    },
+    "body": {
+      "agent_id": "agent_guide",
+      "agent_phone_number_id": "phone_guide",
+      "to_number": "+12025550101",
+      "conversation_initiation_client_data": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": "Welcome to Acme.",
+            "language": "en",
+            "prompt": {
+              "prompt": "Help with the guide."
+            }
+          }
+        },
+        "custom_llm_extra_body": {
+          "guide_mode": true
+        },
+        "dynamic_variables": {
+          "topic": "guide",
+          "count": 2
+        },
+        "user_id": "person_example",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "procedure_ids": [
+          "procedure_guide"
+        ],
+        "start_procedure_ids": [
+          "procedure_guide"
+        ]
+      },
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      }
+    }
+  },
+  {
+    "id": "whatsapp_outbound_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "whatsapp_phone_number_id": "wa_guide",
+        "whatsapp_user_id": "12025550102",
+        "whatsapp_call_permission_request_template_name": "guide_call_permission",
+        "whatsapp_call_permission_request_template_language_code": "en",
+        "agent_id": "agent_guide",
+        "conversation_initiation_client_data": {
+          "conversation_config_override": {
+            "agent": {
+              "first_message": "Welcome to Acme.",
+              "language": "en",
+              "prompt": {
+                "prompt": "Help with the guide."
+              }
+            }
+          },
+          "custom_llm_extra_body": {
+            "guide_mode": true
+          },
+          "dynamic_variables": {
+            "topic": "guide",
+            "count": 2
+          },
+          "user_id": "person_example",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "procedure_ids": [
+            "procedure_guide"
+          ],
+          "start_procedure_ids": [
+            "procedure_guide"
+          ]
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/whatsapp/outbound-call",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "success": true,
+      "message": "Permission workflow accepted.",
+      "conversation_id": null
+    },
+    "body": {
+      "whatsapp_phone_number_id": "wa_guide",
+      "whatsapp_user_id": "12025550102",
+      "whatsapp_call_permission_request_template_name": "guide_call_permission",
+      "whatsapp_call_permission_request_template_language_code": "en",
+      "agent_id": "agent_guide",
+      "conversation_initiation_client_data": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": "Welcome to Acme.",
+            "language": "en",
+            "prompt": {
+              "prompt": "Help with the guide."
+            }
+          }
+        },
+        "custom_llm_extra_body": {
+          "guide_mode": true
+        },
+        "dynamic_variables": {
+          "topic": "guide",
+          "count": 2
+        },
+        "user_id": "person_example",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "procedure_ids": [
+          "procedure_guide"
+        ],
+        "start_procedure_ids": [
+          "procedure_guide"
+        ]
+      }
+    }
+  },
+  {
+    "id": "whatsapp_outbound_message",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "whatsapp_phone_number_id": "wa_guide",
+        "whatsapp_user_id": "12025550102",
+        "template_name": "guide_notice",
+        "template_language_code": "en",
+        "template_params": [
+          {
+            "type": "header",
+            "parameters": [
+              {
+                "type": "text",
+                "text": "Acme guide"
+              }
+            ]
+          },
+          {
+            "type": "body",
+            "parameters": [
+              {
+                "type": "text",
+                "text": "Jane Example"
+              }
+            ]
+          },
+          {
+            "type": "button",
+            "index": 0,
+            "sub_type": "url",
+            "parameters": [
+              {
+                "type": "text",
+                "text": "guide"
+              }
+            ]
+          }
+        ],
+        "agent_id": "agent_guide",
+        "conversation_initiation_client_data": {
+          "conversation_config_override": {
+            "agent": {
+              "first_message": "Welcome to Acme.",
+              "language": "en",
+              "prompt": {
+                "prompt": "Help with the guide."
+              }
+            }
+          },
+          "custom_llm_extra_body": {
+            "guide_mode": true
+          },
+          "dynamic_variables": {
+            "topic": "guide",
+            "count": 2
+          },
+          "user_id": "person_example",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "procedure_ids": [
+            "procedure_guide"
+          ],
+          "start_procedure_ids": [
+            "procedure_guide"
+          ]
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/whatsapp/outbound-message",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "conversation_id": "conv_message"
+    },
+    "body": {
+      "whatsapp_phone_number_id": "wa_guide",
+      "whatsapp_user_id": "12025550102",
+      "template_name": "guide_notice",
+      "template_language_code": "en",
+      "template_params": [
+        {
+          "type": "header",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Acme guide"
+            }
+          ]
+        },
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Jane Example"
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "index": 0,
+          "sub_type": "url",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "guide"
+            }
+          ]
+        }
+      ],
+      "agent_id": "agent_guide",
+      "conversation_initiation_client_data": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": "Welcome to Acme.",
+            "language": "en",
+            "prompt": {
+              "prompt": "Help with the guide."
+            }
+          }
+        },
+        "custom_llm_extra_body": {
+          "guide_mode": true
+        },
+        "dynamic_variables": {
+          "topic": "guide",
+          "count": 2
+        },
+        "user_id": "person_example",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "procedure_ids": [
+          "procedure_guide"
+        ],
+        "start_procedure_ids": [
+          "procedure_guide"
+        ]
+      }
+    }
+  }
+]

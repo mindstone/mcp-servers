@@ -1,0 +1,404 @@
+[
+  {
+    "id": "create_batch_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "call_name": "Acme guide batch",
+        "agent_id": "agent_guide",
+        "recipients": [
+          {
+            "id": "person_one",
+            "phone_number": "+12025550101",
+            "conversation_initiation_client_data": {
+              "conversation_config_override": {
+                "agent": {
+                  "first_message": "Welcome to Acme.",
+                  "language": "en",
+                  "prompt": {
+                    "prompt": "Help with the guide."
+                  }
+                }
+              },
+              "custom_llm_extra_body": {
+                "guide_mode": true
+              },
+              "dynamic_variables": {
+                "topic": "guide",
+                "count": 2
+              },
+              "user_id": "person_example",
+              "branch_id": "branch_guide",
+              "environment": "staging",
+              "procedure_ids": [
+                "procedure_guide"
+              ],
+              "start_procedure_ids": [
+                "procedure_guide"
+              ]
+            }
+          },
+          {
+            "id": "person_two",
+            "phone_number": "+12025550102",
+            "conversation_initiation_client_data": null
+          }
+        ],
+        "scheduled_time_unix": 1800000300,
+        "agent_phone_number_id": "phone_guide",
+        "whatsapp_params": null,
+        "timezone": "Europe/Berlin",
+        "branch_id": "branch_guide",
+        "environment": "staging",
+        "telephony_call_config": {
+          "ringing_timeout_secs": 45,
+          "twilio_call_recording_enabled": false,
+          "twilio_machine_detection": {
+            "mode": "enable",
+            "actions": []
+          }
+        },
+        "target_concurrency_limit": 2
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/batch-calling/submit",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "batch/a ?#",
+      "phone_number_id": "phone_guide",
+      "phone_provider": "twilio",
+      "whatsapp_params": null,
+      "name": "Acme guide batch",
+      "agent_id": "agent_guide",
+      "branch_id": "branch_guide",
+      "environment": "staging",
+      "created_at_unix": 1800000000,
+      "scheduled_time_unix": 1800000300,
+      "timezone": "Europe/Berlin",
+      "total_calls_dispatched": 1,
+      "total_calls_scheduled": 2,
+      "total_calls_finished": 0,
+      "last_updated_at_unix": 1800000001,
+      "status": "in_progress",
+      "retry_count": 0,
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "target_concurrency_limit": 2,
+      "agent_name": "Acme guide",
+      "branch_name": "Guide branch"
+    },
+    "body": {
+      "call_name": "Acme guide batch",
+      "agent_id": "agent_guide",
+      "recipients": [
+        {
+          "id": "person_one",
+          "phone_number": "+12025550101",
+          "conversation_initiation_client_data": {
+            "conversation_config_override": {
+              "agent": {
+                "first_message": "Welcome to Acme.",
+                "language": "en",
+                "prompt": {
+                  "prompt": "Help with the guide."
+                }
+              }
+            },
+            "custom_llm_extra_body": {
+              "guide_mode": true
+            },
+            "dynamic_variables": {
+              "topic": "guide",
+              "count": 2
+            },
+            "user_id": "person_example",
+            "branch_id": "branch_guide",
+            "environment": "staging",
+            "procedure_ids": [
+              "procedure_guide"
+            ],
+            "start_procedure_ids": [
+              "procedure_guide"
+            ]
+          }
+        },
+        {
+          "id": "person_two",
+          "phone_number": "+12025550102",
+          "conversation_initiation_client_data": null
+        }
+      ],
+      "scheduled_time_unix": 1800000300,
+      "agent_phone_number_id": "phone_guide",
+      "whatsapp_params": null,
+      "timezone": "Europe/Berlin",
+      "branch_id": "branch_guide",
+      "environment": "staging",
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "target_concurrency_limit": 2
+    }
+  },
+  {
+    "id": "get_workspace_batch_calls",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "limit": 2,
+        "last_doc": "batch & previous",
+        "agent_id": "agent & 1"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/batch-calling/workspace",
+    "query": [
+      [
+        "limit",
+        "2"
+      ],
+      [
+        "last_doc",
+        "batch & previous"
+      ],
+      [
+        "agent_id",
+        "agent & 1"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "batch_calls": [
+        {
+          "id": "batch/a ?#",
+          "phone_number_id": "phone_guide",
+          "phone_provider": "twilio",
+          "whatsapp_params": null,
+          "name": "Acme guide batch",
+          "agent_id": "agent_guide",
+          "branch_id": "branch_guide",
+          "environment": "staging",
+          "created_at_unix": 1800000000,
+          "scheduled_time_unix": 1800000300,
+          "timezone": "Europe/Berlin",
+          "total_calls_dispatched": 1,
+          "total_calls_scheduled": 2,
+          "total_calls_finished": 0,
+          "last_updated_at_unix": 1800000001,
+          "status": "in_progress",
+          "retry_count": 0,
+          "telephony_call_config": {
+            "ringing_timeout_secs": 45,
+            "twilio_call_recording_enabled": false,
+            "twilio_machine_detection": {
+              "mode": "enable",
+              "actions": []
+            }
+          },
+          "target_concurrency_limit": 2,
+          "agent_name": "Acme guide",
+          "branch_name": "Guide branch"
+        }
+      ],
+      "next_doc": "batch & next",
+      "has_more": true
+    }
+  },
+  {
+    "id": "get_batch_call",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "batch_id": "batch/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/batch-calling/batch%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "batch/a ?#",
+      "phone_number_id": "phone_guide",
+      "phone_provider": "twilio",
+      "whatsapp_params": null,
+      "name": "Acme guide batch",
+      "agent_id": "agent_guide",
+      "branch_id": "branch_guide",
+      "environment": "staging",
+      "created_at_unix": 1800000000,
+      "scheduled_time_unix": 1800000300,
+      "timezone": "Europe/Berlin",
+      "total_calls_dispatched": 1,
+      "total_calls_scheduled": 2,
+      "total_calls_finished": 0,
+      "last_updated_at_unix": 1800000001,
+      "status": "in_progress",
+      "retry_count": 0,
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "target_concurrency_limit": 2,
+      "agent_name": "Acme guide",
+      "branch_name": "Guide branch",
+      "recipients": [
+        {
+          "id": "person_one",
+          "phone_number": "+12025550101",
+          "whatsapp_user_id": null,
+          "status": "in_progress",
+          "created_at_unix": 1800000000,
+          "updated_at_unix": 1800000001,
+          "conversation_id": "conv_example",
+          "conversation_initiation_client_data": null
+        }
+      ]
+    }
+  },
+  {
+    "id": "cancel_batch_call",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "batch_id": "batch/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/batch-calling/batch%2Fa%20%3F%23/cancel",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "batch/a ?#",
+      "phone_number_id": "phone_guide",
+      "phone_provider": "twilio",
+      "whatsapp_params": null,
+      "name": "Acme guide batch",
+      "agent_id": "agent_guide",
+      "branch_id": "branch_guide",
+      "environment": "staging",
+      "created_at_unix": 1800000000,
+      "scheduled_time_unix": 1800000300,
+      "timezone": "Europe/Berlin",
+      "total_calls_dispatched": 1,
+      "total_calls_scheduled": 2,
+      "total_calls_finished": 0,
+      "last_updated_at_unix": 1800000001,
+      "status": "cancelled",
+      "retry_count": 0,
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "target_concurrency_limit": 2,
+      "agent_name": "Acme guide",
+      "branch_name": "Guide branch"
+    }
+  },
+  {
+    "id": "retry_batch_call",
+    "profile": "place_call",
+    "args": {
+      "path_params": {
+        "batch_id": "batch/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/batch-calling/batch%2Fa%20%3F%23/retry",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "batch/a ?#",
+      "phone_number_id": "phone_guide",
+      "phone_provider": "twilio",
+      "whatsapp_params": null,
+      "name": "Acme guide batch",
+      "agent_id": "agent_guide",
+      "branch_id": "branch_guide",
+      "environment": "staging",
+      "created_at_unix": 1800000000,
+      "scheduled_time_unix": 1800000300,
+      "timezone": "Europe/Berlin",
+      "total_calls_dispatched": 1,
+      "total_calls_scheduled": 2,
+      "total_calls_finished": 0,
+      "last_updated_at_unix": 1800000001,
+      "status": "in_progress",
+      "retry_count": 1,
+      "telephony_call_config": {
+        "ringing_timeout_secs": 45,
+        "twilio_call_recording_enabled": false,
+        "twilio_machine_detection": {
+          "mode": "enable",
+          "actions": []
+        }
+      },
+      "target_concurrency_limit": 2,
+      "agent_name": "Acme guide",
+      "branch_name": "Guide branch"
+    }
+  },
+  {
+    "id": "delete_batch_call",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "batch_id": "batch/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/batch-calling/batch%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "export_batch_call",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "batch_id": "batch/a ?#"
+      },
+      "query_params": {
+        "limit": 2
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/batch-calling/batch%2Fa%20%3F%23/export",
+    "query": [
+      [
+        "limit",
+        "2"
+      ]
+    ],
+    "status": 200,
+    "media": "text/csv",
+    "response": "\ufeffrecipient,status,note\r\nperson_one,in_progress,\"Acme, guide\"\r\n"
+  }
+]

@@ -36,6 +36,21 @@ const idsByProfile = {
   tests: 'run_agent_test_suite_route cancel_test_invocation_route resubmit_tests_route',
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
+const reviewedGetCreate = ['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'];
+const credentialIssuers = [...reviewedGetCreate, 'create_realtime_session', 'register_twilio_call'];
+const realtimeAuthorizationPath = ['session', 'tools', '*', 'authorization'];
+const stage81Profiles = { create: [...reviewedGetCreate, 'create_realtime_session'].join(' '), place_call: 'register_twilio_call' };
+const stage82Profiles = {
+  read: 'list_phone_numbers_route get_phone_number_route list_sip_messages list_phone_numbers_page_route get_whatsapp_account list_whatsapp_accounts list_conversation_groups_route get_conversation_group_route',
+  create: 'create_conversation_group_route',
+  change: 'create_phone_number_route update_phone_number_route update_whatsapp_account update_conversation_group_route set_conversation_group_route',
+  delete: 'delete_phone_number_route delete_whatsapp_account delete_conversation_group_route clear_conversation_group_route',
+};
+const stage83Profiles = {
+  read: 'get_workspace_batch_calls get_batch_call export_batch_call',
+  change: 'cancel_batch_call', delete: 'delete_batch_call',
+  place_call: 'handle_twilio_outbound_call handle_exotel_outbound_call handle_sip_trunk_outbound_call whatsapp_outbound_call whatsapp_outbound_message create_batch_call retry_batch_call',
+};
 const stage76Profiles = { read: 'get_agent_summaries_route', create: 'upload_file_route', change: 'post_agent_avatar_route post_agent_hold_audio_route' };
 const stage75Profiles = {
   read: 'get_secret_dependencies_route get_secret_route get_secrets_route get_environment_variable list_environment_variables get_mcp_route get_mcp_tool_config_override_route list_mcp_server_tools_route list_mcp_servers_route',
@@ -52,7 +67,7 @@ const stage7Profiles = {
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
-  tests: [false, true, false, true], query_knowledge: [true, false, false, true],
+  tests: [false, true, false, true], query_knowledge: [true, false, false, true], place_call: [false, true, false, true],
 };
 const annotationNames = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'];
 export const PROFILE_EFFECTS = Object.fromEntries(Object.entries(profileTuples)
@@ -60,9 +75,9 @@ export const PROFILE_EFFECTS = Object.fromEntries(Object.entries(profileTuples)
 export const PROFILE_TOOLS = Object.freeze({
   read: 'elevenlabs_read_resource', create: 'elevenlabs_create_resource',
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
-  tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge',
+  tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -100,7 +115,7 @@ const sourceSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/), bytes: z.number().int().positive(),
   paths: z.number().int().nonnegative(), operations: z.number().int().positive(),
 }).strict();
-const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge']);
+const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'place_call']);
 const aliasSchema = z.object({
   operation_ids: z.array(text).nonempty(), prompt_path: z.array(text).nonempty(),
   own_properties: z.object({ llm_model: z.literal('llm'), knowledge_base_document_ids: z.literal('knowledge_base') }).strict(), reason: text,
@@ -116,8 +131,9 @@ const operationSchema = z.object({
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
   discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
-  timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(),
+  timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
+  credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional() }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
@@ -133,7 +149,7 @@ export const policySchema = z.object({
   milestones: z.array(z.object({ number: z.number().int().positive(), version: z.null(), proposed_version: text.optional() }).strict()),
   local_discovery: z.object({ tool: z.literal('elevenlabs_discover_api'), effects: effectsSchema }).strict(),
   reserved_profiles: z.array(z.object({
-    profile: z.enum(['run_job', 'place_call']), tool: text, milestone: z.number().int().positive(), effects: effectsSchema, reason: text,
+    profile: z.literal('run_job'), tool: text, milestone: z.number().int().positive(), effects: effectsSchema, reason: text,
   }).strict()),
   family_retry_checks: z.record(z.object({ read: text, tests: text.optional() }).strict()),
   operations: z.record(operationSchema),
@@ -170,6 +186,7 @@ export function matchesPrefix(path, prefix) {
   return path === prefix || path.startsWith(prefix + '/');
 }
 function classify(id, path) {
+  if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
   if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
@@ -214,22 +231,25 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
     if (row.status === 'admitted') {
-      if (![1, 7].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
+      if (![1, 7, 8].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
       const reviewedProfile = reviewedProfiles[id];
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
       const floor = { GET: 'read', DELETE: 'delete', PUT: 'change', PATCH: 'change' }[row.method];
-      if (floor && floor !== row.profile && !(row.method === 'PATCH' && row.profile === 'delete' && row.reviewed_patch_delete)) refuse('method effect floor', `${id}: ${row.method} requires ${floor}`);
+      if (floor && floor !== row.profile && !(row.method === 'GET' && row.profile === 'create' && row.reviewed_get_create && reviewedGetCreate.includes(id)) && !(row.method === 'PATCH' && row.profile === 'delete' && row.reviewed_patch_delete)) refuse('method effect floor', `${id}: ${row.method} requires ${floor}`);
       if (row.method !== 'POST' && floor === undefined) refuse('unsupported method', `${id}: ${row.method}`);
       if (row.method === 'POST' && row.profile === 'read' && !row.reviewed_post_read) refuse('unreviewed POST read', id);
+      if (row.reviewed_get_create !== undefined && (row.method !== 'GET' || row.profile !== 'create' || !reviewedGetCreate.includes(id))) refuse('misplaced reviewed GET create', id);
       if (row.reviewed_post_read !== undefined && (row.method !== 'POST' || row.profile !== 'read')) refuse('misplaced reviewed POST read', id);
       if (row.reviewed_patch_delete !== undefined && (row.method !== 'PATCH' || row.profile !== 'delete')) refuse('misplaced reviewed PATCH delete', id);
       if (row.manual_pagination !== undefined && (row.method !== 'GET' || row.profile !== 'read')) refuse('invalid manual pagination', id);
+      if (credentialIssuers.includes(id) && !row.credential_return_fields) refuse('missing credential return fields', id);
+      if (id === 'create_realtime_session' && ['sensitive_request_fields', 'sensitive_response_fields'].some(field => !row[field]?.some(path => isDeepStrictEqual(path, realtimeAuthorizationPath)))) refuse('missing realtime authorization protection', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
       const retryOperation = policy.operations[retryCheck];
       if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -247,7 +267,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 174, planned: 232, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 209, planned: 197, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -278,7 +298,6 @@ function validateProductionCensus(policy) {
   requireEqual(policy.milestones, [{ number: 1, proposed_version: '0.6.0', version: null }, ...[7, 8, 9, 10].map(number => ({ number, version: null }))], 'unpublished milestones');
   requireEqual(policy.reserved_profiles.map(row => ({ profile: row.profile, tool: row.tool, milestone: row.milestone, effects: row.effects })), [
     { profile: 'run_job', tool: 'elevenlabs_run_job', milestone: 9, effects: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } },
-    { profile: 'place_call', tool: 'elevenlabs_place_call', milestone: 8, effects: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
   ], 'unregistered reserved profiles');
 }
 
@@ -532,9 +551,10 @@ function successDescriptors(operation, transform, id) {
     const content = Object.entries(response.content ?? {});
     if (content.length === 0) responses.push({ status: Number(status), media_type: null });
     for (const [media, data] of content.sort()) {
-      if (!['application/json', 'text/plain', 'text/html', 'audio/mpeg'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
+      if (!['application/json', 'text/plain', 'text/html', 'audio/mpeg', 'text/csv'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
       if (media === 'audio/mpeg' && data.schema !== undefined) refuse('unsupported binary success schema', id);
-      responses.push({ status: Number(status), media_type: media, ...(data.schema === undefined ? {} : { schema: transform(data.schema, `${id}/response/${status}/${media}`) }) });
+      if (media === 'text/csv' && (data.schema?.type !== 'string' || data.schema?.format !== 'binary')) refuse('CSV requires a binary success schema', id);
+      responses.push({ status: Number(status), media_type: media, ...(data.schema === undefined ? {} : { schema: transform(data.schema, `${id}/response/${status}/${media}`, media === 'text/csv') }) });
     }
   }
   if (responses.length === 0) refuse('missing concrete success response', id);
@@ -562,12 +582,13 @@ function paginationDescriptor(operation, parameters, responses, spec, id, row) {
     return rootProperties(schema);
   });
   const unsupported = new Set(['offset', 'skip', 'limit', 'page', 'page_number', 'page_index', 'page_token', 'page_key', 'page_cursor',
-    'next_page_token', 'start_after', 'start_after_history_item_id', 'last_doc', 'next_page', 'next_token',
+    'next_page_token', 'start_after', 'start_after_history_item_id', 'last_doc', 'next_doc', 'next_page', 'next_token',
     'after', 'before', 'starting_after', 'ending_before', 'continuation', 'continuation_token', 'continuationToken', 'pagination', 'paging']);
   if (row.manual_pagination !== undefined) {
-    if (row.method !== 'GET' || row.profile !== 'read' || !queries.some(name => ['limit', 'page'].includes(name))
+    const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
+    if (row.method !== 'GET' || row.profile !== 'read' || (!documents && !queries.some(name => ['limit', 'page'].includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
-      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page'].includes(name))) refuse('invalid manual pagination', id);
+      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page', ...(documents ? ['last_doc', 'next_doc'] : [])].includes(name))) refuse('invalid manual pagination', id);
     return null;
   }
   if ([...queries, ...properties].some(name => unsupported.has(name))) refuse('unsupported pagination', `${id}: only cursor -> next_cursor is supported`);
@@ -600,12 +621,19 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     const responses = successDescriptors(operation, transform, id);
     checkSensitivePaths(row.sensitive_request_fields, [request.schema], defs, id);
     checkSensitivePaths(row.sensitive_response_fields, responses.map(response => response.schema), defs, id);
+    if (row.credential_return_fields?.some(path => !path.length) && !responses.some(response => response.schema?.type === 'string' && ['text/plain', 'text/html'].includes(response.media_type))) refuse('whole credential return requires scalar text', id);
+    checkSensitivePaths(row.credential_return_fields, responses.map(response => response.schema), defs, id);
+    for (const returned of row.credential_return_fields ?? []) {
+      if ((row.sensitive_response_fields ?? []).some(hidden => hidden.length === returned.length && hidden.every((part, i) => part === returned[i] || part === '*' || returned[i] === '*'))) refuse('overlapping credential return and sensitive response field', id);
+    }
     const sensitiveRequests = [...new Map([...(row.sensitive_request_fields ?? []), ...credentialRequestPaths(request.schema, defs)].map(path => [JSON.stringify(path), path])).values()];
     descriptors.push({
       operation_id: id, method: row.method, path: row.path, family: row.family, milestone: row.milestone,
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
+      ...(row.reviewed_get_create ? { reviewed_get_create: row.reviewed_get_create } : {}),
+      ...(row.credential_return_fields ? { credential_return_fields: row.credential_return_fields } : {}),
       ...(row.reviewed_patch_delete ? { reviewed_patch_delete: row.reviewed_patch_delete } : {}),
       ...(sensitiveRequests.length ? { sensitive_request_fields: sensitiveRequests } : {}),
       ...(row.sensitive_response_fields ? { sensitive_response_fields: row.sensitive_response_fields } : {}),
@@ -651,7 +679,7 @@ export function renderCoverage(rawPolicy, rosters) {
     `Source census: ${policy.source.paths} paths; ${policy.source.operations} HTTP operation IDs; ${policy.source.bytes.toLocaleString('en-US')} bytes.`, '',
     `Partition: **${counts.admitted} admitted + ${counts.planned} planned + ${counts.excluded} excluded = ${rows.length}**.`, '',
     'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.', '',
-    `Only admitted descriptors and their reachable component graph enter the generated catalogue. Seven registered API tools expose local discovery and six execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (39 total). The separate Agents package is unchanged. Reserved run_job and place_call tools are unregistered.`, '',
+    `Only admitted descriptors and their reachable component graph enter the generated catalogue. Eight registered API tools expose local discovery and seven execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (40 total). The separate Agents package is unchanged. Reserved run_job is unregistered.`, '',
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',
     'Provider constraints (including enums, required fields, maps and open objects) are preserved. Only synthesized path/query records are closed. Forbidden aliases are exact anchored own-property checks described in the compatibility overlay, separate from discovery search aliases. Enum errors refer to the 2026-11-08 snapshot and recommend a reviewed catalogue refresh.', '',

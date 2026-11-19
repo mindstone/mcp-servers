@@ -132,18 +132,6 @@
         "openWorldHint": true
       },
       "reason": "Reserved for actual paid audio resource creation; unregistered."
-    },
-    {
-      "profile": "place_call",
-      "tool": "elevenlabs_place_call",
-      "milestone": 8,
-      "effects": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": true
-      },
-      "reason": "Reserved for actual calls; unregistered."
     }
   ],
   "family_retry_checks": {
@@ -165,7 +153,17 @@
     "triage-tickets": {"read": "list_workspace_conversation_tickets_route"},
     "secrets": {"read": "get_secrets_route"},
     "environment-variables": {"read": "list_environment_variables"},
-    "mcp-servers": {"read": "list_mcp_servers_route"}
+    "mcp-servers": {"read": "list_mcp_servers_route"},
+    "conversation": {"read": "get_conversation_histories_route"},
+    "realtime": {"read": "get_conversation_histories_route"},
+    "twilio": {"read": "get_conversation_histories_route"},
+    "phone-numbers": {"read": "list_phone_numbers_route"},
+    "v2/phone-numbers": {"read": "list_phone_numbers_page_route"},
+    "whatsapp-accounts": {"read": "list_whatsapp_accounts"},
+    "batch-calling": {"read": "get_workspace_batch_calls"},
+    "exotel": {"read": "get_conversation_histories_route"},
+    "sip-trunk": {"read": "get_conversation_histories_route"},
+    "whatsapp": {"read": "get_conversation_histories_route"}
   },
   "operations": {
     "accept_merge_proposal_route": {
@@ -677,12 +675,17 @@
     "cancel_batch_call": {
       "method": "POST",
       "path": "/v1/convai/batch-calling/{batch_id}/cancel",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Cancels a running batch and marks recipients cancelled without undoing completed calls.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -693,7 +696,10 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/batch-calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_batch_call"
+      ]
     },
     "cancel_crawl_job_route": {
       "method": "POST",
@@ -778,19 +784,26 @@
     "clear_conversation_group_route": {
       "method": "DELETE",
       "path": "/v1/convai/realtime/conversations/{conversation_id}/conversation-group",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes a conversation's group association and the access supplied by that association.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_conversation_groups_route"],
+      "effect_note": "Removes a conversation's group association and the access supplied by that association."
     },
     "compile_procedures_route": {
       "method": "POST",
@@ -1180,12 +1193,17 @@
     "create_batch_call": {
       "method": "POST",
       "path": "/v1/convai/batch-calling/submit",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Schedules calls or supported WhatsApp contacts to the supplied recipients, potentially immediately.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -1196,7 +1214,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/batch-calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_batch_call"
+      ],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "create_branch_route": {
       "method": "POST",
@@ -1257,19 +1279,26 @@
     "create_conversation_group_route": {
       "method": "POST",
       "path": "/v1/convai/realtime/conversation-groups",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates a conversation group owned by the caller without moving conversations into it.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_conversation_groups_route"],
+      "effect_note": "Creates a conversation group owned by the caller without moving conversations into it."
     },
     "create_conversation_tag_route": {
       "method": "POST",
@@ -1581,12 +1610,17 @@
     "create_phone_number_route": {
       "method": "POST",
       "path": "/v1/convai/phone-numbers",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Imports a provider number and configures its live routing, credentials and optional agent assignment; Twilio SMS routing is enabled by default.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -1597,7 +1631,10 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/phone-numbers.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_phone_numbers_route"],
+      "effect_note": "Imports a provider number and configures its live routing, credentials and optional agent assignment; Twilio SMS routing is enabled by default.",
+      "sensitive_request_fields": [["outbound_trunk_config", "headers", "*"], ["token"], ["account_auth_token"], ["region_config", "token"], ["api_key"], ["api_token"], ["inbound_trunk_config", "credentials", "password"], ["outbound_trunk_config", "credentials", "password"]]
     },
     "create_podcast": {
       "method": "POST",
@@ -1693,19 +1730,47 @@
     "create_realtime_session": {
       "method": "POST",
       "path": "/v1/convai/realtime/client_secrets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates an ephemeral client credential and configuration for a realtime client session.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "credential_return_fields": [
+        [
+          "value"
+        ]
+      ],
+      "follow_ups": [],
+      "effect_note": "Returns the requested connection credential in data. The connector does not start a client connection or automatically repeat this operation.",
+      "sensitive_request_fields": [
+        [
+          "session",
+          "tools",
+          "*",
+          "authorization"
+        ]
+      ],
+      "sensitive_response_fields": [
+        [
+          "session",
+          "tools",
+          "*",
+          "authorization"
+        ]
+      ]
     },
     "create_secret_route": {
       "method": "POST",
@@ -2130,19 +2195,26 @@
     "delete_batch_call": {
       "method": "DELETE",
       "path": "/v1/convai/batch-calling/{batch_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Permanently deletes the batch and recipient records while retaining conversation history.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Deletes the batch and its recipient records permanently; conversations remain in history."
     },
     "delete_chapter_endpoint": {
       "method": "DELETE",
@@ -2191,19 +2263,26 @@
     "delete_conversation_group_route": {
       "method": "DELETE",
       "path": "/v1/convai/realtime/conversation-groups/{conversation_group_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Deletes the group, ungroups its conversations and revokes access granted through that group.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_conversation_groups_route"],
+      "effect_note": "Deletes the group, ungroups its conversations and revokes access granted through that group."
     },
     "delete_conversation_route": {
       "method": "DELETE",
@@ -2406,12 +2485,17 @@
     "delete_phone_number_route": {
       "method": "DELETE",
       "path": "/v1/convai/phone-numbers/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes an imported phone-number configuration and its routing association.",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -2422,7 +2506,9 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/phone-numbers.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_phone_numbers_route"],
+      "effect_note": "Removes an imported phone-number configuration and its routing association."
     },
     "delete_procedure_draft_route": {
       "method": "DELETE",
@@ -2712,19 +2798,26 @@
     "delete_whatsapp_account": {
       "method": "DELETE",
       "path": "/v1/convai/whatsapp-accounts/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp-accounts",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes the connected WhatsApp account configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["list_whatsapp_accounts"],
+      "effect_note": "Removes the connected WhatsApp account configuration."
     },
     "delete_workspace_webhook_route": {
       "method": "DELETE",
@@ -3310,19 +3403,26 @@
     "export_batch_call": {
       "method": "GET",
       "path": "/v1/convai/batch-calling/{batch_id}/export",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Downloads recipient and conversation results as CSV, including in-progress calls, without contacting recipients.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "manual_pagination": "query_params.limit previews the first N recipients; omit it to export all recipients. This is not a continuation cursor."
     },
     "forced_alignment": {
       "method": "POST",
@@ -3556,7 +3656,8 @@
         "agent"
       ],
       "rank": 50,
-      "follow_ups": []
+      "follow_ups": [],
+      "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "get_agent_summaries_route": {
       "method": "GET",
@@ -3849,12 +3950,17 @@
     "get_batch_call": {
       "method": "GET",
       "path": "/v1/convai/batch-calling/{batch_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads a batch and its recipients without changing their execution.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -3865,7 +3971,8 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/batch-calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_branch_route": {
       "method": "GET",
@@ -4010,19 +4117,25 @@
     "get_conversation_group_route": {
       "method": "GET",
       "path": "/v1/convai/realtime/conversation-groups/{conversation_group_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads a group's metadata and sharing summary without changing access.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_conversation_histories_route": {
       "method": "GET",
@@ -4078,19 +4191,32 @@
     "get_conversation_signed_link": {
       "method": "GET",
       "path": "/v1/convai/conversation/get-signed-url",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "conversation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Issues a signed connection URL authorizing a client to start an agent conversation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "credential_return_fields": [
+        [
+          "signed_url"
+        ]
+      ],
+      "follow_ups": [],
+      "effect_note": "Returns the requested connection credential in data. The connector does not start a client connection or automatically repeat this operation.",
+      "reviewed_get_create": "This GET issues a client authorization credential, so it requires create permission rather than a saved read grant."
     },
     "get_conversation_sip_messages": {
       "method": "GET",
@@ -4690,19 +4816,32 @@
     "get_livekit_token": {
       "method": "GET",
       "path": "/v1/convai/conversation/token",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "conversation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Issues a WebRTC session token and conversation ID for a client connection.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "credential_return_fields": [
+        [
+          "token"
+        ]
+      ],
+      "follow_ups": [],
+      "effect_note": "Returns the requested connection credential in data. The connector does not start a client connection or automatically repeat this operation.",
+      "reviewed_get_create": "This GET issues a client authorization credential, so it requires create permission rather than a saved read grant."
     },
     "get_mcp_route": {
       "method": "GET",
@@ -4830,12 +4969,17 @@
     "get_phone_number_route": {
       "method": "GET",
       "path": "/v1/convai/phone-numbers/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads one phone number configuration without changing it.",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -4846,7 +4990,9 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/phone-numbers.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "sensitive_response_fields": [["outbound_trunk", "headers", "*"], ["provider_config", "headers", "*"]]
     },
     "get_procedure_draft_route": {
       "method": "GET",
@@ -5348,19 +5494,33 @@
     "get_signed_url_deprecated": {
       "method": "GET",
       "path": "/v1/convai/conversation/get_signed_url",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "conversation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Issues conversation authorization through the deprecated underscore route.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "credential_return_fields": [
+        [
+          "signed_url"
+        ]
+      ],
+      "follow_ups": [],
+      "effect_note": "Returns the requested connection credential in data. The connector does not start a client connection or automatically repeat this operation.",
+      "reviewed_get_create": "This GET issues a client authorization credential, so it requires create permission rather than a saved read grant.",
+      "discovery_summary": "Issue a signed conversation URL through the deprecated underscore route; prefer get_conversation_signed_link."
     },
     "get_similar_library_voices": {
       "method": "POST",
@@ -5875,19 +6035,25 @@
     "get_whatsapp_account": {
       "method": "GET",
       "path": "/v1/convai/whatsapp-accounts/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp-accounts",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads WhatsApp account configuration without sending a message or call.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "get_workspace_audit_logs": {
       "method": "GET",
@@ -5909,12 +6075,17 @@
     "get_workspace_batch_calls": {
       "method": "GET",
       "path": "/v1/convai/batch-calling/workspace",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists existing workspace batches without dispatching or retrying recipients.",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -5925,7 +6096,9 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/batch-calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "manual_pagination": "Pagination is manual: pass data.next_doc as query_params.last_doc to this operation while data.has_more is true; keep the other filters. No cursor projection or automatic paging is performed."
     },
     "get_workspace_members": {
       "method": "GET",
@@ -5985,29 +6158,41 @@
     "handle_exotel_outbound_call": {
       "method": "POST",
       "path": "/v1/convai/exotel/outbound-call",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "exotel",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Initiates an outbound telephone call through the configured Exotel number.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "handle_sip_trunk_outbound_call": {
       "method": "POST",
       "path": "/v1/convai/sip-trunk/outbound-call",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "sip-trunk",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Initiates an outbound telephone call through the configured SIP trunk.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -6018,17 +6203,24 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "handle_twilio_outbound_call": {
       "method": "POST",
       "path": "/v1/convai/twilio/outbound-call",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "twilio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Initiates an outbound telephone call through the configured Twilio number.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -6039,7 +6231,9 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "invite_user": {
       "method": "POST",
@@ -6253,19 +6447,25 @@
     "list_conversation_groups_route": {
       "method": "GET",
       "path": "/v1/convai/realtime/conversation-groups",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists conversation groups without changing membership or access.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "list_conversation_tags_route": {
       "method": "GET",
@@ -6464,29 +6664,41 @@
     "list_phone_numbers_page_route": {
       "method": "GET",
       "path": "/v1/convai/v2/phone-numbers",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "v2/phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads a filtered page of configured numbers and outbound capabilities without placing calls.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "list_phone_numbers_route": {
       "method": "GET",
       "path": "/v1/convai/phone-numbers",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists configured phone numbers without changing routing or placing a call.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -6497,7 +6709,9 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/phone-numbers.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "sensitive_response_fields": [["*", "outbound_trunk", "headers", "*"], ["*", "provider_config", "headers", "*"]]
     },
     "list_procedures_route": {
       "method": "GET",
@@ -6559,19 +6773,25 @@
     "list_sip_messages": {
       "method": "GET",
       "path": "/v1/convai/phone-numbers/{phone_number_id}/sip-messages",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads stored SIP messages for a configured number without sending a SIP message.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "list_speech_engines": {
       "method": "GET",
@@ -6654,19 +6874,25 @@
     "list_whatsapp_accounts": {
       "method": "GET",
       "path": "/v1/convai/whatsapp-accounts",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp-accounts",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists connected WhatsApp accounts without contacting their recipients.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": []
     },
     "list_workspace_conversation_tickets_route": {
       "method": "GET",
@@ -6737,6 +6963,7 @@
       ]
     },
     "merge_preview_route": {
+      "discovery_summary": "Preview Merged Configuration. This previews branch changes; read get_agent_route without branch_id or version_id to report the agent's current live settings.",
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{source_branch_id}/merge-preview",
       "status": "admitted",
@@ -6771,7 +6998,8 @@
           }
         }
       ],
-      "follow_ups": []
+      "follow_ups": [],
+      "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "migrate_segments": {
       "method": "POST",
@@ -6819,7 +7047,8 @@
         "agent"
       ],
       "rank": 50,
-      "follow_ups": []
+      "follow_ups": [],
+      "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "patch_pronunciation_dictionary": {
       "method": "PATCH",
@@ -7329,6 +7558,7 @@
       ]
     },
     "rebase_preview_route": {
+      "discovery_summary": "Preview Rebased Configuration. This previews branch changes; read get_agent_route without branch_id or version_id to report the agent's current live settings.",
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/branches/{branch_id}/rebase-preview",
       "status": "admitted",
@@ -7349,7 +7579,8 @@
         "evidence": []
       },
       "replacements": [],
-      "follow_ups": []
+      "follow_ups": [],
+      "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "redirect_to_mintlify": {
       "method": "GET",
@@ -7401,19 +7632,40 @@
     "register_twilio_call": {
       "method": "POST",
       "path": "/v1/convai/twilio/register-call",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "twilio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Registers a live telephone call and returns TwiML for connecting it to the agent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "credential_return_fields": [
+        []
+      ],
+      "follow_ups": [],
+      "effect_note": "Returns TwiML connection instructions as text; the connector does not execute XML, follow its URLs or prove the call connected. No automatic retries are made.",
+      "examples": [
+        {
+          "operation_id": "register_twilio_call",
+          "body": {
+            "agent_id": "agent_example",
+            "from_number": "+12025550100",
+            "to_number": "+12025550101",
+            "direction": "inbound"
+          }
+        }
+      ]
     },
     "remove_mcp_server_tool_approval_route": {
       "method": "DELETE",
@@ -7664,12 +7916,17 @@
     "retry_batch_call": {
       "method": "POST",
       "path": "/v1/convai/batch-calling/{batch_id}/retry",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "batch-calling",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Calls failed and no-response batch recipients again.",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -7680,7 +7937,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/batch-calls.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [
+        "get_batch_call"
+      ],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "run_agent_test_suite_route": {
       "method": "POST",
@@ -7888,19 +8149,26 @@
     "set_conversation_group_route": {
       "method": "PUT",
       "path": "/v1/convai/realtime/conversations/{conversation_id}/conversation-group",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Moves a conversation into the selected group, changing group-derived access.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_group_route"],
+      "effect_note": "Moves a conversation into the selected group, changing group-derived access. A group metadata read describes access, but does not verify conversation membership."
     },
     "set_rules": {
       "method": "POST",
@@ -10056,19 +10324,26 @@
     "update_conversation_group_route": {
       "method": "PATCH",
       "path": "/v1/convai/realtime/conversation-groups/{conversation_group_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "realtime",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Changes the title or description of an existing group.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_conversation_group_route"],
+      "effect_note": "Changes the title or description of an existing group."
     },
     "update_conversation_tag_route": {
       "method": "PATCH",
@@ -10321,12 +10596,17 @@
     "update_phone_number_route": {
       "method": "PATCH",
       "path": "/v1/convai/phone-numbers/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "phone-numbers",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Changes the assigned agent, branch, environment or SIP routing and credentials for a number, affecting live calls.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -10337,7 +10617,11 @@
           "@mindstone/mcp-server-elevenlabs-agents/src/tools/phone-numbers.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_phone_number_route"],
+      "effect_note": "Changes the assigned agent, branch, environment or SIP routing and credentials for a number, affecting live calls.",
+      "sensitive_request_fields": [["outbound_trunk_config", "headers", "*"], ["inbound_trunk_config", "credentials", "password"], ["outbound_trunk_config", "credentials", "password"]],
+      "sensitive_response_fields": [["outbound_trunk", "headers", "*"], ["provider_config", "headers", "*"]]
     },
     "update_procedure_draft_route": {
       "method": "PATCH",
@@ -10544,19 +10828,26 @@
     "update_whatsapp_account": {
       "method": "PATCH",
       "path": "/v1/convai/whatsapp-accounts/{phone_number_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp-accounts",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Changes the account's assigned agent and messaging, audio-response or typing-indicator behavior, affecting live messages.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": ["get_whatsapp_account"],
+      "effect_note": "Changes the account's assigned agent and messaging, audio-response or typing-indicator behavior, affecting live messages."
     },
     "update_workspace_member": {
       "method": "POST",
@@ -10752,36 +11043,50 @@
     "whatsapp_outbound_call": {
       "method": "POST",
       "path": "/v1/convai/whatsapp/outbound-call",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Starts the WhatsApp outbound-call workflow, which can send a call-permission template to the recipient.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "whatsapp_outbound_message": {
       "method": "POST",
       "path": "/v1/convai/whatsapp/outbound-message",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 8,
       "family": "whatsapp",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "place_call",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Sends a WhatsApp template message to the selected recipient and creates its conversation.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "effect_note": "Provider acceptance does not prove that a person answered or received a message. A timeout may follow dispatch; no automatic retry or polling is made."
     },
     "workspace_usage": {
       "method": "POST",

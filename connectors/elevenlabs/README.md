@@ -11,7 +11,7 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 
 - **Version:** [0.7.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [39](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers)
+- **Tools:** [40](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers, phone and WhatsApp account configuration and conversation groups)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -97,7 +97,7 @@ node dist/index.js
 
 ## Host configuration examples
 
-### Claude Desktop / Cursor
+### MCP desktop clients
 
 ```json
 {
@@ -129,7 +129,7 @@ node dist/index.js
 }
 ```
 
-## Tools (39)
+## Tools (40)
 
 ### Agents, tools, knowledge and saved Tests
 
@@ -139,18 +139,31 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The seven API tools cover **174 admitted operations in source** (40 in the published 0.6.0 release) from the
-2026-11-08 API snapshot. Here, admitted means supported by these seven tools in
-this connector snapshot; find them with `elevenlabs_discover_api` or the coverage
+The eight API tools cover **209 admitted operations in source** from the
+2026-11-08 API snapshot. Here, admitted means supported by these eight tools in
+this connector snapshot; consult the package changelog for release history and find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 174 admitted, 232 planned and 109 excluded, with reasons and
+515 operations: 209 admitted, 197 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
 The usage calculators and test-summary lookup use reviewed read-only POST requests;
 they do not run tests or generate audio. Deletion stays in the delete profile.
+
+Phone-number imports and routing changes, and WhatsApp account setting changes,
+use the destructive change tool because they affect live calls or messages. Reads
+include stored SIP messages and paged number configuration. Stored custom SIP header
+values are hidden wherever phone numbers are returned, including agent configurations
+and previews; header names, usernames, credential-presence flags and attribute-to-header
+mappings remain visible. Removing a number or
+WhatsApp account uses the delete tool. Conversation groups support metadata and
+sharing reads, creation, title and description changes and moving a conversation into a group.
+Clearing an association and deleting a group use the delete tool because they
+remove group-derived access. A group metadata read describes sharing; it does not
+independently verify conversation membership. None of these configuration calls
+places a call or sends a message.
 
 Agent lifecycle coverage includes branches, drafts, version metadata, deployments,
 merge proposals, procedures and agent links, widgets, topics and assignable users.
@@ -179,15 +192,44 @@ clips to 180 seconds. The snapshot gives no avatar size limit, so the runtime
 buffer limit applies. These uploads use the same file authorization and opened
 descriptor checks as document uploads; a canonical filename determines the type.
 
+Signed conversation URLs (including the deprecated underscore route), WebRTC tokens and
+ephemeral realtime client credentials use the create tool: issuing authorization is
+a write even when the provider uses GET. Read and query grants acquire no credential
+minting or call permission. Returned credentials stay usable in enveloped `data`;
+the assistant receives them and the host may retain them in the conversation.
+Provider failure diagnostics omit raw detail for these operations. Echoed upstream
+realtime tool authorization remains write-only and is redacted. Only declared issued-credential
+paths bypass credential-name masking; the API key and submitted secrets are always redacted,
+even if an issued credential has the same value.
+
+Outbound Twilio, Exotel and SIP calls, WhatsApp calls and template messages, batch
+submission and batch retry use the destructive `elevenlabs_place_call` tool. These
+actions can contact real people and incur provider charges. Provider acceptance,
+including a returned conversation ID, does not prove someone answered or received
+a message; provider rejections and null call IDs remain visible. Live Twilio
+registration returns TwiML as untrusted text; the connector does not execute it or
+claim a completed dial. Permission prompts are up to the MCP host; the tool is marked
+destructive. No automatic retry or polling is added.
+
+Batch submission takes structured JSON recipients, with scheduling, timezone,
+telephony or WhatsApp controls and optional concurrency. It does not read local
+CSV files. Cancelling uses the change tool because it stops live calls; deleting
+uses delete and removes batch and recipient records while retaining conversations.
+Workspace batch pages keep `next_doc` and `has_more` in `data`; pass `next_doc` as
+`query_params.last_doc` yourself. CSV exports use the shared workspace artifact
+path and preserve exact bytes in a `.csv` file. The optional export `limit` previews
+the first N recipients; it is not a continuation cursor.
+
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 78 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 26 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 41 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 25 deletes | Destructive |
+| `elevenlabs_read_resource` | 89 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 31 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 47 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 30 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
+| `elevenlabs_place_call` | 8 call, message, batch submit/retry and live registration operations | Destructive; provider services may incur charges |
 
 Receipt follow-ups name required path and query parameters; optional filters matching
 known request IDs are marked optional. Other listed operation IDs are names only. Before the
@@ -286,7 +328,7 @@ and credit disclosure; it does not create conversations or place calls.
 
 Secrets, environment variables and MCP server configurations are also available through discovery.
 Agent-link tokens and signed source-file URLs delegate access the read already has to whoever holds them; they are intentionally returned by those reads.
-Argument and local file errors from the seven API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
+Argument and local file errors from the eight API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
 MCP approval changes and overrides of existing MCP tools use the change profile; removals, including environment-value removal by update, use delete.
 
 ### Configuration
@@ -345,7 +387,7 @@ For standalone clients, including clients that do not negotiate `files/readModes
 
 ## Maintainer notes: API catalogue
 
-The API catalogue generator produces the pinned contracts used by the seven API
+The API catalogue generator produces the pinned contracts used by the eight API
 tools. Regenerate with `npm run api:generate -- --spec <pinned.json-or-gzip>` and
 verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. The input must match
 the recorded original-byte pin; the whole provider snapshot is not distributed

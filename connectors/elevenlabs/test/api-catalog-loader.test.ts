@@ -8,6 +8,7 @@ import type { ApiCatalog } from '../src/api-catalog.js';
 import { mswServer } from './helpers/setup.js';
 
 const newToolAnnotations = {
+  elevenlabs_place_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_discover_api: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   elevenlabs_read_resource: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   elevenlabs_create_resource: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -23,7 +24,7 @@ function expectIntegratedRoster(tools: Tool[]) {
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
   const legacyNames = new Set(legacyTools.map(tool => tool.name));
   expect(legacyTools).toHaveLength(32);
-  expect(wireTools).toHaveLength(39);
+  expect(wireTools).toHaveLength(40);
   expect(wireTools.filter(tool => legacyNames.has(tool.name)).sort(byName))
     .toStrictEqual([...legacyTools].sort(byName));
   expect(wireTools.filter(tool => !legacyNames.has(tool.name)).map(({ name, annotations }) => ({ name, annotations })).sort(byName))

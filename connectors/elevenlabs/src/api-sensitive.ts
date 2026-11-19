@@ -55,9 +55,14 @@ const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 
 export interface Redactor {
   include(value: string): void;
-  redact(value: unknown): unknown;
+  redact(value: unknown, response?: ResponseRedaction): unknown;
   text(value: string): string;
   wrap(value: string, source: string): string;
+}
+
+interface ResponseRedaction {
+  sensitive_response_fields?: readonly (readonly string[])[];
+  credential_return_fields?: readonly (readonly string[])[];
 }
 
 /**
@@ -83,7 +88,24 @@ const MAX_DECODE_DEPTH = 16;
 
 /** The secrets stay in this closure; every output uses the same type-independent matcher. */
 export function createRedactor(secrets: readonly SubmittedSecret[]): Redactor {
-  function redact(value: unknown): unknown {
+  function redact(value: unknown, response?: ResponseRedaction): unknown {
+    if (response) {
+      value = redactAtPaths(value, response.sensitive_response_fields ?? []);
+      if (response.credential_return_fields) {
+        const returns = response.credential_return_fields;
+        // The mask applies to parsed response keys, not JSON documents embedded in strings; only the submitted-secret and API-key matcher applies there.
+        function mask(item: unknown, path: string[], sensitive = false): unknown {
+          if (Array.isArray(item)) return item.map((child, index) => mask(child, [...path, String(index)], sensitive));
+          if (isRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) =>
+            [key, mask(child, [...path, key], sensitive || isCredentialKey(key) || key === 'signed_url')]));
+          const issued = returns.some(declared => declared.length === path.length && declared.every((part, index) => part === '*' || part === path[index]));
+          return sensitive && !issued && ['string', 'number', 'boolean'].includes(typeof item) ? '[REDACTED]' : item;
+        }
+        // Only actual response paths bypass credential-key masking. Submitted-secret matching below
+        // still applies everywhere, including issued values that equal (or contain) a submitted secret.
+        value = mask(value, []);
+      }
+    }
     const patterns = new Set<string>();
     for (const secret of secrets) {
       const raw = String(secret);

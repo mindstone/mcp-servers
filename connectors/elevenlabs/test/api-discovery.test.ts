@@ -12,12 +12,12 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(174);
+    expect(catalog.operations).toHaveLength(209);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
       'elevenlabs_discover_api', 'elevenlabs_read_resource', 'elevenlabs_create_resource',
-      'elevenlabs_change_resource', 'elevenlabs_delete_resource', 'elevenlabs_run_agent_tests', 'elevenlabs_query_knowledge',
+      'elevenlabs_change_resource', 'elevenlabs_delete_resource', 'elevenlabs_run_agent_tests', 'elevenlabs_query_knowledge', 'elevenlabs_place_call',
     ]);
   });
 
@@ -85,8 +85,9 @@ describe('discovery', () => {
       const exampleId = description.instructions.match(/EXAMPLE: elevenlabs_discover_api\(\{operation_id:"([a-z_]+)"\}/)![1];
       const example = await getOperation(exampleId);
       for (const [, location, name] of description.instructions.matchAll(/\b(path_params|query_params)\.([a-z_]+)\b/g)) {
-        const schema = location === 'path_params' ? example.parameters.path : example.parameters.query;
-        expect(typeof schema === 'object' && schema.properties, `${exampleId}: ${location}.${name}`).toHaveProperty(name);
+        const target = op.manual_pagination?.includes(`${location}.${name}`) ? op : example;
+        const schema = location === 'path_params' ? target.parameters.path : target.parameters.query;
+        expect(typeof schema === 'object' && schema.properties, `${target.operation_id}: ${location}.${name}`).toHaveProperty(name);
       }
       expect(contract.validation.snapshot_date).toBe(catalog.compatibility_overlay.enum_snapshot_date);
     }
@@ -113,7 +114,7 @@ describe('discovery', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiBoundaryError);
       const failure = error as ApiBoundaryError;
-      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, conversations, environment-variables, environments, llm-usage, mcp-servers, secrets, settings, tags, triage-tickets, users.' });
+      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, batch-calling, conversation, conversations, environment-variables, environments, exotel, llm-usage, mcp-servers, phone-numbers, realtime, secrets, settings, sip-trunk, tags, triage-tickets, twilio, users, v2/phone-numbers, whatsapp, whatsapp-accounts.' });
       expect(failure.resolution).toContain('elevenlabs_discover_api({query:"agents"})');
       expect(failure.resolution).toContain("previous discovery result's next_cursor");
       expect(failure.resolution).toContain('Replace create_agent_route in both examples with the operation_id you intend to use.');

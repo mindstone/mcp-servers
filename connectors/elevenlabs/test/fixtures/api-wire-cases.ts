@@ -1,3 +1,8 @@
+import callingCases from './api-calling-wire-cases.json' with { type: 'json' };
+import batchCallingCases from './api-batch-calling-wire-cases.json' with { type: 'json' };
+import phoneManagementCases from './api-phone-management-wire-cases.json' with { type: 'json' };
+import conversationGroupCases from './api-conversation-groups-wire-cases.json' with { type: 'json' };
+import liveSessionCases from './api-live-session-wire-cases.json' with { type: 'json' };
 import sensitiveCases from './api-sensitive-wire-cases.json' with { type: 'json' };
 import conversationCases from './api-conversations-wire-cases.json' with { type: 'json' };
 import knowledgeBaseCases from './api-knowledge-base-wire-cases.json' with { type: 'json' };
@@ -5,7 +10,7 @@ import lifecycleCases from './api-agent-lifecycle-wire-cases.json' with { type: 
 import jsonFamilyCases from './api-json-family-wire-cases.json' with { type: 'json' };
 // Literal expectations transcribed from the 2026-11-08 provider snapshot, not the generated catalogue.
 // Original and additional JSON family expectations are literal; multipart cases carry their own file bytes and receipts.
-export type WireProfile = 'read' | 'create' | 'change' | 'delete' | 'tests' | 'query_knowledge';
+export type WireProfile = 'read' | 'create' | 'change' | 'delete' | 'tests' | 'query_knowledge' | 'place_call';
 export interface WireCase {
   id: string;
   profile: WireProfile;
@@ -15,7 +20,7 @@ export interface WireCase {
   query: [string, string][];
   body?: unknown;
   status: number;
-  media: 'application/json' | 'text/html' | 'audio/mpeg' | null;
+  media: 'application/json' | 'text/html' | 'audio/mpeg' | 'text/csv' | null;
   response: unknown;
 }
 
@@ -28,6 +33,11 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...callingCases as WireCase[],
+  ...batchCallingCases as WireCase[],
+  ...liveSessionCases as WireCase[],
+  ...phoneManagementCases as WireCase[],
+  ...conversationGroupCases as WireCase[],
   {
     id: 'get_agent_summaries_route', profile: 'read', args: { query_params: { agent_ids: ['agent/a ?#', 'agent_second'] } },
     method: 'GET', path: '/v1/convai/agents/summaries', query: [['agent_ids', 'agent/a ?#'], ['agent_ids', 'agent_second']],

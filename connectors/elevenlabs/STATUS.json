@@ -10,7 +10,7 @@
     ]
   },
   "tools": {
-    "count": 39,
+    "count": 40,
     "domains": [
       "account and usage",
       "voices and pronunciation",
@@ -21,7 +21,9 @@
       "API discovery and voice-agent lifecycle",
       "agent tools, knowledge bases and tests",
       "conversations and review",
-      "workspace secrets, environments and MCP servers"
+      "workspace secrets, environments and MCP servers",
+      "phone and WhatsApp account configuration and conversation groups",
+      "outbound calls, WhatsApp messages and batch calling"
     ]
   },
   "surface": "cloud-api",

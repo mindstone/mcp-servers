@@ -1912,5 +1912,390 @@
       "openWorldHint": true
     },
     "method": "POST"
+  },
+  "create_realtime_session": {
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "get_conversation_signed_link": {
+    "method": "GET",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "get_livekit_token": {
+    "method": "GET",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "get_signed_url_deprecated": {
+    "method": "GET",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "register_twilio_call": {
+    "method": "POST",
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "clear_conversation_group_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "create_conversation_group_route": {
+    "method": "POST",
+    "profile": "create",
+    "tool": "elevenlabs_create_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "create_phone_number_route": {
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "delete_conversation_group_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "delete_phone_number_route": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "delete_whatsapp_account": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "get_conversation_group_route": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "get_phone_number_route": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "get_whatsapp_account": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_conversation_groups_route": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_phone_numbers_page_route": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_phone_numbers_route": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_sip_messages": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_whatsapp_accounts": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "set_conversation_group_route": {
+    "method": "PUT",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "update_conversation_group_route": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "update_phone_number_route": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "update_whatsapp_account": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "cancel_batch_call": {
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "create_batch_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "delete_batch_call": {
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "DELETE"
+  },
+  "export_batch_call": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_batch_call": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "get_workspace_batch_calls": {
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET"
+  },
+  "handle_exotel_outbound_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "handle_sip_trunk_outbound_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "handle_twilio_outbound_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "retry_batch_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "whatsapp_outbound_call": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
+  },
+  "whatsapp_outbound_message": {
+    "profile": "place_call",
+    "tool": "elevenlabs_place_call",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST"
   }
 }

@@ -243,6 +243,7 @@ export function extensionFromContentType(contentType: string | null | undefined)
   if (!contentType) return 'mp3';
   const ct = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
   const map: Record<string, string> = {
+    'text/csv': 'csv',
     'audio/mpeg': 'mp3',
     'audio/mp3': 'mp3',
     'audio/wav': 'wav',

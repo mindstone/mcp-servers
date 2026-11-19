@@ -5,14 +5,18 @@ import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 export type JsonSchema = boolean | Record<string, unknown>;
-export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge']);
+export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'place_call']);
 export type ApiProfile = z.infer<typeof profileSchema>;
 export const API_TOOLS = {
   discover: 'elevenlabs_discover_api', read: 'elevenlabs_read_resource',
   create: 'elevenlabs_create_resource', change: 'elevenlabs_change_resource',
   delete: 'elevenlabs_delete_resource', tests: 'elevenlabs_run_agent_tests',
-  query_knowledge: 'elevenlabs_query_knowledge',
+  query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 } as const;
+
+const reviewedGetCreates = ['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'];
+const credentialIssuers = [...reviewedGetCreates, 'create_realtime_session', 'register_twilio_call'];
+const realtimeAuthorizationPath = ['session', 'tools', '*', 'authorization'];
 
 export interface ValidationIssue { path: string[]; keyword: string; message: string }
 export function inputIssues(issues: z.ZodIssue[], allowedFields: (path: string[]) => string[]): ValidationIssue[] {
@@ -68,7 +72,7 @@ export const effectsSchema = z.object({ readOnlyHint: z.boolean(), destructiveHi
 const parameterRecord = z.object({ type: z.literal('object'), properties: dictionary(schemaValue), required: z.array(text), additionalProperties: z.literal(false) }).strict();
 const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), required: z.boolean(), schema: schemaValue }).strict();
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
-export const binaryResponseMedia = ['audio/mpeg'] as const;
+export const binaryResponseMedia = ['audio/mpeg', 'text/csv'] as const;
 export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', ...binaryResponseMedia]);
 export function isBinaryResponseMedia(media: string | null): media is typeof binaryResponseMedia[number] {
   return binaryResponseMedia.some(candidate => candidate === media);
@@ -77,8 +81,9 @@ const responseSchema = z.object({ status: z.number().int().min(200).max(299), me
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
-  milestone: z.union([z.literal(1), z.literal(7)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(),
+  milestone: z.union([z.literal(1), z.literal(7), z.literal(8)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
+  credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),
   summary: z.string(), description: z.string(), deprecated: z.boolean(),
   parameters: z.object({ path: parameterRecord, query: parameterRecord, query_serialization: dictionary(z.literal('form-explode')) }).strict(),
@@ -158,6 +163,21 @@ function sensitivePathExists(schema: JsonSchema | undefined, path: readonly stri
   if (field === '*') return [schema.items, schema.additionalProperties].some(child => sensitivePathExists(child as JsonSchema, rest, catalog));
   return isRecord(schema.properties) && Object.hasOwn(schema.properties, field) && sensitivePathExists(schema.properties[field] as JsonSchema, rest, catalog);
 }
+function responseProperties(schema: JsonSchema | undefined, catalog: ApiCatalog, seen = new Set<string>()): string[] {
+  if (!isRecord(schema)) return [];
+  const names = isRecord(schema.properties) ? Object.keys(schema.properties) : [];
+  if (typeof schema.$ref === 'string' && !seen.has(schema.$ref)) {
+    const next = new Set(seen); next.add(schema.$ref);
+    names.push(...responseProperties(catalog.$defs[definitionName(schema.$ref)], catalog, next));
+  }
+  for (const key of ['allOf', 'anyOf', 'oneOf']) if (Array.isArray(schema[key])) {
+    for (const branch of schema[key]) names.push(...responseProperties(branch as JsonSchema, catalog, new Set(seen)));
+  }
+  return names;
+}
+const unsupportedPagination = new Set(['offset', 'skip', 'limit', 'page', 'page_number', 'page_index', 'page_token', 'page_key', 'page_cursor',
+  'next_page_token', 'start_after', 'start_after_history_item_id', 'last_doc', 'next_doc', 'next_page', 'next_token',
+  'after', 'before', 'starting_after', 'ending_before', 'continuation', 'continuation_token', 'continuationToken', 'pagination', 'paging']);
 export function enumGuidance(catalog: ApiCatalog): string {
   return `Use an allowed value for this enum in the ${catalog.compatibility_overlay.enum_snapshot_date} snapshot. Inspect the field schema or a named definition through elevenlabs_discover_api. Ask the connector maintainer to refresh the reviewed API catalogue if the provider added a value. If unsure who that is, contact whoever manages your connector installation.`;
 }
@@ -211,14 +231,24 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
   if (byId.size !== catalog.operations.length) invalid('Duplicate operation ID.');
   for (const op of catalog.operations) {
     if (op.tool !== API_TOOLS[op.profile]) invalid('Operation profile/tool mismatch.');
-    const expected = { readOnlyHint: ['read', 'query_knowledge'].includes(op.profile), destructiveHint: ['change', 'delete', 'tests'].includes(op.profile), idempotentHint: op.profile === 'read', openWorldHint: true };
+    const expected = { readOnlyHint: ['read', 'query_knowledge'].includes(op.profile), destructiveHint: ['change', 'delete', 'tests', 'place_call'].includes(op.profile), idempotentHint: op.profile === 'read', openWorldHint: true };
     if (Object.keys(expected).some(key => op.effects[key as keyof typeof expected] !== expected[key as keyof typeof expected])) invalid('Operation profile/effect mismatch.');
-    if ((op.method === 'GET' && op.profile !== 'read') || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change' && !(op.method === 'PATCH' && op.profile === 'delete' && op.reviewed_patch_delete)) || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
+    const reviewedGetCreate = reviewedGetCreates.includes(op.operation_id);
+    if ((op.method === 'GET' && op.profile !== 'read' && !(op.profile === 'create' && op.reviewed_get_create && reviewedGetCreate)) || (['PUT', 'PATCH'].includes(op.method) && op.profile !== 'change' && !(op.method === 'PATCH' && op.profile === 'delete' && op.reviewed_patch_delete)) || (op.method === 'DELETE' && op.profile !== 'delete') || (op.method === 'POST' && op.profile === 'read' && !op.reviewed_post_read)) invalid('Method/effect mismatch.');
+    if (op.reviewed_get_create !== undefined && (op.method !== 'GET' || op.profile !== 'create' || !reviewedGetCreate)) invalid('Misplaced reviewed GET create.');
     if (op.reviewed_patch_delete !== undefined && (op.method !== 'PATCH' || op.profile !== 'delete')) invalid('Misplaced reviewed PATCH delete.');
     if (op.reviewed_post_read !== undefined && (op.method !== 'POST' || op.profile !== 'read')) invalid('Misplaced reviewed POST read.');
+    if (credentialIssuers.includes(op.operation_id) && !op.credential_return_fields) invalid('Missing credential return fields.');
+    if (op.operation_id === 'create_realtime_session' && [op.sensitive_request_fields, op.sensitive_response_fields].some(paths => !paths?.some(path => JSON.stringify(path) === JSON.stringify(realtimeAuthorizationPath)))) invalid('Missing realtime authorization protection.');
+    const queries = Object.keys(op.parameters.query.properties);
+    const properties = op.responses.flatMap(response => responseProperties(response.schema, catalog));
+    const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
+    const pagingNames = [...queries, ...properties].filter(name => unsupportedPagination.has(name));
     if (op.manual_pagination !== undefined && (op.method !== 'GET' || op.profile !== 'read' || op.pagination !== null
-      || !['page', 'limit'].some(name => Object.hasOwn(op.parameters.query.properties, name))
-      || Object.hasOwn(op.parameters.query.properties, 'cursor'))) invalid('Invalid manual pagination.');
+      || (!documents && !['page', 'limit'].some(name => queries.includes(name)))
+      || queries.includes('cursor') || properties.includes('next_cursor')
+      || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : [])].includes(name)))) invalid('Invalid manual pagination.');
+    if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
     const retryOperation = byId.get(op.check_before_retry);
     if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
     if (/[?#\u0000-\u0020\u007f]/.test(op.path) || op.path.startsWith('//') || op.path.split('/').some(part => part === '.' || part === '..')) invalid('Invalid operation path.');
@@ -241,14 +271,20 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (new Set(op.responses.map(response => `${response.status}:${response.media_type}`)).size !== op.responses.length) invalid('Duplicate response descriptor.');
     op.responses.forEach((response, index) => {
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
-      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`);
+      if (response.media_type === 'text/csv' && (!isRecord(response.schema) || response.schema.type !== 'string' || response.schema.format !== 'binary')) invalid('CSV requires a binary success schema.');
+      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, response.media_type === 'text/csv');
     });
     for (const [paths, schemas] of [
       [op.sensitive_request_fields, [op.request.schema]],
       [op.sensitive_response_fields, op.responses.map(response => response.schema)],
+      [op.credential_return_fields, op.responses.map(response => response.schema)],
     ] as const) {
       if (new Set(paths?.map(path => JSON.stringify(path))).size !== (paths?.length ?? 0)) invalid('Duplicate sensitive field.');
       for (const path of paths ?? []) if (!schemas.some(schema => sensitivePathExists(schema, path, catalog))) invalid('Unbound sensitive field.');
+    }
+    if (op.credential_return_fields?.some(path => !path.length) && !op.responses.some(response => isRecord(response.schema) && response.schema.type === 'string' && ['text/plain', 'text/html'].includes(response.media_type!))) invalid('Whole credential return requires scalar text.');
+    for (const returned of op.credential_return_fields ?? []) {
+      if ((op.sensitive_response_fields ?? []).some(hidden => hidden.length === returned.length && hidden.every((part, i) => part === returned[i] || part === '*' || returned[i] === '*'))) invalid('Overlapping credential return and sensitive response field.');
     }
     if (op.pagination) {
       if (!Object.hasOwn(op.parameters.query.properties, op.pagination.request)) invalid('Pagination operand missing.');
@@ -387,5 +423,6 @@ const profileInstructions: Record<ApiProfile, string> = {
   change: 'COST: provider work may spend credits. WHEN TO USE: explicitly modify resources; updates can overwrite or replace content and arrays. The connector does not fetch or merge existing configuration, and does not guarantee that omitted PATCH fields survive at the provider. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"patch_agent_settings_route"}) before elevenlabs_change_resource.',
   delete: 'COST: provider limits apply. WHEN TO USE: explicitly delete a resource. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"delete_agent_route"}) before elevenlabs_delete_resource.',
   tests: 'COST: Tests may spend credits and invoke real integrations unless the caller explicitly configures mocks. Before running, use elevenlabs_read_resource to inspect the saved Test (get_agent_response_test_route), target agent (get_agent_route) and referenced tools (get_tool_route) for external actions. Check explicit mock configuration, including tool_mock_config, tool_mock_overrides and fallback behavior where supported. WHEN TO USE: run, cancel or resubmit saved Tests. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"run_agent_test_suite_route"}) before elevenlabs_run_agent_tests; running a saved Test does not itself configure mocks.',
+  place_call: 'COST: calls and provider services may incur charges. WHEN TO USE: explicitly place or schedule recipient calls, send WhatsApp template messages, retry failed or unanswered batch recipients, or register a live call connection. Provider acceptance is not proof of an answered call or delivered message. Returned TwiML is connection instructions, not proof of a connected call. No automatic retries or polling. RELATED TOOLS: elevenlabs_discover_api, elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"register_twilio_call"}) before elevenlabs_place_call.',
   query_knowledge: 'COST: knowledge queries may spend credits. WHEN TO USE: retrieve knowledge without creating a conversation. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"query_agent_knowledge_base_rag_route"}) before elevenlabs_query_knowledge.',
 };

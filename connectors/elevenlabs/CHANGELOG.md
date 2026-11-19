@@ -11,6 +11,20 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Outbound provider calls, WhatsApp calls and template messages, plus batch submission, inspection, cancellation, retry, deletion and CSV export. Recipient contacts use the destructive call tool. A receipt is not an answered phone.
+
+- Phone and WhatsApp account configuration, stored SIP messages and conversation groups. Live routing changes use the change tool; removing accounts, groups or group associations uses delete. Rearrange the desk without ringing anyone.
+
+- Signed conversation URLs, WebRTC tokens and ephemeral realtime credentials through the create tool, plus live Twilio call registration through the new destructive `elevenlabs_place_call` tool. Connection instructions are returned, not carried out.
+
+### Security
+
+- Stored custom SIP header values are hidden from phone-number reads and other responses containing phone-number configurations.
+
+- Returned connection credentials stay usable only at their declared response paths. Submitted secrets and the API key remain redacted there too; echoed custom SIP header values are also protected.
+
 ## [0.7.0] - 2026-11-16
 
 ### Changed
@@ -145,7 +159,7 @@ are maintained manually as part of the PR review checklist.
 - **elevenlabs**: API error `detail` strings from 401/403/422 bodies are enveloped in model-visible error messages via shared `error-detail.ts` (FastAPI field-path flattening preserved inside the envelope).
 
 ### Security
-- **elevenlabs**: Wrap all API-authored text in `<untrusted-content>` envelopes with close-tag breakout escaping (AGENTS.md security invariant #6, FOX-3490 remediation): `list_voices` voice names/descriptions/label keys and values, `create_music_plan` model-generated free-text fields, `transcribe_audio` transcript text, and the API-resolved voice name returned by `generate_speech`. Human-readable `message` strings no longer echo any API-authored substrings (the `generate_speech` message now reports only the saved file path). Music plans returned for display are unwrapped by `generate_music_from_plan` before strict validation and API submission. Ships a vendored `src/untrusted-content.ts` (byte-identical to the agents connector vendored helper) plus envelope-presence, close-tag-breakout, and mechanical envelope-reachability tests; the connector is removed from the repo untrusted-coverage baseline (ratchet-down).
+- **elevenlabs**: Wrap all API-authored text in `<untrusted-content>` envelopes with close-tag breakout escaping (AGENTS.md security invariant #6): `list_voices` voice names/descriptions/label keys and values, `create_music_plan` model-generated free-text fields, `transcribe_audio` transcript text, and the API-resolved voice name returned by `generate_speech`. Human-readable `message` strings no longer echo any API-authored substrings (the `generate_speech` message now reports only the saved file path). Music plans returned for display are unwrapped by `generate_music_from_plan` before strict validation and API submission. Ships a vendored `src/untrusted-content.ts` (byte-identical to the agents connector vendored helper) plus envelope-presence, close-tag-breakout, and mechanical envelope-reachability tests; the connector is removed from the repo untrusted-coverage baseline (ratchet-down).
 
 ## [0.3.0] - 2026-05-20
 
@@ -185,7 +199,7 @@ full trace.
 - **ci**: Add npm overrides for fast-uri, hono, ip-address across all connectors.
 
 ### Changed
-- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
 
 ## [0.2.1] - 2026-04-29
 

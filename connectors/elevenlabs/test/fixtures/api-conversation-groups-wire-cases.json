@@ -1,0 +1,215 @@
+[
+  {
+    "id": "list_conversation_groups_route",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "search": "Acme & support",
+        "page_size": 2,
+        "cursor": "page & 2"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/realtime/conversation-groups",
+    "query": [
+      [
+        "search",
+        "Acme & support"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "page & 2"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "conversation_groups": [
+        {
+          "id": "group/a ?#",
+          "title": "Acme support",
+          "description": "Shared support conversations",
+          "access_info": {
+            "is_creator": true,
+            "creator_name": "Jane Example",
+            "creator_email": "jane@example.com",
+            "role": "admin",
+            "access_source": "creator"
+          },
+          "sharing": {
+            "people_count": 3,
+            "shared_with_everyone": true,
+            "everyone_role": "viewer"
+          },
+          "created_at_unix_secs": 1
+        }
+      ],
+      "has_more": true,
+      "next_cursor": "group & 3"
+    }
+  },
+  {
+    "id": "create_conversation_group_route",
+    "profile": "create",
+    "args": {
+      "body": {
+        "title": "Acme support",
+        "description": null
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/realtime/conversation-groups",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "group/a ?#",
+      "title": "Acme support",
+      "description": "Shared support conversations",
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin",
+        "access_source": "creator"
+      },
+      "sharing": {
+        "people_count": 3,
+        "shared_with_everyone": true,
+        "everyone_role": "viewer"
+      },
+      "created_at_unix_secs": 1
+    },
+    "body": {
+      "title": "Acme support",
+      "description": null
+    }
+  },
+  {
+    "id": "get_conversation_group_route",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "conversation_group_id": "group/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/realtime/conversation-groups/group%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "group/a ?#",
+      "title": "Acme support",
+      "description": "Shared support conversations",
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin",
+        "access_source": "creator"
+      },
+      "sharing": {
+        "people_count": 3,
+        "shared_with_everyone": true,
+        "everyone_role": "viewer"
+      },
+      "created_at_unix_secs": 1
+    }
+  },
+  {
+    "id": "update_conversation_group_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_group_id": "group/a ?#"
+      },
+      "body": {
+        "title": "Support desk",
+        "description": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/convai/realtime/conversation-groups/group%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "group/a ?#",
+      "title": "Support desk",
+      "description": null,
+      "access_info": {
+        "is_creator": true,
+        "creator_name": "Jane Example",
+        "creator_email": "jane@example.com",
+        "role": "admin",
+        "access_source": "creator"
+      },
+      "sharing": {
+        "people_count": 3,
+        "shared_with_everyone": true,
+        "everyone_role": "viewer"
+      },
+      "created_at_unix_secs": 1
+    },
+    "body": {
+      "title": "Support desk",
+      "description": null
+    }
+  },
+  {
+    "id": "delete_conversation_group_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "conversation_group_id": "group/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/realtime/conversation-groups/group%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  },
+  {
+    "id": "set_conversation_group_route",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "conversation_id": "conv/a ?#"
+      },
+      "body": {
+        "conversation_group_id": "group/a ?#"
+      }
+    },
+    "method": "PUT",
+    "path": "/v1/convai/realtime/conversations/conv%2Fa%20%3F%23/conversation-group",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {},
+    "body": {
+      "conversation_group_id": "group/a ?#"
+    }
+  },
+  {
+    "id": "clear_conversation_group_route",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "conversation_id": "conv/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/convai/realtime/conversations/conv%2Fa%20%3F%23/conversation-group",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {}
+  }
+]

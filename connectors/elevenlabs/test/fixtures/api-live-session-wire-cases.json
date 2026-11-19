@@ -1,0 +1,232 @@
+[
+  {
+    "id": "get_conversation_signed_link",
+    "profile": "create",
+    "args": {
+      "query_params": {
+        "agent_id": "agent & example",
+        "include_conversation_id": true,
+        "branch_id": "branch & example",
+        "version_id": "version & example",
+        "environment": "staging & demo",
+        "debug_events_request": true
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversation/get-signed-url",
+    "query": [
+      [
+        "agent_id",
+        "agent & example"
+      ],
+      [
+        "include_conversation_id",
+        "true"
+      ],
+      [
+        "branch_id",
+        "branch & example"
+      ],
+      [
+        "version_id",
+        "version & example"
+      ],
+      [
+        "environment",
+        "staging & demo"
+      ],
+      [
+        "debug_events_request",
+        "true"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "signed_url": "https://example.invalid/signed"
+    }
+  },
+  {
+    "id": "get_signed_url_deprecated",
+    "profile": "create",
+    "args": {
+      "query_params": {
+        "agent_id": "agent & example",
+        "include_conversation_id": true,
+        "branch_id": "branch & example",
+        "version_id": "version & example",
+        "environment": "staging & demo",
+        "debug_events_request": true
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversation/get_signed_url",
+    "query": [
+      [
+        "agent_id",
+        "agent & example"
+      ],
+      [
+        "include_conversation_id",
+        "true"
+      ],
+      [
+        "branch_id",
+        "branch & example"
+      ],
+      [
+        "version_id",
+        "version & example"
+      ],
+      [
+        "environment",
+        "staging & demo"
+      ],
+      [
+        "debug_events_request",
+        "true"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "signed_url": "https://example.invalid/signed"
+    }
+  },
+  {
+    "id": "get_livekit_token",
+    "profile": "create",
+    "args": {
+      "query_params": {
+        "agent_id": "agent & example",
+        "participant_name": "Example participant",
+        "branch_id": "branch_example",
+        "version_id": "version_example",
+        "environment": "staging",
+        "debug_events_request": false
+      }
+    },
+    "method": "GET",
+    "path": "/v1/convai/conversation/token",
+    "query": [
+      [
+        "agent_id",
+        "agent & example"
+      ],
+      [
+        "participant_name",
+        "Example participant"
+      ],
+      [
+        "branch_id",
+        "branch_example"
+      ],
+      [
+        "version_id",
+        "version_example"
+      ],
+      [
+        "environment",
+        "staging"
+      ],
+      [
+        "debug_events_request",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "token": "example-conversation-token",
+      "conversation_id": "conversation_example"
+    }
+  },
+  {
+    "id": "create_realtime_session",
+    "profile": "create",
+    "args": {
+      "body": {
+        "session": {
+          "type": "realtime",
+          "model": "eleven_realtime_v1_mini",
+          "instructions": "Answer about the guide.",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_duration_seconds": 600
+        },
+        "expires_after": {
+          "anchor": "created_at",
+          "seconds": 90
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/realtime/client_secrets",
+    "query": [],
+    "body": {
+      "session": {
+        "type": "realtime",
+        "model": "eleven_realtime_v1_mini",
+        "instructions": "Answer about the guide.",
+        "output_modalities": [
+          "audio"
+        ],
+        "max_duration_seconds": 600
+      },
+      "expires_after": {
+        "anchor": "created_at",
+        "seconds": 90
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "value": "example-realtime-credential",
+      "expires_at": 1800000090,
+      "session": {
+        "type": "realtime",
+        "model": "eleven_realtime_v1_mini",
+        "instructions": "Answer about the guide.",
+        "output_modalities": [
+          "audio"
+        ],
+        "max_duration_seconds": 600
+      }
+    }
+  },
+  {
+    "id": "register_twilio_call",
+    "profile": "place_call",
+    "args": {
+      "body": {
+        "agent_id": "agent_example",
+        "from_number": "+12025550100",
+        "to_number": "+12025550101",
+        "direction": "inbound",
+        "conversation_initiation_client_data": {
+          "dynamic_variables": {
+            "topic": "Guide"
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/convai/twilio/register-call",
+    "query": [],
+    "body": {
+      "agent_id": "agent_example",
+      "from_number": "+12025550100",
+      "to_number": "+12025550101",
+      "direction": "inbound",
+      "conversation_initiation_client_data": {
+        "dynamic_variables": {
+          "topic": "Guide"
+        }
+      }
+    },
+    "status": 200,
+    "media": "text/html",
+    "response": "<Response><Connect><Stream url=\"https://example.invalid/signed\" /></Connect></Response>"
+  }
+]

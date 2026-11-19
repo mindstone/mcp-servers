@@ -20,7 +20,7 @@ import { mswServer } from './helpers/setup.js';
 const key = 'synthetic-api-key-secret';
 const tools = {
   read: 'elevenlabs_read_resource', create: 'elevenlabs_create_resource', change: 'elevenlabs_change_resource',
-  delete: 'elevenlabs_delete_resource', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge',
+  delete: 'elevenlabs_delete_resource', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 } as const;
 const profiles = Object.keys(tools) as WireProfile[];
 let pair: McpTestClient;
@@ -66,13 +66,14 @@ const agentList = apiWireCases.find(wire => wire.id === 'get_agents_route')!;
 const createAgent = apiWireCases.find(wire => wire.id === 'create_agent_route')!;
 
 describe('actual SDK definitions and independent admission census', () => {
-  it('advertises seven actual tools with exact effects and nested file selectors', async () => {
+  it('advertises eight actual tools with exact effects and nested file selectors', async () => {
     const actual = (await pair.client.listTools()).tools;
-    expect(actual).toHaveLength(39);
+    expect(actual).toHaveLength(40);
     expect(actual.filter(tool => legacyDefinitions.some(legacy => legacy.name === tool.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
       .toEqual(legacyDefinitions);
     const definitions = actual.filter(tool => tool.name.startsWith('elevenlabs_'));
     const expected = [
+      ['elevenlabs_place_call', false, true, false, true],
       ['elevenlabs_discover_api', true, false, true, false],
       ['elevenlabs_read_resource', true, false, true, true],
       ['elevenlabs_create_resource', false, false, false, true],
@@ -81,7 +82,7 @@ describe('actual SDK definitions and independent admission census', () => {
       ['elevenlabs_run_agent_tests', false, true, false, true],
       ['elevenlabs_query_knowledge', true, false, false, true],
     ] as const;
-    expect(definitions).toHaveLength(7);
+    expect(definitions).toHaveLength(8);
     const availableTools = new Set<string>([...expected.map(([name]) => name), 'list_voices']);
     const admittedIds = new Set([...apiWireCases, ...multipartCases].map(wire => wire.id));
     for (const [name, readOnlyHint, destructiveHint, idempotentHint, openWorldHint] of expected) {
@@ -116,7 +117,7 @@ describe('actual SDK definitions and independent admission census', () => {
       expect(ids).toEqual((await loadApiCatalog()).operations.filter(op => op.profile === profile).map(op => op.operation_id).sort());
     }
     expect(definitions.map(tool => tool.name)).not.toContain('elevenlabs_run_job');
-    expect(definitions.map(tool => tool.name)).not.toContain('elevenlabs_place_call');
+    expect(definitions.map(tool => tool.name)).toContain('elevenlabs_place_call');
     const discovery = definitions.find(tool => tool.name === 'elevenlabs_discover_api')!;
     expect(discovery.inputSchema.properties?.definition).toEqual({ type: 'string', minLength: 1 });
     for (const profile of profiles) for (const field of ['path_params', 'query_params', 'body']) {
@@ -134,11 +135,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 169 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(169);
+  it('has independent cases for every admission, with exactly 204 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(204);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['create_file_document_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'update_file_document_route', 'upload_file_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(174);
+    expect(new Set(expectedIds).size).toBe(209);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['create_file_document_route', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'update_file_document_route', 'upload_file_route']);
@@ -162,9 +163,9 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(observed[0].body).toBe(wire.body === undefined ? '' : JSON.stringify(wire.body));
     if (wire.body !== undefined) expect(observed[0].media).toBe('application/json');
     expect(result.json).toMatchObject({ ok: true, operation_id: wire.id, status: wire.status, content_type: wire.media, response_contract: 'matched', effects: {
-      readOnlyHint: wire.profile === 'read' || wire.profile === 'query_knowledge', destructiveHint: ['change', 'delete', 'tests'].includes(wire.profile), idempotentHint: wire.profile === 'read', openWorldHint: true,
+      readOnlyHint: wire.profile === 'read' || wire.profile === 'query_knowledge', destructiveHint: ['change', 'delete', 'tests', 'place_call'].includes(wire.profile), idempotentHint: wire.profile === 'read', openWorldHint: true,
     }, message: 'The provider returned a success response.' });
-    if (wire.media === 'audio/mpeg') {
+    if (['audio/mpeg', 'text/csv'].includes(String(wire.media))) {
       expect(result.json.data).toBeNull();
       const artifact = result.json.artifact as { file_path: string; size_bytes: number; media_type: string };
       expect(artifact).toEqual({ file_path: expect.any(String), size_bytes: Buffer.byteLength(String(wire.response)), media_type: wire.media });
@@ -191,7 +192,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(requests).toHaveLength(0);
   });
 
-  it.each(profiles.flatMap(profile => ['not_an_operation', 'get_signed_url_deprecated', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
+  it.each(profiles.flatMap(profile => ['not_an_operation', 'dubbing_language_get', 'add_documentation_to_knowledge_base'].map(id => ({ profile, id }))))('$id refuses $profile as not admitted', async ({ profile, id }) => {
     const getKey = vi.spyOn(auth, 'getApiKey');
     const readFile = vi.spyOn(fileInput, 'readSandboxedFile');
     const result = await call(profile, { operation_id: id });

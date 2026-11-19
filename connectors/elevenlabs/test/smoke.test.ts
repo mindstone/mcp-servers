@@ -21,6 +21,7 @@ const EXPECTED_TOOL_NAMES = [
   'elevenlabs_create_resource',
   'elevenlabs_delete_resource',
   'elevenlabs_discover_api',
+  'elevenlabs_place_call',
   'elevenlabs_query_knowledge',
   'elevenlabs_read_resource',
   'elevenlabs_run_agent_tests',
@@ -46,7 +47,7 @@ const EXPECTED_TOOL_NAMES = [
   'transcribe_audio',
 ].sort();
 
-/** Complete D-ANNOTATIONS table for all 39 tools. */
+/** Complete D-ANNOTATIONS table for all 40 tools. */
 const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint?: boolean; openWorldHint?: boolean }> = {
   add_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
   archive_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
@@ -64,6 +65,7 @@ const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveH
   elevenlabs_create_resource: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   elevenlabs_delete_resource: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_discover_api: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  elevenlabs_place_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_query_knowledge: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   elevenlabs_read_resource: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   elevenlabs_run_agent_tests: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
@@ -100,7 +102,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 39 tools with correct names', async () => {
+  it('registers exactly 40 tools with correct names', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -113,7 +115,7 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(39);
+    expect(toolsResult.tools).toHaveLength(40);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -166,7 +168,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 39 tools with correct names from built dist/index.js', async () => {
+  it('lists 40 tools with correct names from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -182,7 +184,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(39);
+      expect(toolsResult.tools).toHaveLength(40);
       expect(toolsResult.tools.map(tool => tool.name).sort()).toEqual(EXPECTED_TOOL_NAMES);
     } finally {
       await client.close();

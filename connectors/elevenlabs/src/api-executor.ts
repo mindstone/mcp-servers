@@ -28,6 +28,7 @@ function normalizedInput(input: unknown): unknown {
 }
 
 async function checkBeforeRetry(op: ApiOperation): Promise<string> {
+  if (op.profile === 'create' && op.credential_return_fields) return 'No credential was confirmed. Request a new one if it is still needed.';
   const reads: string[] = [];
   let callable = false;
   for (const id of op.follow_ups) {
@@ -61,6 +62,9 @@ async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSigna
   if (!(error instanceof ElevenLabsError) || error.code === 'NETWORK_ERROR') return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
     `The operation may have completed after dispatch. ${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
 
+  if (op.credential_return_fields) return new ApiBoundaryError(error.code, redactor.wrap(`The provider rejected the request (${error.code}).`, `elevenlabs:api:${op.operation_id}`),
+    `Inspect the operation contract and account permissions. ${await checkBeforeRetry(op)} No automatic retry was made.`);
+
   let resolution = error.resolution;
   if (error.code === 'HTTP_422') resolution = 'The provider rejected the request parameters. Correct the reported loc: msg field issues; inspect this operation with elevenlabs_discover_api. Do not repeat the unchanged request.';
   else if (error.code === 'HTTP_404') resolution = 'The resource was not found. Use elevenlabs_read_resource to list accessible resources and verify the ID and account before retrying.';
@@ -68,10 +72,10 @@ async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSigna
   else if (/^HTTP_5\d\d$/.test(error.code)) resolution = `The provider reported a server error. ${await checkBeforeRetry(op)} Check provider availability. No automatic retry was made.`;
   else if (error.code === 'RATE_LIMITED') resolution = getErrorResolution(429);
   // Redact provider error text before constructing this boundary envelope.
-  return new ApiBoundaryError(error.code, wrapUntrusted(redactor.text(error.message), `elevenlabs:api:${op.operation_id}`)!, resolution);
+  return new ApiBoundaryError(error.code, redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`), resolution);
 }
 
-/** Shared production path for all six profiles; file context is resolved only after validation. */
+/** Shared production path for all seven profiles; file context is resolved only after validation. */
 export async function executeApiOperation(profile: ApiProfile, rawInput: unknown, readContext?: () => FileReadContext) {
   const normalized = normalizedInput(rawInput);
   // Resolve policy before validation, without authentication or network access.
