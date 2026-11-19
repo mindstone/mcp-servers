@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, setApiKey } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { BRIDGE_NOT_AVAILABLE, bridgeRequest, type BridgeResponse } from '../bridge.js';
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -34,39 +34,42 @@ COST: FREE.`,
     withErrorHandling(async (args) => {
       const key = args.api_key.trim();
 
-      // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await bridgeRequest('/bundled/elevenlabs/configure', { apiKey: key });
-          if (result.success) {
-            setApiKey(key);
-            const message = result.warning
-              ? `${CONFIGURED_MESSAGE} Note: ${result.warning}`
-              : (result.message ?? CONFIGURED_MESSAGE);
-            return JSON.stringify({ ok: true, message });
-          }
-          // Bridge returned failure — surface as error, do NOT fall through
-          throw new ElevenLabsError(
-            result.error || 'Bridge configuration failed',
-            'BRIDGE_ERROR',
-            'The host app bridge rejected the configuration request. Check the host app logs.',
-          );
-        } catch (error) {
-          if (error instanceof ElevenLabsError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
-          throw new ElevenLabsError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
-            'BRIDGE_ERROR',
-            'Could not reach the host app bridge. Ensure the host app is running.',
-          );
-        }
+      let result: BridgeResponse;
+      try {
+        result = await bridgeRequest('/bundled/elevenlabs/configure', { apiKey: key });
+      } catch (error) {
+        // Bridge request failed (network, timeout, refused redirect): surface as error
+        throw new ElevenLabsError(
+          `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+          'BRIDGE_ERROR',
+          'Could not reach the host app bridge. Ensure the host app is running.',
+        );
       }
 
-      // No bridge — store in-memory
+      if (result.success) {
+        setApiKey(key);
+        // The warning arrives enveloped as untrusted content by the bridge reader.
+        const message = result.warning
+          ? `${CONFIGURED_MESSAGE} Note: ${result.warning}`
+          : CONFIGURED_MESSAGE;
+        return JSON.stringify({ ok: true, message });
+      }
+
+      if (result.error !== BRIDGE_NOT_AVAILABLE) {
+        // Bridge answered with a failure: surface it, do NOT fall back to in-memory.
+        throw new ElevenLabsError(
+          result.error || 'Bridge configuration failed',
+          'BRIDGE_ERROR',
+          'The host app bridge rejected the configuration request. Check the host app logs.',
+        );
+      }
+
+      // No usable bridge (not run by the host app, or its state file is unusable):
+      // keep the key in memory for this session only.
       setApiKey(key);
       return JSON.stringify({
         ok: true,
-        message: CONFIGURED_MESSAGE,
+        message: `${CONFIGURED_MESSAGE} Your API key is ready to use now, but it wasn't saved for next time.`,
       });
     }),
   );

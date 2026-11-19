@@ -570,11 +570,11 @@ export function createElevenLabsBridgeHandlers(port: number, token: string) {
  */
 export function createElevenLabsBridge401Handlers(port: number) {
   return [
+    // No body: under MSW, cancelling a mocked reply body never resolves, and the
+    // bridge reader cancels the body of a 401/403 (its real-server case is tested
+    // in test-harness/test/bridge-reader.test.ts).
     http.post(`http://127.0.0.1:${port}/bundled/elevenlabs/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+      return new HttpResponse(null, { status: 401 });
     }),
   ];
 }
@@ -584,11 +584,11 @@ export function createElevenLabsBridge401Handlers(port: number) {
  */
 export function createElevenLabsBridge403Handlers(port: number) {
   return [
+    // No body: under MSW, cancelling a mocked reply body never resolves, and the
+    // bridge reader cancels the body of a 401/403 (its real-server case is tested
+    // in test-harness/test/bridge-reader.test.ts).
     http.post(`http://127.0.0.1:${port}/bundled/elevenlabs/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 },
-      );
+      return new HttpResponse(null, { status: 403 });
     }),
   ];
 }
@@ -607,6 +607,29 @@ export function createElevenLabsBridgeFailureHandlers(port: number, token: strin
         );
       }
       return HttpResponse.json({ success: false, error: 'Account validation failed' });
+    }),
+  ];
+}
+
+/**
+ * Creates a bridge configure handler that records each request body it accepts
+ * and answers with `reply` (any JSON, so tests can send a wrong shape).
+ */
+export function createElevenLabsBridgeReplyHandlers(
+  port: number,
+  token: string,
+  reply: unknown,
+  received: unknown[] = [],
+) {
+  return [
+    http.post(`http://127.0.0.1:${port}/bundled/elevenlabs/configure`, async ({ request }) => {
+      if (request.headers.get('Authorization') !== `Bearer ${token}`) {
+        // No body: under MSW, cancelling a mocked reply body never resolves, and
+        // the bridge reader cancels the body of a 401/403.
+        return new HttpResponse(null, { status: 401 });
+      }
+      received.push(await request.json());
+      return HttpResponse.json(reply as Record<string, unknown>);
     }),
   ];
 }

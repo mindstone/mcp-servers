@@ -256,7 +256,7 @@ function isAgentConfigResponse(result: unknown): boolean {
 }
 
 async function fetchAgent(apiKey: string, agentId: string, source: string): Promise<unknown> {
-  const result = await elevenLabsJson<unknown>(
+  const result = await elevenLabsJson(
     apiKey,
     ENDPOINTS.agent(agentId),
     { method: 'GET' },
@@ -326,7 +326,7 @@ FREE.`,
       if (args.page_size !== undefined) params.set('page_size', String(args.page_size));
       if (args.cursor) params.set('cursor', args.cursor);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.AGENTS}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
@@ -372,7 +372,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.agent(args.agent_id),
         { method: 'GET' },
@@ -417,7 +417,7 @@ COMMON MISTAKES:
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
       const body = buildAuthoringBody(args as Record<string, unknown>);
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.AGENTS_CREATE,
         { method: 'POST', body: JSON.stringify(body) },
@@ -477,7 +477,7 @@ COMMON MISTAKES:
       const apiKey = requireApiKey();
       const { agent_id, ...updateArgs } = args;
       const body = buildAuthoringBody(updateArgs as Record<string, unknown>);
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.agent(agent_id),
         { method: 'PATCH', body: JSON.stringify(body) },
@@ -529,7 +529,7 @@ COST: Uses ElevenLabs agent resources; duplication is not read-only.`,
       // Same round-trip contract as buildAuthoringBody: `name` comes back enveloped
       // from get_agent/list_agents, so a copied name must not be stored as an envelope.
       const body = args.name ? { name: unwrapUntrusted(args.name) } : {};
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.agentDuplicate(args.agent_id),
         { method: 'POST', body: JSON.stringify(body) },
@@ -635,7 +635,7 @@ COST: Uses ElevenLabs LLM/simulation credits.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.agentSimulateConversation(args.agent_id),
         {

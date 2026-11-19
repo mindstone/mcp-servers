@@ -6,20 +6,11 @@ import {
   elevenLabsFetch,
   elevenLabsJson,
 } from '../client.js';
+import { parseConversationList } from '../call-receipts.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeConversation, sanitizeList } from '../sanitize.js';
 import { LONG_REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
-
-function extractItems(result: unknown): unknown[] {
-  if (Array.isArray(result)) return result;
-  if (!result || typeof result !== 'object') return [];
-  const obj = result as Record<string, unknown>;
-  if (Array.isArray(obj.conversations)) return obj.conversations;
-  if (Array.isArray(obj.items)) return obj.items;
-  if (Array.isArray(obj.data)) return obj.data;
-  return [];
-}
 
 function extractNextCursor(result: unknown): string | undefined {
   if (!result || typeof result !== 'object') return undefined;
@@ -78,12 +69,12 @@ FREE.`,
       if (args.page_size !== undefined) params.set('page_size', String(args.page_size));
       if (args.cursor) params.set('cursor', args.cursor);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.CONVERSATIONS}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
       );
-      const items = extractItems(result);
+      const items = parseConversationList(result);
       return JSON.stringify({
         ok: true,
         conversations: sanitizeList(items, sanitizeConversation, 'elevenlabs-agents:list_conversations'),
@@ -124,7 +115,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.conversation(args.conversation_id),
         { method: 'GET' },

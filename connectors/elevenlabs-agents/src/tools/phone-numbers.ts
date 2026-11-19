@@ -105,7 +105,7 @@ FREE.`,
       if (args.page_size !== undefined) params.set('page_size', String(args.page_size));
       if (args.cursor) params.set('cursor', args.cursor);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.PHONE_NUMBERS}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
@@ -151,7 +151,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.phoneNumber(args.phone_number_id),
         { method: 'GET' },
@@ -209,7 +209,7 @@ FREE.`,
       if (args.label !== undefined) body.label = args.label;
       if (args.agent_id !== undefined) body.agent_id = args.agent_id;
 
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.phoneNumber(args.phone_number_id),
         { method: 'PATCH', body: JSON.stringify(body) },
@@ -327,7 +327,7 @@ COMMON MISTAKES:
       ];
       let result: unknown;
       try {
-        result = await elevenLabsJson<unknown>(
+        result = await elevenLabsJson(
           apiKey,
           ENDPOINTS.PHONE_NUMBERS,
           { method: 'POST', body: JSON.stringify(body) },

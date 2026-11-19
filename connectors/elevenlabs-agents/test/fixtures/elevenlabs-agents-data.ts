@@ -166,6 +166,11 @@ export const mockPhoneNumber = {
 export const BATCH_SCHEDULED_TIME_UNIX = 1_893_456_000;
 
 export const mockOutboundCall = {
+  // The real Twilio/SIP-trunk receipt fields (`success`, `message`, `conversation_id`, `callSid`).
+  success: true,
+  message: 'Call initiated',
+  conversation_id: 'conv_outbound_test_123',
+  callSid: 'CA_test_123',
   call_id: 'outbound_call_test_123',
   status: 'queued',
   phone_number_id: 'pn_test_123',

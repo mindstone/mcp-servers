@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Saving the API key in Rebel now validates the bridge state and the host app's reply, marks the app's text as outside content, and says when the key is kept only for this session.
+- The call tools (`make_outbound_call`, `submit_batch_call`, `retry_batch_call`) stay marked destructive, so Rebel's permission settings decide when to ask you. They now say plainly that each places a real call, report failed or unclear calls accurately instead of as success and explain how to check before calling again. `list_conversations` now reports an unreadable list as an error.
+
 ## [0.3.0] - 2026-11-16
 
 ### Changed

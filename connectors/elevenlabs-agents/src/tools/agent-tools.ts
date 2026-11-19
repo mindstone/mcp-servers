@@ -180,7 +180,7 @@ FREE.`,
       if (args.page_size !== undefined) params.set('page_size', String(args.page_size));
       if (args.cursor) params.set('cursor', args.cursor);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.TOOLS}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
@@ -290,7 +290,7 @@ COMMON MISTAKES:
       const validated = validateMergedToolConfig(merged);
 
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.TOOLS,
         { method: 'POST', body: JSON.stringify({ tool_config: validated }) },

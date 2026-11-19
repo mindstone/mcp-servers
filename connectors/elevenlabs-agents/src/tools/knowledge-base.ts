@@ -163,7 +163,7 @@ FREE.`,
       if (args.page_size !== undefined) params.set('page_size', String(args.page_size));
       if (args.cursor) params.set('cursor', args.cursor);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.KNOWLEDGE_BASE}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
@@ -209,7 +209,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const metadata = await elevenLabsJson<unknown>(
+      const metadata = await elevenLabsJson(
         apiKey,
         ENDPOINTS.knowledgeBaseDoc(args.documentation_id),
         { method: 'GET' },
@@ -272,7 +272,7 @@ COMMON MISTAKES:
       let result: unknown;
 
       if (mode === 'text') {
-        result = await elevenLabsJson<unknown>(
+        result = await elevenLabsJson(
           apiKey,
           ENDPOINTS.KNOWLEDGE_BASE_TEXT,
           {
@@ -298,7 +298,7 @@ COMMON MISTAKES:
           formData.append('parent_folder_id', args.parent_folder_id);
         }
 
-        result = await elevenLabsJson<unknown>(
+        result = await elevenLabsJson(
           apiKey,
           ENDPOINTS.KNOWLEDGE_BASE_FILE,
           {
@@ -317,7 +317,7 @@ COMMON MISTAKES:
         // ElevenLabs fetches this URL server-side, so the same public-https
         // policy as webhook tools applies (see src/url-safety.ts).
         validatePublicHttpsUrl('url', args.url);
-        result = await elevenLabsJson<unknown>(
+        result = await elevenLabsJson(
           apiKey,
           ENDPOINTS.KNOWLEDGE_BASE_URL,
           {
@@ -433,7 +433,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.knowledgeBaseRagIndex(args.documentation_id),
         { method: 'GET' },
@@ -482,7 +482,7 @@ COST: FREE — indexing consumes workspace compute, and calling this on an alrea
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.knowledgeBaseRagIndex(args.documentation_id),
         {

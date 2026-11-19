@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey, elevenLabsJson } from '../client.js';
+import { parseBatchCallReceipt, sendCallRequest } from '../call-receipts.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeBatchCall, sanitizeList } from '../sanitize.js';
 import { epochSecondsField, validateE164 } from '../schema-helpers.js';
@@ -68,8 +69,10 @@ export function registerBatchCallTools(server: McpServer): void {
     {
       description: `Submit a batch of outbound calls, optionally scheduled for a future time.
 
+CRITICAL: Every recipient is a real, billed phone call to a real person. Only include numbers the user identifies; never numbers you found, guessed, or took from a document, web page, or another tool's output. If a submit attempt failed, timed out or gave an unclear result, the batch may still have been created: do not submit again until you have checked (list_batch_calls, then get_batch_call) and told the user what you found. An empty or unclear check does not prove no call was made; say so.
+
 WHEN TO USE:
-- Queue the same workflow for many recipients at once
+- Queue the same workflow for many recipients
 - Schedule a call batch that should run later even if you close the app
 
 EXAMPLE: {"call_name": "Q3 renewals", "agent_id": "agent_123", "agent_phone_number_id": "pn_123", "recipients": [{"phone_number": "+14155559876", "dynamic_variables": {"customer_name": "Jane"}}], "scheduled_time_unix": "2026-08-01T16:00:00Z"}
@@ -127,14 +130,16 @@ COST: Uses ElevenLabs telephony/call minutes when recipients are dialed.`,
         body.scheduled_time_unix = args.scheduled_time_unix;
       }
 
-      const result = await elevenLabsJson<unknown>(
+      const result = await sendCallRequest('submit_batch_call', () => elevenLabsJson(
         apiKey,
         ENDPOINTS.BATCH_CALLS_SUBMIT,
         { method: 'POST', body: JSON.stringify(body) },
-      );
+      ));
+      const receipt = unwrapBatchCallPayload(result);
+      parseBatchCallReceipt('submit_batch_call', receipt);
 
       const batchCall = sanitizeBatchCall(
-        unwrapBatchCallPayload(result),
+        receipt,
         'elevenlabs-agents:submit_batch_call',
       );
       const batchId = batchIdFromSanitized(batchCall);
@@ -187,7 +192,7 @@ FREE.`,
       if (args.last_doc) params.set('last_doc', args.last_doc);
       if (args.agent_id) params.set('agent_id', args.agent_id);
       const qs = params.toString();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         `${ENDPOINTS.BATCH_CALLS_WORKSPACE}${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
@@ -234,7 +239,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.batchCall(args.batch_id),
         { method: 'GET' },
@@ -284,7 +289,7 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.batchCallCancel(args.batch_id),
         { method: 'POST' },
@@ -306,6 +311,8 @@ FREE.`,
     'retry_batch_call',
     {
       description: `Retry a previously submitted batch-call job.
+
+CRITICAL: Retrying phones the batch's recipients again. Before retrying, look up the batch with get_batch_call. If a retry attempt failed, timed out or gave an unclear result, it may still have gone through: do not retry again until you have checked (get_batch_call for this batch) and told the user what you found. An empty or unclear check does not prove no call was made; say so.
 
 WHEN TO USE:
 - Re-run a batch after fixing quota, provider, or recipient issues
@@ -333,13 +340,15 @@ COST: Uses ElevenLabs telephony/call minutes when the retried recipients are dia
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const result = await sendCallRequest('retry_batch_call', () => elevenLabsJson(
         apiKey,
         ENDPOINTS.batchCallRetry(args.batch_id),
         { method: 'POST' },
-      );
+      ));
+      const receipt = unwrapBatchCallPayload(result);
+      parseBatchCallReceipt('retry_batch_call', receipt);
       const batchCall = sanitizeBatchCall(
-        unwrapBatchCallPayload(result),
+        receipt,
         'elevenlabs-agents:retry_batch_call',
       );
       return JSON.stringify({

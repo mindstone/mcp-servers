@@ -3,11 +3,6 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 /** Per-call override for slow synchronous endpoints (dialogue, voice design). */
 export const LONG_REQUEST_TIMEOUT_MS = 120_000;
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class ElevenLabsError extends Error {
   constructor(
     message: string,

@@ -1,8 +1,3 @@
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Per-call override for slow or binary conversational-AI endpoints. */

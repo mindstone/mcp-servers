@@ -175,15 +175,16 @@ export async function extractErrorDetail(response: Response): Promise<string> {
   }
 }
 
-export async function elevenLabsJson<T>(
+export async function elevenLabsJson(
   apiKey: string,
   urlPath: string,
   options: ElevenLabsFetchOptions = {},
-): Promise<T> {
+): Promise<unknown> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   const body = await response.text();
   try {
-    return JSON.parse(body) as T;
+    const parsed: unknown = JSON.parse(body);
+    return parsed;
   } catch {
     // The parser's own message quotes the leading response bytes ("Unexpected token
     // 'X', \"XINJECTX S\"... is not valid JSON"), which would put unenveloped

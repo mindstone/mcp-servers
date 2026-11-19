@@ -824,3 +824,27 @@ export function createAddAgentToolEchoHandler() {
 
   return { handler, captured };
 }
+
+/**
+ * Creates a host app bridge configure handler that records each request body it
+ * accepts and answers with `reply` (any JSON, so tests can send a wrong shape).
+ * A wrong token gets 401, like the host.
+ */
+export function createElevenLabsAgentsBridgeReplyHandlers(
+  port: number,
+  token: string,
+  reply: unknown,
+  received: unknown[] = [],
+) {
+  return [
+    http.post(`http://127.0.0.1:${port}/bundled/elevenlabs-agents/configure`, async ({ request }) => {
+      if (request.headers.get('Authorization') !== `Bearer ${token}`) {
+        // No body: under MSW, cancelling a mocked reply body never resolves, and
+        // the bridge reader cancels the body of a 401/403.
+        return new HttpResponse(null, { status: 401 });
+      }
+      received.push(await request.json());
+      return HttpResponse.json(reply as Record<string, unknown>);
+    }),
+  ];
+}
