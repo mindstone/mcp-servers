@@ -201,3 +201,76 @@ export async function pandadocFetchRaw(
 
   return response;
 }
+
+const DOWNLOAD_TOO_LARGE_RESOLUTION =
+  'Download a smaller document (or fewer sections), or download it from the PandaDoc website instead.';
+
+function downloadTooLarge(maxBytes: number): PandaDocError {
+  return new PandaDocError(
+    `Document is larger than the ${Math.round(maxBytes / (1024 * 1024))} MB download limit.`,
+    'DOWNLOAD_TOO_LARGE',
+    DOWNLOAD_TOO_LARGE_RESOLUTION,
+  );
+}
+
+function isTimeoutLike(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+}
+
+/**
+ * Read a response body into memory, refusing one larger than `maxBytes`.
+ *
+ * `Content-Length` only allows an early refusal; the bytes are always counted,
+ * so a missing or understated header cannot get past the cap. The request's
+ * own timeout signal stays armed across the body read.
+ */
+export async function readBodyCapped(response: Response, maxBytes: number): Promise<Buffer> {
+  const declared = response.headers.get('Content-Length');
+  if (declared !== null && /^\d+$/.test(declared.trim())) {
+    const declaredBytes = Number(declared.trim());
+    if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+      // Cleanup is not awaited: a refusal must not wait on (or be replaced
+      // by) discarding the body.
+      void response.body?.cancel().catch(() => {
+        console.error('[pandadoc] oversized download body could not be discarded');
+      });
+      throw downloadTooLarge(maxBytes);
+    }
+  }
+
+  if (!response.body) return Buffer.alloc(0);
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      let next: ReadableStreamReadResult<Uint8Array>;
+      try {
+        next = await reader.read();
+      } catch (error) {
+        if (isTimeoutLike(error)) {
+          throw new PandaDocError(
+            'Request to PandaDoc API timed out',
+            'TIMEOUT',
+            'The request took too long. Try again or check if the PandaDoc API is available.',
+          );
+        }
+        throw error;
+      }
+      if (next.done) break;
+      const chunk = next.value;
+      if (total + chunk.byteLength > maxBytes) {
+        void reader.cancel().catch(() => {
+          console.error('[pandadoc] oversized download stream could not be cancelled');
+        });
+        throw downloadTooLarge(maxBytes);
+      }
+      total += chunk.byteLength;
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}

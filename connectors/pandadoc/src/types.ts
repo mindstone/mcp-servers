@@ -1,11 +1,7 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const PANDADOC_API_BASE = 'https://api.pandadoc.com/public/v1';
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-
-export interface BridgeState {
-  port: number;
-  token: string;
-}
+export const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
 export class PandaDocError extends Error {
   constructor(

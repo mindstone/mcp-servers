@@ -5,11 +5,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { pandadocFetch, pandadocFetchRaw } from '../client.js';
+import { pandadocFetch, pandadocFetchRaw, readBodyCapped } from '../client.js';
 import { sanitizeVendorErrorText, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { isConfigured } from '../auth.js';
-import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
+import { MAX_DOWNLOAD_SIZE, MAX_FILE_SIZE, PandaDocError } from '../types.js';
 import { readUploadFile } from './path-safety.js';
 import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
@@ -850,13 +850,15 @@ RELATED TOOLS:
       const downloadPath = `/documents/${encodeURIComponent(args.document_id)}/download${queryStr ? `?${queryStr}` : ''}`;
 
       const response = await pandadocFetchRaw(downloadPath);
+      // Read (and cap) the whole body before any temp file is opened, so a
+      // refused download leaves nothing behind.
+      const pdfBuffer = await readBodyCapped(response, MAX_DOWNLOAD_SIZE);
 
       // Save the PDF under the canonical OS temp directory. The raw
       // TMPDIR/TEMP env strings are NOT trusted verbatim: a process that can
       // mutate the environment could point them at an arbitrary (possibly
       // symlinked) location; os.tmpdir() + realpathSync gives the canonical
       // containment anchor instead.
-      const pdfBuffer = Buffer.from(await response.arrayBuffer());
       const tmpRoot = fs.realpathSync(os.tmpdir());
 
       // Unique name + exclusive create: downloads never overwrite an

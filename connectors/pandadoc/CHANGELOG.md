@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- The host app bridge state file is now read through the shared hardened reader: a symlinked, oversized or malformed state file is refused, a redirect is never followed, and the bridge's reply is checked before use.
+- `download_document` refuses a document larger than 50 MB instead of reading it all into memory, and saves no file when it does.
+
+### Changed
+
+- `configure_pandadoc_api_key` without a usable bridge state file now keeps the key until the app restarts and says it was not saved.
+
 ## [0.4.0] - 2026-11-16
 
 ### Changed

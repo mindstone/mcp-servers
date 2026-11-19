@@ -117,7 +117,7 @@ node dist/index.js
 ## Tools (15)
 
 ### Configuration
-- `configure_pandadoc_api_key` — Configure the PandaDoc API key
+- `configure_pandadoc_api_key` — Configure the PandaDoc API key. The host app bridge saves it; without a usable bridge state file, the key is kept only until the app restarts
 
 ### Documents
 - `list_documents` — List and search PandaDoc documents with filtering
@@ -128,7 +128,7 @@ node dist/index.js
 - `create_document_from_url` — Create a document from a publicly accessible HTTPS PDF URL (the connector DNS-resolves the host and follows redirects before handing PandaDoc the terminal URL, so the URL must be reachable from the machine running the connector)
 - `send_document` — Send a document to recipients for viewing/signing
 - `create_document_session` — Create a shareable view/sign link for a document recipient
-- `download_document` — Download a document as PDF
+- `download_document` — Download a document as PDF (up to 50 MB; a larger document is refused before anything is saved)
 
 ### Templates
 - `list_templates` — List available PandaDoc templates
