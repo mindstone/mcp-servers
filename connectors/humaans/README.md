@@ -76,9 +76,9 @@ node dist/index.js
 
 ### Environment variables
 
-- `HUMAANS_API_KEY` — Humaans API access token (from app settings)
-- `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
-- `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+- `HUMAANS_API_KEY` — Humaans API access token. Create one at <https://app.humaans.io/settings/home?tokens=1> ("Generate new token") with the scopes `public:read`, `private:read` and `private:write`.
+
+The token is read only from this variable. No tool accepts it, so it never passes through the conversation: in a host with connector settings, add it there (for example Settings → Connectors); otherwise set `HUMAANS_API_KEY` in the server's `env`, as below.
 
 ## Host configuration examples
 
@@ -117,7 +117,7 @@ node dist/index.js
 ## Tools (16)
 
 ### Configuration
-- `configure_humaans_api_key` — Configure the Humaans API access token
+- `configure_humaans_api_key` — Check whether a token is set and get setup instructions (takes no arguments and never accepts a token)
 
 ### People
 - `get_humaans_me` — Get the current authenticated user's profile
@@ -145,8 +145,9 @@ node dist/index.js
 ## Data handling
 
 - Person list responses are field-allowlisted; person detail responses strip sensitive fields (tax ID, personal email/phone, home address, birthday, profile photo).
-- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`/`jobTitle`/`department`, time-away type and policy names, team names, person profile free text such as names/`bio`/social links/job title, location labels/cities, the company name) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
-- Humaans API error bodies are enveloped (and non-JSON bodies capped) before they reach the model; `Retry-After` reaches rate-limit messages only as a parsed integer, and a malformed 2xx body yields a static error rather than a parser message embedding a body snippet.
+- Every string in a Humaans response, at any depth and including fields this connector does not know about, is returned inside an `<untrusted-content>` envelope so the model treats it as data, not instructions. The only exceptions are structured tokens the model passes back as tool inputs (resource ids, dates and timestamps, work email, time zone, and the closed status/period/type enums), and only when the value has the expected shape; the list is `RAW_FIELDS` in [`src/sanitize.ts`](./src/sanitize.ts). Company-authored labels such as `contractType` and `employeeId` stay enveloped.
+- Response shapes are validated before use: a list without a numeric `total`/`limit`/`skip` and an array `data`, or a cancellation without a boolean `deleted`, yields a fixed `INVALID_RESPONSE` error.
+- Humaans API error bodies are enveloped (and non-JSON bodies capped) before they reach the model; `Retry-After` reaches rate-limit messages only as a parsed integer, and a malformed 2xx body yields a static error rather than a parser message embedding a body snippet. Network failures and any unexpected error reach the model only as fixed messages (`NETWORK_ERROR`, `INTERNAL_ERROR`), never their raw text.
 
 ## Licence
 

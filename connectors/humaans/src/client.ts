@@ -5,7 +5,8 @@
  * messaging, and timeout handling for all Humaans API calls.
  */
 
-import { getApiKey } from './auth.js';
+import { z } from 'zod';
+import { ADD_TOKEN_IN_SETTINGS, getApiKey } from './auth.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import {
   HumaansError,
@@ -18,6 +19,17 @@ import {
 // model (invariant #6) and cap their length so an HTML error page cannot dump
 // an unbounded body into the conversation.
 const MAX_VENDOR_ERROR_CHARS = 500;
+
+/** Every Humaans list endpoint returns this envelope. */
+export const listResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  skip: z.number().int().nonnegative(),
+  data: z.array(z.unknown()),
+});
+
+/** A single Humaans resource (a person, a job role, a time away entry). */
+export const resourceSchema = z.record(z.string(), z.unknown());
 
 /**
  * Format a Humaans API error response into a human-readable message. The
@@ -39,20 +51,18 @@ function formatApiError(error: HumaansErrorResponse): string {
  * Make an authenticated request to the Humaans API.
  *
  * @param path  API path relative to base, e.g. `/people`
+ * @param schema  Shape the JSON body must have; anything else is INVALID_RESPONSE
  * @param options  Additional fetch options
- * @returns Parsed JSON response
+ * @returns The validated response body
  */
-export async function humaansFetch<T>(
+export async function humaansFetch<S extends z.ZodTypeAny>(
   path: string,
+  schema: S,
   options: RequestInit = {},
-): Promise<T> {
+): Promise<z.infer<S>> {
   const key = getApiKey();
   if (!key) {
-    throw new HumaansError(
-      'Humaans API key not configured',
-      'AUTH_REQUIRED',
-      'Use configure_humaans_api_key to set your API key first.',
-    );
+    throw new HumaansError('Humaans API key not configured', 'AUTH_REQUIRED', ADD_TOKEN_IN_SETTINGS);
   }
 
   const url = `${HUMAANS_API_BASE}${path}`;
@@ -78,14 +88,20 @@ export async function humaansFetch<T>(
         'The request took too long. Try again or check if the Humaans API is available.',
       );
     }
-    throw error;
+    // The rejection's own message can name hosts or carry system detail, so
+    // only a fixed message reaches the model.
+    throw new HumaansError(
+      'Could not reach Humaans',
+      'NETWORK_ERROR',
+      'Check the internet connection and try again, or check whether the Humaans API is available.',
+    );
   }
 
   if (response.status === 401 || response.status === 403) {
     throw new HumaansError(
       'Authentication failed',
       'AUTH_FAILED',
-      'Your Humaans API token is invalid or lacks required scopes. Use configure_humaans_api_key to set a new token.',
+      `Your Humaans API token is invalid or lacks the required scopes. ${ADD_TOKEN_IN_SETTINGS}`,
     );
   }
 
@@ -147,8 +163,9 @@ export async function humaansFetch<T>(
     );
   }
 
+  let body: unknown;
   try {
-    return (await response.json()) as T;
+    body = await response.json();
   } catch {
     // A 2xx with a non-JSON body: the parse error message can embed a snippet
     // of the vendor-controlled body, so it must never reach model-visible
@@ -159,4 +176,15 @@ export async function humaansFetch<T>(
       'The Humaans API returned a malformed response. Try again, and check the Humaans API status if it persists.',
     );
   }
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    // Zod's issue text can quote the offending value, so it never reaches the model.
+    throw new HumaansError(
+      'Unexpected response from Humaans',
+      'INVALID_RESPONSE',
+      'The Humaans API returned data in a shape this connector does not recognise. Try again, and check the Humaans API status if it persists.',
+    );
+  }
+  return parsed.data;
 }

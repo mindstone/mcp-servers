@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { humaansFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { humaansFetch, listResponseSchema } from '../client.js';
+import { notConfiguredResult, withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
-import type { HumaansListResponse } from '../types.js';
 
 // Humaans has no /teams endpoint — team names exist only as an attribute on
 // people — so the team list is derived by scanning the people directory.
@@ -13,13 +12,12 @@ import type { HumaansListResponse } from '../types.js';
 const MAX_PAGES = 10;
 const PAGE_SIZE = 250;
 
-function noApiKeyError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'Humaans API key not configured',
-    resolution: 'Use configure_humaans_api_key to set your API key first.',
-  });
-}
+// Only each person's team names are read; other fields are ignored.
+const teamScanSchema = listResponseSchema.extend({
+  data: z.array(
+    z.object({ teams: z.array(z.object({ name: z.unknown() })).nullish() }),
+  ),
+});
 
 export function registerTeamTools(server: McpServer): void {
   server.registerTool(
@@ -43,7 +41,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const counts = new Map<string, number>();
       let scanned = 0;
@@ -54,9 +52,7 @@ RELATED TOOLS:
         params.set('$skip', String(scanned));
         if (args.status) params.set('status', args.status);
 
-        const result = await humaansFetch<
-          HumaansListResponse<{ teams?: Array<{ name?: unknown }> }>
-        >(`/people?${params.toString()}`);
+        const result = await humaansFetch(`/people?${params.toString()}`, teamScanSchema);
 
         total = result.total;
         for (const person of result.data) {

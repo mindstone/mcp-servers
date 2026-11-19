@@ -3,7 +3,7 @@
  */
 
 export const mockMe = {
-  id: 'person-me-001',
+  id: 'personme',
   firstName: 'Alice',
   lastName: 'Smith',
   preferredName: null,
@@ -11,7 +11,7 @@ export const mockMe = {
   status: 'active',
   contractType: 'fullTime',
   teams: [{ name: 'Engineering' }],
-  locationId: 'loc-001',
+  locationId: 'loc001',
   employmentStartDate: '2023-01-15',
   employmentEndDate: null,
   timezone: 'Europe/London',
@@ -25,7 +25,7 @@ export const mockMe = {
 
 export const mockPeople = [
   {
-    id: 'person-001',
+    id: 'person001',
     firstName: 'Alice',
     lastName: 'Smith',
     preferredName: null,
@@ -33,14 +33,14 @@ export const mockPeople = [
     status: 'active',
     contractType: 'fullTime',
     teams: [{ name: 'Engineering' }],
-    locationId: 'loc-001',
+    locationId: 'loc001',
     employmentStartDate: '2023-01-15',
     employmentEndDate: null,
     timezone: 'Europe/London',
     jobRole: { jobTitle: 'Senior Engineer', department: 'Engineering' },
   },
   {
-    id: 'person-002',
+    id: 'person002',
     firstName: 'Bob',
     lastName: 'Jones',
     preferredName: 'Bobby',
@@ -48,7 +48,7 @@ export const mockPeople = [
     status: 'active',
     contractType: 'partTime',
     teams: [{ name: 'Sales' }],
-    locationId: 'loc-002',
+    locationId: 'loc002',
     employmentStartDate: '2023-06-01',
     employmentEndDate: null,
     timezone: 'America/New_York',
@@ -58,21 +58,21 @@ export const mockPeople = [
 
 export const mockJobRoles = [
   {
-    id: 'role-001',
-    personId: 'person-001',
+    id: 'role001',
+    personId: 'person001',
     jobTitle: 'Senior Engineer',
     department: 'Engineering',
-    reportingTo: 'person-003',
+    reportingTo: 'person003',
     effectiveDate: '2024-01-01',
     endDate: null,
     note: 'Promoted from mid-level',
   },
   {
-    id: 'role-002',
-    personId: 'person-001',
+    id: 'role002',
+    personId: 'person001',
     jobTitle: 'Engineer',
     department: 'Engineering',
-    reportingTo: 'person-003',
+    reportingTo: 'person003',
     effectiveDate: '2023-01-15',
     endDate: '2023-12-31',
     note: null,
@@ -81,14 +81,14 @@ export const mockJobRoles = [
 
 export const mockLocations = [
   {
-    id: 'loc-001',
+    id: 'loc001',
     label: 'London HQ',
     city: 'London',
     country: 'United Kingdom',
     timezone: 'Europe/London',
   },
   {
-    id: 'loc-002',
+    id: 'loc002',
     label: 'New York Office',
     city: 'New York',
     country: 'United States',
@@ -97,7 +97,7 @@ export const mockLocations = [
 ];
 
 export const mockCompany = {
-  id: 'company-001',
+  id: 'company001',
   name: 'Acme Corp',
   status: 'active',
   trialEndDate: null,
@@ -106,12 +106,12 @@ export const mockCompany = {
 
 export const mockTimeAway = [
   {
-    id: 'ta-001',
-    personId: 'person-001',
+    id: 'ta001',
+    personId: 'person001',
     startDate: '2024-03-15',
     endDate: '2024-03-15',
-    timeAwayTypeId: 'tat-001',
-    timeAwayType: { id: 'tat-001', name: 'Paid time off' },
+    timeAwayTypeId: 'tat001',
+    timeAwayType: { id: 'tat001', name: 'Paid time off' },
     requestStatus: 'approved',
     startPeriod: 'full',
     endPeriod: 'full',
@@ -119,12 +119,12 @@ export const mockTimeAway = [
     note: 'Doctor appointment',
   },
   {
-    id: 'ta-002',
-    personId: 'person-002',
+    id: 'ta002',
+    personId: 'person002',
     startDate: '2024-04-01',
     endDate: '2024-04-05',
-    timeAwayTypeId: 'tat-001',
-    timeAwayType: { id: 'tat-001', name: 'Paid time off' },
+    timeAwayTypeId: 'tat001',
+    timeAwayType: { id: 'tat001', name: 'Paid time off' },
     requestStatus: 'pending',
     startPeriod: 'full',
     endPeriod: 'full',
@@ -134,18 +134,18 @@ export const mockTimeAway = [
 ];
 
 export const mockTimeAwayTypes = [
-  { id: 'tat-001', name: 'Paid time off', color: '#4CAF50' },
-  { id: 'tat-002', name: 'Sick leave', color: '#FF9800' },
-  { id: 'tat-003', name: 'Working from home', color: '#2196F3' },
+  { id: 'tat001', name: 'Paid time off', color: '#4CAF50' },
+  { id: 'tat002', name: 'Sick leave', color: '#FF9800' },
+  { id: 'tat003', name: 'Working from home', color: '#2196F3' },
 ];
 
 export const mockCreatedTimeAway = {
-  id: 'ta-new-001',
-  personId: 'person-001',
+  id: 'tanew',
+  personId: 'person001',
   startDate: '2024-05-01',
   endDate: '2024-05-02',
-  timeAwayTypeId: 'tat-001',
-  timeAwayType: { id: 'tat-001', name: 'Paid time off' },
+  timeAwayTypeId: 'tat001',
+  timeAwayType: { id: 'tat001', name: 'Paid time off' },
   requestStatus: 'pending',
   startPeriod: 'full',
   endPeriod: 'full',
@@ -155,22 +155,22 @@ export const mockCreatedTimeAway = {
 
 export const mockTimeAwayAllocations = [
   {
-    id: 'alloc-001',
-    personId: 'person-001',
+    id: 'alloc001',
+    personId: 'person001',
     type: 'specific',
     effectiveDate: '2024-01-01',
-    timeAwayPolicyId: 'policy-001',
-    timeAwayPolicy: { id: 'policy-001', name: 'Standard PTO' },
+    timeAwayPolicyId: 'policy001',
+    timeAwayPolicy: { id: 'policy001', name: 'Standard PTO' },
     createdAt: '2024-01-01T09:00:00.000Z',
     updatedAt: '2024-01-01T09:00:00.000Z',
   },
   {
-    id: 'alloc-002',
-    personId: 'person-002',
+    id: 'alloc002',
+    personId: 'person002',
     type: 'placeOfWork',
     effectiveDate: null,
-    timeAwayPolicyId: 'policy-002',
-    timeAwayPolicy: { id: 'policy-002', name: 'US PTO' },
+    timeAwayPolicyId: 'policy002',
+    timeAwayPolicy: { id: 'policy002', name: 'US PTO' },
     createdAt: '2024-01-02T09:00:00.000Z',
     updatedAt: '2024-01-02T09:00:00.000Z',
   },

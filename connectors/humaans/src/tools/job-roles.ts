@@ -1,23 +1,14 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { humaansFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { humaansFetch, listResponseSchema, resourceSchema } from '../client.js';
+import { notConfiguredResult, withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sanitizeJobRole, sanitizeList } from '../sanitize.js';
-import type { HumaansListResponse } from '../types.js';
+import { envelopeStrings } from '../sanitize.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
   if (count >= total) return `Showing all ${total} results.`;
   const remaining = total - skip - count;
   return `Showing ${count} of ${total} total (skip=${skip}). ${remaining > 0 ? `Use skip=${skip + count} to see more.` : ''}`;
-}
-
-function noApiKeyError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'Humaans API key not configured',
-    resolution: 'Use configure_humaans_api_key to set your API key first.',
-  });
 }
 
 export function registerJobRoleTools(server: McpServer): void {
@@ -49,7 +40,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -60,14 +51,12 @@ RELATED TOOLS:
       if (args.personId) params.set('personId', args.personId);
       if (args.asOf) params.set('$asOf', args.asOf);
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
-        `/job-roles?${params.toString()}`,
-      );
+      const result = await humaansFetch(`/job-roles?${params.toString()}`, listResponseSchema);
 
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        jobRoles: sanitizeList(result.data, sanitizeJobRole, 'humaans:list_humaans_job_roles'),
+        jobRoles: envelopeStrings(result.data, 'humaans:list_humaans_job_roles'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -90,14 +79,15 @@ Example: { "jobRoleId": "hmA5GnUq9ojK86LLKKWbiuKG" }`,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
-      const jobRole = await humaansFetch<Record<string, unknown>>(
+      const jobRole = await humaansFetch(
         `/job-roles/${encodeURIComponent(args.jobRoleId)}`,
+        resourceSchema,
       );
       return JSON.stringify({
         ok: true,
-        jobRole: sanitizeJobRole(jobRole, 'humaans:get_humaans_job_role'),
+        jobRole: envelopeStrings(jobRole, 'humaans:get_humaans_job_role'),
       });
     }),
   );

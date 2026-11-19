@@ -13,11 +13,18 @@ import {
 
 const BASE = 'https://app.humaans.io/api';
 
+export interface HumaansMockRequestBodies {
+  timeAway?: Record<string, unknown>;
+}
+
 /**
  * Creates MSW handlers that mock the Humaans API.
  * Verifies Authorization: Bearer header on every request.
  */
-export function createHumaansHandlers(expectedKey = 'test-humaans-key') {
+export function createHumaansHandlers(
+  expectedKey = 'test-humaans-key',
+  requestBodies: HumaansMockRequestBodies = {},
+) {
   const checkAuth = (request: Request) => {
     const auth = request.headers.get('Authorization');
     if (auth !== `Bearer ${expectedKey}`) {
@@ -126,6 +133,7 @@ export function createHumaansHandlers(expectedKey = 'test-humaans-key') {
     http.post(`${BASE}/time-away`, async ({ request }) => {
       const authError = checkAuth(request);
       if (authError) return authError;
+      requestBodies.timeAway = await request.json() as Record<string, unknown>;
       return HttpResponse.json(mockCreatedTimeAway, { status: 201 });
     }),
 

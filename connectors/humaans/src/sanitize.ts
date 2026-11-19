@@ -1,138 +1,166 @@
 /**
- * Envelope-wrapping for the free-text fields Humaans returns to the LLM.
+ * Envelope-wrapping for everything Humaans returns to the model (AGENTS.md
+ * security invariant #6).
  *
- * People responses are field-allowlisted / sensitive-field-denylisted in
- * `tools/people.ts`, but time away entries, allocations, job roles, person
- * profiles, locations, and the company record come back as raw API objects
- * whose free-text fields are authored in Humaans (by employees, managers, or
- * admins): `note` / `reviewNote`, the `name` of embedded `timeAwayType` /
- * `timeAwayPolicy` objects, profile free text (`bio`, names, social links,
- * team names, job title / department), and location / company names. Those
- * are attacker-controlled strings, so they reach `wrapUntrusted` here before
- * the object is returned (AGENTS.md security invariant #6). This module is
- * the single, auditable place that enumerates those fields.
+ * `envelopeStrings` wraps every string, at any depth, in an untrusted-content
+ * envelope, including fields Humaans adds later. The only strings left raw are
+ * the structured tokens in RAW_FIELDS, and only when the value passes that
+ * field's validator: the model needs them byte-for-byte to pass back as tool
+ * inputs, and an envelope copied into a parameter would change the value. A
+ * value that fails its validator is wrapped like any other text.
+ *
+ * Keys are treated the same way: only the Humaans field names in KNOWN_KEYS
+ * stay raw; any other key is enveloped and shown as `?` in source paths.
+ *
+ * Authored text stays wrapped even when it looks like a token: names, labels,
+ * notes, `contractType` and `employeeId` (both set by the company), location
+ * ids, colours and every field not listed here.
  */
+import { z } from 'zod';
 import { wrapUntrusted } from './untrusted-content.js';
 
-type Obj = Record<string, unknown>;
+// A Humaans resource id, e.g. "VMB1yzL5uL8VvNNCJc9rykJz".
+const resourceId = z.string().regex(/^[A-Za-z0-9]{1,64}$/);
 
-function isObj(v: unknown): v is Obj {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
+// A calendar date (YYYY-MM-DD) or an ISO 8601 timestamp.
+const dateOrTimestamp = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/);
 
-function wrapStr(v: unknown, source: string): unknown {
-  return typeof v === 'string' ? wrapUntrusted(v, source) : v;
-}
+const email = z.string().max(254).email();
 
-function wrapFields(value: unknown, fields: string[], source: string): unknown {
-  if (!isObj(value)) return value;
-  const out: Obj = { ...value };
-  for (const field of fields) {
-    out[field] = wrapStr(out[field], `${source}:${field}`);
-  }
-  return out;
-}
-
-/** Wrap the `name` of an embedded object (e.g. `timeAwayType` / `timeAwayPolicy`). */
-function wrapNestedName(value: unknown, key: string, source: string): unknown {
-  if (!isObj(value)) return value;
-  const nested = value[key];
-  if (!isObj(nested)) return value;
-  return { ...value, [key]: { ...nested, name: wrapStr(nested.name, `${source}:${key}.name`) } };
-}
-
-/** Wrap free-text fields of an embedded object (e.g. `jobRole` on a person). */
-function wrapNestedFields(value: unknown, key: string, fields: string[], source: string): unknown {
-  if (!isObj(value)) return value;
-  const nested = value[key];
-  if (!isObj(nested)) return value;
-  return { ...value, [key]: wrapFields(nested, fields, `${source}:${key}`) };
-}
-
-/** Wrap the `name` of each entry in an array of embedded objects (e.g. `teams`). */
-function wrapNameList(value: unknown, key: string, source: string): unknown {
-  if (!isObj(value)) return value;
-  const list = value[key];
-  if (!Array.isArray(list)) return value;
-  return {
-    ...value,
-    [key]: list.map((item) =>
-      isObj(item) ? { ...item, name: wrapStr(item.name, `${source}:${key}.name`) } : item,
-    ),
-  };
-}
-
-/** Wrap every string entry of an array field (e.g. `socialLinks`). */
-function wrapStringListField(value: unknown, field: string, source: string): unknown {
-  if (!isObj(value)) return value;
-  const list = value[field];
-  if (!Array.isArray(list)) return value;
-  return { ...value, [field]: list.map((item) => wrapStr(item, `${source}:${field}`)) };
-}
-
-/** Wrap the note fields and embedded type name on a time away entry. */
-export function sanitizeTimeAwayEntry(entry: unknown, source: string): unknown {
-  return wrapNestedName(wrapFields(entry, ['note', 'reviewNote'], source), 'timeAwayType', source);
-}
-
-/** Wrap the embedded policy name on a time away allocation. */
-export function sanitizeTimeAwayAllocation(allocation: unknown, source: string): unknown {
-  return wrapNestedName(allocation, 'timeAwayPolicy', source);
-}
-
-/** Wrap the admin-authored job title, department, and note on a job role. */
-export function sanitizeJobRole(role: unknown, source: string): unknown {
-  return wrapFields(role, ['jobTitle', 'department', 'note'], source);
-}
-
-/** Wrap the admin-authored name on a time away type. */
-export function sanitizeTimeAwayType(timeAwayType: unknown, source: string): unknown {
-  return wrapFields(timeAwayType, ['name'], source);
-}
-
-// Self- or manager-editable free text on a person profile. Structured tokens
-// (id, email, status, dates, timezone) stay raw so they remain usable as
-// filter / parameter values; future free-text fields Humaans adds must be
-// enumerated here.
-const PERSON_FREE_TEXT_FIELDS = [
-  'firstName',
-  'lastName',
-  'preferredName',
-  'bio',
-  'remoteCity',
-  'remoteCountry',
-  'jobTitle',
-  'department',
-];
+// An IANA time zone name the runtime recognises, e.g. "Europe/London".
+const timezone = z
+  .string()
+  .regex(/^[A-Za-z][A-Za-z0-9/_+-]{0,63}$/)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  });
 
 /**
- * Wrap the free-text fields on a person profile (full or compact): names,
- * bio, remote location, job title / department / note (top-level and inside
- * the embedded `jobRole`), embedded team names, and social links.
+ * Every field that may stay raw, with its validator and the tool inputs that
+ * consume it. Matched by exact key at any depth (e.g. `timeAwayType.id`).
  */
-export function sanitizePersonProfile(person: unknown, source: string): unknown {
-  let out = wrapFields(person, PERSON_FREE_TEXT_FIELDS, source);
-  out = wrapNestedFields(out, 'jobRole', ['jobTitle', 'department', 'note'], source);
-  out = wrapNameList(out, 'teams', source);
-  out = wrapStringListField(out, 'socialLinks', source);
-  return out;
+const RAW_FIELDS = new Map<string, z.ZodType<string>>([
+  // personId (get_humaans_person, list_humaans_job_roles, the time away tools),
+  // jobRoleId (get_humaans_job_role), timeAwayId (cancel/approve/decline),
+  // timeAwayTypeId (create_humaans_time_away)
+  ['id', resourceId],
+  // personId filters and create_humaans_time_away.personId
+  ['personId', resourceId],
+  ['companyId', resourceId],
+  // a manager's person id: get_humaans_person.personId
+  ['reportingTo', resourceId],
+  // a time away entry's requester and reviewer: get_humaans_person.personId
+  ['requestedBy', resourceId],
+  ['reviewedBy', resourceId],
+  // create_humaans_time_away.timeAwayTypeId
+  ['timeAwayTypeId', resourceId],
+  // startDateAfter / startDateBefore / asOf / create_humaans_time_away dates
+  ['startDate', dateOrTimestamp],
+  ['endDate', dateOrTimestamp],
+  ['effectiveDate', dateOrTimestamp],
+  ['employmentStartDate', dateOrTimestamp],
+  ['employmentEndDate', dateOrTimestamp],
+  ['reviewedAt', dateOrTimestamp],
+  ['createdAt', dateOrTimestamp],
+  ['updatedAt', dateOrTimestamp],
+  // list_humaans_people.email
+  ['email', email],
+  ['timezone', timezone],
+  // list_humaans_people.status / list_humaans_teams.status
+  ['status', z.enum(['active', 'offboarded', 'newHire'])],
+  // list_humaans_time_away.requestStatus
+  ['requestStatus', z.enum(['pending', 'approved', 'declined'])],
+  // create_humaans_time_away.startPeriod / endPeriod
+  ['startPeriod', z.enum(['full', 'am', 'pm'])],
+  ['endPeriod', z.enum(['full', 'am'])],
+  // a time away allocation's type
+  ['type', z.enum(['specific', 'placeOfWork'])],
+]);
+
+/**
+ * The Humaans field names this connector knows, the only keys kept raw. Every
+ * other key, whatever its spelling, is vendor data: it is enveloped, and its
+ * place in a source path is the fixed placeholder `?`. Drawn from `types.ts`,
+ * the response schemas, the test fixtures, and the person, job role, company
+ * and time away objects in the Humaans API reference (docs.humaans.io/api,
+ * checked 2026-11-19). Not exhaustive: a key Humaans documents elsewhere or
+ * adds later is enveloped like any unknown key.
+ */
+const KNOWN_KEYS: ReadonlySet<string> = new Set([
+  ...RAW_FIELDS.keys(),
+  // person (PersonCompact, the compact list shape and the full profile)
+  'firstName', 'middleName', 'lastName', 'preferredName', 'contractType',
+  'employeeId', 'teams', 'locationId', 'jobRole', 'jobTitle', 'department',
+  'bio', 'phoneNumber', 'formattedPhoneNumber', 'spokenLanguages',
+  'workingDays', 'remoteCity', 'remoteState', 'remoteRegionCode',
+  'remoteCountryCode', 'firstWorkingDay', 'lastWorkingDay', 'probationEndDate',
+  'spaceId', 'remoteTimezone', 'linkedIn', 'twitter', 'github', 'isManager',
+  'isVerified', 'isWorkEmailHidden', 'publicHolidayCalendarId', 'leavingReason',
+  'leavingNote', 'source', 'payrollProvider', 'turnoverImpact',
+  // workingDays items
+  'day',
+  // person fields get_humaans_person strips; known, so a stray nested copy is
+  // still labelled by name
+  'calendarFeedToken', 'taxId', 'taxCode', 'personalEmail',
+  'personalPhoneNumber', 'formattedPersonalPhoneNumber', 'birthday', 'address',
+  'city', 'state', 'postcode', 'countryCode', 'profilePhoto', 'profilePhotoId',
+  'nationality', 'nationalities', 'gender', 'dietaryPreference', 'foodAllergies',
+  'shortBirthday',
+  // job role
+  'note', 'jobLibraryProfileId', 'jobLibraryLevelId', 'jobLibraryLevelCode',
+  'jobLibraryLevelGrade', 'jobLibraryLevelName', 'jobLibraryLevelTrack',
+  'deletedAt',
+  // location and company
+  'label', 'country', 'name', 'trialEndDate', 'timesheetEnabled',
+  'paymentStatus', 'logo',
+  // time away, its types, allocations and cancellation result
+  'timeAwayType', 'days', 'reviewNote', 'color', 'timeAwayPolicyId',
+  'timeAwayPolicy', 'deleted', 'startTime', 'endTime', 'isTimeOff',
+  'workingFromLocationId',
+  // time away breakdown items
+  'breakdown', 'date', 'period', 'weekend', 'holiday',
+]);
+
+function isRawToken(key: string | undefined, value: string): boolean {
+  if (key === undefined) return false;
+  const validator = RAW_FIELDS.get(key);
+  return validator !== undefined && validator.safeParse(value).success;
 }
 
-/** Wrap the admin-authored label/city/country on a location. */
-export function sanitizeLocation(location: unknown, source: string): unknown {
-  return wrapFields(location, ['label', 'city', 'country'], source);
+function walk(value: unknown, source: string, path: string, key: string | undefined): unknown {
+  if (typeof value === 'string') {
+    if (isRawToken(key, value)) return value;
+    return wrapUntrusted(value, path ? `${source}:${path}` : source);
+  }
+  if (Array.isArray(value)) {
+    // Array items share the array's key and path, so `teams[].name` is `teams.name`.
+    return value.map((item) => walk(item, source, path, undefined));
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, item]) => {
+        const known = KNOWN_KEYS.has(k);
+        const outKey = known ? k : (wrapUntrusted(k, `${source}:key`) ?? k);
+        const segment = known ? k : '?';
+        const childPath = path ? `${path}.${segment}` : segment;
+        return [outKey, walk(item, source, childPath, known ? k : undefined)];
+      }),
+    );
+  }
+  return value;
 }
 
-/** Wrap the admin-authored name on the company record. */
-export function sanitizeCompany(company: unknown, source: string): unknown {
-  return wrapFields(company, ['name'], source);
-}
-
-/** Map a sanitizer over an array, passing non-arrays through unchanged. */
-export function sanitizeList(
-  items: unknown,
-  fn: (item: unknown, source: string) => unknown,
-  source: string,
-): unknown {
-  return Array.isArray(items) ? items.map((it) => fn(it, source)) : items;
+/**
+ * Wrap every string in `value`, at any depth, except a validated structured
+ * token in RAW_FIELDS. Source labels are `<source>:<dotted.path>`.
+ */
+export function envelopeStrings(value: unknown, source: string): unknown {
+  return walk(value, source, '', undefined);
 }

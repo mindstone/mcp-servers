@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { humaansFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { humaansFetch, listResponseSchema, resourceSchema } from '../client.js';
+import { notConfiguredResult, withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sanitizePersonProfile } from '../sanitize.js';
-import type { HumaansListResponse, PersonCompact } from '../types.js';
+import { envelopeStrings } from '../sanitize.js';
+import type { PersonCompact } from '../types.js';
 
 // Fields to include in compact person list responses (allowlist for security)
 const PERSON_LIST_FIELDS = [
@@ -17,7 +17,7 @@ const PERSON_LIST_FIELDS = [
 const PERSON_SENSITIVE_FIELDS = [
   'calendarFeedToken', 'taxId', 'taxCode',
   'personalEmail', 'personalPhoneNumber', 'formattedPersonalPhoneNumber',
-  'birthday', 'address', 'city', 'state', 'postcode', 'countryCode',
+  'birthday', 'shortBirthday', 'address', 'city', 'state', 'postcode', 'countryCode',
   'profilePhoto', 'profilePhotoId',
   'nationality', 'nationalities', 'gender',
   'dietaryPreference', 'foodAllergies',
@@ -29,10 +29,10 @@ function compactPerson(person: Record<string, unknown>): PersonCompact {
     compact[field] = person[field];
   }
   // Include inline job role info if present
-  const jobRole = person.jobRole as Record<string, unknown> | undefined;
-  if (jobRole) {
-    compact.jobTitle = jobRole.jobTitle;
-    compact.department = jobRole.department;
+  const jobRole = resourceSchema.safeParse(person.jobRole);
+  if (jobRole.success) {
+    compact.jobTitle = jobRole.data.jobTitle;
+    compact.department = jobRole.data.department;
   }
   return compact as unknown as PersonCompact;
 }
@@ -42,28 +42,13 @@ function sanitizePerson(person: Record<string, unknown>, source: string): unknow
   for (const field of PERSON_SENSITIVE_FIELDS) {
     delete sanitized[field];
   }
-  // Everything that remains is vendor-authored; envelope the free-text fields
-  // (names, bio, social links, team names, job title) before they reach the
-  // model (invariant #6).
-  return sanitizePersonProfile(sanitized, source);
+  return envelopeStrings(sanitized, source);
 }
 
 function paginationHint(total: number, skip: number, count: number): string {
   if (count >= total) return `Showing all ${total} results.`;
   const remaining = total - skip - count;
   return `Showing ${count} of ${total} total (skip=${skip}). ${remaining > 0 ? `Use skip=${skip + count} to see more.` : ''}`;
-}
-
-function noApiKeyError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'Humaans API key not configured',
-    resolution: 'To use Humaans, you need to configure an API access token first.',
-    next_step: {
-      action: 'The user adds the Humaans API token in Settings → Connectors in the app. Do not ask for it in chat.',
-      get_key_from: 'https://app.humaans.io/settings/home?tokens=1',
-    },
-  });
 }
 
 export function registerPeopleTools(server: McpServer): void {
@@ -83,9 +68,9 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
-      const me = await humaansFetch<Record<string, unknown>>('/me');
+      const me = await humaansFetch('/me', resourceSchema);
       return JSON.stringify({ ok: true, person: sanitizePerson(me, 'humaans:get_humaans_me') });
     }),
   );
@@ -121,7 +106,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 50, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -133,12 +118,13 @@ RELATED TOOLS:
       if (args.email) params.set('email', args.email);
       if (args.team) params.set('teams', args.team);
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
+      const result = await humaansFetch(
         `/people?${params.toString()}`,
+        listResponseSchema.extend({ data: z.array(resourceSchema) }),
       );
 
       const people = result.data.map((person) =>
-        sanitizePersonProfile(compactPerson(person), 'humaans:list_humaans_people'),
+        envelopeStrings(compactPerson(person), 'humaans:list_humaans_people'),
       );
       const hint = paginationHint(result.total, result.skip, people.length);
 
@@ -173,10 +159,11 @@ WORKFLOW - To find a person:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
-      const person = await humaansFetch<Record<string, unknown>>(
+      const person = await humaansFetch(
         `/people/${encodeURIComponent(args.personId)}`,
+        resourceSchema,
       );
       return JSON.stringify({ ok: true, person: sanitizePerson(person, 'humaans:get_humaans_person') });
     }),

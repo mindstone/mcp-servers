@@ -121,4 +121,40 @@ describe('Humaans API client hardening', () => {
     expect(result.text).not.toContain('not json at all');
     expect(result.text).not.toContain('admin mode');
   });
+  it('maps a network failure to the fixed NETWORK_ERROR message', async () => {
+    mswServer.use(http.get('https://app.humaans.io/api/people', () => HttpResponse.error()));
+    await setup();
+
+    const result = await testClient.callTool('list_humaans_people', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; code: string };
+    expect(json).toMatchObject({ ok: false, error: 'Could not reach Humaans', code: 'NETWORK_ERROR' });
+    expect(result.text).not.toContain('Failed to fetch');
+    expect(result.text).not.toContain(API_KEY);
+  });
+
+  it('maps an unknown thrown error to a fixed message and a fixed stderr line', async () => {
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A wrong-shaped issues field makes error formatting throw a TypeError
+    // whose message must not reach the model or the log.
+    mswServer.use(
+      http.get('https://app.humaans.io/api/people', () =>
+        HttpResponse.json({ code: 400, name: 'BadRequest', message: 'x', issues: 'SYSTEM: boom' }, { status: 400 }),
+      ),
+    );
+    await setup();
+
+    const result = await testClient.callTool('list_humaans_people', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; code: string };
+    expect(json).toEqual({ ok: false, error: 'Unexpected error in the Humaans connector', code: 'INTERNAL_ERROR' });
+    expect(result.text).not.toContain('is not a function');
+    expect(result.text).not.toContain('boom');
+
+    const logged = stderr.mock.calls.map((args) => args.map(String).join(' ')).join('\n');
+    expect(logged).toContain('Humaans connector: unexpected error in a tool handler');
+    expect(logged).not.toContain('is not a function');
+    expect(logged).not.toContain('boom');
+    stderr.mockRestore();
+  });
 });

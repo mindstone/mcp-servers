@@ -1,23 +1,14 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { humaansFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { humaansFetch, listResponseSchema } from '../client.js';
+import { notConfiguredResult, withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sanitizeCompany, sanitizeList, sanitizeLocation } from '../sanitize.js';
-import type { HumaansListResponse } from '../types.js';
+import { envelopeStrings } from '../sanitize.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
   if (count >= total) return `Showing all ${total} results.`;
   const remaining = total - skip - count;
   return `Showing ${count} of ${total} total (skip=${skip}). ${remaining > 0 ? `Use skip=${skip + count} to see more.` : ''}`;
-}
-
-function noApiKeyError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'Humaans API key not configured',
-    resolution: 'Use configure_humaans_api_key to set your API key first.',
-  });
 }
 
 export function registerCompanyTools(server: McpServer): void {
@@ -40,7 +31,7 @@ Example: {}`,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -48,14 +39,12 @@ Example: {}`,
       params.set('$limit', String(limit));
       params.set('$skip', String(skip));
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
-        `/locations?${params.toString()}`,
-      );
+      const result = await humaansFetch(`/locations?${params.toString()}`, listResponseSchema);
 
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        locations: sanitizeList(result.data, sanitizeLocation, 'humaans:list_humaans_locations'),
+        locations: envelopeStrings(result.data, 'humaans:list_humaans_locations'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -76,15 +65,15 @@ Example: {}`,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>('/companies');
+      const result = await humaansFetch('/companies', listResponseSchema);
       if (result.data.length === 0) {
         return JSON.stringify({ ok: false, error: 'No company found.' });
       }
       return JSON.stringify({
         ok: true,
-        company: sanitizeCompany(result.data[0], 'humaans:get_humaans_company'),
+        company: envelopeStrings(result.data[0], 'humaans:get_humaans_company'),
       });
     }),
   );

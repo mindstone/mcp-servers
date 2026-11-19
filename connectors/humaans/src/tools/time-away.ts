@@ -1,23 +1,16 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { humaansFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { humaansFetch, listResponseSchema, resourceSchema } from '../client.js';
+import { notConfiguredResult, withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sanitizeList, sanitizeTimeAwayAllocation, sanitizeTimeAwayEntry, sanitizeTimeAwayType } from '../sanitize.js';
-import type { HumaansListResponse } from '../types.js';
+import { envelopeStrings } from '../sanitize.js';
+
+const deletedSchema = z.object({ id: z.string(), deleted: z.boolean() });
 
 function paginationHint(total: number, skip: number, count: number): string {
   if (count >= total) return `Showing all ${total} results.`;
   const remaining = total - skip - count;
   return `Showing ${count} of ${total} total (skip=${skip}). ${remaining > 0 ? `Use skip=${skip + count} to see more.` : ''}`;
-}
-
-function noApiKeyError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'Humaans API key not configured',
-    resolution: 'Use configure_humaans_api_key to set your API key first.',
-  });
 }
 
 export function registerTimeAwayTools(server: McpServer): void {
@@ -53,7 +46,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 50, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -66,14 +59,12 @@ RELATED TOOLS:
       if (args.startDateAfter) params.set('startDate[$gte]', args.startDateAfter);
       if (args.startDateBefore) params.set('startDate[$lte]', args.startDateBefore);
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
-        `/time-away?${params.toString()}`,
-      );
+      const result = await humaansFetch(`/time-away?${params.toString()}`, listResponseSchema);
 
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        timeAway: sanitizeList(result.data, sanitizeTimeAwayEntry, 'humaans:list_humaans_time_away'),
+        timeAway: envelopeStrings(result.data, 'humaans:list_humaans_time_away'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -116,7 +107,7 @@ COMMON MISTAKES:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const body: Record<string, unknown> = {
         personId: args.personId,
@@ -128,7 +119,7 @@ COMMON MISTAKES:
       if (args.endPeriod) body.endPeriod = args.endPeriod;
       if (args.note) body.note = args.note;
 
-      const created = await humaansFetch<Record<string, unknown>>('/time-away', {
+      const created = await humaansFetch('/time-away', resourceSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -136,7 +127,7 @@ COMMON MISTAKES:
       return JSON.stringify({
         ok: true,
         message: 'Time away request created.',
-        timeAway: sanitizeTimeAwayEntry(created, 'humaans:create_humaans_time_away'),
+        timeAway: envelopeStrings(created, 'humaans:create_humaans_time_away'),
       });
     }),
   );
@@ -161,7 +152,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -169,18 +160,12 @@ RELATED TOOLS:
       params.set('$limit', String(limit));
       params.set('$skip', String(skip));
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
-        `/time-away-types?${params.toString()}`,
-      );
+      const result = await humaansFetch(`/time-away-types?${params.toString()}`, listResponseSchema);
 
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        timeAwayTypes: sanitizeList(
-          result.data,
-          sanitizeTimeAwayType,
-          'humaans:list_humaans_time_away_types',
-        ),
+        timeAwayTypes: envelopeStrings(result.data, 'humaans:list_humaans_time_away_types'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -214,7 +199,7 @@ RELATED TOOLS:
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
       const skip = Math.max(args.skip ?? 0, 0);
@@ -224,18 +209,15 @@ RELATED TOOLS:
 
       if (args.personId) params.set('personId', args.personId);
 
-      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
+      const result = await humaansFetch(
         `/time-away-allocations?${params.toString()}`,
+        listResponseSchema,
       );
 
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        allocations: sanitizeList(
-          result.data,
-          sanitizeTimeAwayAllocation,
-          'humaans:list_humaans_time_away_allocations',
-        ),
+        allocations: envelopeStrings(result.data, 'humaans:list_humaans_time_away_allocations'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -264,18 +246,18 @@ RELATED TOOLS:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
-      const result = await humaansFetch<{ id: string; deleted: boolean }>(
+      const result = await humaansFetch(
         `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        deletedSchema,
         { method: 'DELETE' },
       );
 
       return JSON.stringify({
         ok: true,
         message: 'Time away entry cancelled.',
-        id: result.id,
-        deleted: result.deleted,
+        ...(envelopeStrings(result, 'humaans:cancel_humaans_time_away') as typeof result),
       });
     }),
   );
@@ -303,20 +285,21 @@ RELATED TOOLS:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const body: Record<string, unknown> = { requestStatus: 'approved' };
       if (args.reviewNote) body.reviewNote = args.reviewNote;
 
-      const updated = await humaansFetch<Record<string, unknown>>(
+      const updated = await humaansFetch(
         `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        resourceSchema,
         { method: 'PATCH', body: JSON.stringify(body) },
       );
 
       return JSON.stringify({
         ok: true,
         message: 'Time away request approved.',
-        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:approve_humaans_time_away'),
+        timeAway: envelopeStrings(updated, 'humaans:approve_humaans_time_away'),
       });
     }),
   );
@@ -344,20 +327,21 @@ RELATED TOOLS:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (!isConfigured()) return noApiKeyError();
+      if (!isConfigured()) return notConfiguredResult();
 
       const body: Record<string, unknown> = { requestStatus: 'declined' };
       if (args.reviewNote) body.reviewNote = args.reviewNote;
 
-      const updated = await humaansFetch<Record<string, unknown>>(
+      const updated = await humaansFetch(
         `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        resourceSchema,
         { method: 'PATCH', body: JSON.stringify(body) },
       );
 
       return JSON.stringify({
         ok: true,
         message: 'Time away request declined.',
-        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:decline_humaans_time_away'),
+        timeAway: envelopeStrings(updated, 'humaans:decline_humaans_time_away'),
       });
     }),
   );

@@ -1,10 +1,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createHumaansHandlers } from './helpers/humaans-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
-describe('Humaans configure tools', () => {
+const API_KEY = 'test-humaans-key';
+
+// The configure tool is a read-only status check: the key is set only by the
+// host (Settings → Connectors, or HUMAANS_API_KEY), never as a tool argument.
+describe('Humaans configure tool', () => {
   let testClient: McpTestClient;
 
   afterEach(async () => {
@@ -12,198 +15,62 @@ describe('Humaans configure tools', () => {
     vi.unstubAllEnvs();
   });
 
-  it('configure_humaans_api_key sets the key and enables subsequent calls', async () => {
-    const NEW_KEY = 'newly-configured-key';
+  it('takes no input and is annotated read-only', async () => {
+    testClient = await createTestClient({ env: { HUMAANS_API_KEY: '' } });
+    const { tools } = await testClient.client.listTools();
+    const tool = tools.find((t) => t.name === 'configure_humaans_api_key');
 
-    // Start without API key, with handlers that accept the new key
-    mswServer.use(...createHumaansHandlers(NEW_KEY));
+    expect(tool).toBeDefined();
+    expect(tool?.inputSchema.properties ?? {}).toEqual({});
+    expect(tool?.inputSchema.required ?? []).toEqual([]);
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.annotations?.destructiveHint).toBe(false);
+    expect(tool?.description).toContain('Settings → Connectors');
+    expect(tool?.description).toContain('takes no token');
+  });
 
-    testClient = await createTestClient({
-      env: { HUMAANS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
+  it('reports configured without echoing the token when one is set', async () => {
+    testClient = await createTestClient({ env: { HUMAANS_API_KEY: API_KEY } });
+
+    const result = await testClient.callTool('configure_humaans_api_key', {});
+    expect(result.isError).toBeFalsy();
+    const json = result.json as { ok: boolean; configured: boolean; message: string };
+    expect(json).toMatchObject({ ok: true, configured: true });
+    expect(result.text).not.toContain(API_KEY);
+  });
+
+  it('points to Settings → Connectors when no token is set', async () => {
+    testClient = await createTestClient({ env: { HUMAANS_API_KEY: '' } });
+
+    const result = await testClient.callTool('configure_humaans_api_key', {});
+    expect(result.isError).toBeFalsy();
+    const json = result.json as {
+      ok: boolean;
+      configured: boolean;
+      next_step: { action: string; get_key_from: string; scopes: string };
+    };
+    expect(json).toMatchObject({ ok: true, configured: false });
+    expect(json.next_step.action).toContain('Settings → Connectors');
+    expect(json.next_step.action).toContain('Do not ask for the token in chat');
+    expect(json.next_step.get_key_from).toBe('https://app.humaans.io/settings/home?tokens=1');
+    expect(json.next_step.scopes).toContain('private:read');
+  });
+
+  it('ignores an api_key argument: it never sets the key', async () => {
+    const PASTED_KEY = 'pasted-into-chat-key';
+    mswServer.use(...createHumaansHandlers(PASTED_KEY));
+    testClient = await createTestClient({ env: { HUMAANS_API_KEY: '' } });
+
+    const configResult = await testClient.callTool('configure_humaans_api_key', {
+      api_key: PASTED_KEY,
     });
+    expect(configResult.text).not.toContain(PASTED_KEY);
+    expect((configResult.json as { configured?: boolean }).configured).not.toBe(true);
 
-    // First, verify calls fail without key
-    const beforeResult = await testClient.callTool('list_humaans_people', {});
-    const beforeJson = beforeResult.json as { ok: boolean; error: string };
-    expect(beforeJson.ok).toBe(false);
-    expect(beforeJson.error).toContain('not configured');
-
-    // Configure the key
-    const configResult = await testClient.callTool('configure_humaans_api_key', { api_key: NEW_KEY });
-    const configJson = configResult.json as { ok: boolean; message: string };
-    expect(configJson.ok).toBe(true);
-    expect(configJson.message).toContain('configured successfully');
-
-    // Now list people should work
-    const afterResult = await testClient.callTool('list_humaans_people', {});
-    const afterJson = afterResult.json as { ok: boolean; people: unknown[] };
-    expect(afterJson.ok).toBe(true);
-    expect(afterJson.people).toBeDefined();
-  });
-
-  it('configure_humaans_api_key rejects empty key via Zod (requestCount=0)', async () => {
-    let requestCount = 0;
-    mswServer.use(
-      ...createHumaansHandlers(),
-      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
-        requestCount++;
-        return HttpResponse.json({ success: true });
-      }),
-    );
-    testClient = await createTestClient({
-      env: { HUMAANS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
-    });
-
-    const result = await testClient.callTool('configure_humaans_api_key', { api_key: '' });
-    expect(result.isError).toBe(true);
-    expect(requestCount).toBe(0);
-  });
-
-  it('configure_humaans_api_key returns isError when bridge returns 401', async () => {
-    // Mock bridge endpoint returning 401
-    mswServer.use(
-      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
-        return new HttpResponse(null, { status: 401 });
-      }),
-      ...createHumaansHandlers(),
-    );
-
-    // Write a temp bridge state file
-    const fs = await import('fs');
-    const path = await import('path');
-    const os = await import('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-401-'));
-    const bridgePath = path.join(tmpDir, 'bridge.json');
-    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
-
-    try {
-      testClient = await createTestClient({
-        env: {
-          HUMAANS_API_KEY: '',
-          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
-          MCP_HOST_BRIDGE_STATE: '',
-        },
-      });
-
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
-      expect(result.isError).toBe(true);
-      const json = result.json as { ok: boolean; error: string; code: string };
-      expect(json.ok).toBe(false);
-      expect(json.error).toContain('401');
-      expect(json.code).toBe('BRIDGE_ERROR');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('configure_humaans_api_key returns isError when bridge returns 403', async () => {
-    // Mock bridge endpoint returning 403
-    mswServer.use(
-      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
-        return new HttpResponse(null, { status: 403 });
-      }),
-      ...createHumaansHandlers(),
-    );
-
-    const fs = await import('fs');
-    const path = await import('path');
-    const os = await import('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-403-'));
-    const bridgePath = path.join(tmpDir, 'bridge.json');
-    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
-
-    try {
-      testClient = await createTestClient({
-        env: {
-          HUMAANS_API_KEY: '',
-          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
-          MCP_HOST_BRIDGE_STATE: '',
-        },
-      });
-
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
-      expect(result.isError).toBe(true);
-      const json = result.json as { ok: boolean; error: string; code: string };
-      expect(json.ok).toBe(false);
-      expect(json.error).toContain('403');
-      expect(json.code).toBe('BRIDGE_ERROR');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('configure_humaans_api_key returns isError when bridge returns success:false', async () => {
-    // Mock bridge endpoint returning success:false
-    mswServer.use(
-      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
-        return HttpResponse.json({ success: false, error: 'Invalid API key format' });
-      }),
-      ...createHumaansHandlers(),
-    );
-
-    const fs = await import('fs');
-    const path = await import('path');
-    const os = await import('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-fail-'));
-    const bridgePath = path.join(tmpDir, 'bridge.json');
-    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
-
-    try {
-      testClient = await createTestClient({
-        env: {
-          HUMAANS_API_KEY: '',
-          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
-          MCP_HOST_BRIDGE_STATE: '',
-        },
-      });
-
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
-      expect(result.isError).toBe(true);
-      const json = result.json as { ok: boolean; error: string; code: string };
-      expect(json.ok).toBe(false);
-      expect(json.error).toContain('Invalid API key format');
-      expect(json.code).toBe('BRIDGE_ERROR');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('configure_humaans_api_key works with bridge available', async () => {
-    // Mock bridge endpoint
-    mswServer.use(
-      http.post('http://127.0.0.1:9999/bundled/humaans/configure', async ({ request }) => {
-        const body = await request.json() as { apiKey: string };
-        if (body.apiKey) {
-          return HttpResponse.json({ success: true });
-        }
-        return HttpResponse.json({ success: false, error: 'Missing key' });
-      }),
-      ...createHumaansHandlers('bridge-key'),
-    );
-
-    // Write a temp bridge state file
-    const fs = await import('fs');
-    const path = await import('path');
-    const os = await import('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-'));
-    const bridgePath = path.join(tmpDir, 'bridge.json');
-    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
-
-    try {
-      testClient = await createTestClient({
-        env: {
-          HUMAANS_API_KEY: '',
-          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
-          MCP_HOST_BRIDGE_STATE: '',
-        },
-      });
-
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'bridge-key' });
-      const json = result.json as { ok: boolean; message: string };
-      expect(json.ok).toBe(true);
-      expect(json.message).toContain('configured successfully');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    const after = await testClient.callTool('list_humaans_people', {});
+    const afterJson = after.json as { ok: boolean; error: string; resolution: string };
+    expect(afterJson.ok).toBe(false);
+    expect(afterJson.error).toContain('not configured');
+    expect(afterJson.resolution).toContain('Settings → Connectors');
   });
 });

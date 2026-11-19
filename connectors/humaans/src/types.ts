@@ -1,11 +1,6 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const HUMAANS_API_BASE = 'https://app.humaans.io/api';
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class HumaansError extends Error {
   constructor(
     message: string,
@@ -15,13 +10,6 @@ export class HumaansError extends Error {
     super(message);
     this.name = 'HumaansError';
   }
-}
-
-export interface HumaansListResponse<T> {
-  total: number;
-  limit: number;
-  skip: number;
-  data: T[];
 }
 
 export interface HumaansErrorResponse {
