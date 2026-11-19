@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { ConnectorError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { MAX_FILE_BYTES, libraryFileToRead, writeNewLibraryFile } from './library.js';
+import { fileTooLarge } from './limits.js';
 import { type ComputerInfo, type ExecResult, type Provider, type ProviderId, NAME_PATTERN, TOOLBOX } from './provider.js';
 import { shellQuote } from './providers/gcp.js';
 
@@ -308,7 +309,7 @@ export class Computers {
     if (!Number.isFinite(size))
       throw new ConnectorError(`${path} does not exist on the computer, or its size can't be read.`, 'SOURCE_MISSING', 'Check the path with computer_run (for example `ls -la <folder>`).');
     if (size > MAX_FILE_BYTES)
-      throw new ConnectorError(`${path} is larger than 200 MB.`, 'FILE_TOO_LARGE', 'Compress or split it on the computer first (for example with zip or split), then copy the parts.');
+      throw fileTooLarge(path);
     const data = await located.provider.download(located.computer, path);
     const written = await writeNewLibraryFile(libraryPath, data);
     return { computer: located.computer.name, library_path: written, bytes: data.length };

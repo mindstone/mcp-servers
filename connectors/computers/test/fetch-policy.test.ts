@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { refuseRedirects } from '../src/fetch-policy.js';
+import { installFetchPolicy } from '../src/fetch-policy.js';
 
 // A computer's endpoint redirecting to something on the host's own network must get nothing back.
 describe('the connector refuses every redirect, including requests the E2B SDK makes', () => {
@@ -15,7 +15,7 @@ describe('the connector refuses every redirect, including requests the E2B SDK m
     computer = createHttpServer((_, res) => res.writeHead(302, { Location: target }).end());
     await new Promise<void>((r) => computer.listen(0, '127.0.0.1', r));
     computerUrl = `http://127.0.0.1:${(computer.address() as AddressInfo).port}/files`;
-    refuseRedirects();
+    installFetchPolicy();
   });
   afterAll(() => {
     hostOnly.close();

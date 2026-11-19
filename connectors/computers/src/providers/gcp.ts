@@ -14,6 +14,7 @@ import type { Client as SshClient, SFTPWrapper } from 'ssh2';
 const { Client, utils: sshUtils } = ssh2;
 import { ConnectorError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
+import { CommandOutput, fileLimit, providerReply, readCapped } from '../limits.js';
 import { type ComputerInfo, type ComputerState, type ExecResult, type Provider, extraLabels, sleep } from '../provider.js';
 
 const COMPUTE = 'https://compute.googleapis.com/compute/v1';
@@ -21,6 +22,9 @@ const NETWORK = 'mcp-computers';
 const TAG = 'mcp-computer';
 const USER = 'computer';
 const KEY_HELP = 'https://console.cloud.google.com/iam-admin/serviceaccounts';
+/** Hosts Google writes in an operation's selfLink; the request itself always goes to COMPUTE. */
+const OPERATION_HOSTS = new Set(['compute.googleapis.com', 'www.googleapis.com']);
+const REPLY_LIMIT = providerReply('Google Cloud');
 
 interface ServiceAccountKey {
   client_email: string;
@@ -105,7 +109,7 @@ export class GcpProvider implements Provider {
     }).catch(() => {
       throw new ConnectorError('Google Cloud could not be reached.', 'PROVIDER_UNREACHABLE', 'Check the internet connection and try again in a minute.');
     });
-    const body = (await response.json().catch(() => ({}))) as { access_token?: string; expires_in?: number };
+    const body = parseJson((await readCapped(response.body, REPLY_LIMIT)).toString()) as { access_token?: string; expires_in?: number };
     if (!response.ok || !body.access_token)
       throw new ConnectorError(
         'Google Cloud did not accept the service-account key.',
@@ -116,9 +120,9 @@ export class GcpProvider implements Provider {
     return body.access_token;
   }
 
+  /** `path` is always relative to this project, so the account's token only ever goes to Compute Engine. */
   private async api<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = path.startsWith('https://') ? path : `${COMPUTE}/projects/${this.project}${path}`;
-    const response = await fetch(url, {
+    const response = await fetch(`${COMPUTE}/projects/${this.project}${path}`, {
       method,
       headers: { Authorization: `Bearer ${await this.accessToken()}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -127,7 +131,7 @@ export class GcpProvider implements Provider {
     }).catch(() => {
       throw new ConnectorError('Google Cloud could not be reached.', 'PROVIDER_UNREACHABLE', 'Check the internet connection and try again in a minute.');
     });
-    const text = await response.text();
+    const text = (await readCapped(response.body, REPLY_LIMIT)).toString();
     if (response.ok) {
       try {
         return (text ? JSON.parse(text) : {}) as T;
@@ -135,7 +139,7 @@ export class GcpProvider implements Provider {
         throw new ConnectorError('Google Cloud gave a reply the connector could not read.', 'PROVIDER_ERROR', 'Try again in a minute.');
       }
     }
-    console.error(`[computers] Google Cloud ${method} ${url.replace(COMPUTE, '')} -> HTTP ${response.status}`);
+    console.error(`[computers] Google Cloud ${method} /projects/${this.project}${path} -> HTTP ${response.status}`);
     throw this.error(response.status, text);
   }
 
@@ -176,11 +180,32 @@ export class GcpProvider implements Provider {
   private async waitOperation(operation: { selfLink: string; status: string; error?: { errors?: Array<{ message: string }> } }): Promise<void> {
     let current = operation;
     for (let attempt = 0; current.status !== 'DONE' && attempt < 60; attempt++) {
-      current = await this.api('POST', `${current.selfLink}/wait`);
+      current = await this.api('POST', `${this.operationPath(current.selfLink)}/wait`);
     }
     if (current.status !== 'DONE') throw new ConnectorError('Google Cloud is taking unusually long.', 'PROVIDER_TIMEOUT', 'Wait a minute, then call computer_list to see where it got to.');
     const message = current.error?.errors?.map((e) => e.message).join('; ');
     if (message) throw this.error(400, JSON.stringify({ error: { message } }));
+  }
+
+  /**
+   * The part after /projects/<project> of an operation's selfLink, or a refusal. The link comes from
+   * Google's reply, so it is checked as written (before URL parsing can tidy away a port, `..` or a
+   * stray `?`) and must name one of this project's own operations.
+   */
+  private operationPath(selfLink: unknown): string {
+    const untrusted = () => new ConnectorError(
+        'Google Cloud returned an unexpected operation address, so the connector did not follow it.',
+        'PROVIDER_ERROR',
+        'Use computer_list to check whether the requested change completed before trying again. If this keeps happening, contact support and include this error.',
+      );
+    if (typeof selfLink !== 'string' || /[\s\\%?#@\u0000-\u001f\u007f]/.test(selfLink) || /\/\.\.?(\/|$)/.test(selfLink)) throw untrusted();
+    const authority = /^https:\/\/([^/]*)\//.exec(selfLink)?.[1];
+    if (!authority || !OPERATION_HOSTS.has(authority)) throw untrusted();
+    const url = new URL(selfLink);
+    const project = this.project.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`^/compute/v1/projects/${project}(/(?:global|regions/[a-z0-9-]+|zones/[a-z0-9-]+)/operations/[A-Za-z0-9_-]+)$`).exec(url.pathname);
+    if (url.protocol !== 'https:' || url.hostname !== authority || url.port !== '' || !match) throw untrusted();
+    return match[1];
   }
 
   async check(): Promise<string> {
@@ -361,17 +386,20 @@ export class GcpProvider implements Provider {
     return new Promise((resolve, reject) => {
       client.exec('sudo -n bash -s', (error, stream) => {
         if (error) return reject(sshFailed());
-        let stdout = '';
-        let stderr = '';
         const timer = setTimeout(() => {
           stream.close();
           reject(new ConnectorError('The computer took too long to answer.', 'PROVIDER_TIMEOUT', 'Try again; long commands return a job handle to wait on instead.'));
         }, timeoutSec * 1000);
-        stream.on('data', (data: Buffer) => (stdout += data.toString()));
-        stream.stderr.on('data', (data: Buffer) => (stderr += data.toString()));
+        const output = new CommandOutput((tooLarge) => {
+          clearTimeout(timer);
+          stream.close();
+          reject(tooLarge);
+        });
+        stream.on('data', (data: Buffer) => output.add('stdout', data));
+        stream.stderr.on('data', (data: Buffer) => output.add('stderr', data));
         stream.on('close', (code: number | null) => {
           clearTimeout(timer);
-          resolve({ exitCode: code ?? 1, stdout, stderr });
+          resolve({ exitCode: code ?? 1, stdout: output.stdout, stderr: output.stderr });
         });
         stream.end(script);
       });
@@ -405,7 +433,9 @@ export class GcpProvider implements Provider {
     if (exists.exitCode !== 0) throw new ConnectorError(`${path} does not exist on the computer, or is not a file.`, 'SOURCE_MISSING', 'Check the path with computer_run (for example `ls -la <folder>`).');
     const sftp = await this.sftp(computer);
     try {
-      return await new Promise<Buffer>((resolve, reject) => sftp.readFile(path, (error, data) => (error ? reject(sshFailed()) : resolve(data))));
+      return await readCapped(sftp.createReadStream(path), fileLimit(path));
+    } catch (error) {
+      throw error instanceof ConnectorError ? error : sshFailed();
     } finally {
       sftp.end();
     }
@@ -417,6 +447,14 @@ export class GcpProvider implements Provider {
       `cat > /etc/systemd/system/mcp-computer-idle.service <<'UNIT'\n[Unit]\nDescription=Stop this computer when idle\n[Service]\nExecStart=/usr/bin/python3 /var/lib/mcp-computer/box.py idle 15 ${shutdown}\nRestart=always\n[Install]\nWantedBy=multi-user.target\nUNIT\n` +
         'systemctl daemon-reload && systemctl enable --now mcp-computer-idle.service',
     );
+  }
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
   }
 }
 

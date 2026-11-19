@@ -71,6 +71,8 @@ Each provider is a small adapter: lifecycle plus exec, upload and download.
 - **E2B:** a sandbox per computer, built from a 2 GB template the connector creates on first use. It pauses itself when idle and keeps its files and memory.
 - **Google Cloud:** a Debian instance per computer, on a network the connector creates for its computers only, with SSH in. The SSH key is generated per session and expires after 12 hours.
 
+Safety limits on what the connector reads from a provider, so a misbehaving computer can't flood it: a file copied out stops at 200 MB, and a command's reply at about 1 MiB. That 1 MiB is measured on the reply as the provider sends it (Fly.io's JSON, a Google Cloud SSH session's stdout and stderr together, E2B's decoded output and each of its stream frames), so it is a safety limit, not an exact allowance of command text. An E2B error reply from a computer is capped at 1 MiB, and Fly.io and Google Cloud API replies at 16 MiB each; E2B's own account API replies are not capped, and neither is the number of pages a list of computers can span. Over a limit, the tool fails with a message saying what to do instead (for example, save long output to a file and copy it out); nothing is cut short silently. Credentials go only to their own provider: the Google Cloud token only to Compute Engine for the connected project, and each Fly.io computer's file key only to its app's `fly.dev` address.
+
 On every computer, `box/box.py` runs each command as a job in its own cgroup. Cancelling ends the job and everything it started. A job nobody has waited on for 3 minutes is ended too, so stopping the assistant never leaves work running.
 
 ## Development

@@ -11,6 +11,7 @@
 import { randomBytes } from 'node:crypto';
 import { ConnectorError } from '../types.js';
 import { MAX_FILE_BYTES } from '../library.js';
+import { type Limit, commandOutput, fileLimit, fileTooLarge, providerReply, readCapped } from '../limits.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { type ComputerInfo, type ComputerState, type ExecResult, type Provider, TOOLBOX, extraLabels, sleep } from '../provider.js';
 
@@ -21,6 +22,11 @@ const TOKEN_URL = 'https://fly.io/dashboard/personal/tokens';
 const BOOT = '/root/.mcp-computer-boot.sh';
 /** Written by the boot hook once the everyday tools are back (Fly resets the root disk on every start). */
 const TOOLS_READY = '/var/lib/mcp-computer/tools-ready';
+/** The file key goes to https://<app>.fly.dev, so the app name must be one plain DNS label. */
+const DNS_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const REPLY_LIMIT = providerReply('Fly.io');
+/** Listing every app in the organisation is the one reply that setting FLY_APP avoids. */
+const APP_LIST_LIMIT = providerReply('Fly.io', 'To skip searching the whole organisation, set the Fly.io app name (FLY_APP) in the Computers connector settings.');
 
 interface FlyMachine {
   id: string;
@@ -51,7 +57,7 @@ export class FlyProvider implements Provider {
     this.app = appName || undefined;
   }
 
-  private async api<T>(method: string, path: string, body?: unknown, timeoutMs = 60_000): Promise<T> {
+  private async api<T>(method: string, path: string, body?: unknown, timeoutMs = 60_000, limit: Limit = REPLY_LIMIT): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${API}${path}`, {
@@ -68,7 +74,7 @@ export class FlyProvider implements Provider {
         'Check the internet connection and try again in a minute. If it keeps failing, see https://status.flyio.net.',
       );
     }
-    const text = await response.text();
+    const text = (await readCapped(response.body, limit)).toString();
     if (response.ok) {
       try {
         return (text ? JSON.parse(text) : {}) as T;
@@ -86,13 +92,13 @@ export class FlyProvider implements Provider {
       const machines = await this.machines(app);
       return `Fly.io: the token works. Computers live in the app "${app}" (${machines.length} so far).`;
     }
-    await this.api('GET', `/apps?org_slug=${encodeURIComponent(this.org)}`);
+    await this.api('GET', `/apps?org_slug=${encodeURIComponent(this.org)}`, undefined, undefined, APP_LIST_LIMIT);
     return `Fly.io: the token works for the organization "${this.org}". The first computer you create will make an app for them.`;
   }
 
   private async findApp(create: boolean): Promise<string | undefined> {
     if (this.app) return this.app;
-    const { apps } = await this.api<{ apps: Array<{ name: string }> }>('GET', `/apps?org_slug=${encodeURIComponent(this.org)}`);
+    const { apps } = await this.api<{ apps: Array<{ name: string }> }>('GET', `/apps?org_slug=${encodeURIComponent(this.org)}`, undefined, undefined, APP_LIST_LIMIT);
     const found = apps?.find((app) => app.name.startsWith(APP_PREFIX));
     if (found) return (this.app = found.name);
     if (!create) return undefined;
@@ -214,6 +220,7 @@ export class FlyProvider implements Provider {
       `/apps/${app}/machines/${id}/exec`,
       { command: ['bash', '-c', script], timeout: Math.min(timeoutSec, 60) },
       (Math.min(timeoutSec, 60) + 15) * 1000,
+      commandOutput,
     );
     return { exitCode: result.exit_code ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
   }
@@ -234,6 +241,12 @@ export class FlyProvider implements Provider {
 
   private async files(computer: ComputerInfo, method: 'GET' | 'PUT', path: string, mode: string, body?: Buffer): Promise<Response> {
     const app = (await this.findApp(false))!;
+    if (!DNS_LABEL.test(app))
+      throw new ConnectorError(
+        'The file could not be transferred because the Fly.io app name is invalid.',
+        'PROVIDER_ERROR',
+        'In the Computers connector settings, check the Fly.io app name (FLY_APP). Enter only the app name, without a web address; use lowercase letters, digits and dashes, starting and ending with a letter or digit, up to 63 characters. If this field is already empty, contact support and include this error.',
+      );
     const url = `https://${app}.fly.dev/files?path=${encodeURIComponent(path)}&mode=${mode}`;
     const headers = { Authorization: `Bearer ${await this.fileKey(computer)}`, 'fly-force-instance-id': computer.id };
     for (let attempt = 0; ; attempt++) {
@@ -260,9 +273,10 @@ export class FlyProvider implements Provider {
     if (!response.ok) throw new ConnectorError(`The computer could not read ${path}.`, 'TRANSFER_FAILED', 'Check it is a file you can read, then try again.');
     if (Number(response.headers.get('content-length') ?? 0) > MAX_FILE_BYTES) {
       await response.body?.cancel();
-      throw new ConnectorError(`${path} is larger than 200 MB.`, 'FILE_TOO_LARGE', 'Compress or split it on the computer first, then copy the parts.');
+      throw fileTooLarge(path);
     }
-    return Buffer.from(await response.arrayBuffer());
+    // Content-Length is the computer's claim; the bytes are counted as they arrive.
+    return readCapped(response.body, fileLimit(path));
   }
 
   async afterSetup(computer: ComputerInfo, run: (script: string) => Promise<ExecResult>): Promise<void> {
