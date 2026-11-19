@@ -1,65 +1,24 @@
-import * as fs from 'fs';
-import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
-
-/**
- * Path to bridge state file, supporting both current and legacy env vars.
- */
-export const BRIDGE_STATE_PATH =
-  process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
+import { REQUEST_TIMEOUT_MS } from './types.js';
+import { type BridgeResponse, postToBridge } from './bridge-reader.js';
 
 /**
  * Bridge configure endpoint, set by the host app when spawning the connector.
- * The host controls the path format — the connector never hardcodes it.
+ * The host controls the path format — the connector never hardcodes it. When it
+ * is unset there is no host to save keys to, so keys last for this session only.
  */
-const BRIDGE_CONFIGURE_ENDPOINT = process.env.MCP_BRIDGE_CONFIGURE_ENDPOINT || '';
-
-const loadBridgeState = (): BridgeState | null => {
-  if (!BRIDGE_STATE_PATH) return null;
-  try {
-    const raw = fs.readFileSync(BRIDGE_STATE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
+export const getBridgeConfigureEndpoint = (): string =>
+  process.env.MCP_BRIDGE_CONFIGURE_ENDPOINT || '';
 
 /**
- * Send a request to the host app bridge at an arbitrary path.
- *
- * The bridge is an HTTP server running inside the host app
- * that handles credential management and other cross-process operations.
+ * Ask the host app bridge, a loopback HTTP server inside the host app that
+ * handles credential management, to save a credential configuration.
+ * `bridge-reader.ts` is the vendored hardened reader: keep it byte-identical to
+ * `test-harness/src/bridge-reader.ts` (`scripts/check-bridge-reader.mjs`
+ * enforces this) and read the bridge only through it. Network failures are
+ * thrown for the caller to report.
  */
-const bridgeRequest = async (
-  urlPath: string,
+export const saveToBridge = (
+  endpoint: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
-  const bridge = loadBridgeState();
-  if (!bridge) {
-    return { success: false, error: 'Bridge not available' };
-  }
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bridge.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
-};
-
-/**
- * Post a credential configuration request to the host app bridge.
- *
- * Uses the MCP_BRIDGE_CONFIGURE_ENDPOINT env var set by the host.
- * Returns `{ success: false }` if the bridge or endpoint is not configured.
- */
-export const postToBridge = async (
-  body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
-  if (!BRIDGE_CONFIGURE_ENDPOINT) {
-    return { success: false, error: 'Bridge configure endpoint not set' };
-  }
-  return bridgeRequest(BRIDGE_CONFIGURE_ENDPOINT, body);
-};
+): Promise<BridgeResponse> =>
+  postToBridge(endpoint, body, { connector: 'retell-ai', timeoutMs: REQUEST_TIMEOUT_MS });

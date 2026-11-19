@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { setApiKey } from '../client.js';
-import { postToBridge, BRIDGE_STATE_PATH } from '../bridge.js';
+import { getBridgeConfigureEndpoint, saveToBridge } from '../bridge.js';
+import type { BridgeResponse } from '../bridge-reader.js';
+import { ConnectorError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerConfigTools(server: McpServer): void {
@@ -32,26 +34,44 @@ All other Retell AI tools require a valid API key to work.`,
         return JSON.stringify({ ok: false, error: 'API key is required.' });
       }
 
-      // If running inside a host app bridge, persist via the bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await postToBridge({ apiKey });
-          if (result.success) {
-            setApiKey(apiKey);
-            const message = result.warning
-              ? `Retell AI API key configured. Note: ${result.warning}`
-              : 'Retell AI API key configured! You can now manage voice agents and make phone calls.';
-            return JSON.stringify({ ok: true, message });
-          }
-          // Bridge endpoint not configured or failed — fall through to session-only mode
-        } catch {
-          // Bridge unavailable — fall through to session-only mode
-        }
+      const endpoint = getBridgeConfigureEndpoint();
+      if (!endpoint) {
+        // No host app to save to: the key lasts only as long as this server runs.
+        setApiKey(apiKey);
+        return JSON.stringify({
+          ok: true,
+          saved: false,
+          message:
+            'Retell AI API key set for this session only. It was not saved and will be lost when this server restarts. To keep it, set RETELL_API_KEY in your MCP client configuration.',
+        });
       }
 
-      // Standalone mode: set key for this session
+      // Host-managed: the key is saved by the host app. A failed save is reported
+      // as a failure, never downgraded to a session-only key.
+      let result: BridgeResponse;
+      try {
+        result = await saveToBridge(endpoint, { apiKey });
+      } catch {
+        // Fixed text: a network error message can quote the bridge address.
+        throw new ConnectorError(
+          'Retell AI API key was not saved: the app could not be reached.',
+          'SAVE_FAILED',
+          'Add the key in Settings → Connectors in the app instead.',
+        );
+      }
+      if (!result.success) {
+        const reason = result.error ? ` Reason: ${result.error}` : '';
+        throw new ConnectorError(
+          `Retell AI API key was not saved.${reason}`,
+          'SAVE_FAILED',
+          'Add the key in Settings → Connectors in the app instead.',
+        );
+      }
       setApiKey(apiKey);
-      return JSON.stringify({ ok: true, message: 'Retell AI API key configured for this session.' });
+      const message = result.warning
+        ? `Retell AI API key saved. Note: ${result.warning}`
+        : 'Retell AI API key saved. You can now manage voice agents and make phone calls.';
+      return JSON.stringify({ ok: true, saved: true, message });
     }),
   );
 }

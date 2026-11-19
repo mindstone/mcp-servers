@@ -13,11 +13,6 @@ export const SERVER_NAME = 'retell-ai-mcp-server';
  */
 export const SERVER_VERSION = pkg.version;
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class ConnectorError extends Error {
   constructor(
     message: string,

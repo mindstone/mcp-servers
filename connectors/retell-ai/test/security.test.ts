@@ -33,8 +33,9 @@ describe('Security — No internal references', () => {
       const content = fs.readFileSync(file, 'utf8');
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
-        // Allow the legacy env var reference (MINDSTONE_REBEL_BRIDGE_STATE) in bridge.ts — it's a runtime fallback
-        if (file.endsWith('bridge.ts') && lines[i].includes('MINDSTONE_REBEL_BRIDGE_STATE')) {
+        // Allow the legacy env var reference (MINDSTONE_REBEL_BRIDGE_STATE) in the vendored
+        // bridge reader — it's a runtime fallback
+        if (file.endsWith('bridge-reader.ts') && lines[i].includes('MINDSTONE_REBEL_BRIDGE_STATE')) {
           continue;
         }
         if (forbidden.test(lines[i])) {

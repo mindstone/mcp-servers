@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `configure_retell_api_key` no longer says the key was configured when the host app failed to save it. A failed save is now reported as an error (`SAVE_FAILED`) and the key is not kept, and without a host app the reply says plainly that the key lasts for this session only.
+
+### Security
+
+- The host app bridge state file is now read through the shared hardened reader (no symlinks, size limit, strict schema check), and the bridge's reply is schema-checked rather than trusted.
+
 ## [0.4.0] - 2026-11-16
 
 ### Changed
