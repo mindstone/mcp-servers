@@ -50,11 +50,6 @@ export interface ZendeskAccount {
   authIssue?: AuthIssue;
 }
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export interface FormatOptions {
   format?: 'concise' | 'detailed';
 }

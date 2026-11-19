@@ -36,6 +36,9 @@ are maintained manually as part of the PR review checklist.
 - Renewed tokens are written atomically (0600 temp file in the same folder, then rename), and a token file removed during a refresh (a disconnect) is not recreated. No refresh failure deletes or truncates a token file.
 - Refresh failures log only the HTTP status and OAuth error code, never the response body or `error_description`; a corrupt token file's parse error is no longer logged, since it can quote file contents.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- The host app bridge is now reached only through the shared hardened reader: the bridge state file is refused if it is a symlink, not a regular file, too large, or holds an invalid port or token; the reply is checked against a schema, redirects are refused, and its error and warning text is wrapped as outside content.
+- Removing an account now saves `accounts.json` atomically (owner-only temp file, then rename), so a failed save can't leave it half-written and an older file with wider permissions becomes owner-only (0600).
+- `accounts.json` and token files are no longer read or written through a symlink: a symlinked file is refused and logged by error code only (a symlinked containing folder is fine). An unreadable `accounts.json`, or one containing invalid JSON, is now logged instead of ignored silently, and removing an account no longer overwrites it with an empty list; it is saved again once it reads cleanly.
 
 ## [0.4.1] - 2026-08-09
 

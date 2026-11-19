@@ -231,8 +231,9 @@ describe('connector logs never name the tenant', () => {
       path.join(tempDir, 'accounts.json'),
       JSON.stringify({ accounts: [{ subdomain: SUB, email: 'agent@example.com', apiToken: 'fake-api-token' }] }),
     );
-    const original = realFs.writeFileSync;
-    realFs.writeFileSync = () => {
+    // The save is a temp file and a rename; fail the rename.
+    const original = realFs.renameSync;
+    realFs.renameSync = () => {
       throw Object.assign(new Error(`EACCES: permission denied, open '/configs/${SUB}.zendesk.com/accounts.json'`), {
         code: 'EACCES',
         path: `/configs/${SUB}.zendesk.com/accounts.json`,
@@ -244,7 +245,7 @@ describe('connector logs never name the tenant', () => {
       auth.loadAccounts();
       auth.removeAccount(SUB);
     } finally {
-      realFs.writeFileSync = original;
+      realFs.renameSync = original;
       syncBuiltinESMExports();
     }
     expectNoTenantLogged();

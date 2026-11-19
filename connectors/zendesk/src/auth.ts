@@ -16,15 +16,25 @@ import {
 } from './types.js';
 
 export const CONFIG_PATH = process.env.ZENDESK_CONFIG_PATH || path.join(os.homedir(), '.mcp', 'zendesk');
-export const BRIDGE_STATE_PATH = process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE;
 
 /** The largest valid Date, used for a token the server gave no lifetime. */
 const NON_EXPIRING_MS = 8_640_000_000_000_000;
+
+/** accounts.json and token files are a few KiB; anything past this is refused. */
+const MAX_CONFIG_FILE_BYTES = 1024 * 1024;
 
 /** Token-endpoint error codes that mean the stored sign-in can't be renewed. */
 const RECONNECT_ERROR_CODES = new Set(['invalid_grant', 'invalid_client', 'unauthorized_client']);
 
 let accountsConfig: AccountsConfig = { accounts: [] };
+
+/**
+ * True while the last load could not read accounts.json (refused, too large,
+ * not valid JSON, ...). The in-memory list is then empty, not the file's, so
+ * saving it would wipe the file; saves are skipped until a load succeeds or
+ * finds the file absent.
+ */
+let accountsFileUnreadable = false;
 let accounts: Map<string, ZendeskAccount> = new Map();
 
 /** One refresh per subdomain at a time: refresh tokens are single-use. */
@@ -72,10 +82,23 @@ export function loadAccounts(): void {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
   const credentialsDir = path.join(CONFIG_PATH, 'credentials');
 
+  let accountsRaw: string | undefined;
   try {
-    if (fs.existsSync(accountsPath)) {
-      const raw = fs.readFileSync(accountsPath, 'utf8');
-      const parsed = JSON.parse(raw);
+    accountsRaw = readConfigFile(accountsPath);
+    accountsFileUnreadable = false;
+  } catch (error) {
+    accountsFileUnreadable = errorName(error) !== 'ENOENT';
+    // A missing file means no accounts saved yet. Anything else (a symlink,
+    // not a regular file, too large) is refused; the error's message names
+    // the config path, so log its code only.
+    if (errorName(error) !== 'ENOENT') {
+      console.error(`[Zendesk] Failed to read the accounts file (${errorName(error)})`);
+      accountsConfig = { accounts: [] };
+    }
+  }
+  if (accountsRaw !== undefined) {
+    try {
+      const parsed = JSON.parse(accountsRaw);
       if (parsed && Array.isArray(parsed.accounts)) {
         accountsConfig = {
           accounts: parsed.accounts,
@@ -84,9 +107,12 @@ export function loadAccounts(): void {
       } else {
         accountsConfig = { accounts: [] };
       }
+    } catch {
+      // A JSON parse error can quote part of the file, which holds API tokens.
+      console.error('[Zendesk] Failed to read the accounts file (the file is not valid JSON)');
+      accountsConfig = { accounts: [] };
+      accountsFileUnreadable = true;
     }
-  } catch {
-    accountsConfig = { accounts: [] };
   }
 
   accounts.clear();
@@ -100,7 +126,7 @@ export function loadAccounts(): void {
           const tokenPath = path.join(credentialsDir, file);
           try {
             assertValidSubdomain(subdomain);
-            const tokenRaw = fs.readFileSync(tokenPath, 'utf8');
+            const tokenRaw = readConfigFile(tokenPath);
             const tokenData = withUnsavedRenewal(subdomain, JSON.parse(tokenRaw)) as unknown as TokenData;
 
             let authIssue: AuthIssue | undefined;
@@ -182,12 +208,61 @@ function errorName(error: unknown): string {
 }
 
 /**
+ * Read a credential file (accounts.json, a token file) without following a
+ * symlink at its final component: an lstat refusal, then `O_NOFOLLOW` on the
+ * open where the platform defines it, `O_NONBLOCK` so a FIFO is refused
+ * rather than waited on, a same-descriptor check that it is a regular file,
+ * and a read through that descriptor of at most MAX_CONFIG_FILE_BYTES.
+ * Symlinked folders above the file stay allowed. Throws an error with a
+ * `code` (ENOENT when missing, ELOOP for a symlink) and never logs: callers
+ * log the code, never the message, which names the path.
+ */
+function readConfigFile(filePath: string): string {
+  if (fs.lstatSync(filePath).isSymbolicLink()) {
+    throw Object.assign(new Error('refusing to read through a symbolic link'), { code: 'ELOOP' });
+  }
+  const fd = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+  );
+  try {
+    if (!fs.fstatSync(fd).isFile()) {
+      throw Object.assign(new Error('not a regular file'), { code: 'ENOTREGULAR' });
+    }
+    const buffer = Buffer.alloc(MAX_CONFIG_FILE_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = fs.readSync(fd, buffer, length, buffer.length - length, length);
+      if (read === 0) break;
+      length += read;
+    }
+    if (length > MAX_CONFIG_FILE_BYTES) {
+      throw Object.assign(new Error('file is too large'), { code: 'EFBIG' });
+    }
+    return buffer.toString('utf8', 0, length);
+  } finally {
+    try { fs.closeSync(fd); } catch { /* a read-only descriptor: nothing to lose */ }
+  }
+}
+
+/**
  * Write `text` to `target` through a temp file in the same folder and a
  * rename, so a reader never sees a partial file. `canReplace` runs just
  * before the rename; if it returns false, nothing is written and this
- * returns false.
+ * returns false. A symlink at `target`, even a dangling one, is refused
+ * (ELOOP) rather than replaced.
  */
 function writeFileAtomic(target: string, text: string, canReplace?: () => boolean): boolean {
+  // lstat, not existsSync: existsSync is false for a dangling link.
+  let existing: fs.Stats | undefined;
+  try {
+    existing = fs.lstatSync(target);
+  } catch (error) {
+    if (errorName(error) !== 'ENOENT') throw error;
+  }
+  if (existing?.isSymbolicLink()) {
+    throw Object.assign(new Error('refusing to replace a symbolic link'), { code: 'ELOOP' });
+  }
   const tmp = path.join(
     path.dirname(target),
     `.${path.basename(target)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`,
@@ -275,9 +350,15 @@ function replaceTokenFileAtomic(
 
 function readTokenFile(subdomain: string): Record<string, unknown> | null {
   try {
-    const parsed: unknown = JSON.parse(fs.readFileSync(tokenFilePath(subdomain), 'utf8'));
+    const parsed: unknown = JSON.parse(readConfigFile(tokenFilePath(subdomain)));
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-  } catch {
+  } catch (error) {
+    // A missing token is normal (never signed in, or disconnected). Otherwise
+    // log only the code or name: a parse error can quote tokens, and other
+    // messages name the file, which names the tenant.
+    if (errorName(error) !== 'ENOENT') {
+      console.error(`[Zendesk] Failed to read a stored sign-in (${errorName(error)})`);
+    }
     return null;
   }
 }
@@ -542,7 +623,7 @@ export function removeAccount(subdomain: string): void {
   // The subdomain is joined into a credentials file path and unlinked below,
   // so validate it like every other subdomain sink BEFORE any mutation: a
   // traversal value (e.g. "../../slack/credentials/team") must never reach
-  // writeFileSync/unlinkSync, where it would delete another connector's
+  // writeFileAtomic/unlinkSync, where it would delete another connector's
   // stored credentials outside the Zendesk config root.
   assertValidSubdomain(subdomain);
   const idx = accountsConfig.accounts.findIndex(a => a?.subdomain === subdomain);
@@ -552,12 +633,18 @@ export function removeAccount(subdomain: string): void {
   if (accountsConfig.defaultSubdomain === subdomain) {
     accountsConfig.defaultSubdomain = accountsConfig.accounts[0]?.subdomain;
   }
-  try {
-    const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
-    fs.writeFileSync(accountsPath, JSON.stringify(accountsConfig, null, 2), { mode: 0o600 });
-  } catch (error) {
-    // The error's message and path name the config directory.
-    console.error(`[Zendesk] Failed to save accounts (${errorName(error)})`);
+  if (accountsFileUnreadable) {
+    // The in-memory list isn't the file's contents; saving it would wipe the file.
+    console.error('[Zendesk] Not saving the accounts list: the accounts file could not be read');
+  } else {
+    try {
+      const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
+      // Atomic and owner-only; a symlink at accounts.json is refused, never written through.
+      writeFileAtomic(accountsPath, JSON.stringify(accountsConfig, null, 2));
+    } catch (error) {
+      // The error's message and path name the config directory.
+      console.error(`[Zendesk] Failed to save accounts (${errorName(error)})`);
+    }
   }
   const tokenPath = path.join(CONFIG_PATH, 'credentials', `${subdomain}.token.json`);
   try {

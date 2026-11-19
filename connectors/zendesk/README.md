@@ -167,6 +167,8 @@ cat > ~/.mcp/zendesk/accounts.json <<'EOF'
 EOF
 ```
 
+`accounts.json` and the token files must be regular files: a symlinked file is refused, while a symlinked config folder is fine. Keep the file owner-only (`chmod 600 ~/.mcp/zendesk/accounts.json`); the connector saves it owner-only whenever it changes it.
+
 ## Host configuration examples
 
 ### Claude Desktop / Cursor
@@ -265,8 +267,9 @@ EOF
 ## Security notes
 
 - Zendesk API-token credentials live in `accounts.json`; OAuth credentials are read from `credentials/*.token.json` under `ZENDESK_CONFIG_PATH`. Renewed tokens are written to a 0600 temp file in the same folder and renamed into place; token files are never deleted on a failed refresh.
+- Credential files (`accounts.json`, token files) must be regular files. They are read without following a symlink and capped at 1 MiB; a symlinked file is refused and never written through, while a symlinked containing folder is fine. Saves to either are atomic (0600 temp file, then rename) and owner-only.
 - Access tokens, refresh tokens and the token endpoint's error descriptions are never logged; only HTTP status and OAuth error codes are.
-- Host bridge calls, when configured, go to `127.0.0.1` using the token from `MCP_HOST_BRIDGE_STATE`.
+- Host bridge calls, when configured, go to `127.0.0.1` using the token from `MCP_HOST_BRIDGE_STATE`. The state file is read through the shared hardened reader (no symlinks, regular file only, size-capped, schema-checked port and token); redirects are refused and the bridge's reply text is enveloped as untrusted content.
 - Ticket subjects, descriptions, comment bodies, user/org/group/macro/view/field text, and other externally authored strings are wrapped in `<untrusted-content source="...">...</untrusted-content>` envelopes with close-tag escaping before model exposure.
 - Ticket exports that write files are constrained to the system temp directory (symlink-safe canonical containment) and are created inside a fresh private per-export directory with owner-only permissions — only the requested file name is honoured, the full path is returned as `file_path`, and pre-existing files are never touched. `export_zendesk_tickets` and `get_zendesk_tickets_by_ids` are annotated as non-read-only because they can write local export files.
 - Email inputs are validated for format and phone inputs for E.164 before any network call; numeric IDs and pagination parameters must be positive integers.
