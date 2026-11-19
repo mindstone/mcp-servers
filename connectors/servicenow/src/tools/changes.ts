@@ -16,7 +16,8 @@ export function registerChangeTools(server: McpServer): void {
         'List or search change requests in ServiceNow. ' +
         'Returns: number, short_description, state, type, priority, assigned_to, start_date, end_date. ' +
         'Use ServiceNow encoded query syntax for filtering. ' +
-        'Type values: "normal", "standard", "emergency".',
+        'Type values: "normal", "standard", "emergency". ' +
+        'Pages with limit (default 20, up to 1000) and offset (default 0).',
       inputSchema: z.object({
         query: z
           .string()
@@ -67,7 +68,8 @@ export function registerChangeTools(server: McpServer): void {
     {
       description:
         'Get a single change request by number (e.g., CHG0010001) or sys_id. ' +
-        'Returns the full change request record with all fields.',
+        'Returns the full change request record with all fields. ' +
+        'Use list_servicenow_change_requests to find the number first.',
       inputSchema: z.object({
         identifier: z
           .string()

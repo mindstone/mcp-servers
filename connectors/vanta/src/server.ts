@@ -71,9 +71,11 @@ const readOnlyAnnotations = {
   openWorldHint: true,
 };
 
+// Creates and uploads write to the customer's production Vanta account, so
+// they carry destructiveHint like the update tools (AGENTS.md invariant 7).
 const createAnnotations = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 };
@@ -116,49 +118,49 @@ RETURNS:
 
   server.registerTool('vanta_get_vulnerability', {
     title: 'Get Vanta Vulnerability',
-    description: 'Get details for one Vanta vulnerability by ID.',
+    description: 'Get details for one Vanta vulnerability by ID. Use an ID from vanta_list_vulnerabilities. Returns JSON with ok and vulnerability.',
     annotations: readOnlyAnnotations,
     inputSchema: getVulnerabilitySchema,
   }, async (input) => textResult(await vantaGetVulnerability(client, input)));
 
   server.registerTool('vanta_list_tests', {
     title: 'List Vanta Tests',
-    description: 'List compliance tests from Vanta with optional status and framework filters.',
+    description: 'List compliance tests from Vanta with optional status and framework filters. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, tests, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: listTestsSchema,
   }, async (input) => textResult(await vantaListTests(client, input)));
 
   server.registerTool('vanta_get_test', {
     title: 'Get Vanta Test',
-    description: 'Get details for one Vanta compliance test by ID.',
+    description: 'Get details for one Vanta compliance test by ID. Use an ID from vanta_list_tests. Returns JSON with ok and test.',
     annotations: readOnlyAnnotations,
     inputSchema: getTestSchema,
   }, async (input) => textResult(await vantaGetTest(client, input)));
 
   server.registerTool('vanta_list_controls', {
     title: 'List Vanta Controls',
-    description: 'List Vanta controls with an optional framework filter.',
+    description: 'List Vanta controls with an optional framework filter. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, controls, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: listControlsSchema,
   }, async (input) => textResult(await vantaListControls(client, input)));
 
   server.registerTool('vanta_get_control', {
     title: 'Get Vanta Control',
-    description: 'Get details for one Vanta control by ID.',
+    description: 'Get details for one Vanta control by ID. Use an ID from vanta_list_controls. Returns JSON with ok and control.',
     annotations: readOnlyAnnotations,
     inputSchema: getControlSchema,
   }, async (input) => textResult(await vantaGetControl(client, input)));
 
   server.registerTool('vanta_list_people', {
     title: 'List Vanta People',
-    description: 'List people tracked in Vanta with optional name/email and employment-status filters.',
+    description: 'List people tracked in Vanta with optional name/email and employment-status filters. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, people, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: listPeopleSchema,
   }, async (input) => textResult(await vantaListPeople(client, input)));
 
   server.registerTool('vanta_query_test_results', {
     title: 'Query Vanta Test Results',
-    description: 'List test entities/results for one Vanta test with an optional entity-status filter.',
+    description: 'List test entities/results for one Vanta test with an optional entity-status filter. Use a test ID from vanta_list_tests. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, testEntities, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: queryTestResultsSchema,
   }, async (input) => textResult(await vantaQueryTestResults(client, input)));
@@ -179,7 +181,7 @@ RETURNS:
 
   server.registerTool('vanta_get_framework', {
     title: 'Get Vanta Framework',
-    description: 'Get details for one Vanta framework by ID, including requirement categories and mapped controls.',
+    description: 'Get details for one Vanta framework by ID, including requirement categories and mapped controls. Use an ID from vanta_list_frameworks. Returns JSON with ok and framework.',
     annotations: readOnlyAnnotations,
     inputSchema: getFrameworkSchema,
   }, async (input) => textResult(await vantaGetFramework(client, input)));
@@ -193,7 +195,7 @@ RETURNS:
 
   server.registerTool('vanta_get_policy', {
     title: 'Get Vanta Policy',
-    description: 'Get details for one Vanta policy by ID, including its latest version status and approved document links.',
+    description: 'Get details for one Vanta policy by ID, including its latest version status and approved document links. Use an ID from vanta_list_policies. Returns JSON with ok and policy.',
     annotations: readOnlyAnnotations,
     inputSchema: getPolicySchema,
   }, async (input) => textResult(await vantaGetPolicy(client, input)));
@@ -207,21 +209,21 @@ RETURNS:
 
   server.registerTool('vanta_list_risk_scenarios', {
     title: 'List Vanta Risk Scenarios',
-    description: 'List risk scenarios from the Vanta risk register with optional search and include-ignored filters.',
+    description: 'List risk scenarios from the Vanta risk register with optional search and include-ignored filters. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, riskScenarios, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: listRiskScenariosSchema,
   }, async (input) => textResult(await vantaListRiskScenarios(client, input)));
 
   server.registerTool('vanta_get_risk_scenario', {
     title: 'Get Vanta Risk Scenario',
-    description: 'Get details for one Vanta risk scenario by risk ID, including scores, treatment, and review status.',
+    description: 'Get details for one Vanta risk scenario by risk ID, including scores, treatment, and review status. Use a risk ID from vanta_list_risk_scenarios. Returns JSON with ok and riskScenario.',
     annotations: readOnlyAnnotations,
     inputSchema: getRiskScenarioSchema,
   }, async (input) => textResult(await vantaGetRiskScenario(client, input)));
 
   server.registerTool('vanta_list_event_logs', {
     title: 'List Vanta Event Logs',
-    description: 'List audit event logs from the Vanta account (actor, action, targets, date) with an optional start-date filter.',
+    description: 'List audit event logs from the Vanta account (actor, action, targets, date) with an optional start-date filter. Pages with page_size (default 25, up to 100) and page_cursor (pageInfo.endCursor while pageInfo.hasNextPage is true). Returns JSON with ok, eventLogs, count and pageInfo.',
     annotations: readOnlyAnnotations,
     inputSchema: listEventLogsSchema,
   }, async (input) => textResult(await vantaListEventLogs(client, input)));
@@ -235,7 +237,7 @@ RETURNS:
 
   server.registerTool('vanta_get_vendor', {
     title: 'Get Vanta Vendor',
-    description: 'Get details for one Vanta vendor by ID.',
+    description: 'Get details for one Vanta vendor by ID. Use an ID from vanta_list_vendors. Returns JSON with ok and vendor.',
     annotations: readOnlyAnnotations,
     inputSchema: getVendorSchema,
   }, async (input) => textResult(await vantaGetVendor(client, input)));

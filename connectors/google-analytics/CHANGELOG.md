@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- A report task's `name` is passed through unwrapped only when it has the documented `properties/{property}/reportTasks/{task}` shape; any other value is wrapped as outside content.
 
 ### Added
 

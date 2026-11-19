@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- List and search tools now describe paging with `limit` and `offset`, and the incident, change request and knowledge article get tools say which tool finds the number first.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.

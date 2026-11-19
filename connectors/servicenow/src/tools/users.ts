@@ -16,7 +16,8 @@ export function registerUserTools(server: McpServer): void {
         'List or search users in ServiceNow. ' +
         'Returns: sys_id, user_name, first_name, last_name, email, title, department, active. ' +
         'user_name is the login username, not the display name. ' +
-        'For name searches, use first_nameLIKE or last_nameLIKE in the query.',
+        'For name searches, use first_nameLIKE or last_nameLIKE in the query. ' +
+        'Pages with limit (default 20, up to 1000) and offset (default 0).',
       inputSchema: z.object({
         query: z
           .string()

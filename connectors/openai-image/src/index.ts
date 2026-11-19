@@ -1719,7 +1719,8 @@ const registerTools = (targetServer: McpServer): void => {
     {
       title: 'Generate Image',
       description:
-        "Generate one or more images using OpenAI's GPT Image models and save outputs to your workspace.",
+        `Generate one or more images with OpenAI's GPT Image models (the model set in OPENAI_IMAGE_MODEL, default ${DEFAULT_MODEL}). ` +
+        'Saves the images (to the workspace when one is configured, otherwise to a folder under Pictures) and returns their file paths.',
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -1810,7 +1811,8 @@ const registerTools = (targetServer: McpServer): void => {
     {
       title: 'Edit Image',
       description:
-        'Edit one or more existing images with OpenAI image editing and save outputs to your workspace.',
+        `Edit one or more existing images with OpenAI's GPT Image models (the model set in OPENAI_IMAGE_MODEL, default ${DEFAULT_MODEL}). ` +
+        'Saves the edited images (to the workspace when one is configured, otherwise to a folder under Pictures) and returns their file paths.',
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,

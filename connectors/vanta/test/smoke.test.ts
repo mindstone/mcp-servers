@@ -42,9 +42,12 @@ const WRITE_TOOLS = new Set([
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([
+  'vanta_create_vendor',
   'vanta_update_vendor',
+  'vanta_attach_vendor_document',
   'vanta_deactivate_vulnerability_monitoring',
   'vanta_reactivate_vulnerability_monitoring',
+  'vanta_upload_document',
 ]);
 
 describe('Smoke test — Vanta MCP server', () => {

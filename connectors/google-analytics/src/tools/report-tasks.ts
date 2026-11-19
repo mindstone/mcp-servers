@@ -83,9 +83,17 @@ function reportTaskPath(propertyId: string | undefined, taskId: string): string 
   return `${property}/reportTasks/${assertResourceIdSegment(clean, 'report task ID')}`;
 }
 
+// Google-assigned identifier that the model echoes back as `task_id`, so it
+// stays raw when it has the documented shape; anything else is enveloped.
+const REPORT_TASK_NAME_PATTERN = /^properties\/[A-Za-z0-9_-]+\/reportTasks\/[A-Za-z0-9_-]+$/;
+
 function mapReportTask(task: ReportTask) {
+  const name =
+    task.name && !REPORT_TASK_NAME_PATTERN.test(task.name)
+      ? wrapUntrusted(task.name, UNTRUSTED_SOURCES.report)
+      : task.name;
   return {
-    name: task.name || null,
+    name: name || null,
     state: task.reportMetadata?.state || null,
     taskRowCount: task.reportMetadata?.taskRowCount ?? null,
     totalRowCount: task.reportMetadata?.totalRowCount ?? null,

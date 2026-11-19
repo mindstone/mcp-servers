@@ -17,7 +17,8 @@ export function registerCatalogTools(server: McpServer): void {
         'Returns: sys_id, name, short_description, category, price, active. ' +
         'Simple text queries are automatically converted to LIKE queries on the item name. ' +
         'For advanced filtering, use ServiceNow encoded query syntax directly. ' +
-        'Use get_servicenow_catalog_item for full details of a specific item.',
+        'Use get_servicenow_catalog_item for full details of a specific item. ' +
+        'Pages with limit (default 20, up to 1000) and offset (default 0).',
       inputSchema: z.object({
         query: z
           .string()

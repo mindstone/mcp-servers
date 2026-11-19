@@ -6,9 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Get tools now say which list tool gives their ID and what they return, and the main list tools say how to page and which key holds the results.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- Network failures, document-download failures, refused redirects and unexpected errors now return fixed text instead of the underlying error message, which could carry URLs, hostnames or credentials; logs record only a well-formed error code.
+- URLs in Vanta responses are now always wrapped as outside content, like other text: a link's path, query, fragment and sign-in part are written by whoever set it up in Vanta, so they can carry instructions.
+- `vanta_create_vendor`, `vanta_attach_vendor_document` and `vanta_upload_document` now carry `destructiveHint: true`, since they write to the live Vanta account.
 
 ## [0.3.1] - 2026-08-09
 

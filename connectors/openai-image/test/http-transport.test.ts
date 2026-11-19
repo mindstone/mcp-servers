@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import { CallToolResultSchema, JSONRPCResponseSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FILE_READ_CAPABILITIES } from '../src/file-read-context.js';
+import { DEFAULT_MODEL } from '../src/models.js';
 import { createInMemoryClientPair, importConnectorModule, makeImageBase64 } from './helpers.js';
 
 type Connector = Awaited<ReturnType<typeof importConnectorModule>>;
@@ -96,13 +97,15 @@ const fakeProvider = (format: 'png' | 'jpeg' = 'png') => vi.spyOn(globalThis, 'f
 const expectedTools = [
   {
     name: 'generate_image', title: 'Generate Image',
-    description: "Generate one or more images using OpenAI's GPT Image models and save outputs to your workspace.",
+    description: `Generate one or more images with OpenAI's GPT Image models (the model set in OPENAI_IMAGE_MODEL, default ${DEFAULT_MODEL}). `
+      + 'Saves the images (to the workspace when one is configured, otherwise to a folder under Pictures) and returns their file paths.',
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: false },
     _meta: undefined,
   },
   {
     name: 'edit_image', title: 'Edit Image',
-    description: 'Edit one or more existing images with OpenAI image editing and save outputs to your workspace.',
+    description: `Edit one or more existing images with OpenAI's GPT Image models (the model set in OPENAI_IMAGE_MODEL, default ${DEFAULT_MODEL}). `
+      + 'Saves the edited images (to the workspace when one is configured, otherwise to a folder under Pictures) and returns their file paths.',
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: false },
     _meta: { 'files/readInputs': { version: 1, inputs: [
       { selector: ['image_paths', '*'], base: 'workspace', expandTilde: false },

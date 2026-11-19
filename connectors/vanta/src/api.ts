@@ -647,6 +647,25 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
   );
 };
 
+const LOGGABLE_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,40}$/;
+
+/**
+ * Logs a fixed context line plus, at most, a well-formed error code
+ * (`ECONNREFUSED`, `ENOTFOUND`). Exception messages, stacks and causes can
+ * carry URLs, hostnames or credentials, so they reach neither the tool result
+ * nor the log.
+ */
+export const logVantaFailure = (context: string, error: unknown): void => {
+  let code: unknown;
+  if (error && typeof error === 'object') {
+    const cause = (error as { cause?: unknown }).cause;
+    const causeCode = cause && typeof cause === 'object' ? (cause as { code?: unknown }).code : undefined;
+    code = causeCode ?? (error as { code?: unknown }).code;
+  }
+  const safeCode = typeof code === 'string' && LOGGABLE_ERROR_CODE_PATTERN.test(code) ? code : undefined;
+  console.error(`[Vanta] ${context}${safeCode ? ` (${safeCode})` : ''}`);
+};
+
 export const toToolErrorResponse = (error: unknown): string => {
   if (error instanceof VantaApiError) {
     return JSON.stringify({
@@ -662,10 +681,10 @@ export const toToolErrorResponse = (error: unknown): string => {
     }, null, 2);
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  logVantaFailure('Unexpected connector error', error);
   return JSON.stringify({
     ok: false,
-    error: message,
+    error: 'The Vanta connector hit an unexpected error.',
     code: 'API_ERROR',
     action_required: 'Vanta returned an unexpected error.',
     next_step: 'Retry the call. If the problem persists, file an issue with the connector maintainers.',
@@ -962,9 +981,10 @@ export class VantaApiClient {
           'Check network connectivity to Vanta and retry; increase VANTA_REQUEST_TIMEOUT_MS if the link is high-latency.',
         );
       }
+      logVantaFailure('Network error during OAuth token exchange', error);
       throw new VantaApiError(
         'NETWORK',
-        error instanceof Error ? error.message : String(error),
+        'Could not reach Vanta to sign in.',
         'A network error occurred while exchanging Vanta OAuth credentials.',
         'Check network connectivity and DNS resolution for the configured Vanta region.',
       );
@@ -1054,9 +1074,10 @@ export class VantaApiClient {
             'Retry with a smaller page_size or narrower filters; increase VANTA_REQUEST_TIMEOUT_MS if the link is high-latency.',
           );
         }
+        logVantaFailure('Network error calling the Vanta API', error);
         throw new VantaApiError(
           'NETWORK',
-          error instanceof Error ? error.message : String(error),
+          'Could not reach the Vanta API.',
           'A network error occurred while calling the Vanta API.',
           'Check network connectivity and retry.',
         );

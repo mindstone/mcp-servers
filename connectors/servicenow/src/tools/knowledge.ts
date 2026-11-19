@@ -16,7 +16,8 @@ export function registerKnowledgeTools(server: McpServer): void {
         'Search knowledge base articles in ServiceNow. ' +
         'Returns: number, short_description, sys_created_on, author, kb_knowledge_base, workflow_state. ' +
         'Simple text queries are automatically converted to LIKE queries. ' +
-        'For advanced filtering, use ServiceNow encoded query syntax directly.',
+        'For advanced filtering, use ServiceNow encoded query syntax directly. ' +
+        'Pages with limit (default 20, up to 1000) and offset (default 0).',
       inputSchema: z.object({
         query: z
           .string()
@@ -74,7 +75,8 @@ export function registerKnowledgeTools(server: McpServer): void {
     {
       description:
         'Get a full knowledge base article by sys_id or number (e.g., KB0010001). ' +
-        'Returns the full article record including the article body text.',
+        'Returns the full article record including the article body text. ' +
+        'Use search_servicenow_knowledge to find the number first.',
       inputSchema: z.object({
         identifier: z
           .string()

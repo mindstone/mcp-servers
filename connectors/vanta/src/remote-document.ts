@@ -1,4 +1,4 @@
-import { VantaApiError, validateDocumentUrlWithDns } from './api.js';
+import { logVantaFailure, VantaApiError, validateDocumentUrlWithDns } from './api.js';
 
 // Vanta's upload endpoints take the file as multipart/form-data, so the connector
 // fetches the caller-supplied URL itself and forwards the bytes. That makes this
@@ -132,9 +132,12 @@ const validateHop = async (rawUrl: string, fieldName: string, isRedirect: boolea
     return await validateDocumentUrlWithDns(rawUrl, fieldName);
   } catch (error) {
     if (isRedirect && error instanceof VantaApiError) {
+      // The refusal detail can name the redirect target, which the remote
+      // server chose; keep it out of the result.
+      logVantaFailure('Document URL redirect refused', error);
       throw new VantaApiError(
         'CONFIG_INVALID',
-        `The document URL followed a redirect that was refused: ${error.message}`,
+        'The document link redirected to an address that could not be used.',
         'A redirect from the document URL pointed somewhere this connector will not fetch.',
         'Pass a direct https:// URL that does not redirect through internal infrastructure.',
       );
@@ -255,8 +258,9 @@ export async function fetchRemoteDocument(
             'Verify the URL is reachable and serves the file quickly, then retry.',
           );
         }
+        logVantaFailure('Document URL fetch failed', error);
         throw unreachableError(
-          `Fetching the document URL failed: ${error instanceof Error ? error.message : String(error)}`,
+          'Could not download the document from the provided link.',
           'Verify the URL is publicly reachable over https:// and retry.',
         );
       }
@@ -315,8 +319,9 @@ export async function fetchRemoteDocument(
         'Verify the URL is reachable and serves the file quickly, then retry.',
       );
     }
+    logVantaFailure('Document download failed', error);
     throw unreachableError(
-      `Fetching the document URL failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Could not download the document from the provided link.',
       'Verify the URL is publicly reachable over https:// and retry.',
     );
   } finally {

@@ -16,7 +16,8 @@ export function registerIncidentTools(server: McpServer): void {
         'List or search incidents in ServiceNow. ' +
         'Returns: number, short_description, state, priority, assigned_to, sys_created_on, sys_updated_on, urgency, impact. ' +
         'Use ServiceNow encoded query syntax for filtering (^ as AND separator). ' +
-        'Use get_servicenow_incident for full details of a specific incident.',
+        'Use get_servicenow_incident for full details of a specific incident. ' +
+        'Pages with limit (default 20, up to 1000) and offset (default 0).',
       inputSchema: z.object({
         query: z
           .string()
@@ -67,7 +68,8 @@ export function registerIncidentTools(server: McpServer): void {
     {
       description:
         'Get a single incident by number (e.g., INC0010001) or sys_id. ' +
-        'Returns the full incident record with all fields.',
+        'Returns the full incident record with all fields. ' +
+        'Use list_servicenow_incidents to find the number first.',
       inputSchema: z.object({
         identifier: z
           .string()

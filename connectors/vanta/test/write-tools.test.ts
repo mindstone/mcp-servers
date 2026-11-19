@@ -477,8 +477,8 @@ describe('Vanta write tools', () => {
 
       expect(payload.ok).toBe(false);
       expect(payload.code).toBe('CONFIG_INVALID');
-      expect(payload.error).toMatch(/redirect/i);
-      expect(payload.error).toMatch(/non-public address/);
+      // The refusal detail names the redirect target, so the result carries fixed text.
+      expect(payload.error).toBe('The document link redirected to an address that could not be used.');
     });
 
     it('re-validates redirect hostnames via DNS and refuses private answers', async () => {
@@ -500,8 +500,8 @@ describe('Vanta write tools', () => {
 
       expect(payload.ok).toBe(false);
       expect(payload.code).toBe('CONFIG_INVALID');
-      expect(payload.error).toMatch(/redirect/i);
-      expect(payload.error).toMatch(/resolves to a non-public address/);
+      // The refusal detail names the redirect target, so the result carries fixed text.
+      expect(payload.error).toBe('The document link redirected to an address that could not be used.');
     });
 
     it('refuses a redirect chain longer than the hop budget', async () => {

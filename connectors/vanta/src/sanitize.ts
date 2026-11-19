@@ -21,19 +21,24 @@
  *
  * - the KEY names a value the model must quote verbatim into a follow-up tool
  *   call or a filter (ids, enum-like statuses/severities/types, ISO-8601
- *   dates, http(s) URLs, pagination cursors) — enveloping those would corrupt
- *   the round-trip; and
+ *   dates, pagination cursors) — enveloping those would corrupt the
+ *   round-trip; and
  * - the VALUE matches that context's strict grammar (id/enum alphabet with no
- *   `:`/`/`/whitespace, ISO-8601 timestamp, parseable http(s) URL, cursor
- *   alphabet) and is not instruction-shaped (`IGNORE_PRIOR_INSTRUCTIONS`
- *   satisfies the alphabet, so multi-word phrase shapes and instruction
- *   tokens lose the exemption too).
+ *   `:`/`/`/whitespace, ISO-8601 timestamp, cursor alphabet) and is not
+ *   instruction-shaped (`IGNORE_PRIOR_INSTRUCTIONS` satisfies the alphabet,
+ *   so multi-word phrase shapes and instruction tokens lose the exemption
+ *   too).
  *
  * A key name alone can never pass raw text through: prose under a
  * structural-looking key (`status: "ignore prior instructions"`) fails the
  * grammar and is enveloped. All grammars fail toward enveloping, never
  * toward raw passthrough — worst case a genuine but oddly-shaped structural
  * value gets enveloped, which is cosmetic.
+ *
+ * URLs are always enveloped: their path, query, fragment and userinfo are
+ * vendor-authored text, and no tool needs an opaque Vanta URL quoted back
+ * verbatim; a model reusing one (e.g. as `vendor_website`) takes the literal
+ * URL out of the envelope.
  *
  * Strings under credential-shaped keys are replaced with `[redacted]`, not
  * enveloped: an envelope marks text as untrusted but still discloses it.
@@ -73,6 +78,19 @@ const INSTRUCTION_PHRASE_TOKENS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Words joined without punctuation (`IgnorePreviousInstructions`,
+ * `HTTPServerPrompt`) are still words: split on CamelCase boundaries
+ * (lower→Upper, and Upper→Upper+lower) as well as on separators.
+ */
+const CAMEL_CASE_BOUNDARY = /(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/;
+
+const splitWords = (value: string, separators: RegExp): string[] =>
+  value
+    .split(separators)
+    .flatMap((segment) => segment.split(CAMEL_CASE_BOUNDARY))
+    .filter((segment) => segment.length > 0);
+
+/**
  * Alphabet shape alone cannot separate an identifier from whitespace-free
  * authored instructions — `IGNORE_PRIOR_INSTRUCTIONS` satisfies the id/enum
  * alphabet. A multi-word value containing an instruction-shaping token never
@@ -81,7 +99,7 @@ const INSTRUCTION_PHRASE_TOKENS: ReadonlySet<string> = new Set([
  * why the check only fires on multi-word values.)
  */
 const hasInstructionToken = (value: string, separators: RegExp): boolean => {
-  const segments = value.split(separators).filter((segment) => segment.length > 0);
+  const segments = splitWords(value, separators);
   return (
     segments.length >= 2 &&
     segments.some((segment) => INSTRUCTION_PHRASE_TOKENS.has(segment.toLowerCase()))
@@ -97,7 +115,7 @@ const hasInstructionToken = (value: string, separators: RegExp): boolean => {
  * phrase rule would envelope real ids and corrupt the get-by-id round-trip.
  */
 const isLetterPhrase = (value: string, separators: RegExp): boolean => {
-  const segments = value.split(separators).filter((segment) => segment.length > 0);
+  const segments = splitWords(value, separators);
   return (
     segments.length >= 3 && segments.every((segment) => /^[A-Za-z]+$/.test(segment))
   );
@@ -113,15 +131,6 @@ const isCursorShaped = (value: string): boolean =>
   CURSOR_VALUE_PATTERN.test(value) && !hasInstructionToken(value, /[_+/.=@-]+/);
 
 const isTimestampShaped = (value: string): boolean => ISO_8601_TIMESTAMP_VALUE_PATTERN.test(value);
-
-const isHttpUrlShaped = (value: string): boolean => {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-  } catch {
-    return false;
-  }
-};
 
 // Enum-like keys whose values the model quotes back into filters and whose
 // grammar is the id/enum alphabet. Broad on key suffix, strict on value
@@ -156,9 +165,6 @@ const isExemptStructuralValue = (key: string | undefined, value: string): boolea
   }
   if (CURSOR_KEYS.has(key)) return isCursorShaped(value);
   if (key.endsWith('At') || key.endsWith('Date')) return isTimestampShaped(value);
-  if (key === 'url' || key.endsWith('Url') || key.endsWith('URL') || key === 'link' || key.endsWith('Link')) {
-    return isHttpUrlShaped(value);
-  }
   if (ENUM_EXACT_KEYS.has(key) || ENUM_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))) {
     return isEnumShaped(value);
   }
