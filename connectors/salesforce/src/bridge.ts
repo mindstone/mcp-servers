@@ -1,47 +1,20 @@
-import * as fs from 'node:fs';
-import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
+import { REQUEST_TIMEOUT_MS } from './types.js';
+import { type BridgeResponse, postToBridge } from './bridge-reader.js';
 
 /**
- * Path to bridge state file, supporting both current and legacy env vars.
- */
-export const BRIDGE_STATE_PATH =
-  process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
-
-const loadBridgeState = (): BridgeState | null => {
-  if (!BRIDGE_STATE_PATH) return null;
-  try {
-    const raw = fs.readFileSync(BRIDGE_STATE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Send a request to the host app bridge.
+ * Send a request to the host app bridge, a loopback HTTP server inside the host
+ * app that handles credential management. `bridge-reader.ts` is the vendored
+ * hardened reader: keep it byte-identical to `test-harness/src/bridge-reader.ts`
+ * (`scripts/check-bridge-reader.mjs` enforces this) and read the bridge only
+ * through it. Its `username`, `warning` and `error` come back already enveloped.
  *
  * `timeoutMs` defaults to the ordinary per-call budget (REQUEST_TIMEOUT_MS);
  * callers that trigger long host-side flows (e.g. interactive OAuth) can opt
  * into a longer one. The abort itself is never removed — only widened — so a
  * dead bridge still fails within the chosen bound.
  */
-export const bridgeRequest = async (
+export const bridgeRequest = (
   urlPath: string,
   body: Record<string, unknown> = {},
   timeoutMs: number = REQUEST_TIMEOUT_MS,
-): Promise<{ success: boolean; username?: string; warning?: string; error?: string }> => {
-  const bridge = loadBridgeState();
-  if (!bridge) {
-    return { success: false, error: 'Bridge not available' };
-  }
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bridge.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  return response.json() as Promise<{ success: boolean; username?: string; warning?: string; error?: string }>;
-};
+): Promise<BridgeResponse> => postToBridge(urlPath, body, { connector: 'salesforce', timeoutMs });

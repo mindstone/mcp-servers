@@ -15,9 +15,16 @@ are maintained manually as part of the PR review checklist.
 
 - `salesforce_query` now accepts two SQL quoting habits that Salesforce refuses: a doubled apostrophe inside a string (`'O''Brien'`) is sent as `'O\'Brien'`, and a double-quoted string (`"Acme"`) is sent single-quoted. Valid SOQL is sent unchanged.
 
+### Changed
+
+- Calls Salesforce API v67.0 (Summer '26) instead of v66.0, staying one release behind the current one.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- The connection to the host app now goes through the shared hardened reader: its state file must be a plain file of the expected shape, a redirect is never followed, and its reply is checked before use.
+- Saved sign-in files are read more carefully: a symbolic link, a file that is not a regular file, a file over 64 KiB, malformed JSON, or a sign-in whose Salesforce addresses are not https is refused, with a short note in the log that never includes the file's content.
+- Saving a sign-in creates its temporary file fresh every time, so a file or link already at that name is never written through.
 
 ## [0.2.6] - 2026-11-06
 

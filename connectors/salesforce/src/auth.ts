@@ -10,7 +10,8 @@ import {
   type SalesforceAccount,
   ConnectorError,
 } from './types.js';
-import { BRIDGE_STATE_PATH } from './bridge.js';
+import { isBridgeConfigured } from './bridge-reader.js';
+import { accountsFileSchema, readCredentialFile, tokenFileSchema } from './secure-read.js';
 
 // ---------------------------------------------------------------------------
 // Auth Mode Detection (resolved ONCE at startup)
@@ -21,7 +22,7 @@ let resolvedMode: AuthMode | null = null;
 export function resolveAuthMode(): AuthMode {
   if (resolvedMode !== null) return resolvedMode;
 
-  const hasBridge = !!BRIDGE_STATE_PATH;
+  const hasBridge = isBridgeConfigured();
   const hasClientId = !!process.env.SALESFORCE_CLIENT_ID;
   const hasClientSecret = !!process.env.SALESFORCE_CLIENT_SECRET;
   const hasManualToken = !!process.env.SALESFORCE_ACCESS_TOKEN;
@@ -95,14 +96,29 @@ function atomicWriteFile(filePath: string, data: string): void {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   const tmpPath = `${filePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  const fd = fs.openSync(tmpPath, 'w', 0o600);
+  // Exclusive create: a file or symlink already at the tmp path is never
+  // followed or reused (the random suffix makes a collision unlikely).
+  const fd = fs.openSync(
+    tmpPath,
+    fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0),
+    0o600,
+  );
   try {
-    fs.writeSync(fd, data);
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
+    try {
+      fs.writeSync(fd, data);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      // Best effort: the tmp file may already be gone.
+    }
+    throw err;
   }
-  fs.renameSync(tmpPath, filePath);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,12 +127,10 @@ function atomicWriteFile(filePath: string, data: string): void {
 
 export function loadAccounts(): SalesforceAccountsConfig {
   ensureDirectories();
-  try {
-    const data = fs.readFileSync(getAccountsPath(), 'utf-8');
-    return JSON.parse(data) as SalesforceAccountsConfig;
-  } catch {
-    return { accounts: [] };
-  }
+  const config = readCredentialFile(getAccountsPath(), 'accounts', accountsFileSchema);
+  // Legacy entries may lack fields the type declares, exactly as before this
+  // read was schema-checked; the schema only refuses a wrong type.
+  return config ? (config as SalesforceAccountsConfig) : { accounts: [] };
 }
 
 export function saveAccounts(config: SalesforceAccountsConfig): void {
@@ -125,12 +139,7 @@ export function saveAccounts(config: SalesforceAccountsConfig): void {
 }
 
 export function loadToken(accountId: string): SalesforceTokenData | null {
-  try {
-    const data = fs.readFileSync(getTokenPath(accountId), 'utf-8');
-    return JSON.parse(data) as SalesforceTokenData;
-  } catch {
-    return null;
-  }
+  return readCredentialFile(getTokenPath(accountId), 'token', tokenFileSchema);
 }
 
 export function saveToken(accountId: string, token: SalesforceTokenData): void {

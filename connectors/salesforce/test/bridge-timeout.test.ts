@@ -23,9 +23,9 @@ import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.
 import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 
 /**
- * bridge.ts captures MCP_HOST_BRIDGE_STATE at import time, so each unit test
- * stubs the env var and re-imports the module fresh (mirrors the outreach
- * connector's bridge tests).
+ * Each unit test writes a valid bridge state file, stubs the env var to it and
+ * re-imports the module fresh. The vendored reader reads the env var per call,
+ * so the re-import only keeps the tests independent.
  */
 async function importBridge(): Promise<{
   bridgeRequest: (
@@ -70,6 +70,8 @@ describe('bridgeRequest timeout budget', () => {
   it('defaults to the ordinary 30s budget for calls with no explicit timeout', async () => {
     const { bridgeRequest } = await importBridge();
     const fetchSpy = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
       json: async () => ({ success: true }),
     });
     vi.stubGlobal('fetch', fetchSpy);
@@ -89,6 +91,8 @@ describe('bridgeRequest timeout budget', () => {
   it('uses the long OAuth budget only when the caller passes it', async () => {
     const { bridgeRequest, BRIDGE_OAUTH_TIMEOUT_MS } = await importBridge();
     const fetchSpy = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
       json: async () => ({ success: true }),
     });
     vi.stubGlobal('fetch', fetchSpy);

@@ -35,27 +35,25 @@ function readAllSourceFiles(): string {
 
 describe('Security audit — Salesforce MCP server', () => {
   it('source contains no internal references (mindstone/rebel/nspr)', () => {
+    // Every source file is scanned. Only lines that name the standard legacy
+    // env var MINDSTONE_REBEL_BRIDGE_STATE (kept by the vendored bridge-reader.ts
+    // per mcp-servers convention) are exempt, and only in that file.
     const srcFiles = getAllFiles(SRC_DIR);
-    // Exclude bridge.ts which has the standard legacy env var fallback per mcp-servers convention
-    const nonBridgeFiles = srcFiles.filter((f) => !f.endsWith('bridge.ts'));
-    const source = nonBridgeFiles.map((f) => fs.readFileSync(f, 'utf-8')).join('\n');
+    const source = srcFiles
+      .map((f) => {
+        const text = fs.readFileSync(f, 'utf-8');
+        if (path.basename(f) !== 'bridge-reader.ts') return text;
+        return text
+          .split('\n')
+          .filter((l) => !l.includes('MINDSTONE_REBEL_BRIDGE_STATE'))
+          .join('\n');
+      })
+      .join('\n');
 
     const patterns = [/mindstone/i, /\brebel\b/i, /\bnspr\b/i];
     for (const pattern of patterns) {
       const match = source.match(pattern);
       expect(match, `Found internal reference: ${match?.[0]}`).toBeNull();
-    }
-
-    // bridge.ts: only the standard MINDSTONE_REBEL_BRIDGE_STATE legacy fallback is allowed
-    const bridgeFile = srcFiles.find((f) => f.endsWith('bridge.ts'));
-    if (bridgeFile) {
-      const bridgeSource = fs.readFileSync(bridgeFile, 'utf-8');
-      const lines = bridgeSource.split('\n').filter((l) => !l.includes('MINDSTONE_REBEL_BRIDGE_STATE'));
-      const filtered = lines.join('\n');
-      for (const pattern of patterns) {
-        const match = filtered.match(pattern);
-        expect(match, `bridge.ts has non-standard internal reference: ${match?.[0]}`).toBeNull();
-      }
     }
   });
 

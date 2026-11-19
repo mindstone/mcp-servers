@@ -72,9 +72,9 @@ After connecting, verify with salesforce_list_connected_accounts.`,
           BRIDGE_OAUTH_TIMEOUT_MS,
         );
         if (result.success) {
-          // The bridge username is host/org-authored external text: envelope
-          // it before it reaches model-visible output (AGENTS.md invariant #6).
-          const username = result.username ? sanitizeExternalData(result.username, 'salesforce:auth') : undefined;
+          // The bridge reader returns the username and error already enveloped
+          // (AGENTS.md invariant #6), and absent when empty; never wrap again.
+          const username = result.username;
           return JSON.stringify({
             ok: true,
             status: 'authenticated',
@@ -85,9 +85,7 @@ After connecting, verify with salesforce_list_connected_accounts.`,
         }
         return JSON.stringify({
           ok: false,
-          error: result.error
-            ? sanitizeExternalData(result.error, 'salesforce:auth')
-            : 'Failed to authenticate with Salesforce',
+          error: result.error || 'Failed to authenticate with Salesforce',
           action_required: 'Please try calling salesforce_connect_account again.',
         });
       }

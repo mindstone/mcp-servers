@@ -18,20 +18,15 @@ export const BRIDGE_OAUTH_TIMEOUT_MS = 5 * 60 * 1000 + REQUEST_TIMEOUT_MS;
 export const SERVER_NAME = 'salesforce-mcp-server';
 /**
  * Salesforce REST API version the connector pins every request to. Pinned
- * deliberately rather than riding jsforce's bundled default (v50.0): v66.0 is
- * Spring '26 — one release behind current (v67.0, Summer '26) so orgs still on
+ * deliberately rather than riding jsforce's bundled default (v50.0): v67.0 is
+ * Summer '26 — one release behind current (v68.0, Winter '27) so orgs still on
  * the previous release accept it. Raise this deliberately, with tests run,
  * when newer API behavior is needed.
  */
-export const SALESFORCE_API_VERSION = '66.0';
+export const SALESFORCE_API_VERSION = '67.0';
 /** Server version reported on MCP `initialize`. Read from package.json so
  *  it cannot drift from the published npm version. */
 export const SERVER_VERSION = pkg.version;
-
-export interface BridgeState {
-  port: number;
-  token: string;
-}
 
 export class ConnectorError extends Error {
   constructor(
