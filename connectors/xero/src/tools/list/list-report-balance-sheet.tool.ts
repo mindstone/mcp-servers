@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { listXeroReportBalanceSheet } from "../../handlers/list-xero-report-balance-sheet.handler.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
-import { formatReportRows } from "../../helpers/format-report-rows.js";
 import { ListReportBalanceSheetParams } from "../../types/list-report-balance-sheet-params.js";
 
 const ListReportBalanceSheetTool = CreateXeroTool(
@@ -42,7 +41,7 @@ const ListReportBalanceSheetTool = CreateXeroTool(
         },
         {
           type: "text" as const,
-          text: formatReportRows(balanceSheetReport.rows),
+          text: JSON.stringify(balanceSheetReport.rows, null, 2),
         },
       ],
     };

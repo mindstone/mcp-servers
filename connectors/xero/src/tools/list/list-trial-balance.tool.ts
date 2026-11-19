@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { listXeroTrialBalance } from "../../handlers/list-xero-trial-balance.handler.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
-import { formatReportRows } from "../../helpers/format-report-rows.js";
 
 const ListTrialBalanceTool = CreateXeroTool(
   "list-trial-balance",
@@ -42,7 +41,7 @@ const ListTrialBalanceTool = CreateXeroTool(
         },
         {
           type: "text" as const,
-          text: formatReportRows(trialBalanceReport.rows),
+          text: JSON.stringify(trialBalanceReport.rows, null, 2),
         },
       ],
     };

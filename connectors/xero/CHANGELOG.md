@@ -11,7 +11,6 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Only error text this connector wrote reaches the AI. An unexpected error (a bug, a dropped connection, an SDK failure) is reported as a fixed sentence, so it can no longer quote internal details; Xero's own explanation of a refused request (a 4xx, such as a validation message) is still passed on; the body of a Xero server error (a 5xx) is not.
 - Every request to Xero, including the sign-in and company-list requests and every API call made through xero-node, now gives up after 30 seconds and says Xero did not answer in time, instead of waiting forever. A timed-out or unreachable API call now ends with that message; before, xero-node could leave it waiting with no answer.
-- Report tools (profit and loss, balance sheet, trial balance, aged payables and receivables, bank, budget and executive summaries) cut their output at 50,000 characters and say so, with a hint to ask for a shorter date range.
 
 ## [0.1.3] - 2026-11-16
 
