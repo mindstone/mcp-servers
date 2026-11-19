@@ -123,29 +123,27 @@ export function createNapkinBridgeHandlers(port: number, token: string) {
 }
 
 /**
- * Creates bridge handlers that return 401.
+ * Creates bridge handlers that return 401. Bodyless: the bridge reader
+ * cancels an unauthorized reply's body, and a body stream cancel never
+ * settles under msw (the shared reader's own tests cover it on a real server).
  */
 export function createNapkinBridge401Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/napkin/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+      return new HttpResponse(null, { status: 401 });
     }),
   ];
 }
 
 /**
- * Creates bridge handlers that return 403.
+ * Creates bridge handlers that return 403. Bodyless: the bridge reader
+ * cancels an unauthorized reply's body, and a body stream cancel never
+ * settles under msw (the shared reader's own tests cover it on a real server).
  */
 export function createNapkinBridge403Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/napkin/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 },
-      );
+      return new HttpResponse(null, { status: 403 });
     }),
   ];
 }

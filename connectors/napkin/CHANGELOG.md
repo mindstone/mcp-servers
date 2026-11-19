@@ -14,6 +14,11 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - `napkin_check_status` now sends the request ID as one encoded path segment and refuses `.` and `..`, so an ID can only ever reach its own request's status.
+- `napkin_check_status` now accepts only a request ID in Napkin's own ID shape (letters, digits, `.`, `_`, `:`, `-`, up to 128 characters), refusing anything else before a request is sent.
+- `napkin_download_visual` now sends the API key only to Napkin's documented file route, `https://api.napkin.ai/v1/visual/<request-id>/file/<file-id>`, on the default port with no query string or fragment, on the first URL and on every redirect hop. Refusals name the rule that failed and no longer echo any part of the URL.
+- The host-app bridge (the local state file through which the desktop app saves the API key for the connector) is now read through the shared hardened bridge reader used by the other connectors: a state file that is a symlink or malformed is refused, and the reply is validated. With no usable bridge, `configure_napkin_api_key` still accepts the key and says it has not been saved for future use: it works until the Napkin connection restarts, after which the key must be entered again in the app's connector settings.
+- Requests that carry the API key (starting a visual, checking its status) no longer follow redirects (Napkin's documented API does not redirect them, so ordinary calls are unaffected): a redirect is refused with a clear error and the key is never sent to the redirect target.
+- A rate-limit error now reports `Retry-After` as whole seconds capped at 5 minutes ("a moment" when missing or not a number) and never copies the header text into the message.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
 ## [0.4.1] - 2026-08-10

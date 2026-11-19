@@ -14,6 +14,7 @@ import {
   getRequestTimeoutMs,
   createVisualResponseSchema,
   visualStatusResponseSchema,
+  pathIdSchema,
   type VisualRequest,
   type VisualStatusResponse,
   type CreateVisualResponse,
@@ -31,7 +32,8 @@ const NAPKIN_API_BASE = 'https://api.napkin.ai/v1';
  *
  * `napkin_download_visual` attaches `Authorization: Bearer <NAPKIN_API_KEY>`
  * to its outbound request, so the destination MUST be limited to the
- * official Napkin API host. The Napkin API documentation specifies that
+ * official Napkin API host, and `validateDownloadUrl` further limits it to
+ * the documented file route. The Napkin API documentation specifies that
  * download URLs are returned by the status endpoint as
  * `https://api.napkin.ai/v1/visual/<request-id>/file/<file-id>` — there is
  * no separate signed-URL CDN host. Keeping this list as a literal const
@@ -39,6 +41,15 @@ const NAPKIN_API_BASE = 'https://api.napkin.ai/v1';
  * the API key to attacker-controlled hosts.
  */
 export const NAPKIN_DOWNLOAD_ALLOWED_HOSTS: readonly string[] = ['api.napkin.ai'] as const;
+
+/** The only origin a download may reach: the allow-listed host on the default HTTPS port. */
+const NAPKIN_DOWNLOAD_ORIGIN = 'https://api.napkin.ai';
+
+/** The documented file route; both IDs must also pass `pathIdSchema`. */
+const NAPKIN_FILE_PATH = /^\/v1\/visual\/([^/]+)\/file\/([^/]+)$/;
+
+/** Longest Retry-After we report as a number; anything above reads "at least 5 minutes". */
+const MAX_RETRY_AFTER_SECONDS = 300;
 
 /**
  * Check whether a hostname is private, localhost, or otherwise reserved.
@@ -81,7 +92,7 @@ function isPrivateOrReservedHost(hostname: string): boolean {
 }
 
 /**
- * Validate a download URL against the Napkin allow-list.
+ * Validate a download URL against the Napkin allow-list and file route.
  *
  * Rejects:
  *  - malformed URLs
@@ -89,8 +100,15 @@ function isPrivateOrReservedHost(hostname: string): boolean {
  *  - URLs carrying userinfo (`https://user:pass@host/...`)
  *  - hosts outside `NAPKIN_DOWNLOAD_ALLOWED_HOSTS`
  *  - hosts matching private/loopback/link-local/reserved IP ranges
+ *  - any origin other than `https://api.napkin.ai` (e.g. another port)
+ *  - any query string or fragment, even an empty one
+ *  - any path other than `/v1/visual/<request-id>/file/<file-id>`, checked
+ *    on the parsed (dot-segment-resolved) path, each ID in the machine-ID
+ *    charset (so no `%`-encoded separators)
  *
- * Throws a `NapkinError` (with `URL_REJECTED` code) on any failure.
+ * Throws a `NapkinError` (with `URL_REJECTED` code) on any failure. Messages
+ * name the rule that failed and never echo the URL or any part of it: a
+ * redirect target's URL is server-chosen and can carry signed queries.
  * Callers MUST invoke this BEFORE constructing the `Authorization` header.
  */
 export function validateDownloadUrl(input: string): URL {
@@ -107,7 +125,7 @@ export function validateDownloadUrl(input: string): URL {
 
   if (parsed.protocol !== 'https:') {
     throw new NapkinError(
-      `Refusing non-HTTPS file_url scheme '${parsed.protocol.replace(/:$/, '')}'`,
+      'Refusing file_url: the scheme is not https',
       'URL_REJECTED',
       'Only https:// URLs are accepted for napkin_download_visual.',
     );
@@ -125,7 +143,7 @@ export function validateDownloadUrl(input: string): URL {
 
   if (isPrivateOrReservedHost(parsed.hostname)) {
     throw new NapkinError(
-      `Refusing file_url whose host '${parsed.hostname}' is a private/loopback/reserved address`,
+      'Refusing file_url: the host is a private/loopback/reserved address',
       'URL_REJECTED',
       'file_url must point at the public Napkin API host (api.napkin.ai).',
     );
@@ -133,9 +151,39 @@ export function validateDownloadUrl(input: string): URL {
 
   if (!NAPKIN_DOWNLOAD_ALLOWED_HOSTS.includes(host)) {
     throw new NapkinError(
-      `Refusing file_url host '${parsed.hostname}': not on the Napkin allow-list (${NAPKIN_DOWNLOAD_ALLOWED_HOSTS.join(', ')})`,
+      `Refusing file_url: the host is not on the Napkin allow-list (${NAPKIN_DOWNLOAD_ALLOWED_HOSTS.join(', ')})`,
       'URL_REJECTED',
       'Pass a URL returned by napkin_check_status (generated_files[].url). Other hosts are refused to prevent leaking the Napkin API key.',
+    );
+  }
+
+  if (parsed.origin !== NAPKIN_DOWNLOAD_ORIGIN) {
+    throw new NapkinError(
+      'Refusing file_url: only the default https port is accepted',
+      'URL_REJECTED',
+      'Pass a URL returned by napkin_check_status (generated_files[].url) unchanged.',
+    );
+  }
+
+  // `href` keeps a bare `?` or `#`, which `search` and `hash` report as ''.
+  if (parsed.href.includes('?') || parsed.href.includes('#')) {
+    throw new NapkinError(
+      'Refusing file_url: a query string or fragment is not accepted',
+      'URL_REJECTED',
+      'Pass a URL returned by napkin_check_status (generated_files[].url) unchanged; Napkin file URLs carry no query or fragment.',
+    );
+  }
+
+  const route = NAPKIN_FILE_PATH.exec(parsed.pathname);
+  if (
+    !route ||
+    !pathIdSchema.safeParse(route[1]).success ||
+    !pathIdSchema.safeParse(route[2]).success
+  ) {
+    throw new NapkinError(
+      'Refusing file_url: the path is not a Napkin file path (/v1/visual/<request-id>/file/<file-id>)',
+      'URL_REJECTED',
+      'Pass a URL returned by napkin_check_status (generated_files[].url) unchanged. Other Napkin endpoints are refused to prevent sending the API key where it is not needed.',
     );
   }
 
@@ -174,6 +222,10 @@ async function napkinFetch<S extends z.ZodTypeAny>(
   try {
     response = await fetch(url, {
       ...options,
+      // These requests carry the API key, so a redirect is never followed:
+      // the key must not travel to a server-chosen target. 'manual' hands
+      // the 30x back to us and it is refused below.
+      redirect: 'manual',
       signal: fetchSignal,
       headers: {
         'Content-Type': 'application/json',
@@ -196,10 +248,32 @@ async function napkinFetch<S extends z.ZodTypeAny>(
     throw error;
   }
 
-  // Handle rate limiting
+  // Refuse any redirect. The Location header is never read or echoed: it is
+  // server-chosen and can carry signed queries.
+  if (response.status >= 300 && response.status < 400) {
+    void response.body?.cancel().catch(() => {
+      /* best-effort drain */
+    });
+    throw new NapkinError(
+      `Napkin's reply was a redirect (HTTP ${response.status}), which is not allowed for requests that carry the API key`,
+      'REDIRECT_REJECTED',
+      'The request was not sent on to the redirect target. Try again; if the problem persists, check the Napkin status page.',
+    );
+  }
+
+  // Handle rate limiting. Retry-After is read only as whole seconds and capped;
+  // the header text itself never reaches the message.
   if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After');
-    const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+    const retryAfter = response.headers.get('Retry-After')?.trim() ?? '';
+    // Any run of digits: Number() of a huge one is Infinity, which falls into
+    // the "at least 5 minutes" branch.
+    const seconds = /^\d+$/.test(retryAfter) ? Number(retryAfter) : 0;
+    const waitTime =
+      seconds === 0
+        ? 'a moment'
+        : seconds > MAX_RETRY_AFTER_SECONDS
+          ? 'at least 5 minutes'
+          : `${seconds} second${seconds === 1 ? '' : 's'}`;
     throw new NapkinError(
       `Rate limited. Please wait ${waitTime} before retrying.`,
       'RATE_LIMITED',
@@ -339,16 +413,17 @@ export async function getVisualStatus(
  * Download a file from a URL with Bearer auth.
  * Returns the raw Buffer.
  *
- * The URL is validated against `NAPKIN_DOWNLOAD_ALLOWED_HOSTS` BEFORE the
+ * The URL is validated by `validateDownloadUrl` (allow-listed host, file
+ * route only, no query) BEFORE the
  * `Authorization: Bearer` header is constructed. This is a defence-in-depth
  * measure against prompt-injection-driven API-key exfiltration: if validation
  * fails we throw before composing the header, and the request is never sent.
  *
  * Redirects are NOT auto-followed (AGENTS.md invariant #7): each hop is
  * fetched with `redirect: 'manual'` and every `Location` target is
- * re-validated against the same allow-list before it is followed, so a 30x
+ * re-validated by `validateDownloadUrl` before it is followed, so a 30x
  * from the API host cannot smuggle the request — and the bytes written to
- * disk — to an internal or attacker-controlled host. The Bearer header is
+ * disk — to an internal or attacker-controlled host, or to another endpoint. The Bearer header is
  * only ever attached to a URL that has passed `validateDownloadUrl`.
  */
 export async function downloadFile(
@@ -364,7 +439,7 @@ export async function downloadFile(
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
 
   // SSRF-via-redirect defence: `redirect: 'manual'`, re-validate every
-  // Location target against the same allow-list, cap the chain depth.
+  // Location target with the same rules, cap the chain depth.
   const MAX_REDIRECTS = 5;
   let currentUrl = validated.toString();
   let redirectCount = 0;
@@ -433,9 +508,9 @@ export async function downloadFile(
       );
     }
 
-    // Re-apply the same SSRF validation to every redirect target. The thrown
-    // URL_REJECTED message names only the scheme/hostname — never the full
-    // Location — so it is safe to relay.
+    // Re-apply the same validation (host, route, no query) to every redirect
+    // target. The thrown URL_REJECTED message names only the rule that
+    // failed — never any part of the Location — so it is safe to relay.
     try {
       validateDownloadUrl(nextUrl);
     } catch (error) {

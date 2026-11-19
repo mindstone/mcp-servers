@@ -3,7 +3,7 @@
  *
  * Napkin generation is async — create/status are polling calls that should
  * complete in <5s. Downloads can be larger, but 60s gives ample headroom
- * for a single signed-URL fetch. Override via `NAPKIN_REQUEST_TIMEOUT_MS`.
+ * for a single authenticated file download. Override via `NAPKIN_REQUEST_TIMEOUT_MS`.
  */
 
 import { z } from 'zod';
@@ -41,11 +41,6 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
  */
 export function getRequestTimeoutMs(): number {
   return parseTimeoutEnv('NAPKIN_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
-}
-
-export interface BridgeState {
-  port: number;
-  token: string;
 }
 
 export class NapkinError extends Error {
@@ -108,6 +103,14 @@ export interface VisualRequest {
 export const machineIdSchema = z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/);
 
 /**
+ * An ID that goes into a request path (a request ID, a file ID): the machine
+ * ID shape, minus `.` and `..`, which URL parsing treats as directory steps.
+ */
+export const pathIdSchema = machineIdSchema.refine((value) => value !== '.' && value !== '..', {
+  message: 'must not be . or ..',
+});
+
+/**
  * File URLs are likewise relayed raw (the model must be able to pass them
  * back to napkin_download_visual). HTTPS-only with no whitespace, quotes, or
  * angle brackets — enough to make an envelope-breakout or markup payload
@@ -136,7 +139,9 @@ export type StatusWarning = z.infer<typeof statusWarningSchema>;
 export type StatusError = StatusWarning;
 
 export const visualStatusResponseSchema = z.object({
-  id: machineIdSchema,
+  // A request ID the model may pass back to napkin_check_status, so it must
+  // pass the same check that input does.
+  id: pathIdSchema,
   status: requestStatusSchema,
   request: z.record(z.unknown()).optional(),
   generated_files: z.array(generatedFileSchema).optional(),
@@ -147,7 +152,7 @@ export const visualStatusResponseSchema = z.object({
 export type VisualStatusResponse = z.infer<typeof visualStatusResponseSchema>;
 
 export const createVisualResponseSchema = z.object({
-  id: machineIdSchema,
+  id: pathIdSchema,
   status: requestStatusSchema,
   request: z.record(z.unknown()).optional(),
 });

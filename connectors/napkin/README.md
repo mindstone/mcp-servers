@@ -13,7 +13,7 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
-> **Note:** The Napkin API is currently a **developer preview** (see [api.napkin.ai](https://api.napkin.ai/)). Endpoints and behavior may change; report upstream issues to api@napkin.ai. Older guides reference `context_before`/`context_after` parameters — Napkin deprecated these in favor of the single `context` parameter, which `napkin_generate_visual` supports.
+> **Note:** As of 2026-11-19, Napkin documents its API as generally available for production use, at version 1.2.2 with all endpoints still under `/v1` (see [api.napkin.ai](https://api.napkin.ai/)); report upstream issues to api@napkin.ai. Older guides reference `context_before`/`context_after` parameters — Napkin deprecated these in favor of the single `context` parameter, which `napkin_generate_visual` supports.
 
 ## Requirements
 
@@ -127,7 +127,7 @@ node dist/index.js
 ### Generation
 - `napkin_generate_visual` — Generate a professional visual from text
 - `napkin_check_status` — Check the status of a visual generation request (vendor-authored free text — warning/error messages and `visual_query` — is wrapped in `<untrusted-content>` envelopes so hosts treat it as data; codes, IDs, and URLs stay raw, with their machine-identifier charset enforced by response validation)
-- `napkin_download_visual` — Download a generated visual file to disk (existing files are never overwritten — pass a different `filename` or omit it to auto-generate one). Redirects are re-validated against the Napkin host allow-list before being followed; off-list redirect targets are refused.
+- `napkin_download_visual` — Download a generated visual file to disk (existing files are never overwritten — pass a different `filename` or omit it to auto-generate one). `file_url` must be a Napkin file URL exactly as returned (`https://api.napkin.ai/v1/visual/<request-id>/file/<file-id>`, no query or fragment); redirects are re-validated by the same rules before being followed, and anything else is refused before the API key is sent.
 
 ### Styles
 - `napkin_list_styles` — List the 15 built-in Napkin visual styles (IDs, descriptions, categories) to pick a `style_id` for `napkin_generate_visual`. Static catalog; no API key or network call required.

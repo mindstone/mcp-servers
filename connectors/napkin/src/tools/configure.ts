@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, setApiKey } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { bridgeRequest, BRIDGE_NOT_AVAILABLE } from '../bridge.js';
 import { NapkinError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+
+const SUCCESS_MESSAGE =
+  'Napkin API key configured successfully! You can now use napkin_generate_visual to create diagrams, infographics, and illustrations from text.';
 
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
@@ -20,41 +23,42 @@ export function registerConfigureTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const key = args.api_key.trim();
 
-      // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await bridgeRequest('/bundled/napkin/configure', { apiKey: key });
-          if (result.success) {
-            setApiKey(key);
-            const message = result.warning
-              ? `Napkin API key configured successfully. Note: ${result.warning}`
-              : 'Napkin API key configured successfully! You can now use napkin_generate_visual to create diagrams, infographics, and illustrations from text.';
-            return JSON.stringify({ ok: true, message });
-          }
-          // Bridge returned failure — surface as error, do NOT fall through
-          throw new NapkinError(
-            result.error || 'Bridge configuration failed',
-            'BRIDGE_ERROR',
-            'The host app bridge rejected the configuration request. Check the host app logs.',
-          );
-        } catch (error) {
-          if (error instanceof NapkinError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
-          throw new NapkinError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
-            'BRIDGE_ERROR',
-            'Could not reach the host app bridge. Ensure the host app is running.',
-          );
-        }
+      let result: Awaited<ReturnType<typeof bridgeRequest>>;
+      try {
+        result = await bridgeRequest('/bundled/napkin/configure', { apiKey: key });
+      } catch (error) {
+        // Bridge request failed (network, timeout, refused redirect) — surface as error
+        throw new NapkinError(
+          `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+          'BRIDGE_ERROR',
+          'Could not reach the host app bridge. Ensure the host app is running.',
+        );
       }
 
-      // No bridge — store in-memory
-      setApiKey(key);
-      return JSON.stringify({
-        ok: true,
-        message:
-          'Napkin API key configured successfully! You can now use napkin_generate_visual to create diagrams, infographics, and illustrations from text.',
-      });
+      if (result.success) {
+        setApiKey(key);
+        const message = result.warning
+          ? `Napkin API key configured successfully. Note: ${result.warning}`
+          : SUCCESS_MESSAGE;
+        return JSON.stringify({ ok: true, message });
+      }
+
+      // No usable bridge state (not run by a host app, or the state file was
+      // refused) — keep the key in memory for this process only.
+      if (result.error === BRIDGE_NOT_AVAILABLE) {
+        setApiKey(key);
+        return JSON.stringify({
+          ok: true,
+          message: `${SUCCESS_MESSAGE} The key has not been saved for future use. It will work until the Napkin connection restarts; after that, set it up again in your app's connector settings.`,
+        });
+      }
+
+      // Bridge returned failure — surface as error, do NOT fall through
+      throw new NapkinError(
+        result.error || 'Bridge configuration failed',
+        'BRIDGE_ERROR',
+        'The host app bridge rejected the configuration request. Check the host app logs.',
+      );
     }),
   );
 }

@@ -220,7 +220,7 @@ describe('Napkin generation tools', () => {
       expect(requestMade).toBe(false);
     });
 
-    it('sends a request_id as one encoded path segment', async () => {
+    it('sends a Napkin-shaped request_id as one encoded path segment', async () => {
       const urls: string[] = [];
       mswServer.use(
         http.all('https://api.napkin.ai/*', ({ request }) => {
@@ -233,14 +233,23 @@ describe('Napkin generation tools', () => {
       });
 
       const result = await testClient.callTool('napkin_check_status', {
-        request_id: 'a/../../b?c=1#d',
+        request_id: 'Req_1.a:b-2',
       });
 
       expect(result.isError).toBeFalsy();
-      expect(urls).toEqual([`${BASE}/visual/a%2F..%2F..%2Fb%3Fc%3D1%23d/status`]);
+      expect(urls).toEqual([`${BASE}/visual/Req_1.a%3Ab-2/status`]);
     });
 
-    it.each(['.', '..'])('refuses request_id %j without sending a request', async (requestId) => {
+    it.each([
+      '.',
+      '..',
+      'a/../../b?c=1#d',
+      'a/b',
+      'has space',
+      'a%2Fb',
+      '<tag>',
+      'x'.repeat(129),
+    ])('refuses request_id %j without sending a request', async (requestId) => {
       let requestMade = false;
       mswServer.use(
         http.all('https://api.napkin.ai/*', () => {
@@ -255,7 +264,7 @@ describe('Napkin generation tools', () => {
       const result = await testClient.callTool('napkin_check_status', { request_id: requestId });
 
       expect(result.isError).toBe(true);
-      expect((result.json as { code: string }).code).toBe('INVALID_ARGUMENTS');
+      expect(result.text).toContain('request_id');
       expect(requestMade).toBe(false);
     });
   });

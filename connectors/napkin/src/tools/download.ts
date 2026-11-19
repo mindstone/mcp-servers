@@ -200,8 +200,8 @@ export function registerDownloadTools(server: McpServer): void {
         'Files are saved to your private space (Chief-of-Staff/generated-visuals/) in the workspace, or ~/Pictures/NapkinVisuals/ if no workspace is set. ' +
         'Existing files are never overwritten — if the name is taken, pass a different filename or omit it to auto-generate one. ' +
         'IMPORTANT: Download URLs expire 30 minutes after generation. ' +
-        'SECURITY: file_url must be a Napkin-hosted https URL (host on the hard-coded allow-list, currently api.napkin.ai); ' +
-        'requests to other hosts are refused without sending the request, to prevent leaking the Napkin API key. ' +
+        'SECURITY: file_url must be a Napkin file URL exactly as returned, https://api.napkin.ai/v1/visual/<request-id>/file/<file-id> (host on the hard-coded allow-list); ' +
+        'any other host, path, port, query string or fragment is refused without sending the request, to prevent leaking the Napkin API key. ' +
         'URLs with userinfo (user:pass@host) and non-HTTPS schemes are also refused.',
       inputSchema: z.object({
         file_url: z
@@ -224,7 +224,7 @@ export function registerDownloadTools(server: McpServer): void {
       // `getVisualStatus(apiKey, requestId)` (which sends
       // `Authorization: Bearer ${NAPKIN_API_KEY}` to api.napkin.ai) for any
       // `file_url` whose pathname embeds `/visual/<id>/`, even when the URL's
-      // host/scheme/userinfo would later be rejected by `downloadFile`. By
+      // host, scheme, path or query would later be rejected by `downloadFile`. By
       // validating first we guarantee that a rejected `file_url` produces a
       // structured `URL_REJECTED` error with ZERO outbound `fetch` calls
       // anywhere in the handler. Re-using the parsed URL avoids a second
@@ -239,19 +239,14 @@ export function registerDownloadTools(server: McpServer): void {
         // Normalize .ppt to .pptx
         if (extension === '.ppt') extension = '.pptx';
       } else {
-        // Try to determine format from the (already-validated) URL structure
+        // Determine format from the request's status. validateDownloadUrl has
+        // already fixed the path to /v1/visual/<request-id>/file/<file-id>.
         try {
-          const pathParts = validatedUrl.pathname.split('/');
-          const requestIdIndex = pathParts.indexOf('visual');
-          if (requestIdIndex >= 0) {
-            const requestId = pathParts[requestIdIndex + 1];
-            if (requestId) {
-              const statusResp = await getVisualStatus(apiKey, requestId);
-              const format = statusResp.request?.format as string;
-              if (format && FORMAT_EXTENSIONS[format]) {
-                extension = FORMAT_EXTENSIONS[format];
-              }
-            }
+          const requestId = validatedUrl.pathname.split('/')[3];
+          const statusResp = await getVisualStatus(apiKey, requestId);
+          const format = statusResp.request?.format as string;
+          if (format && FORMAT_EXTENSIONS[format]) {
+            extension = FORMAT_EXTENSIONS[format];
           }
         } catch (formatError) {
           // Best-effort pre-check; a failure must be observable, never

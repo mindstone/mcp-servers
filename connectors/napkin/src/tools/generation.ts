@@ -4,6 +4,7 @@ import { getApiKey, hasApiKey } from '../auth.js';
 import { createVisual, getVisualStatus } from '../client.js';
 import {
   NapkinError,
+  pathIdSchema,
   type OutputFormat,
   type ColorMode,
   type Orientation,
@@ -150,10 +151,9 @@ export function registerGenerationTools(server: McpServer): void {
         'Status values: "pending" (call again in 3-5s), "completed" (done with generated_files), "failed" (check error). ' +
         'IMPORTANT: File download URLs expire after 30 minutes. Download promptly or use napkin_download_visual.',
       inputSchema: z.object({
-        request_id: z
-          .string()
-          .min(1)
-          .describe('The request ID returned by napkin_generate_visual (UUID format)'),
+        request_id: pathIdSchema.describe(
+          'The request ID returned by napkin_generate_visual, passed exactly as returned',
+        ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
