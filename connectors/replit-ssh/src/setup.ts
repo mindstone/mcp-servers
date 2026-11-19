@@ -68,13 +68,17 @@ function fsyncParentDirectoryBestEffort(filePath: string): void {
   }
 }
 
-function atomicWriteFileSync(targetPath: string, content: Buffer | string, mode: number): void {
+export function atomicWriteFileSync(targetPath: string, content: Buffer | string, mode: number): void {
   const tempPath = `${targetPath}.replit-tmp-${randomUUID()}`;
   const data = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
   let tempFd: number | undefined;
+  let createdTemp = false;
 
   try {
-    tempFd = fs.openSync(tempPath, 'w', mode);
+    // 'wx' (O_CREAT|O_EXCL): fail rather than reuse or follow anything
+    // already at the temp path.
+    tempFd = fs.openSync(tempPath, 'wx', mode);
+    createdTemp = true;
     fs.writeSync(tempFd, data, 0, data.length, 0);
     fs.chmodSync(tempPath, mode);
     fs.fsyncSync(tempFd);
@@ -91,10 +95,14 @@ function atomicWriteFileSync(targetPath: string, content: Buffer | string, mode:
         // best-effort cleanup
       }
     }
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      // best-effort cleanup
+    // Only remove a temp file this call created; anything already at the
+    // temp path is not ours to delete.
+    if (createdTemp) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        // best-effort cleanup
+      }
     }
     throw err;
   }

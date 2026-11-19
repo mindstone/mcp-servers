@@ -3,11 +3,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { SlackTokenProvider } from '../src/tokenProvider.js';
+import { failWritePathOpens as failWritePathOpensWith, isReadOpen } from './fixtures/token-read-opens.js';
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, openSync: vi.fn(actual.openSync), renameSync: vi.fn(actual.renameSync), existsSync: vi.fn(actual.existsSync), mkdirSync: vi.fn(actual.mkdirSync), readFileSync: vi.fn(actual.readFileSync) };
 });
+
+// This file's openSync mock stands for the token write path; read opens
+// pass through and are not counted (see fixtures/token-read-opens.ts).
+const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+const writePathOpens = () => vi.mocked(fs.openSync).mock.calls.filter(([, flags]) => !isReadOpen(flags));
+function failWritePathOpens(error: () => never, times = Infinity) {
+  failWritePathOpensWith(vi.mocked(fs.openSync), actualFs.openSync, error, times);
+}
 
 const initial = {
   botToken: 'xoxb-example-old', userToken: 'xoxp-example-old', botUserId: 'UBOT',
@@ -52,7 +61,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
   function failWrites() {
-    vi.mocked(fs.openSync).mockImplementation(() => { throw Object.assign(new Error('Example disk failure'), { code: 'EIO' }); });
+    failWritePathOpens(() => { throw Object.assign(new Error('Example disk failure'), { code: 'EIO' }); });
   }
   function mockRefresh(role: Role) {
     const fetch = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(rotated(role)));
@@ -69,7 +78,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     });
     await expect(acquire(provider, role)).rejects.toMatchObject({ code: 'TOKEN_FILE_PERMISSION_DENIED' });
     expect(fetch).not.toHaveBeenCalled();
-    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(writePathOpens()).toHaveLength(0);
     expect(fs.renameSync).not.toHaveBeenCalled();
   });
 
@@ -83,7 +92,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     });
     await expect(acquire(provider, role)).rejects.toMatchObject({ code: 'TOKEN_FILE_PERMISSION_DENIED' });
     expect(fetch).not.toHaveBeenCalled();
-    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(writePathOpens()).toHaveLength(0);
     expect(fs.renameSync).not.toHaveBeenCalled();
   });
 
@@ -93,7 +102,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     const fetch = mockRefresh(role);
     await expect(acquire(provider, role)).rejects.toMatchObject({ code: 'TOKEN_FILE_CORRUPT' });
     expect(fetch).not.toHaveBeenCalled();
-    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(writePathOpens()).toHaveLength(0);
     expect(fs.renameSync).not.toHaveBeenCalled();
   });
 
@@ -103,7 +112,6 @@ describe('token lifecycle ownership and pending persistence', () => {
     const fetch = vi.fn(() => Promise.resolve(Response.json(rotated(role))))
       .mockImplementationOnce(() => { started.resolve(); return response.promise; });
     vi.stubGlobal('fetch', fetch);
-    const writes = vi.mocked(fs.openSync);
     const result = acquire(provider, role);
     const outcome = result.then(token => ({ token }), error => ({ code: error.code }));
     await started.promise;
@@ -113,7 +121,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     response.resolve(Response.json(rotated(role)));
 
     expect.soft(await outcome).toEqual({ code: code === 'EACCES' ? 'TOKEN_FILE_PERMISSION_DENIED' : 'TOKEN_FILE_UNREADABLE' });
-    expect.soft(writes).not.toHaveBeenCalled();
+    expect.soft(writePathOpens()).toHaveLength(0);
     expect.soft(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(initial);
     expect.soft((await provider.loadTokens())?.[`${role}RefreshToken`]).toBe(`example-${role}-refresh-fresh`);
     expect.soft(await acquire(provider, role)).toBe(`example-${role}-fresh`);
@@ -140,7 +148,7 @@ describe('token lifecycle ownership and pending persistence', () => {
       throw Object.assign(new Error('Example transient read failure'), { code: 'EACCES' });
     });
     expect(await acquire(provider, role)).toBe(`example-${role}-fresh`);
-    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(writePathOpens()).toHaveLength(0);
     expect(fs.renameSync).not.toHaveBeenCalled();
     expect(await acquire(provider, role)).toBe(`example-${role}-fresh`);
     expect(fs.renameSync).toHaveBeenCalledTimes(1);
@@ -157,7 +165,7 @@ describe('token lifecycle ownership and pending persistence', () => {
     await expect(acquire(provider, role)).rejects.toMatchObject({ code: 'TOKEN_PERSIST_FAILED' });
     log.mockClear();
     for (let i = 0; i < 2; i++) expect(await acquire(provider, role)).toBe(`example-${role}-fresh`);
-    expect(fs.openSync).toHaveBeenCalledTimes(3);
+    expect(writePathOpens()).toHaveLength(3);
     expect(log.mock.calls.filter(args => String(args[0]).includes('Token persist FAILED'))).toHaveLength(2);
     expect(fetch).toHaveBeenCalledTimes(1);
   });

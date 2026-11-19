@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ConnectorError, MAX_RETRIES, REQUEST_TIMEOUT_MS, type SlackWorkspace } from './types.js';
 import { SlackTokenProvider } from './tokenProvider.js';
+import { readRegularFileNoFollow, UnsafeTokenFileError } from './safeTokenFileRead.js';
 import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage, setSlackErrorTokenRole } from './utils.js';
 
 const SLACK_CONFIG_PATH = process.env.SLACK_CONFIG_PATH;
@@ -348,11 +349,16 @@ export function getWorkspaces(): SlackWorkspace[] {
     try {
       // We only need to verify readability + parseability, not the actual
       // token contents — the tokens are read lazily via SlackTokenProvider.
-      if (!fs.existsSync(tokenFile)) {
-        readable.push(ws);
-        continue;
+      let data: string;
+      try {
+        data = readRegularFileNoFollow(tokenFile);
+      } catch (readErr) {
+        if ((readErr as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          readable.push(ws);
+          continue;
+        }
+        throw readErr;
       }
-      const data = fs.readFileSync(tokenFile, 'utf-8');
       JSON.parse(data);
       readable.push(ws);
     } catch (err) {
@@ -361,7 +367,9 @@ export function getWorkspaces(): SlackWorkspace[] {
       // contents, so it is replaced with fixed text.
       const reason = err instanceof SyntaxError
         ? 'not valid JSON'
-        : sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
+        : err instanceof UnsafeTokenFileError
+          ? 'symbolic link or not a regular file'
+          : sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
       console.error(
         `[slack-mcp] Skipping unreadable workspace token file for team=${ws.teamId}: ${reason}`,
       );

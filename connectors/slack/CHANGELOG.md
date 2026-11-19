@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - When your user token can't be refreshed for a temporary reason, tools that act as you (sending, searching, opening a DM) now say to try again instead of asking you to reconnect Slack.
 
+### Security
+
+- A saved Slack token file that is a symbolic link or not a regular file (such as a folder or a named pipe) is now refused instead of being followed or read.
+- When saving tokens, the temporary file is now created fresh every time; if something already exists at that path, the save fails rather than writing through it.
+
 ## [0.3.8] - 2026-11-14
 
 ### Changed

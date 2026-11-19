@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- `replit_setup_ssh` now creates the temporary files for the SSH key and SSH config fresh each time; if a file or symbolic link already exists at the temporary path, setup fails rather than writing through it.
 
 ## [0.2.2] - 2026-08-10
 

@@ -7,11 +7,16 @@ import { SLACK_API_BASE } from './fixtures/slack-mock-api.js';
 import {
   createSlackConfigDir, createTestClient, type McpTestClient, type SlackTestConfig,
 } from './fixtures/mcp-test-client.js';
+import { isReadOpen } from './fixtures/token-read-opens.js';
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn(actual.readFileSync), openSync: vi.fn(actual.openSync), renameSync: vi.fn(actual.renameSync) };
 });
+
+// This file's openSync mock stands for the token write path; read opens
+// are not counted (see fixtures/token-read-opens.ts).
+const writePathOpens = () => vi.mocked(fs.openSync).mock.calls.filter(([, flags]) => !isReadOpen(flags));
 
 const tokens = {
   botToken: 'xoxb-old-example', userToken: 'xoxp-old-example',
@@ -164,7 +169,7 @@ describe('removed Slack connection', () => {
     vi.mocked(fs.readFileSync).mockImplementationOnce(() => { throw Object.assign(new Error('Read failed'), { code }); });
     expect(await (role === 'bot' ? provider.getBotToken() : provider.getUserToken())).toBe(tokens[`${role}Token`]);
     expect(fetch).not.toHaveBeenCalled();
-    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(writePathOpens()).toHaveLength(0);
     expect(fs.renameSync).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledExactlyOnceWith(`[slack-mcp] ${code === 'EACCES' || code === 'EPERM' ? 'TOKEN_FILE_PERMISSION_DENIED' : 'TOKEN_FILE_UNREADABLE'}`);
     expect(await provider.getBotToken() === replacement.botToken).toBe(true);

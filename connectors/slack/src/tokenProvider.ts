@@ -30,6 +30,7 @@ import {
   TOKEN_EXPIRED_REFRESH_DISABLED,
 } from './types.js';
 import { sanitizeErrorMessage } from './utils.js';
+import { readRegularFileNoFollow, UnsafeTokenFileError } from './safeTokenFileRead.js';
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
@@ -175,6 +176,7 @@ export class SlackTokenProvider {
    *
    * - ENOENT  → return null  (legitimate first-run / not-yet-authed)
    * - EACCES / EPERM → throw `TOKEN_FILE_PERMISSION_DENIED`
+   * - symlink or non-regular file → throw `TOKEN_FILE_UNREADABLE` (refused)
    * - SyntaxError on parse → throw `TOKEN_FILE_CORRUPT`
    * - other unexpected → throw `TOKEN_FILE_UNREADABLE`
    */
@@ -182,8 +184,17 @@ export class SlackTokenProvider {
     const tokenPath = this.getTokenPath();
     let raw: string;
     try {
-      raw = fs.readFileSync(tokenPath, 'utf-8');
+      raw = readRegularFileNoFollow(tokenPath);
     } catch (err) {
+      if (err instanceof UnsafeTokenFileError) {
+        throw new ConnectorError(
+          'Slack token file is a symbolic link or not a regular file; refusing to read it.',
+          'TOKEN_FILE_UNREADABLE',
+          'Remove the symbolic link or special file at this path itself (not whatever it points to), then reconnect Slack via your MCP host application to write a fresh token file.',
+          { path: tokenPath },
+          'authenticate_slack_workspace',
+        );
+      }
       const code = (err as NodeJS.ErrnoException)?.code;
       if (code === 'ENOENT') {
         if (this.lastDiskSignature !== null) this.connectionRevision++;
@@ -686,11 +697,15 @@ export class SlackTokenProvider {
     // disk holding an empty/partial file.
     const tmpPath = `${tokenPath}.tmp.${process.pid}.${Date.now()}`;
     const payload = JSON.stringify(tokens, null, 2);
+    let createdTemp = false;
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       // openSync(mode=0o600) creates the file with 0600 even on filesystems
       // that ignore the writeFileSync mode option.
-      const fd = fs.openSync(tmpPath, 'w', 0o600);
+      // 'wx' (O_CREAT|O_EXCL): fail rather than reuse or follow anything
+      // already at the temp path.
+      const fd = fs.openSync(tmpPath, 'wx', 0o600);
+      createdTemp = true;
       try {
         // Loop until the entire payload is written. fs.writeSync(fd, string)
         // historically returns the number of bytes written and CAN short-write
@@ -746,9 +761,11 @@ export class SlackTokenProvider {
       this.lastDiskSignature = JSON.stringify(connectionCredentials(tokens));
       this.persistPending = false;
     } catch (err) {
-      // Best-effort cleanup of the temp file. Don't mask the original error.
+      // Best-effort cleanup of the temp file, only if this call created it:
+      // an entry already at the temp path is not ours to delete. Don't mask
+      // the original error.
       try {
-        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+        if (createdTemp) fs.unlinkSync(tmpPath);
       } catch {
         // ignore
       }

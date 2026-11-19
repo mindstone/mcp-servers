@@ -3,11 +3,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SlackTokenProvider } from '../src/tokenProvider.js';
+import { failWritePathOpens as failWritePathOpensWith, isReadOpen } from './fixtures/token-read-opens.js';
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, openSync: vi.fn(actual.openSync) };
 });
+
+// This file's openSync mock stands for the token write path; read opens
+// pass through and are not counted (see fixtures/token-read-opens.ts).
+const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+function failWritePathOpens(error: () => never, times = Infinity) {
+  failWritePathOpensWith(vi.mocked(fs.openSync), actualFs.openSync, error, times);
+}
 
 const initial = {
   botToken: 'xoxb-example-contract-old', userToken: 'xoxp-example-contract-old',
@@ -67,9 +75,9 @@ describe('independent token lifecycle contracts', () => {
   ))('retains unsaved $role credentials after a credential-neutral $change change', async ({ role, change }) => {
     const fetch = vi.fn(async () => Response.json(rotation(role)));
     vi.stubGlobal('fetch', fetch);
-    vi.mocked(fs.openSync).mockImplementationOnce(() => {
+    failWritePathOpens(() => {
       throw Object.assign(new Error('Example save failure'), { code: 'EIO' });
-    });
+    }, 1);
     await expect(acquire(provider, role)).rejects.toMatchObject({ code: 'TOKEN_PERSIST_FAILED' });
 
     if (change === 'timestamp') fs.utimesSync(file, new Date(1000), new Date(1000));
@@ -147,9 +155,8 @@ describe('independent token lifecycle contracts', () => {
     const bot = vi.spyOn(current, 'getBotToken');
     const refresh = vi.fn(async () => Response.json(rotation('user')));
     vi.stubGlobal('fetch', refresh);
-    const saveFailure = () => { throw Object.assign(new Error('Example disk failure'), { code: 'EIO' }); };
-    if (disk === 'recovered') vi.mocked(fs.openSync).mockImplementationOnce(saveFailure);
-    else vi.mocked(fs.openSync).mockImplementation(saveFailure);
+    const saveFailure = (): never => { throw Object.assign(new Error('Example disk failure'), { code: 'EIO' }); };
+    failWritePathOpens(saveFailure, disk === 'recovered' ? 1 : Infinity);
     const callback = vi.fn(async (reader: { token?: string }) => {
       expect(user).toHaveBeenCalledTimes(2);
       expect(bot).not.toHaveBeenCalled();

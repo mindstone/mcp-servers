@@ -12,8 +12,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const isWindows = process.platform === 'win32';
+const slackRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // chmod-based refusal assertions cannot fail-closed when running as uid 0 —
 // root bypasses file mode bits, so these tests only mean anything non-root.
 const isRoot = typeof process.geteuid === 'function' && process.geteuid() === 0;
@@ -278,4 +281,183 @@ describe('getWorkspaces — distinct error types', () => {
       }
     },
   );
+});
+
+describe('token file reads refuse symlinks and non-regular files', () => {
+  let tmpDir: string;
+  let wsDir: string;
+  const validTokens = JSON.stringify({ botToken: 'xoxb-example', botUserId: 'UEXAMPLE' });
+
+  beforeEach(() => {
+    vi.resetModules();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slack-mcp-symlink-'));
+    wsDir = path.join(tmpDir, 'workspaces');
+    fs.mkdirSync(wsDir, { recursive: true, mode: 0o700 });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeConfig(teamIds: string[]): void {
+    fs.writeFileSync(
+      path.join(tmpDir, 'config.json'),
+      JSON.stringify({
+        workspaces: teamIds.map((teamId) => ({ teamId, teamName: teamId, authedAt: new Date().toISOString() })),
+      }),
+    );
+  }
+
+  it('a regular token file still loads', async () => {
+    fs.writeFileSync(path.join(wsDir, 'T0123ABCD.json'), validTokens, { mode: 0o600 });
+    const { SlackTokenProvider } = await import('../src/tokenProvider.js');
+    const tp = new SlackTokenProvider(tmpDir, 'T0123ABCD', 'cid', 'csec');
+    expect(await tp.loadTokens()).toMatchObject({ botToken: 'xoxb-example' });
+  });
+
+  it.skipIf(isWindows)('a symlinked token file pointing at valid tokens is refused with TOKEN_FILE_UNREADABLE', async () => {
+    const elsewhere = path.join(tmpDir, 'elsewhere.json');
+    fs.writeFileSync(elsewhere, validTokens);
+    fs.symlinkSync(elsewhere, path.join(wsDir, 'T0123ABCD.json'));
+    const { SlackTokenProvider } = await import('../src/tokenProvider.js');
+    const tp = new SlackTokenProvider(tmpDir, 'T0123ABCD', 'cid', 'csec');
+    const err = await tp.loadTokens().then(
+      () => { throw new Error('expected loadTokens to reject'); },
+      (e: unknown) => e as { code?: string; message: string; resolution?: string; nextStep?: string },
+    );
+    expect(err.code).toBe('TOKEN_FILE_UNREADABLE');
+    expect(err.message).toBe('Slack token file is a symbolic link or not a regular file; refusing to read it.');
+    expect(err.resolution).toBe(
+      'Remove the symbolic link or special file at this path itself (not whatever it points to), then reconnect Slack via your MCP host application to write a fresh token file.',
+    );
+    expect(err.nextStep).toBe('authenticate_slack_workspace');
+    expect(JSON.stringify(err)).not.toContain('xoxb-example');
+  });
+
+  it('a directory at the token path is refused with TOKEN_FILE_UNREADABLE', async () => {
+    fs.mkdirSync(path.join(wsDir, 'T0123ABCD.json'));
+    const { SlackTokenProvider } = await import('../src/tokenProvider.js');
+    const tp = new SlackTokenProvider(tmpDir, 'T0123ABCD', 'cid', 'csec');
+    await expect(tp.loadTokens()).rejects.toMatchObject({
+      code: 'TOKEN_FILE_UNREADABLE',
+      message: 'Slack token file is a symbolic link or not a regular file; refusing to read it.',
+      nextStep: 'authenticate_slack_workspace',
+    });
+  });
+
+  // Runs on every platform: the Windows branch is picked by process.platform,
+  // and its lstat refusal must happen before any open.
+  it('on Windows, a symlink at the token path is refused by lstat before any open', async () => {
+    const lstatSync = vi.fn(() => ({ isSymbolicLink: () => true }));
+    const openSync = vi.fn(() => { throw new Error('openSync must not be called'); });
+    vi.doMock('node:fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('node:fs')>();
+      return { ...actual, lstatSync, openSync };
+    });
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    try {
+      const { readRegularFileNoFollow, UnsafeTokenFileError } = await import('../src/safeTokenFileRead.js');
+      expect(() => readRegularFileNoFollow(path.join(wsDir, 'T0123ABCD.json'))).toThrow(UnsafeTokenFileError);
+      expect(lstatSync).toHaveBeenCalledTimes(1);
+      expect(openSync).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+      vi.doUnmock('node:fs');
+    }
+  });
+
+  // A blocking open of a FIFO with no writer hangs the whole event loop, so an
+  // in-process test could never time out. The load runs in a child process the
+  // parent kills after a bounded wait; a hang shows up as a failed test.
+  it.skipIf(isWindows)('a FIFO at the token path is refused without hanging', () => {
+    const fifo = path.join(wsDir, 'T0123ABCD.json');
+    execFileSync('mkfifo', [fifo]);
+    const providerUrl = pathToFileURL(path.join(slackRoot, 'src', 'tokenProvider.ts')).href;
+    const script = [
+      `const { SlackTokenProvider } = await import(${JSON.stringify(providerUrl)});`,
+      `const tp = new SlackTokenProvider(${JSON.stringify(tmpDir)}, 'T0123ABCD', 'cid', 'csec');`,
+      `try { await tp.loadTokens(); console.log('LOADED'); } catch (e) { console.log('CODE=' + e.code); }`,
+    ].join('\n');
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      cwd: slackRoot, encoding: 'utf8', timeout: 10_000, killSignal: 'SIGKILL',
+    });
+    expect(child.error, 'child process hung reading the FIFO and was killed').toBeUndefined();
+    expect(child.status, child.stderr).toBe(0);
+    expect(child.stdout.trim()).toBe('CODE=TOKEN_FILE_UNREADABLE');
+  }, 20_000);
+
+  it.skipIf(isWindows)('getWorkspaces skips a symlinked token file and keeps the readable one', async () => {
+    writeConfig(['T111AAA', 'T222BBB']);
+    fs.writeFileSync(path.join(wsDir, 'T111AAA.json'), validTokens);
+    const elsewhere = path.join(tmpDir, 'elsewhere.json');
+    fs.writeFileSync(elsewhere, validTokens);
+    fs.symlinkSync(elsewhere, path.join(wsDir, 'T222BBB.json'));
+    vi.stubEnv('SLACK_CONFIG_PATH', tmpDir);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { getWorkspaces } = await import('../src/client.js');
+    expect(getWorkspaces().map((w) => w.teamId)).toEqual(['T111AAA']);
+    const logs = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logs).toContain('T222BBB');
+    expect(logs).toContain('symbolic link or not a regular file');
+  });
+
+  it.skipIf(isWindows)('getWorkspaces throws WORKSPACE_DIR_ALL_CORRUPT when the only token file is a symlink', async () => {
+    writeConfig(['T111AAA']);
+    const elsewhere = path.join(tmpDir, 'elsewhere.json');
+    fs.writeFileSync(elsewhere, validTokens);
+    fs.symlinkSync(elsewhere, path.join(wsDir, 'T111AAA.json'));
+    vi.stubEnv('SLACK_CONFIG_PATH', tmpDir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { getWorkspaces } = await import('../src/client.js');
+    expect(() => getWorkspaces()).toThrow(expect.objectContaining({ code: 'WORKSPACE_DIR_ALL_CORRUPT' }));
+  });
+
+  it('getWorkspaces still lists a workspace whose token file is missing', async () => {
+    writeConfig(['T111AAA']);
+    vi.stubEnv('SLACK_CONFIG_PATH', tmpDir);
+    const { getWorkspaces } = await import('../src/client.js');
+    expect(getWorkspaces().map((w) => w.teamId)).toEqual(['T111AAA']);
+  });
+});
+
+describe('saveTokens creates its temp file exclusively', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    vi.resetModules();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slack-mcp-save-excl-'));
+    fs.mkdirSync(path.join(tmpDir, 'workspaces'), { recursive: true, mode: 0o700 });
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it.skipIf(isWindows)('a symlink planted at the temp path makes the save fail; its target and the link are untouched', async () => {
+    const tokenPath = path.join(tmpDir, 'workspaces', 'T0123ABCD.json');
+    const fixedNow = 1_700_000_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+    const tmpPath = `${tokenPath}.tmp.${process.pid}.${fixedNow}`;
+    const victim = path.join(tmpDir, 'victim');
+    fs.writeFileSync(victim, 'victim-contents');
+    fs.symlinkSync(victim, tmpPath);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { SlackTokenProvider } = await import('../src/tokenProvider.js');
+    const tp = new SlackTokenProvider(tmpDir, 'T0123ABCD', 'cid', 'csec');
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tp as any).saveTokens({ botToken: 'xoxb-new', botUserId: 'U1' }),
+    ).rejects.toMatchObject({ code: 'TOKEN_PERSIST_FAILED' });
+
+    expect(fs.readFileSync(victim, 'utf-8')).toBe('victim-contents');
+    expect(fs.lstatSync(tmpPath).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(tokenPath)).toBe(false);
+  });
 });
