@@ -14,13 +14,17 @@
  */
 
 import { getApiKey } from './auth.js';
+import { logError, redactCredentials } from './key-filter.js';
 import {
   OpusError,
+  describeForLog,
   getApiTimeoutMs,
   getUploadTimeoutMs,
+  opusNetworkError,
+  opusParseError,
   parseRetryAfter,
   KNOWN_JOB_STATUSES,
-  type PollableJobResponse,
+  type RequestKind,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { UPLOAD_ALLOWED_HOST_SUFFIXES, validateOutboundUrlSync } from './url-safety.js';
@@ -48,6 +52,53 @@ export interface OpusFetchOptions extends Omit<RequestInit, 'signal'> {
   uploadTimeout?: boolean;
   /** Override the default JSON parse behaviour — return the raw Response. */
   rawResponse?: boolean;
+  /** Picks the next step a fixed network or parse error suggests. Defaults to `'request'`. */
+  requestKind?: RequestKind;
+}
+
+
+/**
+ * Remove every credential from every string value and member name, at every
+ * depth and inside arrays. Member names matter too: handlers spread upstream
+ * objects into results (`raw`, the project object) and use names as envelope
+ * source labels. Objects are rebuilt with defineProperty so a
+ * `__proto__` member stays an ordinary own property.
+ */
+function redactCredentialsDeep(value: unknown): unknown {
+  if (typeof value === 'string') return redactCredentials(value);
+  if (Array.isArray(value)) return value.map((item) => redactCredentialsDeep(item));
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [key, member] of Object.entries(value)) {
+      Object.defineProperty(out, redactCredentials(key), {
+        value: redactCredentialsDeep(member),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Parse a 2xx OpusClip body, removing every credential from every string
+ * value and member name so upstream-authored text (failure reasons, status
+ * messages, field names) can never carry it into a result. A body that is not
+ * JSON gives fixed text: a JSON parser's message quotes a slice of the input,
+ * so it is neither returned nor logged.
+ */
+function parseOpusJson<T>(text: string, kind: RequestKind = 'request'): T {
+  if (text.trim().length === 0) return {} as T;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    logError('[Opus API] response body was not valid JSON');
+    throw opusParseError(kind);
+  }
+  return redactCredentialsDeep(parsed) as T;
 }
 
 /**
@@ -60,19 +111,21 @@ async function opusFetchRaw<T>(
   options: OpusFetchOptions = {},
   injectAuth: boolean = true,
 ): Promise<T> {
+  const { uploadTimeout, rawResponse, requestKind = 'request', ...init } = options;
   // Never log the full URL: GCS resumable/signed URLs carry bearer-like
   // query credentials (upload_id, X-Goog-Signature, …). Method +
-  // origin + pathname is enough to trace a request.
-  console.error(`[Opus API] ${options.method || 'GET'} ${redactUrlForLog(url)}`);
+  // origin + pathname is enough to trace a request; `logError` removes the
+  // key should an upstream-supplied path carry it.
+  logError(`[Opus API] ${options.method || 'GET'} ${redactUrlForLog(url)}`);
 
-  const timeoutMs = options.uploadTimeout ? getUploadTimeoutMs() : getApiTimeoutMs();
+  const timeoutMs = uploadTimeout ? getUploadTimeoutMs() : getApiTimeoutMs();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const callerSignal = options.signal;
+  const callerSignal = init.signal;
   const fetchSignal =
     callerSignal === undefined ? timeoutSignal : AbortSignal.any([callerSignal, timeoutSignal]);
 
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> | undefined),
+    ...(init.headers as Record<string, string> | undefined),
   };
 
   if (injectAuth) {
@@ -81,10 +134,10 @@ async function opusFetchRaw<T>(
 
   // Default Content-Type only when there's a body and the caller didn't set one.
   if (
-    options.body !== undefined &&
-    options.body !== null &&
+    init.body !== undefined &&
+    init.body !== null &&
     !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type') &&
-    typeof options.body === 'string'
+    typeof init.body === 'string'
   ) {
     headers['Content-Type'] = 'application/json';
   }
@@ -97,7 +150,7 @@ async function opusFetchRaw<T>(
       // control signal, and silently following a redirect anywhere else
       // would bypass the SSRF validation of the new destination).
       redirect: 'manual',
-      ...options,
+      ...init,
       signal: fetchSignal,
       headers,
     });
@@ -106,14 +159,16 @@ async function opusFetchRaw<T>(
       const timeoutSec = Math.round(timeoutMs / 1000);
       throw new OpusError(
         `Request to Opus API timed out after ${timeoutSec}s`,
-        options.uploadTimeout ? 'UPLOAD_TIMEOUT' : 'TIMEOUT',
-        options.uploadTimeout
+        uploadTimeout ? 'UPLOAD_TIMEOUT' : 'TIMEOUT',
+        uploadTimeout
           ? `The upload chunk took longer than ${timeoutSec}s. Set OPUS_UPLOAD_TIMEOUT_MS to increase the timeout, or try again.`
           : `The request took longer than ${timeoutSec}s. Set OPUS_API_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
-    // Re-throw caller-aborted or generic network errors as-is.
-    throw error;
+    // The error text can quote anything (a URL, a header, the key): fixed
+    // text for the result, key-free detail for stderr.
+    logError(`[Opus API] request failed: ${describeForLog(error)}`);
+    throw opusNetworkError(requestKind);
   }
 
   // 429 — rate limit. Parse Retry-After (seconds OR HTTP-date) per RFC 9110.
@@ -158,7 +213,9 @@ async function opusFetchRaw<T>(
     // The vendor body is attacker-controlled external text: envelope it
     // (invariant #6) before embedding it in an error message that becomes
     // model-visible via withErrorHandling. Bounded to keep errors readable.
-    const text = await response.text().catch(() => '');
+    // The key is removed before truncation, so a cut cannot leave a fragment
+    // that exact matching would miss.
+    const text = redactCredentials(await response.text().catch(() => ''));
     const wrappedBody = wrapUntrusted(text.slice(0, 1000), 'opus:api:validation_error_body');
     throw new OpusError(
       `Validation error: ${wrappedBody ?? 'check request parameters'}`,
@@ -172,7 +229,7 @@ async function opusFetchRaw<T>(
   // committed offset, and wrap their own error bodies), so hand them the
   // raw response rather than collapsing every non-2xx into API_ERROR.
   // Auth/rate-limit/not-found/validation statuses above still throw first.
-  if (options.rawResponse) {
+  if (rawResponse) {
     return response as unknown as T;
   }
 
@@ -180,7 +237,7 @@ async function opusFetchRaw<T>(
     // Consume the body so the connection is released, but never log it:
     // vendor error bodies are not proven secret-free.
     await response.text().catch(() => '');
-    console.error(`Opus API error (HTTP ${response.status})`);
+    logError(`Opus API error (HTTP ${response.status})`);
     const message =
       response.status >= 500
         ? 'Opus server error - try again later'
@@ -197,20 +254,39 @@ async function opusFetchRaw<T>(
     return {} as T;
   }
 
-  const text = await response.text();
-  if (text.trim().length === 0) {
-    return {} as T;
-  }
+  return readOpusJson<T>(response, requestKind);
+}
+
+/**
+ * Read and parse a 2xx OpusClip body through `parseOpusJson`. A body cut off
+ * mid-read gives the fixed network text.
+ */
+export async function readOpusJson<T>(response: Response, kind: RequestKind = 'request'): Promise<T> {
+  let text: string;
   try {
-    return JSON.parse(text) as T;
+    text = await response.text();
+  } catch (error) {
+    logError(`[Opus API] response body could not be read: ${describeForLog(error)}`);
+    throw opusNetworkError(kind);
+  }
+  return parseOpusJson<T>(text, kind);
+}
+
+/**
+ * True for an endpoint path on the OpusClip API itself: it starts with a
+ * single `/`, holds no backslash, `@` or percent-encoded slash or backslash, and
+ * resolves to the API base's origin. Anything else could send the key to
+ * another host.
+ */
+function isOwnEndpoint(endpoint: string): boolean {
+  if (!endpoint.startsWith('/') || endpoint.startsWith('//')) return false;
+  // `@` is refused too: no OpusClip path needs one raw (tool input is
+  // percent-encoded), and other URL parsers can read it as a username.
+  if (/[\\@]/.test(endpoint) || /%(2f|5c)/i.test(endpoint)) return false;
+  try {
+    return new URL(endpoint, OPUS_API_BASE).origin === new URL(OPUS_API_BASE).origin;
   } catch {
-    // Never embed error.message here: V8 JSON parse errors quote a prefix of
-    // the response body, which is upstream-controlled text (invariant #6).
-    throw new OpusError(
-      'Unable to parse Opus API response as JSON.',
-      'API_ERROR',
-      'The response body was not valid JSON. Report this to Opus support with the request details.',
-    );
+    return false;
   }
 }
 
@@ -221,8 +297,15 @@ export async function opusFetch<T>(
   endpoint: string,
   options: OpusFetchOptions = {},
 ): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `${OPUS_API_BASE}${endpoint}`;
-  return opusFetchRaw<T>(url, options, true);
+  if (!isOwnEndpoint(endpoint)) {
+    // Fixed text: the endpoint can be built from tool input, so it is not echoed.
+    throw new OpusError(
+      'This connector only calls OpusClip API paths, and this request was not one.',
+      'INVALID_ENDPOINT',
+      'Check that IDs passed to the tool are plain OpusClip IDs, then try again.',
+    );
+  }
+  return opusFetchRaw<T>(`${OPUS_API_BASE}${endpoint}`, options, true);
 }
 
 /**
@@ -311,38 +394,6 @@ export function computeNextPollAfterSeconds(
   const max = 30;
   const value = Math.min(max, Math.round(base * Math.pow(1.5, Math.max(0, attempt - 1))));
   return value;
-}
-
-/**
- * Poll a single status endpoint once. Returns the parsed response, the
- * categorised status, and the recommended `next_poll_after_seconds` value
- * to surface to the caller.
- */
-export async function pollOpusJob<T extends PollableJobResponse>(
-  endpoint: string,
-  attempt: number,
-): Promise<{
-  body: T;
-  classification: { category: 'pending' | 'completed' | 'failed' | 'unknown'; raw: string };
-  next_poll_after_seconds: number;
-}> {
-  // We need access to the raw response to read Retry-After.
-  const response = (await opusFetch<Response>(endpoint, { rawResponse: true })) as Response;
-
-  const retryAfterHeader = response.headers.get('Retry-After');
-  let body: T;
-  if (response.status === 204) {
-    body = {} as T;
-  } else {
-    const text = await response.text();
-    body = (text.trim().length === 0 ? {} : JSON.parse(text)) as T;
-  }
-  const classification = classifyJobStatus(body.status);
-  const next_poll_after_seconds = computeNextPollAfterSeconds(retryAfterHeader, attempt);
-
-  // The raw Retry-After header is attacker-controlled external text and is
-  // deliberately NOT returned — callers surface the parsed numeric delay.
-  return { body, classification, next_poll_after_seconds };
 }
 
 /**

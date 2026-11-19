@@ -115,8 +115,12 @@ describe('Error handling', () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(result.text).toContain('NETWORK_ERROR');
-      expect(result.text).toContain('resolution');
+      expect(result.json).toEqual({
+        ok: false,
+        error: 'Could not get a complete response from Gemini.',
+        code: 'NETWORK_ERROR',
+        resolution: 'Check your internet connection, then try again.',
+      });
     });
   });
 });
@@ -146,7 +150,8 @@ describe('Configure tool', () => {
       api_key: MOCK_API_KEY,
     });
     expect(configResult.isError).toBeFalsy();
-    expect(configResult.text).toContain('configured successfully');
+    // No bridge: the key is kept for this session only, and the result says so.
+    expect(configResult.text).toContain('It has not been saved');
 
     // After configure, tools should work
     const afterResult = await testClient.callTool('nano_banana_generate', {
@@ -210,7 +215,7 @@ describe('Bridge integration', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.text).toContain('configured successfully');
+    expect(result.text).toContain('Gemini API key configured.');
   });
 
   it('bridge 401 returns isError true', async () => {
@@ -300,6 +305,6 @@ describe('Bridge integration', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.text).toContain('configured successfully');
+    expect(result.text).toContain('Gemini API key configured.');
   });
 });

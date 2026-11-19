@@ -7,8 +7,11 @@
  * Auth: Gemini API key as query parameter (?key=...) on all API requests (NOT header).
  */
 
+import { rememberCredential } from './key-filter.js';
+
 /** Runtime API key — starts from env, can be updated via configure tool. */
 let apiKey: string = process.env.GEMINI_API_KEY ?? '';
+rememberCredential(apiKey);
 
 /**
  * Get the current API key.
@@ -22,6 +25,7 @@ export function getApiKey(): string {
  */
 export function setApiKey(key: string): void {
   apiKey = key;
+  rememberCredential(key);
 }
 
 /**

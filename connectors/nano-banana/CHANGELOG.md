@@ -11,6 +11,18 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Every API key the connector has held this session is removed from everything it sends (tool results and its own error messages) and from every log line, wherever upstream echoes it.
+- The connector now reads the host app's bridge settings through the shared hardened reader, which refuses a symlinked, oversized or malformed settings file and never follows a redirect off the local machine.
+- A Gemini request or remote source-image download that fails without a response now returns fixed text (`NETWORK_ERROR` or `REMOTE_IMAGE_FETCH_FAILED`) instead of the underlying error message, which could quote the request URL and so the API key. Unexpected errors return fixed `UNEXPECTED_ERROR` text. Timeouts and authentication errors are reported as before.
+- A failed request to the host app during `configure_nano_banana_api_key` no longer puts the underlying network error text in the result, and the submitted key is replaced with `[REDACTED]` in any warning or error text from the host app.
+- Gemini responses are checked against schemas that now drop fields the connector does not read, instead of passing them through.
+
+### Changed
+
+- `configure_nano_banana_api_key` says "configured" rather than "configured successfully". Without a host app, it now says the key is kept only while the connector is running and has not been saved.
+
 ## [0.6.0] - 2026-11-11
 
 ### Changed

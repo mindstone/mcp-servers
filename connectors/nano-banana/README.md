@@ -122,7 +122,7 @@ node dist/index.js
 ## Tools (3)
 
 ### Configuration
-- `configure_nano_banana_api_key` — Save your Gemini API key for image generation
+- `configure_nano_banana_api_key` — Set your Gemini API key for image generation. The host app saves it; without a host app, the key is kept only while the connector is running.
 
 ### Image generation
 - `nano_banana_generate` — Generate images from text descriptions

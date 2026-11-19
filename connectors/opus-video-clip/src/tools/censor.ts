@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
-import { opusFetch, classifyJobStatus, computeNextPollAfterSeconds } from '../client.js';
+import { opusFetch, readOpusJson, classifyJobStatus, computeNextPollAfterSeconds } from '../client.js';
 import { wrapRawDump } from '../sanitize.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -119,12 +119,11 @@ export function registerCensorTools(server: McpServer): void {
       const attempt = args.attempt ?? 1;
       const response = (await opusFetch<Response>(
         `/api/censor-jobs/${encodeURIComponent(args.jobId)}`,
-        { rawResponse: true },
+        { rawResponse: true, requestKind: 'status_check' },
       )) as Response;
 
       const retryAfterHeader = response.headers.get('Retry-After');
-      const text = await response.text();
-      const body = (text.trim() ? JSON.parse(text) : {}) as CensorJobStatusResponse;
+      const body = await readOpusJson<CensorJobStatusResponse>(response, 'status_check');
       const classification = classifyJobStatus(body.status);
       const next_poll_after_seconds = computeNextPollAfterSeconds(retryAfterHeader, attempt);
 

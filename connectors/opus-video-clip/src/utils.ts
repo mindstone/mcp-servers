@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { OpusError } from './types.js';
-import { wrapUntrusted } from './untrusted-content.js';
+import { logError } from './key-filter.js';
+import { OpusError, describeForLog } from './types.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -231,10 +231,15 @@ export function validateHostname(input: string): string {
  *
  *  - On success: returns the string result as a text content block.
  *  - On OpusError: returns a structured JSON error with code and resolution.
- *  - On unknown error: returns a generic error message.
+ *  - On unknown error: returns fixed text; the detail goes to stderr only.
  *
- * Secrets are never exposed in error messages.
+ * Credentials are removed from every outgoing message by the transport filter
+ * (`key-filter.ts`, wired in `server.ts`), not here: the SDK builds some
+ * results (argument validation, unknown tools) without calling this wrapper.
  */
+export const UNEXPECTED_ERROR_MESSAGE = 'Something went wrong while running this OpusClip tool.';
+export const UNEXPECTED_ERROR_RESOLUTION = "Try again. If it keeps happening, restart the connector from your app's connector settings, and contact support if that does not help.";
+
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
 ): ToolHandler<T> {
@@ -259,17 +264,19 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      // Unknown errors (network/runtime) may embed upstream-controlled text
-      // (e.g. a fetched URL inside a fetch failure message), so the message
-      // is enveloped before it becomes model-visible — invariant #6.
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unknown errors (runtime, local file, network) can quote anything —
+      // URLs, headers, the key, upstream text — so the result carries fixed
+      // text only; the detail goes to stderr with the key removed.
+      logError(`[Opus] unexpected tool error: ${describeForLog(error)}`);
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
               ok: false,
-              error: wrapUntrusted(errorMessage, 'opus:unhandled-error') ?? 'Unknown error',
+              error: UNEXPECTED_ERROR_MESSAGE,
+              code: 'UNEXPECTED_ERROR',
+              resolution: UNEXPECTED_ERROR_RESOLUTION,
             }),
           },
         ],

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
-import { withErrorHandling } from '../utils.js';
+import { allowedCallbackUrl, callbackUrlRefusal, withErrorHandling } from '../utils.js';
 import { taskCreatedResponseSchema } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
@@ -68,10 +68,9 @@ export function registerImageTools(server: McpServer): void {
           ),
         callback_url: z
           .string()
-          .url()
           .optional()
           .describe(
-            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+            'HTTPS URL that Kling POSTs the task result to when the task status changes, without a username or password in it. Optional — polling with check_kling_task works without it.',
           ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -92,13 +91,8 @@ export function registerImageTools(server: McpServer): void {
           code: 'INVALID_URL',
         });
       }
-      if (args.callback_url && !args.callback_url.startsWith('https://')) {
-        return JSON.stringify({
-          ok: false,
-          error: 'callback_url must use HTTPS',
-          code: 'INVALID_URL',
-        });
-      }
+      const callbackRefusal = callbackUrlRefusal(args.callback_url);
+      if (callbackRefusal) return callbackRefusal;
 
       const body: Record<string, unknown> = {
         prompt: args.prompt,
@@ -113,7 +107,7 @@ export function registerImageTools(server: McpServer): void {
         // Local file: workspace-fenced read, Base64-encoded into the request.
         body.image = encodeLocalImage(args.image_path, reads);
       }
-      if (args.callback_url) body.callback_url = args.callback_url;
+      if (args.callback_url) body.callback_url = allowedCallbackUrl(args.callback_url);
 
       const result = await klingFetch('/images/generations', taskCreatedResponseSchema, {
         method: 'POST',

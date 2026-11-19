@@ -1,3 +1,5 @@
+import { logError } from './key-filter.js';
+
 /**
  * Default timeouts (ms) for outbound HTTP requests.
  *
@@ -30,13 +32,13 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
   if (raw === undefined || raw === '') return fallbackMs;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
-    console.error(
+    logError(
       `[NanoBanana] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
   }
   if (parsed > MAX_REQUEST_TIMEOUT_MS) {
-    console.error(
+    logError(
       `[NanoBanana] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
@@ -62,11 +64,6 @@ export function getBridgeRequestTimeoutMs(): number {
   return parseTimeoutEnv('NANO_BANANA_BRIDGE_TIMEOUT_MS', DEFAULT_BRIDGE_REQUEST_TIMEOUT_MS);
 }
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class NanoBananaError extends Error {
   constructor(
     message: string,
@@ -76,6 +73,37 @@ export class NanoBananaError extends Error {
     super(message);
     this.name = 'NanoBananaError';
   }
+}
+
+/**
+ * Fixed text for a request to Gemini that failed without an HTTP response.
+ * The underlying error text can quote the request URL, which carries the API
+ * key, so it never reaches a tool result.
+ */
+export function geminiNetworkError(): NanoBananaError {
+  return new NanoBananaError(
+    'Could not get a complete response from Gemini.',
+    'NETWORK_ERROR',
+    'Check your internet connection, then try again.',
+  );
+}
+
+/** Fixed text for a remote source image whose download failed. */
+export function remoteImageDownloadError(): NanoBananaError {
+  return new NanoBananaError(
+    'Could not download the source image.',
+    'REMOTE_IMAGE_FETCH_FAILED',
+    'Check that the link opens a PNG, JPEG or WebP image, or download it into the workspace and use the local file.',
+  );
+}
+
+/** Fixed text for an error no other branch recognised. */
+export function unexpectedError(): NanoBananaError {
+  return new NanoBananaError(
+    'The Nano Banana connector hit an unexpected error.',
+    'UNEXPECTED_ERROR',
+    'Try again. If it keeps happening, restart the connector.',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +279,7 @@ export function normaliseImageMimeType(
   const sniffedMimeType = sniffImageMimeType(base64Data);
   if (sniffedMimeType && ALLOWED_IMAGE_MIME_TYPES.has(sniffedMimeType)) {
     if (mimeType !== sniffedMimeType) {
-      console.error('[NanoBanana] Ignoring untrusted response MIME; using byte-sniffed image format');
+      logError('[NanoBanana] Ignoring untrusted response MIME; using byte-sniffed image format');
     }
     return sniffedMimeType;
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { logError } from './key-filter.js';
 
 export const KLING_API_BASE = 'https://api-singapore.klingai.com/v1';
 
@@ -24,13 +25,13 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
   if (raw === undefined || raw === '') return fallbackMs;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
-    console.error(
+    logError(
       `[Kling] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
   }
   if (parsed > MAX_REQUEST_TIMEOUT_MS) {
-    console.error(
+    logError(
       `[Kling] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
@@ -44,11 +45,6 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
  */
 export function getRequestTimeoutMs(): number {
   return parseTimeoutEnv('KLING_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
-}
-
-export interface BridgeState {
-  port: number;
-  token: string;
 }
 
 export class KlingError extends Error {

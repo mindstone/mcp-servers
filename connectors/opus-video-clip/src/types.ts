@@ -1,3 +1,5 @@
+import { logError, redactCredentials } from './key-filter.js';
+
 /**
  * Default timeouts (ms). Three split values — see D7 in the planning doc:
  *  - API timeout for general Opus API calls (CRUD, polling)
@@ -19,13 +21,13 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
   if (raw === undefined || raw === '') return fallbackMs;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
-    console.error(
+    logError(
       `[Opus] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
   }
   if (parsed > MAX_TIMEOUT_MS) {
-    console.error(
+    logError(
       `[Opus] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_TIMEOUT_MS}ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
@@ -45,11 +47,6 @@ export function getBridgeTimeoutMs(): number {
   return parseTimeoutEnv('OPUS_BRIDGE_TIMEOUT_MS', DEFAULT_BRIDGE_TIMEOUT_MS);
 }
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 /**
  * Typed connector error with a stable machine-readable `code` and a
  * human-facing `resolution` hint. The MCP tool wrapper (`withErrorHandling`)
@@ -64,6 +61,44 @@ export class OpusError extends Error {
     super(message);
     this.name = 'OpusError';
   }
+}
+
+/**
+ * Which kind of request failed, so the fixed error text can say what to do
+ * next. A request that started an Opus job may have created it even when no
+ * complete response came back.
+ */
+export type RequestKind = 'request' | 'status_check';
+
+/**
+ * Fixed text for a request to OpusClip that failed without an HTTP response.
+ * The underlying error text can quote anything (headers, URLs, the key), so
+ * it never reaches a tool result.
+ */
+export function opusNetworkError(kind: RequestKind = 'request'): OpusError {
+  return new OpusError(
+    'Could not get a complete response from OpusClip.',
+    'NETWORK_ERROR',
+    kind === 'status_check'
+      ? 'Check your internet connection, then try the status check again.'
+      : 'Check your internet connection. If you were starting a job, check OpusClip for an existing job before submitting it again.',
+  );
+}
+
+/** Fixed text for a successful (2xx) OpusClip response whose body is not readable JSON. */
+export function opusParseError(kind: RequestKind = 'request'): OpusError {
+  return new OpusError(
+    'OpusClip returned a response this connector could not read.',
+    'PARSE_ERROR',
+    kind === 'status_check'
+      ? 'Try the status check again.'
+      : 'If you were starting a job, check OpusClip for an existing job before submitting it again.',
+  );
+}
+
+/** Error text for stderr: no credential seen this session appears in it. */
+export function describeForLog(error: unknown): string {
+  return redactCredentials(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
 }
 
 /**
@@ -114,11 +149,6 @@ export const KNOWN_JOB_STATUSES = [
 ] as const;
 
 export type KnownJobStatus = (typeof KNOWN_JOB_STATUSES)[number];
-
-export interface PollableJobResponse {
-  status?: string;
-  [key: string]: unknown;
-}
 
 /**
  * Sharing visibility for `POST /api/clip-projects/{projectId}/update-visibility`.

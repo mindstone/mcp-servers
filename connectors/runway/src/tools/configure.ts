@@ -1,60 +1,70 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getApiKey, setApiKey } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { setApiKey } from '../auth.js';
+import { credentialInput, rememberCredential } from '../key-filter.js';
+import { BRIDGE_NOT_AVAILABLE, bridgeRequest } from '../bridge.js';
 import { RunwayError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+
+export const SESSION_ONLY_MESSAGE =
+  'Your Runway API key is available while this connector is running. It has not been saved, so you may need to configure it again after the connector restarts. To keep it, save it in your app\'s connector settings; do not send it in chat.';
+
+export const BRIDGE_UNREACHABLE_MESSAGE =
+  'Could not confirm that your API key was saved. Reopen the app and try setup again in connector settings.';
 
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
     'configure_runway_api_key',
     {
       description:
-        'Save your Runway API key. Call this when the user provides their key. ' +
+        'Set up your Runway API key. Call this when the user provides their key. ' +
         'WHERE TO GET A KEY: Go to https://dev.runwayml.com/ → API Keys. ' +
-        'Add credits in Billing (min $10 = 1000 credits).',
+        'Add credits in Billing (min $10 = 1000 credits). ' +
+        'The host app saves the key. Without a host app, the key is kept only while this connector is running.',
       inputSchema: z.object({
-        api_key: z.string().min(1).describe('Runway API key (starts with "key_").'),
+        api_key: credentialInput('Runway API key (starts with "key_").'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
-      const key = args.api_key.trim();
+      const key = args.api_key;
+      // Remembered before the bridge sees it, so a key the bridge rejects or
+      // echoes is filtered from the result too.
+      rememberCredential(key);
 
-      // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
-        try {
-          const result = await bridgeRequest('/bundled/runway/configure', { apiKey: key });
-          if (result.success) {
-            setApiKey(key);
-            const message = result.warning
-              ? `Runway API key configured successfully. Note: ${result.warning}`
-              : 'Runway API key configured! Ready to generate.';
-            return JSON.stringify({ ok: true, message });
-          }
-          // Bridge returned failure — surface as error, do NOT fall through
-          throw new RunwayError(
-            result.error || 'Bridge configuration failed',
-            'BRIDGE_ERROR',
-            'The host app bridge rejected the configuration request. Check the host app logs.',
-          );
-        } catch (error) {
-          if (error instanceof RunwayError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
-          throw new RunwayError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
-            'BRIDGE_ERROR',
-            'Could not reach the host app bridge. Ensure the host app is running.',
-          );
-        }
+      let result: Awaited<ReturnType<typeof bridgeRequest>>;
+      try {
+        result = await bridgeRequest('/bundled/runway/configure', { apiKey: key });
+      } catch {
+        // Network, timeout or refused redirect: the error text can quote
+        // anything, so it never reaches the result.
+        throw new RunwayError(
+          BRIDGE_UNREACHABLE_MESSAGE,
+          'BRIDGE_ERROR',
+          'Make sure the app is running, then try again.',
+        );
       }
 
-      // No bridge — store in-memory
-      setApiKey(key);
-      return JSON.stringify({
-        ok: true,
-        message: 'Runway API key configured for this session.',
-      });
+      if (result.success) {
+        setApiKey(key);
+        const message = result.warning
+          ? `Runway API key configured. Note: ${result.warning}`
+          : 'Runway API key configured. Ready to generate.';
+        return JSON.stringify({ ok: true, message });
+      }
+
+      if (result.error === BRIDGE_NOT_AVAILABLE) {
+        // No usable host app bridge: standalone use keeps the key for this session only.
+        setApiKey(key);
+        return JSON.stringify({ ok: true, message: SESSION_ONLY_MESSAGE });
+      }
+
+      // The bridge answered with a failure — surface it, do NOT fall through.
+      throw new RunwayError(
+        result.error || 'Bridge configuration failed',
+        'BRIDGE_ERROR',
+        'The host app did not save the key. Check the host app, then try setup again in connector settings.',
+      );
     }),
   );
 }

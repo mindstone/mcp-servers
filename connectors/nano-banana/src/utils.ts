@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { NanoBananaError } from './types.js';
+import { NanoBananaError, unexpectedError } from './types.js';
+import { logError } from './key-filter.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -8,7 +9,7 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  *
  * - On success: returns the string result as a text content block.
  * - On NanoBananaError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On unknown error: returns fixed text; the raw message is never returned.
  *
  * Secrets are never exposed in error messages.
  */
@@ -36,11 +37,25 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
-        isError: true,
-      };
+      return unexpectedErrorResult(error);
     }
+  };
+}
+
+/**
+ * The result for an error no handler recognised. Its text can quote anything,
+ * including a submitted key, so only its class name goes to stderr.
+ */
+export function unexpectedErrorResult(error: unknown): CallToolResult {
+  logError(`[NanoBanana] unexpected error: ${error instanceof Error ? error.name : typeof error}`);
+  const safe = unexpectedError();
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ ok: false, error: safe.message, code: safe.code, resolution: safe.resolution }),
+      },
+    ],
+    isError: true,
   };
 }

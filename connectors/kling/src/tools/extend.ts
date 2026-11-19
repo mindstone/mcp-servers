@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { allowedCallbackUrl, callbackUrlRefusal, withErrorHandling } from '../utils.js';
 import { taskCreatedResponseSchema } from '../types.js';
 import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
@@ -37,27 +37,21 @@ export function registerExtendTools(server: McpServer): void {
           .describe('Things to avoid in the extension: "blurry, distorted faces, watermark"'),
         callback_url: z
           .string()
-          .url()
           .optional()
           .describe(
-            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+            'HTTPS URL that Kling POSTs the task result to when the task status changes, without a username or password in it. Optional — polling with check_kling_task works without it.',
           ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (args.callback_url && !args.callback_url.startsWith('https://')) {
-        return JSON.stringify({
-          ok: false,
-          error: 'callback_url must use HTTPS',
-          code: 'INVALID_URL',
-        });
-      }
+      const callbackRefusal = callbackUrlRefusal(args.callback_url);
+      if (callbackRefusal) return callbackRefusal;
 
       const body: Record<string, unknown> = { video_id: unwrapUntrusted(args.video_id) };
       if (args.prompt) body.prompt = args.prompt;
       if (args.negative_prompt) body.negative_prompt = args.negative_prompt;
-      if (args.callback_url) body.callback_url = args.callback_url;
+      if (args.callback_url) body.callback_url = allowedCallbackUrl(args.callback_url);
 
       const result = await klingFetch('/videos/video-extend', taskCreatedResponseSchema, {
         method: 'POST',

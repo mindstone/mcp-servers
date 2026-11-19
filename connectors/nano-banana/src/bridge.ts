@@ -1,49 +1,21 @@
-import * as fs from 'fs';
-import { type BridgeState, getBridgeRequestTimeoutMs } from './types.js';
+import { getBridgeRequestTimeoutMs } from './types.js';
+import { type BridgeResponse, postToBridge } from './bridge-reader.js';
+
+export type { BridgeResponse };
+
+/** What the vendored reader answers when no usable host app bridge is set up. */
+export const BRIDGE_NOT_AVAILABLE = 'Bridge not available';
 
 /**
- * Path to bridge state file, supporting both current and legacy env vars.
+ * Send a request to the host app bridge, a loopback HTTP server inside the host
+ * app that handles credential management. `bridge-reader.ts` is the vendored
+ * hardened reader: keep it byte-identical to `test-harness/src/bridge-reader.ts`
+ * (`scripts/check-bridge-reader.mjs` enforces this) and read the bridge only
+ * through it. Its `error` and `warning` text comes back wrapped in an
+ * untrusted-content envelope; network failures and timeouts are thrown.
  */
-export const BRIDGE_STATE_PATH =
-  process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
-
-const loadBridgeState = (): BridgeState | null => {
-  if (!BRIDGE_STATE_PATH) return null;
-  try {
-    const raw = fs.readFileSync(BRIDGE_STATE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Send a request to the host app bridge.
- *
- * The bridge is an HTTP server running inside the host app (e.g. the host application)
- * that handles credential management and other cross-process operations.
- */
-export const bridgeRequest = async (
+export const bridgeRequest = (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
-  const bridge = loadBridgeState();
-  if (!bridge) {
-    return { success: false, error: 'Bridge not available' };
-  }
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(getBridgeRequestTimeoutMs()),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bridge.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
-  }
-
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
-};
+): Promise<BridgeResponse> =>
+  postToBridge(urlPath, body, { connector: 'nano-banana', timeoutMs: getBridgeRequestTimeoutMs() });

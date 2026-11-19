@@ -5,13 +5,14 @@ import { once } from 'events';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
-import { OpusError, getApiTimeoutMs } from '../types.js';
+import { OpusError, describeForLog, getApiTimeoutMs } from '../types.js';
 import { resolveDownloadTargetPath } from '../path-safety.js';
 import {
   DOWNLOAD_ALLOWED_HOST_SUFFIXES,
   validateOutboundUrlSync,
   validateOutboundUrlWithDns,
 } from '../url-safety.js';
+import { logError } from '../key-filter.js';
 import { withErrorHandling } from '../utils.js';
 
 const MAX_REDIRECTS = 5;
@@ -32,6 +33,28 @@ function urlRejected(message: string): OpusError {
     `Download URL rejected: ${message}`,
     'URL_REJECTED',
     'Pass the uriForExport URL exactly as returned by opus_get_clips or opus_export_collection.',
+  );
+}
+
+/**
+ * Fixed text for a download that failed without a usable response, or whose
+ * body stopped part-way. The runtime's error can quote the signed URL (or
+ * anything else), so it goes to stderr with the key removed, never to a result.
+ */
+function downloadNetworkError(cause: unknown, timedOutAfterMs: number | null): OpusError {
+  logError(`[Opus] clip download failed: ${describeForLog(cause)}`);
+  if (timedOutAfterMs !== null) {
+    const timeoutSec = Math.round(timedOutAfterMs / 1000);
+    return new OpusError(
+      `The clip download from OpusClip timed out after ${timeoutSec}s.`,
+      'DOWNLOAD_TIMEOUT',
+      'Set OPUS_API_TIMEOUT_MS to allow longer, or try the download again.',
+    );
+  }
+  return new OpusError(
+    'Could not download the clip from OpusClip.',
+    'DOWNLOAD_NETWORK_ERROR',
+    'Check your internet connection and try the download again.',
   );
 }
 
@@ -223,12 +246,18 @@ export function registerDownloadTools(server: McpServer): void {
         let response: Response;
         let currentUrl = args.url;
         let redirectCount = 0;
+        let timeoutMs = 0;
+        let lastTimeoutSignal: AbortSignal | undefined;
         // eslint-disable-next-line no-constant-condition
         while (true) {
-          response = await fetch(currentUrl, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(getApiTimeoutMs()),
-          });
+          timeoutMs = getApiTimeoutMs();
+          const timeoutSignal = AbortSignal.timeout(timeoutMs);
+          lastTimeoutSignal = timeoutSignal;
+          try {
+            response = await fetch(currentUrl, { redirect: 'manual', signal: timeoutSignal });
+          } catch (fetchErr) {
+            throw downloadNetworkError(fetchErr, timeoutSignal.aborted ? timeoutMs : null);
+          }
           if (response.status >= 300 && response.status < 400) {
             try {
               await response.body?.cancel();
@@ -313,7 +342,13 @@ export function registerDownloadTools(server: McpServer): void {
           const reader = response.body.getReader();
           try {
             for (;;) {
-              const { done, value } = await reader.read();
+              let chunk: ReadableStreamReadResult<Uint8Array>;
+              try {
+                chunk = await reader.read();
+              } catch (readErr) {
+                throw downloadNetworkError(readErr, lastTimeoutSignal?.aborted ? timeoutMs : null);
+              }
+              const { done, value } = chunk;
               if (done) break;
               bytesWritten += value.byteLength;
               if (bytesWritten > maxDownloadBytes) {

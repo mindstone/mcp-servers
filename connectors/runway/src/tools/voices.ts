@@ -4,6 +4,7 @@ import { runwayFetch, runwayRawFetch } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import type { VoicePreviewResponse } from '../types.js';
 import { RunwayError } from '../types.js';
+import { redactCredentials } from '../key-filter.js';
 import { pathSegment, withErrorHandling } from '../utils.js';
 
 /**
@@ -42,8 +43,8 @@ export function registerVoiceTools(server: McpServer): void {
       const result = voiceListResponseSchema.parse(raw);
       const voices = result.data.map(v => ({
         id: v.id,
-        name: wrapUntrusted(v.name, 'runway-voice'),
-        description: wrapUntrusted(v.description || '', 'runway-voice'),
+        name: wrapUntrusted(redactCredentials(v.name), 'runway-voice'),
+        description: wrapUntrusted(redactCredentials(v.description || ''), 'runway-voice'),
         status: v.status, created: v.createdAt,
       }));
       return JSON.stringify({

@@ -239,8 +239,9 @@ export function createRunwayBridgeHandlers(port: number, token: string) {
  */
 export function createRunwayBridge401Handlers(port: number) {
   return [
+    // No body: the shared reader discards an unauthorized reply's body unread.
     http.post(`http://127.0.0.1:${port}/bundled/runway/configure`, () => {
-      return HttpResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return new HttpResponse(null, { status: 401 });
     }),
   ];
 }
@@ -250,8 +251,9 @@ export function createRunwayBridge401Handlers(port: number) {
  */
 export function createRunwayBridge403Handlers(port: number) {
   return [
+    // No body: the shared reader discards an unauthorized reply's body unread.
     http.post(`http://127.0.0.1:${port}/bundled/runway/configure`, () => {
-      return HttpResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      return new HttpResponse(null, { status: 403 });
     }),
   ];
 }

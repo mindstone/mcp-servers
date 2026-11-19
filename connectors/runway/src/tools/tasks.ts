@@ -11,8 +11,15 @@ import {
   RUNWAY_API_SOURCE,
 } from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
+import { redactCredentials } from '../key-filter.js';
 import { pathSegment, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope a 2xx task's vendor text with any echoed API key removed first. */
+function safeUpstreamText(text: string | null | undefined): string | undefined {
+  if (text === undefined || text === null) return undefined;
+  return wrapUntrusted(redactCredentials(text), RUNWAY_API_SOURCE);
+}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -45,9 +52,8 @@ export function registerTaskTools(server: McpServer): void {
         response.message = 'Generation complete! Output URLs are ready.';
       } else if (result.status === 'FAILED') {
         response.ok = false;
-        response.error = result.failure
-          ? wrapUntrusted(result.failure, RUNWAY_API_SOURCE) : 'Generation failed.';
-        response.failure_code = wrapUntrusted(result.failureCode, RUNWAY_API_SOURCE);
+        response.error = result.failure ? safeUpstreamText(result.failure) : 'Generation failed.';
+        response.failure_code = safeUpstreamText(result.failureCode);
       }
       return JSON.stringify(response);
     }),
@@ -100,8 +106,8 @@ export function registerTaskTools(server: McpServer): void {
         if (result.status === 'FAILED') {
           return JSON.stringify({
             ok: false, task_id: result.id, status: 'FAILED',
-            error: result.failure ? wrapUntrusted(result.failure, RUNWAY_API_SOURCE) : 'Generation failed.',
-            failure_code: wrapUntrusted(result.failureCode, RUNWAY_API_SOURCE),
+            error: result.failure ? safeUpstreamText(result.failure) : 'Generation failed.',
+            failure_code: safeUpstreamText(result.failureCode),
             elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
           });
         }

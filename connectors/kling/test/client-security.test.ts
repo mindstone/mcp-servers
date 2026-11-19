@@ -124,7 +124,7 @@ describe('vendor error message sanitization', () => {
     expect(text).not.toContain(ACCESS_KEY);
     expect(text).not.toContain(SECRET_KEY);
     expect(text).not.toContain('Bearer ey'); // JWTs are base64url JSON headers
-    expect(text).toContain('[redacted]');
+    expect(text).toContain('[REDACTED]');
   });
 
   it('never copies a hostile Retry-After header into model-visible output', async () => {

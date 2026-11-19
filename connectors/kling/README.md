@@ -125,7 +125,7 @@ node dist/index.js
 ## Tools (10)
 
 ### Configuration
-- `configure_kling_api_keys` — Save Kling API credentials
+- `configure_kling_api_keys` — Set Kling API credentials (the host app saves them; without one they last only while the connector runs)
 
 ### Video generation
 - `generate_kling_video` — Create an AI-generated video from a text description
@@ -146,7 +146,7 @@ Models: the video tools default to `kling-v2-6` and the image tool to `kling-v2-
 ### Account
 - `get_kling_balance` — List resource packages on the account and their remaining quantities
 
-All generation tools accept an optional `callback_url` (HTTPS) that Kling POSTs to on task status changes, as an alternative to polling.
+All generation tools accept an optional `callback_url` (a complete HTTPS URL without a username or password; tokens in the path or query are fine) that Kling POSTs to on task status changes, as an alternative to polling.
 
 ## Licence
 

@@ -294,7 +294,12 @@ describe('Opus tool behaviour (MSW-mocked)', () => {
       });
       const result = await testClient.callTool('opus_get_collections', { q: 'mine' });
       expect(result.isError).toBe(true);
-      expect(result.text).toContain('Unable to parse Opus API response as JSON');
+      // Fixed parse text: no body slice, and a stable PARSE_ERROR code.
+      expect(result.json).toMatchObject({
+        ok: false,
+        error: 'OpusClip returned a response this connector could not read.',
+        code: 'PARSE_ERROR',
+      });
       expect(result.text).not.toContain('SECRET-BODY-TEXT');
     });
 

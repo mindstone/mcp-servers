@@ -188,14 +188,15 @@ describe('adversarial envelopes', () => {
     expectEnveloped(data.project.attackerNote, 'opus:get_project:attackerNote');
   });
 
-  it('envelopes unhandled-exception messages that may embed upstream text', async () => {
+  it('never returns unhandled-exception text, which may embed upstream text', async () => {
     const handler = withErrorHandling(async () => {
       throw new Error(`network blew up: ${BREAKOUT}`);
     });
     const res = await handler({}, null);
     expect(res.isError).toBe(true);
-    const parsed = JSON.parse((res.content[0] as { text: string }).text) as { error: string };
-    expectEnveloped(parsed.error, 'opus:unhandled-error');
+    const text = (res.content[0] as { text: string }).text;
+    expect(text).not.toContain('network blew up');
+    expect((JSON.parse(text) as { code: string }).code).toBe('UNEXPECTED_ERROR');
   });
 });
 

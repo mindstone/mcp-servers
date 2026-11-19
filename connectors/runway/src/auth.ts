@@ -7,8 +7,11 @@
  * Auth: Authorization: Bearer {key} + X-Runway-Version header on all API requests.
  */
 
+import { rememberCredential } from './key-filter.js';
+
 /** Runtime API key — starts from env, can be updated via configure tool. */
 let apiKey: string = process.env.RUNWAYML_API_SECRET ?? '';
+rememberCredential(apiKey);
 
 /**
  * Get the current API key.
@@ -22,6 +25,7 @@ export function getApiKey(): string {
  */
 export function setApiKey(key: string): void {
   apiKey = key;
+  rememberCredential(key);
 }
 
 /**

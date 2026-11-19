@@ -7,15 +7,19 @@
  * override takes effect on the very next API call.
  */
 
+import { rememberCredential } from './key-filter.js';
 import { OpusError } from './types.js';
 
 let apiKey: string = process.env.OPUS_API_KEY ?? '';
+rememberCredential(apiKey);
 
 export function getApiKey(): string {
   return apiKey;
 }
 
+/** Every key ever set stays filtered from output for the rest of the process. */
 export function setApiKey(key: string): void {
+  rememberCredential(key);
   apiKey = key;
 }
 

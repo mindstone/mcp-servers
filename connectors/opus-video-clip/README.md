@@ -131,7 +131,7 @@ In every mode, pick download targets inside the workspace (or temp) directory.
 ## Tools (22)
 
 ### Configuration
-- `configure_opus_api_key` — Configure the OpusClip API key
+- `configure_opus_api_key` — Configure the OpusClip API key. The host app saves it; without a host app it is kept only while the connector is running. Errors: `BRIDGE_UNREACHABLE` when the host app could not be reached, `BRIDGE_ERROR` when it did not save the key.
 
 ### Brand templates
 - `opus_get_brand_templates` — List brand templates

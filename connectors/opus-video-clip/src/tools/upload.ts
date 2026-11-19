@@ -5,6 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
+import { redactCredentials } from '../key-filter.js';
 import { resolveUploadSourcePath } from '../path-safety.js';
 import { sanitizeProject } from '../sanitize.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -247,7 +248,9 @@ async function putUploadBytes(
     return putUploadBytes(sessionUrl, fd, committed, totalBytes);
   }
 
-  const errText = await response.text().catch(() => '');
+  // The key is removed before truncation, so a cut cannot leave a fragment
+  // that exact matching would miss.
+  const errText = redactCredentials(await response.text().catch(() => ''));
   // The GCS error body is upstream-controlled text embedded in a
   // model-visible error message — envelope it (invariant #6).
   const wrappedBody = wrapUntrusted(errText.slice(0, 200), 'opus:upload_video:gcs_error_body') ?? '';
@@ -306,13 +309,14 @@ async function performUpload(args: {
       await putUploadBytes(sessionUrl, fd, 0, totalBytes);
     } catch (error) {
       if (error instanceof OpusError) {
-        // Treat UPLOAD_FAILED / TIMEOUT / UPLOAD_TIMEOUT as ambiguous: query
+        // Treat UPLOAD_FAILED / TIMEOUT / UPLOAD_TIMEOUT / NETWORK_ERROR as ambiguous: query
         // the committed offset and resume from there. URL_REJECTED /
         // VALIDATION_ERROR / AUTH_* are non-recoverable.
         const recoverable =
           error.code === 'UPLOAD_FAILED' ||
           error.code === 'UPLOAD_TIMEOUT' ||
           error.code === 'TIMEOUT' ||
+          error.code === 'NETWORK_ERROR' ||
           error.code === 'API_ERROR';
         if (!recoverable) throw error;
       } else if (!(error instanceof Error)) {

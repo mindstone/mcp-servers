@@ -9,9 +9,12 @@
  */
 
 import { SignJWT } from 'jose';
+import { rememberCredential } from './key-filter.js';
 
 let accessKey: string = process.env.KLING_ACCESS_KEY || '';
 let secretKey: string = process.env.KLING_SECRET_KEY || '';
+rememberCredential(accessKey);
+rememberCredential(secretKey);
 
 /** JWT token cache (refreshed when expired) */
 let cachedToken: { jwt: string; expiresAt: number } | null = null;
@@ -39,12 +42,15 @@ export function isConfigured(): boolean {
 
 /**
  * Update the API keys at runtime (e.g. after configure_kling_api_keys).
- * Clears the JWT cache to force re-generation with new credentials.
+ * Clears the JWT cache to force re-generation with new credentials. The old
+ * keys stay in the credential filter (key-filter.ts).
  */
 export function setApiKeys(newAccessKey: string, newSecretKey: string): void {
   accessKey = newAccessKey;
   secretKey = newSecretKey;
   cachedToken = null;
+  rememberCredential(newAccessKey);
+  rememberCredential(newSecretKey);
 }
 
 /**
@@ -74,27 +80,8 @@ export async function getJwtToken(): Promise<string> {
     .sign(secret);
 
   cachedToken = { jwt, expiresAt };
+  rememberCredential(jwt);
   return jwt;
-}
-
-/**
- * Replace any occurrence of the configured credentials (access key, secret
- * key, cached JWT) in `text` with `[redacted]`. Applied to vendor-supplied
- * error text before it reaches model-visible output or logs, so a vendor
- * response that echoes our credentials cannot leak them.
- *
- * Values shorter than 8 chars are skipped: redacting a near-empty string
- * would mangle unrelated text, and such a value is not a usable credential.
- */
-export function redactSecrets(text: string): string {
-  let out = text;
-  const candidates = [accessKey, secretKey, cachedToken?.jwt];
-  for (const secret of candidates) {
-    if (secret && secret.length >= 8) {
-      out = out.split(secret).join('[redacted]');
-    }
-  }
-  return out;
 }
 
 /**

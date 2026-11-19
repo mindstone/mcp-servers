@@ -8,9 +8,11 @@
  * Base URL: https://generativelanguage.googleapis.com/v1beta
  */
 
+import { logError } from './key-filter.js';
 import { z } from 'zod';
 import {
   NanoBananaError,
+  geminiNetworkError,
   getGeminiRequestTimeoutMs,
   getErrorResolution,
   type GeminiResponse,
@@ -20,9 +22,10 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
  * Lenient structural schemas for the bits of the Gemini response the
- * connector consumes. Every field is optional and unknown fields pass
- * through — the point is to reject structurally wrong payloads (wrong
- * types, error-shaped bodies on a 200) instead of casting them blindly.
+ * connector consumes. Every field is optional and unknown fields are
+ * dropped — the point is to reject structurally wrong payloads (wrong
+ * types, error-shaped bodies on a 200) instead of casting them blindly,
+ * and to hand callers only the fields they read.
  */
 const geminiResponseSchema = z.object({
   candidates: z.array(z.object({
@@ -31,21 +34,21 @@ const geminiResponseSchema = z.object({
         inlineData: z.object({
           data: z.string(),
           mimeType: z.string().optional(),
-        }).passthrough().optional(),
+        }).optional(),
         text: z.string().optional(),
-      }).passthrough()).optional(),
-    }).passthrough().optional(),
-  }).passthrough()).optional(),
+      })).optional(),
+    }).optional(),
+  })).optional(),
   promptFeedback: z.object({
     blockReason: z.string().optional(),
-  }).passthrough().optional(),
-}).passthrough();
+  }).optional(),
+});
 
 const geminiApiErrorSchema = z.object({
   error: z.object({
     message: z.string().optional(),
-  }).passthrough().optional(),
-}).passthrough();
+  }).optional(),
+});
 
 /**
  * Make an authenticated request to the Gemini API.
@@ -69,7 +72,7 @@ export async function geminiFetch(
   const url = `${GEMINI_API_BASE}/models/${modelPath}:generateContent?key=${apiKey}`;
 
   // Log URL without key
-  console.error(`[NanoBanana API] POST ${GEMINI_API_BASE}/models/${modelPath}:generateContent`);
+  logError(`[NanoBanana API] POST ${GEMINI_API_BASE}/models/${modelPath}:generateContent`);
 
   let response: Response;
 
@@ -105,7 +108,8 @@ export async function geminiFetch(
         `The request took longer than ${timeoutSec}s. Gemini Pro image generations can be slow; set NANO_BANANA_GEMINI_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
-    throw error;
+    logError('[NanoBanana API] request failed:', error);
+    throw geminiNetworkError();
   }
 
   // Handle rate limiting

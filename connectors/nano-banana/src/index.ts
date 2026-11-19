@@ -7,21 +7,22 @@
  *
  * Environment variables:
  * - GEMINI_API_KEY: Gemini API key (required, get from https://aistudio.google.com/api-keys)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
+ * - The host app bridge state path (optional): read only by the vendored reader
+ *   in bridge-reader.ts; see the README for the variable names.
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
+import { logError } from './key-filter.js';
 
 async function main() {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('NanoBanana MCP server running on stdio');
+  logError('NanoBanana MCP server running on stdio');
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  logError('Fatal error:', error);
   process.exit(1);
 });

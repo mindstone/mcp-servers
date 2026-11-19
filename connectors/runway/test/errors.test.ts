@@ -130,7 +130,8 @@ describe('Configure tool', () => {
       api_key: MOCK_API_KEY,
     });
     expect(configResult.isError).toBeFalsy();
-    expect(configResult.text).toContain('configured');
+    // No bridge: the key is kept for this session only, and the result says so.
+    expect(configResult.text).toContain('has not been saved');
 
     // After configure, tools should work
     const afterResult = await testClient.callTool('get_runway_balance', {});

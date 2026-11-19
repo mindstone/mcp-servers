@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
-import { opusFetch, classifyJobStatus, computeNextPollAfterSeconds } from '../client.js';
+import { opusFetch, readOpusJson, classifyJobStatus, computeNextPollAfterSeconds } from '../client.js';
 import { sanitizeList, sanitizeSocialAccount, wrapRawDump } from '../sanitize.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -158,7 +158,7 @@ export function registerSocialPostingTools(server: McpServer): void {
         'Status values: "RUNNING" (still generating), "COMPLETED" (returns title/description/hashtags), "FAILED". ' +
         'Includes `next_poll_after_seconds` honouring Retry-After.',
       inputSchema: z.object({
-        jobId: z.string().min(1),
+        jobId: z.string().min(1).describe('Job ID returned by opus_create_social_copy_job'),
         attempt: z.number().int().nonnegative().optional(),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -168,11 +168,10 @@ export function registerSocialPostingTools(server: McpServer): void {
       const attempt = args.attempt ?? 1;
       const response = (await opusFetch<Response>(
         `/api/social-copy-jobs/${encodeURIComponent(args.jobId)}`,
-        { rawResponse: true },
+        { rawResponse: true, requestKind: 'status_check' },
       )) as Response;
       const retryAfterHeader = response.headers.get('Retry-After');
-      const text = await response.text();
-      const wrapped = (text.trim() ? JSON.parse(text) : {}) as OpusDataResponse<SocialCopyJobResponse>;
+      const wrapped = await readOpusJson<OpusDataResponse<SocialCopyJobResponse>>(response, 'status_check');
       const body = wrapped.data ?? {};
       const classification = classifyJobStatus(body.status);
       const next_poll_after_seconds = computeNextPollAfterSeconds(retryAfterHeader, attempt);

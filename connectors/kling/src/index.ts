@@ -7,21 +7,22 @@
  * Environment variables:
  * - KLING_ACCESS_KEY: Kling API access key (required)
  * - KLING_SECRET_KEY: Kling API secret key (required)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
+ * - The host app bridge state path (optional; set by the host app, see the
+ *   README's environment variables and src/bridge-reader.ts)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { logError } from './key-filter.js';
 import { createServer } from './server.js';
 
 async function main() {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Kling MCP server running on stdio');
+  logError('Kling MCP server running on stdio');
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  logError('Fatal error:', error);
   process.exit(1);
 });

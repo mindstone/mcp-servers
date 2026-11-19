@@ -19,7 +19,8 @@
  *    the body (a lying header cannot overflow it).
  */
 
-import { NanoBananaError } from '../types.js';
+import { NanoBananaError, remoteImageDownloadError } from '../types.js';
+import { logError } from '../key-filter.js';
 
 /**
  * Vendor guidance: keep individual reference images under ~20MB.
@@ -376,11 +377,9 @@ export async function fetchRemoteImage(input: string): Promise<RemoteImage> {
         signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
       });
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      throw fetchFailure(
-        `Failed to fetch remote source image: ${errMsg}`,
-        'Check the URL is reachable and points directly to a PNG/JPEG/WebP image, or download it into the workspace and pass a local path.',
-      );
+      // The error text can quote the remote host or URL; it goes to stderr only.
+      logError('[NanoBanana] remote source image request failed:', error);
+      throw remoteImageDownloadError();
     }
 
     if (response.status >= 300 && response.status < 400) {
@@ -454,7 +453,7 @@ export async function fetchRemoteImage(input: string): Promise<RemoteImage> {
     }
 
     const buffer = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-    console.error(`[NanoBanana] Fetched remote source image: ${buffer.length} bytes, type: ${mimeType}`);
+    logError(`[NanoBanana] Fetched remote source image: ${buffer.length} bytes, type: ${mimeType}`);
     return { mimeType, base64: buffer.toString('base64'), bytes: buffer.length };
   }
 

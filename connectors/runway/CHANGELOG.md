@@ -11,6 +11,20 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- The connector now reads the host app's bridge settings through the shared hardened reader, which refuses a symlinked, oversized or malformed settings file and never follows a redirect off the local machine.
+- A failed request to the host app during `configure_runway_api_key` no longer puts the underlying network error text in the result.
+- `configure_runway_api_key` replaces the submitted key with `[REDACTED]` in any warning or error text from the host app before it reaches the result.
+- Requests to Runway that fail without a response, signed-URL uploads that fail, successful replies that cannot be read, and any other unexpected error now give fixed text (`NETWORK_ERROR`, `PARSE_ERROR`, `UNEXPECTED_ERROR`) instead of the underlying error message. Timeouts and authentication errors keep their existing codes. The detail goes to stderr with the API key removed.
+- Error text from Runway has the configured API key replaced with `[REDACTED]` before it reaches the result.
+- The configured API key is removed from every tool result and log line, wherever upstream echoes it.
+
+### Changed
+
+- `configure_runway_api_key` says "configured" rather than "configured!". Without a host app, it now says the key is kept only while the connector is running and has not been saved.
+- A network or unreadable-reply error on a request that may have started a generation advises checking Runway for an existing task before submitting it again; on a task status check it advises trying the status check again.
+
 ## [0.5.0] - 2026-11-16
 
 ### Changed

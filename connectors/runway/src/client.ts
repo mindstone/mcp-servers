@@ -22,9 +22,14 @@ import {
   DATA_URI_BINARY_LIMITS,
   MAX_UPLOAD_BYTES,
   MIN_UPLOAD_BYTES,
+  describeForLog,
+  runwayNetworkError,
+  runwayParseError,
+  type RequestKind,
   type UploadResponse,
 } from './types.js';
 import { getApiKey } from './auth.js';
+import { logError, redactCredentials } from './key-filter.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /** Envelope source label for Runway-authored text (error bodies, task failures). */
@@ -310,7 +315,18 @@ export function assertDownloadPathInRoot(outputPath: string): { resolved: string
 }
 
 /**
+ * A GET of one task is a status check; every other request might have started
+ * a generation, so its failure text says to check for an existing task.
+ */
+function requestKind(urlPath: string, method: string | undefined): RequestKind {
+  return (method ?? 'GET').toUpperCase() === 'GET' && urlPath.startsWith('/tasks/') ? 'status_check' : 'request';
+}
+
+/**
  * Make an authenticated JSON request to the Runway API.
+ *
+ * Failures without an HTTP response give fixed `NETWORK_ERROR` text (timeouts
+ * keep `TIMEOUT`); an unreadable 2xx body gives fixed `PARSE_ERROR` text.
  */
 export async function runwayFetch<T>(
   urlPath: string,
@@ -326,8 +342,9 @@ export async function runwayFetch<T>(
   }
 
   const url = `${RUNWAY_API_BASE}${urlPath}`;
+  const kind = requestKind(urlPath, options.method);
 
-  console.error(`[Runway API] ${options.method || 'GET'} ${url}`);
+  logError(`[Runway API] ${options.method || 'GET'} ${url}`);
 
   let response: Response;
   const timeoutMs = getRequestTimeoutMs();
@@ -359,7 +376,11 @@ export async function runwayFetch<T>(
         `The request took longer than ${timeoutSec}s. Set RUNWAY_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
-    throw error;
+    // A caller's own abort is theirs to report.
+    if (callerSignal?.aborted) throw error;
+    // Anything else gets fixed text: the raw error can quote anything.
+    logError(`[Runway API] request failed: ${describeForLog(error)}`);
+    throw runwayNetworkError(kind);
   }
 
   if (response.status === 429) {
@@ -379,13 +400,23 @@ export async function runwayFetch<T>(
     try {
       detail = ((await response.json()) as { error?: string })?.error || '';
     } catch { /* empty */ }
+    // Remove any echoed key before the text is enveloped (or ever shortened).
+    const safeDetail = detail ? redactCredentials(detail) : '';
     throw new RunwayError(
-      `Runway API error (HTTP ${response.status}): ${detail ? wrapUntrusted(detail, RUNWAY_API_SOURCE) : ''}`,
+      `Runway API error (HTTP ${response.status}): ${safeDetail ? wrapUntrusted(safeDetail, RUNWAY_API_SOURCE) : ''}`,
       `HTTP_${response.status}`,
       'Try again or check https://dev.runwayml.com/',
     );
   }
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    // Fixed text only: a JSON parser's message quotes the input around the
+    // failure point, so a key fragment could survive exact-match redaction.
+    const errorClass = error instanceof Error ? error.name : typeof error;
+    logError(`[Runway API] response could not be read (${errorClass}, HTTP ${response.status})`);
+    throw runwayParseError(kind);
+  }
 }
 
 /**
@@ -405,8 +436,9 @@ export async function runwayRawFetch(
   }
 
   const url = `${RUNWAY_API_BASE}${urlPath}`;
+  const kind = requestKind(urlPath, options.method);
 
-  console.error(`[Runway API] ${options.method || 'GET'} ${url}`);
+  logError(`[Runway API] ${options.method || 'GET'} ${url}`);
 
   let response: Response;
   const timeoutMs = getRequestTimeoutMs();
@@ -437,7 +469,11 @@ export async function runwayRawFetch(
         `The request took longer than ${timeoutSec}s. Set RUNWAY_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
-    throw error;
+    // A caller's own abort is theirs to report.
+    if (callerSignal?.aborted) throw error;
+    // Anything else gets fixed text: the raw error can quote anything.
+    logError(`[Runway API] request failed: ${describeForLog(error)}`);
+    throw runwayNetworkError(kind);
   }
 
   if (response.status === 429) {
@@ -533,7 +569,9 @@ export async function uploadEphemeral(filePath: string, context?: FileReadContex
         `The signed-URL upload took longer than ${timeoutSec}s. Set RUNWAY_UPLOAD_TIMEOUT_MS to increase the timeout, or reduce the file size / use a faster connection.`,
       );
     }
-    throw error;
+    // The raw error can quote the signed upload URL; the result gets fixed text.
+    logError(`[Runway] upload failed: ${describeForLog(error)}`);
+    throw runwayNetworkError();
   }
   if (!uploadRes.ok && uploadRes.status !== 204) {
     throw new RunwayError(`Upload failed (HTTP ${uploadRes.status})`, 'UPLOAD_FAILED',

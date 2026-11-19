@@ -1,6 +1,7 @@
 import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { filterTransport } from './key-filter.js';
 import {
   registerConfigureTools,
   registerVideoTools,
@@ -29,6 +30,12 @@ export function createServer(): McpServer {
   registerTaskListTools(server);
   registerAccountTools(server);
   registerImageTools(server);
+
+  // Every transport this server connects to (stdio in index.ts, in-memory in
+  // tests) gets the credential filter on its outgoing side, so no message the
+  // SDK sends — whoever built it — can carry a credential.
+  const connect = server.connect.bind(server);
+  server.connect = (transport) => connect(filterTransport(transport));
 
   return server;
 }

@@ -121,7 +121,7 @@ node dist/index.js
 ## Tools (23)
 
 ### Configuration
-- `configure_runway_api_key` — Save your Runway API key
+- `configure_runway_api_key` — Set your Runway API key (the host app saves it; without one it lasts only while the connector runs)
 
 ### Video
 - `generate_video_from_image` — Animate a still image into a video

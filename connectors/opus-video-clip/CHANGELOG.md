@@ -7,6 +7,27 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- The connector now reads the host app's bridge settings through the shared hardened reader, which refuses a symlinked, oversized or malformed settings file and never follows a redirect off the local machine.
+- Authenticated requests go only to OpusClip API paths on the OpusClip API host. An absolute or protocol-relative URL, a backslash, an `@`, or a percent-encoded slash or backslash (for example an ID containing `/`) is refused before any request is made, so the API key is never sent elsewhere.
+- Requests to OpusClip that fail without a response, or whose reply stops part-way, now give fixed text (`NETWORK_ERROR`); successful replies that are not valid JSON, including censor and social-copy status bodies, give fixed text (`PARSE_ERROR`). Timeouts, rate limits and authentication errors keep their existing codes. The detail goes to stderr with the API key removed; a JSON parser's message is never logged.
+- `opus_download_clip` gives fixed text when the download fails without a response or stops part-way (`DOWNLOAD_NETWORK_ERROR`), or times out (`DOWNLOAD_TIMEOUT`); HTTP-status and size errors keep their codes. The underlying error, which can quote the signed clip URL, goes to stderr only.
+- Any other unexpected error now gives fixed text (`UNEXPECTED_ERROR`) instead of its message; the detail goes to stderr with the API key removed.
+- Error text from OpusClip (including the validation-error excerpt) and successful replies (job failure reasons, status and other fields, and field names at any depth) have the configured API key replaced with `[REDACTED]`, before any truncation.
+- Every message the connector sends, including argument-validation and unknown-tool errors, and every log line has every API key used this session removed, wherever it appears; a key replaced through `configure_opus_api_key` stays removed. Keys shorter than 8 characters are not filtered.
+- `configure_opus_api_key` no longer puts the underlying network error text in the result, and replaces the submitted key with `[REDACTED]` in any warning or error text from the host app.
+
+### Changed
+
+- Bridge errors from `configure_opus_api_key` converge on `BRIDGE_ERROR`, carrying the host app's (redacted) reply. `BRIDGE_UNREACHABLE` is kept for a request to the host app that fails outright. `BRIDGE_UNAVAILABLE` is retired: with no usable host app, configure now succeeds and keeps the key only while the connector is running, saying so. `BRIDGE_AUTH_FAILED` is retired: an unauthorized reply is now `BRIDGE_ERROR`. This is an intentional compatibility change for MCP clients that matched those codes.
+- The success message says "configured" rather than "configured successfully".
+- `opus_get_social_copy_job` describes its `jobId` input.
+
+### Removed
+
+- The unused internal `pollOpusJob` helper.
+
 ## [0.3.0] - 2026-11-16
 
 ### Changed

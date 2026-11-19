@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -28,6 +28,8 @@ afterEach(async () => {
     await testClient.close();
     testClient = undefined;
   }
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   fs.rmSync(workspace, { recursive: true, force: true });
 });
 
@@ -281,6 +283,72 @@ describe('opus_download_clip', () => {
       });
       expect(result.isError).toBeFalsy();
       expect(fs.statSync(out).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  describe('network failures give fixed text', () => {
+    const RAW = `getaddrinfo ENOTFOUND ${CLIP_URL} Bearer ${MOCK_API_KEY} SENTINEL-dl-9e41`;
+    const KEY_FRAGMENT = 'mcp-test';
+    const NETWORK_RESULT = {
+      ok: false,
+      error: 'Could not download the clip from OpusClip.',
+      code: 'DOWNLOAD_NETWORK_ERROR',
+      resolution: 'Check your internet connection and try the download again.',
+    };
+
+    function captureStderr(): () => string {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      return () => spy.mock.calls.map((args) => args.map(String).join(' ')).join('\n');
+    }
+
+    it('a fetch rejection', async () => {
+      const stderr = captureStderr();
+      const client = await freshClient();
+      const realFetch = globalThis.fetch;
+      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.startsWith(CDN)) return Promise.reject(new TypeError(RAW));
+        return realFetch(input, init);
+      });
+      const out = path.join(workspace, 'clip.mp4');
+      const result = await client.callTool('opus_download_clip', { url: CLIP_URL, output_path: out });
+      expect(result.isError).toBe(true);
+      expect(result.json).toEqual(NETWORK_RESULT);
+      expect(result.text).not.toContain('SENTINEL');
+      expect(result.text).not.toContain('ENOTFOUND');
+      expect(result.text).not.toContain(KEY_FRAGMENT);
+      expect(stderr()).toContain('SENTINEL-dl-9e41');
+      expect(stderr()).not.toContain(KEY_FRAGMENT);
+      expect(fs.existsSync(out)).toBe(false);
+    });
+
+    it('a body that fails part-way', async () => {
+      mswServer.use(
+        http.get(`${CDN}/media/*`, () => {
+          let sent = false;
+          const body = new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true;
+                controller.enqueue(new Uint8Array(16).fill(1));
+              } else {
+                controller.error(new Error(RAW));
+              }
+            },
+          });
+          return new HttpResponse(body, { headers: { 'Content-Type': 'video/mp4' } });
+        }),
+      );
+      const stderr = captureStderr();
+      const client = await freshClient();
+      const out = path.join(workspace, 'clip.mp4');
+      const result = await client.callTool('opus_download_clip', { url: CLIP_URL, output_path: out });
+      expect(result.isError).toBe(true);
+      expect(result.json).toEqual(NETWORK_RESULT);
+      expect(result.text).not.toContain('SENTINEL');
+      expect(result.text).not.toContain(KEY_FRAGMENT);
+      expect(stderr()).not.toContain(KEY_FRAGMENT);
+      expect(fs.existsSync(out)).toBe(false);
     });
   });
 });

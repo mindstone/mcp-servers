@@ -1,3 +1,5 @@
+import { logError, redactCredentials } from './key-filter.js';
+
 export const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1';
 export const RUNWAY_API_VERSION = '2024-11-06';
 
@@ -22,13 +24,13 @@ function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
   if (raw === undefined || raw === '') return fallbackMs;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
-    console.error(
+    logError(
       `[Runway] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
   }
   if (parsed > MAX_REQUEST_TIMEOUT_MS) {
-    console.error(
+    logError(
       `[Runway] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
     );
     return fallbackMs;
@@ -66,11 +68,6 @@ export function getUploadTimeoutMs(): number {
   return parseTimeoutEnv('RUNWAY_UPLOAD_TIMEOUT_MS', DEFAULT_UPLOAD_TIMEOUT_MS);
 }
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class RunwayError extends Error {
   constructor(
     message: string,
@@ -80,6 +77,53 @@ export class RunwayError extends Error {
     super(message);
     this.name = 'RunwayError';
   }
+}
+
+/**
+ * Which kind of request failed, so the fixed error text can say what to do
+ * next. Runway generations are async tasks: a request that started one may
+ * have created the task even when no complete response came back.
+ */
+export type RequestKind = 'request' | 'status_check';
+
+function nextStep(kind: RequestKind): string {
+  return kind === 'status_check'
+    ? 'Check your internet connection, then try the status check again.'
+    : 'Check your internet connection. If you were starting a generation, check Runway for an existing task before submitting it again.';
+}
+
+/**
+ * Fixed text for a request to Runway that failed without an HTTP response.
+ * The underlying error text can quote anything (headers, URLs, the key), so
+ * it never reaches a tool result.
+ */
+export function runwayNetworkError(kind: RequestKind = 'request'): RunwayError {
+  return new RunwayError('Could not get a complete response from Runway.', 'NETWORK_ERROR', nextStep(kind));
+}
+
+/** Fixed text for a successful (2xx) Runway response whose body is not readable JSON. */
+export function runwayParseError(kind: RequestKind = 'request'): RunwayError {
+  return new RunwayError(
+    'Runway returned a response this connector could not read.',
+    'PARSE_ERROR',
+    kind === 'status_check'
+      ? 'Try the status check again.'
+      : 'If you were starting a generation, check Runway for an existing task before submitting it again.',
+  );
+}
+
+/** Fixed text for an error no other branch recognised. */
+export function unexpectedError(): RunwayError {
+  return new RunwayError(
+    'The Runway connector hit an unexpected error.',
+    'UNEXPECTED_ERROR',
+    'Try again. If it keeps happening, restart the connector.',
+  );
+}
+
+/** Error text for stderr: no credential seen this session appears in it. */
+export function describeForLog(error: unknown): string {
+  return redactCredentials(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
 }
 
 // ---------------------------------------------------------------------------

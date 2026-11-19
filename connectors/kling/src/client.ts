@@ -18,7 +18,8 @@
  */
 
 import { z } from 'zod';
-import { isConfigured, getJwtToken, redactSecrets } from './auth.js';
+import { isConfigured, getJwtToken } from './auth.js';
+import { logError, redactCredentials } from './key-filter.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import {
   KlingError,
@@ -40,7 +41,7 @@ const VENDOR_ERROR_SOURCE = 'kling-api-error';
  */
 function sanitizeVendorMessage(message: string): string {
   // wrapUntrusted only returns undefined for undefined input.
-  return wrapUntrusted(redactSecrets(message), VENDOR_ERROR_SOURCE)!;
+  return wrapUntrusted(redactCredentials(message), VENDOR_ERROR_SOURCE)!;
 }
 
 /**
@@ -112,7 +113,7 @@ function resolveApiUrl(path: string): string {
 function invalidResponseError(detail: string): KlingError {
   // Detail (issue counts, HTTP status) goes to stderr only; the model-visible
   // message stays generic and free of vendor-controlled content.
-  console.error(`[kling] ${detail}`);
+  logError(`[kling] ${detail}`);
   return new KlingError(
     'Kling API returned an unexpected response shape',
     'INVALID_RESPONSE',

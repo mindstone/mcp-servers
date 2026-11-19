@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { redactSecrets } from './auth.js';
+import { logError } from './key-filter.js';
 import { KlingError } from './types.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
@@ -10,12 +10,13 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  *
  * - On success: returns the string result as a text content block.
  * - On KlingError: returns a structured JSON error with code and resolution.
- * - On unknown error: logs a credential-redacted detail line to stderr and
- *   returns a generic message — runtime error text (e.g. JSON parser
- *   failures) can embed fragments of a vendor response or local paths, which
- *   must not reach model-visible output.
+ * - On unknown error: logs the detail to stderr and returns a generic
+ *   message — runtime error text (e.g. JSON parser failures) can embed
+ *   fragments of a vendor response or local paths, which must not reach
+ *   model-visible output.
  *
- * Secrets are never exposed in error messages.
+ * Credentials are removed later, from every outgoing message, by the
+ * transport filter (`key-filter.ts`), and from every log line by `logError`.
  */
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
@@ -42,7 +43,7 @@ export function withErrorHandling<T>(
         };
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[kling] Unexpected tool error:', redactSecrets(errorMessage));
+      logError('[kling] Unexpected tool error:', errorMessage);
       return {
         content: [
           {
@@ -50,7 +51,7 @@ export function withErrorHandling<T>(
             text: JSON.stringify({
               ok: false,
               error:
-                'An unexpected error occurred while running the tool. Details are in the connector logs.',
+                "An unexpected error occurred while running the tool. Try again. If it keeps happening, restart the connector from your app's connector settings.",
             }),
           },
         ],
@@ -109,4 +110,43 @@ export function pathSegment(value: string): string {
     );
   }
   return encodeURIComponent(value);
+}
+
+/** The one refusal for a callback URL. It never quotes the URL, which may carry a secret. */
+export const INVALID_CALLBACK_URL_MESSAGE =
+  "callback_url must be a complete HTTPS URL without a username or password. Use another webhook URL, or omit callback_url and check the task's status instead.";
+
+/**
+ * The normalised form (`new URL(value).href`) of a callback URL that may be
+ * sent to Kling, or `undefined` when it may not. Allowed means: it parses as a
+ * URL, uses `https:`, and carries no username or password (Kling would send
+ * those credentials on to the webhook host). Webhook tokens in the path or
+ * query are the user's own choice and stay allowed. No host policy: Kling's
+ * servers make the call, not this connector. Tools forward this normalised
+ * form, never the original string, so Kling receives exactly what was checked
+ * (no case, whitespace, backslash or IDN differences from another parser).
+ */
+export function allowedCallbackUrl(value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return undefined;
+  return url.href;
+}
+
+/** True when a callback URL may be sent to Kling (see `allowedCallbackUrl`). */
+export function isAllowedCallbackUrl(value: string): boolean {
+  return allowedCallbackUrl(value) !== undefined;
+}
+
+/**
+ * The tool result refusing `callbackUrl`, or `undefined` when it is absent or
+ * allowed. Every tool that takes `callback_url` checks it through this.
+ */
+export function callbackUrlRefusal(callbackUrl: string | undefined): string | undefined {
+  if (callbackUrl === undefined || isAllowedCallbackUrl(callbackUrl)) return undefined;
+  return JSON.stringify({ ok: false, error: INVALID_CALLBACK_URL_MESSAGE, code: 'INVALID_URL' });
 }

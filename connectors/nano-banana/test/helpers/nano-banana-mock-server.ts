@@ -84,15 +84,16 @@ export function createNanoBananaBridgeHandlers(port: number, token: string) {
     http.post(`http://127.0.0.1:${port}/bundled/nanobanana/configure`, async ({ request }) => {
       const auth = request.headers.get('Authorization');
       if (auth !== `Bearer ${token}`) {
-        return HttpResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 },
-        );
+        return new HttpResponse(null, { status: 401 });
       }
       return HttpResponse.json({ success: true });
     }),
   ];
 }
+
+// Unauthorized bridge replies have no body: the hardened reader discards the
+// body of a 401/403, and msw's mocked transport never settles that cancel for
+// a JSON body (a real socket does).
 
 /**
  * Creates bridge handlers that return 401.
@@ -100,10 +101,7 @@ export function createNanoBananaBridgeHandlers(port: number, token: string) {
 export function createNanoBananaBridge401Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/nanobanana/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+      return new HttpResponse(null, { status: 401 });
     }),
   ];
 }
@@ -114,10 +112,7 @@ export function createNanoBananaBridge401Handlers(port: number) {
 export function createNanoBananaBridge403Handlers(port: number) {
   return [
     http.post(`http://127.0.0.1:${port}/bundled/nanobanana/configure`, () => {
-      return HttpResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 },
-      );
+      return new HttpResponse(null, { status: 403 });
     }),
   ];
 }
@@ -130,10 +125,7 @@ export function createNanoBananaBridgeFailureHandlers(port: number, token: strin
     http.post(`http://127.0.0.1:${port}/bundled/nanobanana/configure`, async ({ request }) => {
       const auth = request.headers.get('Authorization');
       if (auth !== `Bearer ${token}`) {
-        return HttpResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 },
-        );
+        return new HttpResponse(null, { status: 401 });
       }
       return HttpResponse.json({ success: false, error: 'Account validation failed' });
     }),

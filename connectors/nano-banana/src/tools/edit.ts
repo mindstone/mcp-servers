@@ -7,6 +7,8 @@ import { getApiKey, hasApiKey } from '../auth.js';
 import { geminiFetch } from '../client.js';
 import {
   NanoBananaError,
+  geminiNetworkError,
+  remoteImageDownloadError,
   ACCEPTED_MODELS,
   resolveModel,
   SUPPORTED_ASPECT_RATIOS,
@@ -21,6 +23,7 @@ import {
 import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath, writeContainedFileExclusive } from './path-safety.js';
 import { fetchRemoteImage, isRemoteImageUrl, REMOTE_IMAGE_PREFIXES, MAX_REMOTE_IMAGE_BYTES, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
+import { logError } from '../key-filter.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image" (Nano Banana 2, default — pro-quality at flash speed), ' +
@@ -83,15 +86,13 @@ async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResul
         errorText: JSON.stringify({ ok: false, error: error.message, code: error.code, resolution: error.resolution }, null, 2),
       };
     }
-    const errMsg = error instanceof Error ? error.message : String(error);
+    // fetchRemoteImage maps its own failures; the text of anything else
+    // (a URL parse error, say) is not passed on.
+    logError('[NanoBanana] remote source image failed:', error);
+    const safe = remoteImageDownloadError();
     return {
       ok: false,
-      errorText: JSON.stringify({
-        ok: false,
-        error: `Failed to fetch remote source image: ${errMsg}`,
-        code: 'REMOTE_IMAGE_FETCH_FAILED',
-        resolution: 'Check the URL is reachable and points directly to a PNG/JPEG/WebP image, or download it into the workspace and pass a local path.',
-      }, null, 2),
+      errorText: JSON.stringify({ ok: false, error: safe.message, code: safe.code, resolution: safe.resolution }, null, 2),
     };
   }
 }
@@ -149,7 +150,7 @@ function loadLocalSourceImage(rawSource: string, context: FileReadContext, locat
       };
     }
     const imageBuffer = readResult.content;
-    console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
+    logError(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
     return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64'), bytes: imageBuffer.length } };
   } catch (readError) {
     const errMsg = readError instanceof Error ? readError.message : String(readError);
@@ -322,9 +323,12 @@ export function registerEditTools(server: McpServer): void {
             isError: true,
           };
         }
-        const errMsg = error instanceof Error ? error.message : String(error);
+        // geminiFetch maps its own failures; the text of anything else could
+        // quote the request URL, which carries the key.
+        logError('[NanoBanana] generation request failed:', error);
+        const safe = geminiNetworkError();
         return {
-          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}`, code: 'NETWORK_ERROR', resolution: 'Check your internet connection and try again. If the problem persists, the Gemini API may be temporarily unreachable.' }, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: safe.message, code: safe.code, resolution: safe.resolution }, null, 2) }],
           isError: true,
         };
       }
@@ -394,7 +398,7 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      console.error('[NanoBanana] Image edited successfully');
+      logError('[NanoBanana] Image edited successfully');
 
       // Optionally save to disk with path traversal protection
       let savedPath: string | null = null;
@@ -415,7 +419,7 @@ export function registerEditTools(server: McpServer): void {
         const writeResult = writeContainedFileExclusive(resolveResult.path, Buffer.from(imageData, 'base64'));
         if (writeResult.ok) {
           savedPath = writeResult.path;
-          console.error(`[NanoBanana] Saved edited image to: ${savedPath}`);
+          logError(`[NanoBanana] Saved edited image to: ${savedPath}`);
         } else {
           const isExists = writeResult.reason === 'exists';
           const errMsg = isExists ? 'a file already exists at that path' : writeResult.error;
@@ -423,7 +427,7 @@ export function registerEditTools(server: McpServer): void {
           const saveResolution = isExists
             ? 'Choose a different save_path (or delete the existing file) and try again. The edited image is included inline in this result.'
             : 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.';
-          console.error(`[NanoBanana] Failed to save: ${errMsg}`);
+          logError(`[NanoBanana] Failed to save: ${errMsg}`);
           // The image was edited but the requested save failed — surface
           // that as an error instead of silently reporting success. The image
           // is still returned inline so the edit is not lost.

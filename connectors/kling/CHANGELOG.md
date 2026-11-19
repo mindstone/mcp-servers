@@ -11,6 +11,19 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- The connector now reads the host app's bridge settings through the shared hardened reader, which refuses a symlinked, oversized or malformed settings file and never follows a redirect off the local machine.
+- `callback_url` is now refused unless it is a complete HTTPS URL without a username or password, in every tool that takes one. The refusal never repeats the URL. Webhook tokens in the path or query string are still accepted.
+- A failed request to the host app during `configure_kling_api_keys` no longer puts the underlying network error text in the result.
+- `configure_kling_api_keys` replaces both submitted keys with `[REDACTED]` in any warning or error text from the host app before it reaches the result.
+- An accepted `callback_url` is sent to Kling in its normalised form (lowercase scheme and host, surrounding whitespace trimmed, backslashes as slashes, international hostnames encoded), so Kling receives exactly the URL that was checked.
+- Every message the connector sends (tool results, argument-validation and unknown-tool errors included) and every log line has the API keys removed, wherever they appear, including keys replaced earlier in the session.
+
+### Changed
+
+- `configure_kling_api_keys` says "configured" rather than "configured successfully". Without a host app, it now says the keys are kept only while the connector is running and have not been saved.
+
 ## [0.6.0] - 2026-11-16
 
 ### Changed

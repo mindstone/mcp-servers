@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { RunwayError } from './types.js';
+import { RunwayError, describeForLog, unexpectedError } from './types.js';
+import { logError } from './key-filter.js';
 
 /**
  * Encodes one value for use as a single URL path segment, so an ID can never
@@ -25,9 +26,9 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  *
  * - On success: returns the string result as a text content block.
  * - On RunwayError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On unknown error: returns fixed UNEXPECTED_ERROR text (detail to stderr, key removed).
  *
- * Secrets are never exposed in error messages.
+ * Credentials in results are removed at the transport (`filterTransport`).
  */
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
@@ -53,9 +54,17 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unknown errors can quote anything (a URL, a header, the key), so the
+      // result gets fixed text and the detail goes to stderr with the key removed.
+      logError(`[Runway] unexpected error: ${describeForLog(error)}`);
+      const safe = unexpectedError();
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ ok: false, error: safe.message, code: safe.code, resolution: safe.resolution }),
+          },
+        ],
         isError: true,
       };
     }

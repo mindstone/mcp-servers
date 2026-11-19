@@ -5,6 +5,7 @@ import { getApiKey, hasApiKey } from '../auth.js';
 import { geminiFetch } from '../client.js';
 import {
   NanoBananaError,
+  geminiNetworkError,
   ACCEPTED_MODELS,
   resolveModel,
   SUPPORTED_ASPECT_RATIOS,
@@ -17,6 +18,7 @@ import {
 } from '../types.js';
 import { resolveSavePath, writeContainedFileExclusive } from './path-safety.js';
 import { wrapUntrusted } from '../untrusted-content.js';
+import { logError } from '../key-filter.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image" (Nano Banana 2, default — pro-quality at flash speed), ' +
@@ -102,9 +104,12 @@ export function registerGenerateTools(server: McpServer): void {
             isError: true,
           };
         }
-        const errMsg = error instanceof Error ? error.message : String(error);
+        // geminiFetch maps its own failures; the text of anything else could
+        // quote the request URL, which carries the key.
+        logError('[NanoBanana] generation request failed:', error);
+        const safe = geminiNetworkError();
         return {
-          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}`, code: 'NETWORK_ERROR', resolution: 'Check your internet connection and try again. If the problem persists, the Gemini API may be temporarily unreachable.' }, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: safe.message, code: safe.code, resolution: safe.resolution }, null, 2) }],
           isError: true,
         };
       }
@@ -174,7 +179,7 @@ export function registerGenerateTools(server: McpServer): void {
         };
       }
 
-      console.error('[NanoBanana] Image generated successfully');
+      logError('[NanoBanana] Image generated successfully');
 
       // Optionally save to disk with path traversal protection
       let savedPath: string | null = null;
@@ -195,7 +200,7 @@ export function registerGenerateTools(server: McpServer): void {
         const writeResult = writeContainedFileExclusive(resolveResult.path, Buffer.from(imageData, 'base64'));
         if (writeResult.ok) {
           savedPath = writeResult.path;
-          console.error(`[NanoBanana] Saved to: ${savedPath}`);
+          logError(`[NanoBanana] Saved to: ${savedPath}`);
         } else {
           const isExists = writeResult.reason === 'exists';
           const errMsg = isExists ? 'a file already exists at that path' : writeResult.error;
@@ -203,7 +208,7 @@ export function registerGenerateTools(server: McpServer): void {
           const saveResolution = isExists
             ? 'Choose a different save_path (or delete the existing file) and try again. The generated image is included inline in this result.'
             : 'Check that the save path is inside the workspace and writable, then try again. The generated image is included inline in this result.';
-          console.error(`[NanoBanana] Failed to save: ${errMsg}`);
+          logError(`[NanoBanana] Failed to save: ${errMsg}`);
           // The image was generated but the requested save failed — surface
           // that as an error instead of silently reporting success. The image
           // is still returned inline so the generation is not lost.

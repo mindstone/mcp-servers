@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
-import { pathSegment, withErrorHandling } from '../utils.js';
+import { allowedCallbackUrl, callbackUrlRefusal, pathSegment, withErrorHandling } from '../utils.js';
 import {
   TASK_TYPE_PATHS,
   taskCreatedResponseSchema,
@@ -72,22 +72,16 @@ export function registerVideoTools(server: McpServer): void {
           .describe('std=standard (faster), pro=professional (higher quality). Default: std'),
         callback_url: z
           .string()
-          .url()
           .optional()
           .describe(
-            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+            'HTTPS URL that Kling POSTs the task result to when the task status changes, without a username or password in it. Optional — polling with check_kling_task works without it.',
           ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      if (args.callback_url && !args.callback_url.startsWith('https://')) {
-        return JSON.stringify({
-          ok: false,
-          error: 'callback_url must use HTTPS',
-          code: 'INVALID_URL',
-        });
-      }
+      const callbackRefusal = callbackUrlRefusal(args.callback_url);
+      if (callbackRefusal) return callbackRefusal;
 
       const model = args.model || 'kling-v2-6';
       const body: Record<string, unknown> = {
@@ -101,7 +95,7 @@ export function registerVideoTools(server: McpServer): void {
         body.negative_prompt = args.negative_prompt;
       }
       if (args.callback_url) {
-        body.callback_url = args.callback_url;
+        body.callback_url = allowedCallbackUrl(args.callback_url);
       }
 
       const result = await klingFetch('/videos/text2video', taskCreatedResponseSchema, {
@@ -166,10 +160,9 @@ export function registerVideoTools(server: McpServer): void {
           .describe('std=standard, pro=professional quality. Default: std'),
         callback_url: z
           .string()
-          .url()
           .optional()
           .describe(
-            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+            'HTTPS URL that Kling POSTs the task result to when the task status changes, without a username or password in it. Optional — polling with check_kling_task works without it.',
           ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -191,13 +184,8 @@ export function registerVideoTools(server: McpServer): void {
           code: 'INVALID_INPUT',
         });
       }
-      if (args.callback_url && !args.callback_url.startsWith('https://')) {
-        return JSON.stringify({
-          ok: false,
-          error: 'callback_url must use HTTPS',
-          code: 'INVALID_URL',
-        });
-      }
+      const callbackRefusal = callbackUrlRefusal(args.callback_url);
+      if (callbackRefusal) return callbackRefusal;
 
       let image: string;
       if (args.image_url) {
@@ -230,7 +218,7 @@ export function registerVideoTools(server: McpServer): void {
         body.negative_prompt = args.negative_prompt;
       }
       if (args.callback_url) {
-        body.callback_url = args.callback_url;
+        body.callback_url = allowedCallbackUrl(args.callback_url);
       }
 
       const result = await klingFetch('/videos/image2video', taskCreatedResponseSchema, {
