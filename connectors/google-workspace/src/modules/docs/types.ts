@@ -197,8 +197,8 @@ export interface DocsOperationResult {
     | InsertTextResponse
     | TabCopyResponse;
   error?: string;
-  /** Original API failure for the tool boundary's cause chain. */
-  cause?: unknown;
+  /** Original API failure for the tool boundary's cause chain (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   /** HTTP status preserved for the tool boundary when a write wrapper fails. */
   status?: number;
   occurrencesChanged?: number;

@@ -235,6 +235,8 @@ export interface SheetTabOperationResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
 }
 
 export interface SpreadsheetResponse {
@@ -263,6 +265,8 @@ export interface FormulaOverwriteRefusal {
   status: 'refused';
   error_code: FormulaSafetyErrorCode;
   error: string;
+  /** The service's refusal text, which may quote sheet titles, formulas or Google's error; enveloped. */
+  error_detail?: string;
   retry_with: {
     overwrite_formulas: true;
   };
@@ -274,6 +278,8 @@ export interface SheetsOperationResult {
   success: boolean;
   data?: SpreadsheetResponse | Spreadsheet | SheetInfo | ValueRange | ShapedReadResponse | AnchorReadResponse | WriteResponse;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   errorCode?: FormulaSafetyErrorCode;
   retryWith?: {
     overwrite_formulas: true;
@@ -336,6 +342,8 @@ export interface BatchOperationResult {
   success: boolean;
   data?: Array<BatchValuesResult | BatchShapedValuesResult | BatchAnchorValuesResult>;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   errorCode?: FormulaSafetyErrorCode;
   retryWith?: {
     overwrite_formulas: true;
@@ -363,6 +371,8 @@ export interface FindReplaceOptions {
 export interface FindReplaceResult {
   success: boolean;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   occurrencesChanged?: number;
   valuesChanged?: number;
   rowsChanged?: number;
@@ -404,5 +414,7 @@ export interface FormatCellsOptions {
 export interface FormatResult {
   success: boolean;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   spreadsheetId?: string;
 }

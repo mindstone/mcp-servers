@@ -11,6 +11,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Chat space, contact, Meet conference record and transcript, and Slides presentation IDs must now be plain IDs (letters, digits, `-` and `_`). A malformed ID is refused before anything is sent to Google, so it can no longer point a request somewhere other than the named space, contact, transcript or presentation. The Slides read, list and get-slide tools now also accept a presentation URL, like the Slides update and thumbnail tools already did.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
+- When a Google request fails, the assistant now gets a short summary (what happened, status, Google's reason code and what to do next) with Google's own error text kept inside the untrusted-content envelope. Formula-overwrite refusals envelope sheet titles and formulas, and a failed formula check now says what Google returned (status and reason).
+- Saved sign-in files are now read the way they are written: a file replaced by a link, or anything that is not a plain file, is refused instead of being followed. A refused sign-in token reaches the assistant with the reason; a refused accounts list stops the connector from starting.
+
+### Removed
+
+- The old all-in-one attachment tool, `manage_workspace_attachment` (also called `manage_attachment`), is gone. Use `download_workspace_attachment`, `upload_workspace_attachment` or `delete_workspace_attachment` instead; they do the same jobs, one each. Anything that still calls the old name by hand, such as a saved skill or automation, now gets an unknown-tool error and needs updating to one of the three.
 
 ### Fixed
 

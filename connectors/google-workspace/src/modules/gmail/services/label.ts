@@ -402,7 +402,8 @@ export class LabelService {
         throw new GmailError(
           'Authentication failed',
           'AUTH_ERROR',
-          'Please re-authenticate your account'
+          'Please re-authenticate your account',
+          error
         );
       }
       
@@ -410,14 +411,16 @@ export class LabelService {
         throw new GmailError(
           'Authentication token expired',
           'TOKEN_ERROR',
-          'Please re-authenticate your account'
+          'Please re-authenticate your account',
+          error
         );
       }
 
       throw new GmailError(
         'Failed to create label',
         'CREATE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -440,7 +443,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to fetch labels',
         'FETCH_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -496,7 +500,8 @@ export class LabelService {
         throw new GmailError(
           'Authentication failed',
           'AUTH_ERROR',
-          'Please re-authenticate your account'
+          'Please re-authenticate your account',
+          error
         );
       }
       
@@ -504,14 +509,16 @@ export class LabelService {
         throw new GmailError(
           'Authentication token expired',
           'TOKEN_ERROR',
-          'Please re-authenticate your account'
+          'Please re-authenticate your account',
+          error
         );
       }
 
       throw new GmailError(
         'Failed to update label',
         'UPDATE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -527,7 +534,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to delete label',
         'DELETE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -547,7 +555,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to modify message labels',
         'MODIFY_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -616,7 +625,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to create label filter',
         'CREATE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -670,7 +680,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to get label filters',
         'FETCH_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -743,7 +754,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to update label filter',
         'UPDATE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -759,7 +771,8 @@ export class LabelService {
       throw new GmailError(
         'Failed to delete label filter',
         'DELETE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createRequire } from 'node:module';
 import { GSuiteServer } from './tools/server.js';
+import { renderLogArg } from './utils/logger.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -29,6 +30,6 @@ process.on('SIGTERM', () => {
 
 // Start with error handling
 server.run().catch(error => {
-  console.error('Fatal Error:', error);
+  console.error('Fatal Error:', renderLogArg(error));
   process.exit(1);
 });

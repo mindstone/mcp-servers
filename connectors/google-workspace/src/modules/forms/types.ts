@@ -432,4 +432,6 @@ export interface FormsOperationResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
 }

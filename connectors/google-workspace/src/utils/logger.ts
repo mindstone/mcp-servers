@@ -37,6 +37,40 @@ const isJsonRpc = (msg: any): boolean => {
   return msg.startsWith('{"jsonrpc":') || msg.startsWith('{"id":');
 };
 
+const MAX_RENDER_DEPTH = 6;
+
+const renderError = (error: Error): string => error.stack || `${error.name}: ${error.message}`;
+
+const isPlainObject = (value: object): boolean => {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
+const renderValue = (value: unknown, depth: number, seen: WeakSet<object>): unknown => {
+  if (value instanceof Error) return renderError(value);
+  if (typeof value !== 'object' || value === null) return value;
+  if (!Array.isArray(value) && !isPlainObject(value)) return value;
+  if (seen.has(value)) return '[Circular]';
+  if (depth >= MAX_RENDER_DEPTH) return Array.isArray(value) ? '[Array]' : '[Object]';
+  seen.add(value);
+  const copy = Array.isArray(value)
+    ? value.map((item) => renderValue(item, depth + 1, seen))
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderValue(item, depth + 1, seen)]));
+  seen.delete(value);
+  return copy;
+};
+
+/**
+ * Renders every `Error` in a log argument (top level, or nested at any depth
+ * in plain objects and arrays) as a plain string (its stack, or `name: message`),
+ * so console and the log file never print its cause chain or a gaxios error's
+ * config, request, response or headers. Plain objects and arrays are copied;
+ * every other value passes through unchanged.
+ */
+export const renderLogArg = (arg: unknown): unknown => renderValue(arg, 0, new WeakSet());
+
+const renderArgs = (args: any[]): any[] => args.map(renderLogArg);
+
 const writeToLogFile = (level: string, ...args: any[]) => {
   if (!LOG_FILE) return;
   try {
@@ -46,16 +80,18 @@ const writeToLogFile = (level: string, ...args: any[]) => {
     ).join(' ');
     appendFileSync(LOG_FILE, `[${timestamp}] [${level.toUpperCase()}] ${message}\n`);
   } catch (error) {
-    console.error('Failed to write to log file:', error);
+    console.error('Failed to write to log file:', renderLogArg(error));
   }
 };
 
 const logger = {
-  error: (...args: any[]) => {
+  error: (...rawArgs: any[]) => {
+    const args = renderArgs(rawArgs);
     console.error(...args);
     writeToLogFile('error', ...args);
   },
-  warn: (...args: any[]) => {
+  warn: (...rawArgs: any[]) => {
+    const args = renderArgs(rawArgs);
     if (LOG_MODE === 'strict' || isJsonRpc(args[0])) {
       console.error(...args);
     } else {
@@ -63,7 +99,8 @@ const logger = {
     }
     writeToLogFile('warn', ...args);
   },
-  info: (...args: any[]) => {
+  info: (...rawArgs: any[]) => {
+    const args = renderArgs(rawArgs);
     if (LOG_MODE === 'strict' || isJsonRpc(args[0])) {
       console.error(...args);
     } else {
@@ -71,8 +108,9 @@ const logger = {
     }
     writeToLogFile('info', ...args);
   },
-  debug: (...args: any[]) => {
+  debug: (...rawArgs: any[]) => {
     if (!process.env.DEBUG) return;
+    const args = renderArgs(rawArgs);
     if (LOG_MODE === 'strict' || isJsonRpc(args[0])) {
       console.error(...args);
     } else {

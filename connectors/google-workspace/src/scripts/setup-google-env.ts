@@ -2,6 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { renderLogArg } from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '../..');
@@ -82,6 +83,6 @@ async function setupGoogleEnv(): Promise<void> {
 }
 
 setupGoogleEnv().catch(error => {
-  console.error('Fatal error:', error);
+  console.error('Fatal error:', renderLogArg(error));
   process.exit(1);
 });

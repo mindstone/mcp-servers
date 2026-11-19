@@ -108,7 +108,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to create draft',
         'CREATE_ERROR',
-        details
+        details,
+        error
       );
     }
   }
@@ -151,7 +152,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to list drafts',
         'LIST_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -187,7 +189,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to get draft',
         'GET_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -272,7 +275,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to update draft',
         'UPDATE_ERROR',
-        details
+        details,
+        error
       );
     }
   }
@@ -291,7 +295,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to delete draft',
         'DELETE_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }
@@ -379,7 +384,8 @@ export class DraftService {
       throw new GmailError(
         'Failed to send draft',
         'SEND_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }

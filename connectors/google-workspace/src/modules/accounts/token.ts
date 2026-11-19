@@ -5,6 +5,11 @@ import { AccountError, TokenStatus, TokenRenewalResult } from './types.js';
 import { GoogleOAuthClient } from './oauth.js';
 import logger from '../../utils/logger.js';
 import { atomicCredentialWrite, sweepStaleTemps } from '../../utils/atomicCredentialWrite.js';
+import {
+  CREDENTIAL_FILE_REFUSED_RESOLUTION,
+  CredentialFileRefusedError,
+  readCredentialFile,
+} from '../../utils/guardedCredentialRead.js';
 import { isRefreshTokenInvalidError } from './unauthorized.js';
 
 /**
@@ -54,13 +59,19 @@ export class TokenManager {
   async loadToken(email: string): Promise<any> {
     logger.debug(`Loading token for account: ${email}`);
     try {
-      const tokenPath = this.getTokenPath(email);
-      const data = await fs.readFile(tokenPath, 'utf-8');
+      const data = await readCredentialFile(this.getTokenPath(email));
+      // File doesn't exist - return null to trigger OAuth flow
+      if (data === null) return null;
       return JSON.parse(data);
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        // File doesn't exist - return null to trigger OAuth flow
-        return null;
+      if (error instanceof CredentialFileRefusedError) {
+        logger.warn('Refused to read a saved sign-in file', { reason: error.reason });
+        throw new AccountError(
+          'Saved sign-in was not read',
+          'CREDENTIAL_FILE_REFUSED',
+          CREDENTIAL_FILE_REFUSED_RESOLUTION,
+          error
+        );
       }
       throw new AccountError(
         'Failed to load token',
@@ -234,6 +245,8 @@ export class TokenManager {
         token
       };
     } catch (error) {
+      // A refused sign-in file reaches the tool result with its own guidance, not a renewal status.
+      if (error instanceof AccountError && error.code === 'CREDENTIAL_FILE_REFUSED') throw error;
       logger.error('Token auto-renewal error', error as Error);
       return {
         success: false,
@@ -333,6 +346,8 @@ export class TokenManager {
         requiredScopes: token.scope ? token.scope.split(' ') : undefined
       };
     } catch (error) {
+      // A refused sign-in file reaches the tool result with its own guidance, not a renewal status.
+      if (error instanceof AccountError && error.code === 'CREDENTIAL_FILE_REFUSED') throw error;
       logger.error('Token validation error', error as Error);
       return {
         valid: false,

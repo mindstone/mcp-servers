@@ -579,6 +579,8 @@ describe('copyTabContent', () => {
     const error = await copyTabContent(deps).catch((e: unknown) => e);
     expect(error).toMatchObject({ phase: 'plan source', wroteContent: false, attemptedWrite: false });
     expect((error as TabCopyError).cause).toBeInstanceOf(DocsInputError);
+    expect(Object.getOwnPropertyDescriptor(error, 'cause')?.enumerable).toBe(false);
+    expect(Object.keys(error as object)).not.toContain('cause');
     expect(log).not.toContain('prepareTarget');
     expect(batches).toHaveLength(0);
   });

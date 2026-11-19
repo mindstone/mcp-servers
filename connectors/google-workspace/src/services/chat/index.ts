@@ -155,21 +155,26 @@ export class ChatService extends BaseGoogleService<ChatApiClient> {
       return new ChatError(
         gError.message || fallbackMessage, // Fallback message
         gError.data?.code || "GOOGLE_SERVICE_ERROR", // Code from data
-        gError.data?.details // Details from data
+        gError.data?.details, // Details from data
+        error
       );
     }
     // Handle other potential errors (e.g. network errors)
     else if (error instanceof Error) {
       return new ChatError(
         `${fallbackMessage}: ${error.message}`,
-        "UNKNOWN_API_ERROR"
+        "UNKNOWN_API_ERROR",
+        undefined,
+        error
       );
     }
     // Handle non-Error throws
     else {
       return new ChatError(
         `${fallbackMessage} due to an unknown issue`,
-        "UNKNOWN_INTERNAL_ERROR"
+        "UNKNOWN_INTERNAL_ERROR",
+        undefined,
+        error
       );
     }
   }

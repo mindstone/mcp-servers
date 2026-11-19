@@ -64,6 +64,8 @@ export interface SlidesOperationResult {
   success: boolean;
   data?: PresentationResponse | SlidesPresentation | SlideInfo[] | SlidesBatchUpdateResponse | SlidesThumbnail;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
 }
 
 export interface ExtractPresentationIdResult {

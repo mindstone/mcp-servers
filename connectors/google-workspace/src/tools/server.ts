@@ -2,9 +2,16 @@ import { FILE_READ_CAPABILITIES, fileReadContext } from '../file-read-context.js
 import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { createStdioTransport } from "./stdio-transport.js";
-import logger from '../utils/logger.js';
-import { GOOGLE_RATE_LIMIT_NEXT_STEP, isGoogleRecoveryExhausted, isShortWindowRateLimit } from '../utils/google-retry.js';
-import { describeApiErrorUntrusted } from '../utils/apiError.js';
+import logger, { renderLogArg } from '../utils/logger.js';
+import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
+import {
+  GENERIC_NEXT_STEP,
+  classifyGoogleFailure,
+  envelopeErrorDetail,
+  googleFailureNextStep,
+  hasErrorDetails,
+  summariseGoogleError,
+} from '../utils/apiError.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -43,7 +50,6 @@ import {
   handleManageWorkspaceLabel,
   handleManageWorkspaceLabelAssignment,
   handleManageWorkspaceLabelFilter,
-  handleManageWorkspaceAttachment,
   handleListWorkspaceDrafts,
   handleGetWorkspaceDraft,
   handleCreateWorkspaceDraft,
@@ -200,9 +206,6 @@ import {
 
 // Import error types
 import { AccountError } from '../modules/accounts/types.js';
-import { GmailError } from '../modules/gmail/types.js';
-import { CalendarError } from '../modules/calendar/types.js';
-import { ContactsError } from '../modules/contacts/types.js';
 
 // Import service initializer
 import { initializeAllServices } from '../utils/service-initializer.js';
@@ -214,7 +217,6 @@ import {
   SendEmailArgs,
   AuthenticateAccountArgs,
   ManageDraftParams,
-  ManageAttachmentParams,
   McpToolResponse,
 } from './types.js';
 import {
@@ -246,7 +248,6 @@ import {
   assertDriveTrashArgs,
   assertDriveRevisionsArgs,
   assertDriveDownloadRevisionArgs,
-  assertManageAttachmentParams,
   assertGetContactsParams,
   assertReadDocumentArgs,
   assertCreateDocumentArgs,
@@ -343,6 +344,23 @@ function extractResultMeta(result: unknown): Record<string, unknown> {
   return (typeof maybeMeta === 'object' && maybeMeta !== null)
     ? (maybeMeta as Record<string, unknown>)
     : {};
+}
+
+
+/** The thrown error's own text (which may quote Google), with a domain error's details. */
+function errorDetailText(error: unknown): string {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const parts = [message];
+  if (hasErrorDetails(error) && error.details) parts.push(error.details);
+  if (error instanceof McpError) {
+    const details = (error.data as { details?: unknown } | undefined)?.details;
+    if (typeof details === 'string' && details) parts.push(details);
+  }
+  return parts.filter(Boolean).join(': ');
+}
+
+function errorDetailField(text: string): { error_detail?: string } {
+  return text ? { error_detail: envelopeErrorDetail(text) } : {};
 }
 
 export class GSuiteServer {
@@ -556,12 +574,6 @@ export class GSuiteServer {
           case 'delete_workspace_attachment':
             assertBaseToolArguments(args);
             result = await handleDeleteWorkspaceAttachment(args as { email?: string; source: 'email' | 'calendar'; messageId: string; filename: string });
-            break;
-
-          // Attachment Management (deprecated)
-          case 'manage_workspace_attachment':
-            assertManageAttachmentParams(args);
-            result = await handleManageWorkspaceAttachment(args as ManageAttachmentParams);
             break;
 
           // Calendar Operations
@@ -1123,7 +1135,6 @@ export class GSuiteServer {
   }
 
   private formatErrorResponse(error: unknown) {
-    const recoveryExhausted = isGoogleRecoveryExhausted(error);
     // Read the string domain-error `code` from ANY domain error, not just AccountError:
     // CalendarError/GmailError/ContactsError all expose a string `code`, and a
     // `getCalendarClient` auth failure surfaces as `CalendarError('AUTH_REQUIRED')`, not an
@@ -1166,45 +1177,30 @@ export class GSuiteServer {
       };
     }
 
-    const rateLimited = numericStatus === 429 || recoveryExhausted || isShortWindowRateLimit(error);
-    const message = rateLimited
-      ? describeApiErrorUntrusted(error, 'google-workspace:api-error')
-      : error instanceof Error ? error.message : 'Unknown error occurred';
-
-    if (rateLimited) {
+    // Connector input checks: the connector's own guidance about the caller's input.
+    if (error instanceof McpError && (error.code === ErrorCode.InvalidParams || error.code === ErrorCode.InvalidRequest)) {
       return {
         ok: false,
-        action_required: message,
-        next_step: GOOGLE_RATE_LIMIT_NEXT_STEP
+        action_required: error.message,
+        next_step: GENERIC_NEXT_STEP
       };
     }
 
-    if (numericStatus === 403) {
+    // Account and sign-in problems: the resolution is connector text, the message may quote Google.
+    if (error instanceof AccountError) {
       return {
         ok: false,
-        action_required: message,
-        next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.'
+        action_required: `Google Workspace account problem. ${error.resolution}`,
+        next_step: error.resolution,
+        ...errorDetailField(error.message)
       };
     }
-
-    if (numericStatus !== undefined && numericStatus >= 500 && numericStatus <= 599) {
-      return {
-        ok: false,
-        action_required: message,
-        next_step: 'Google Workspace returned a temporary server error. Retry after a short delay; if it keeps failing, narrow the request and try again.'
-      };
-    }
-
-    const nextStep = error instanceof AccountError ? error.resolution :
-      error instanceof GmailError ? error.details :
-      error instanceof CalendarError ? error.message :
-      error instanceof ContactsError ? error.details :
-      'Review the error, adjust the request if needed, and retry.';
 
     return {
       ok: false,
-      action_required: message,
-      next_step: nextStep || 'Review the error, adjust the request if needed, and retry.'
+      action_required: summariseGoogleError(error),
+      next_step: googleFailureNextStep(classifyGoogleFailure(error)),
+      ...errorDetailField(errorDetailText(error))
     };
   }
 
@@ -1217,7 +1213,7 @@ export class GSuiteServer {
       await initializeAllServices();
       
       // Set up error handler
-      this.server.onerror = (error) => console.error('MCP Error:', error);
+      this.server.onerror = (error) => console.error('MCP Error:', renderLogArg(error));
       
       // Connect transport
       const transport = createStdioTransport();

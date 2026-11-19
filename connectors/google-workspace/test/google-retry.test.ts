@@ -8,6 +8,7 @@ import { mswServer } from './fixtures/setup.js';
 
 const EMAIL = 'user@example.com';
 const ROOT = 'https://gmail.googleapis.com/gmail/v1/users/me/messages';
+const PER_MINUTE_SUMMARY = "Google Workspace: Google received too many requests in a short time (quota exceeded per minute) (status 403). Reason: rateLimitExceeded. Wait a minute, then try again.";
 const QUOTA = {
   error: {
     code: 403,
@@ -249,12 +250,18 @@ describe('Google short-window rate-limit recovery', () => {
     mswServer.use(http.get(ROOT, () => { requests++; return HttpResponse.json(QUOTA, { status: 403 }); }));
     const response = await call();
     expect(response.isError).toBe(true);
-    expect(JSON.parse(response.content[0].text)).toEqual({
+    const envelope = JSON.parse(response.content[0].text);
+    // The GmailError keeps the quota 403 as its cause, so the summary still names the per-minute quota.
+    expect(envelope).toEqual({
       ok: false,
-      action_required: `<untrusted-content source="google-workspace:api-error">MCP error -32603: Failed to search emails: Failed to get emails: Error: ${QUOTA.error.message} (status 403)</untrusted-content>`,
+      action_required: PER_MINUTE_SUMMARY,
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      error_detail: expect.stringMatching(/^<untrusted-content source="google-workspace:api-error">Failed to get emails: [\s\S]*Quota exceeded for quota metric[\s\S]*<\/untrusted-content>$/),
       recoveryExhausted: true,
     });
+    expect(envelope.action_required).toMatch(/quota exceeded/i);
+    expect(envelope.action_required).toMatch(/\bper minute\b/);
+    expect(envelope.action_required).toContain('(status 403)');
     expect(requests).toBe(8);
   });
 
@@ -286,8 +293,9 @@ describe('Google short-window rate-limit recovery', () => {
     expect(response.isError).toBe(true);
     expect(JSON.parse(response.content[0].text)).toMatchObject({
       ok: false,
-      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
+      action_required: PER_MINUTE_SUMMARY,
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      error_detail: expect.stringContaining(QUOTA.error.message),
       recoveryExhausted: true,
     });
     expect(requests).toBe(expectedRequests);
@@ -300,10 +308,12 @@ describe('Google short-window rate-limit recovery', () => {
     const response = await call('read_workspace_document', { document_id: 'doc-1', return_json: true });
     const envelope = JSON.parse(response.content[0].text);
     expect(envelope).toMatchObject({
-      action_required: `<untrusted-content source="google-workspace:api-error">${QUOTA.error.message}</untrusted-content> (status 403)`,
+      action_required: PER_MINUTE_SUMMARY,
       next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      error_detail: expect.stringContaining(QUOTA.error.message),
       recoveryExhausted: true,
     });
+    expect(envelope.error_detail.match(/<untrusted-content /g)).toHaveLength(1);
   });
 
   it('keeps the Sheets service response for an insufficientPermissions 403', async () => {
@@ -320,8 +330,9 @@ describe('Google short-window rate-limit recovery', () => {
     const envelope = JSON.parse(response.content[0].text);
     expect(envelope).toMatchObject({
       ok: false,
-      action_required: 'MCP error -32603: Insufficient permissions',
-      next_step: 'Review the error, adjust the request if needed, and retry.',
+      action_required: 'Google Workspace: Google refused access (status 403). Reason: insufficientPermissions. Check that this Google account can open the item, or sign in to Google again and allow the access it asks for.',
+      next_step: 'Check that this Google account can open the item. If it cannot, ask the owner for access. Otherwise, sign in to Google again and allow the access it asks for, then try again.',
+      error_detail: '<untrusted-content source="google-workspace:api-error">MCP error -32603: Insufficient permissions</untrusted-content>',
     });
     expect(envelope).not.toHaveProperty('recoveryExhausted');
     expect(requests).toBe(1);
@@ -333,7 +344,7 @@ describe('Google short-window rate-limit recovery', () => {
     const error = Object.assign(new Error('Insufficient permissions'), {
       response: { status: 403, data: { error: { errors: [{ reason: 'insufficientPermissions' }] } } },
     });
-    // Ordinary Sheets errors lose their status; inject the raw error at the service boundary.
+    // Inject the raw error at the service boundary (no service wrapper in between).
     const read = vi.spyOn(getSheetsService(), 'getSpreadsheet').mockRejectedValueOnce(error);
     try {
       const response = await call('read_workspace_spreadsheet', { spreadsheet_id: 'sheet-1', return_json: true });
@@ -341,8 +352,9 @@ describe('Google short-window rate-limit recovery', () => {
       const envelope = JSON.parse(response.content[0].text);
       expect(envelope).toMatchObject({
         ok: false,
-        action_required: 'Insufficient permissions',
-        next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.',
+        action_required: 'Google Workspace: Google refused access (status 403). Reason: insufficientPermissions. Check that this Google account can open the item, or sign in to Google again and allow the access it asks for.',
+        error_detail: '<untrusted-content source="google-workspace:api-error">Insufficient permissions</untrusted-content>',
+        next_step: 'Check that this Google account can open the item. If it cannot, ask the owner for access. Otherwise, sign in to Google again and allow the access it asks for, then try again.',
       });
       expect(envelope).not.toHaveProperty('recoveryExhausted');
     } finally {

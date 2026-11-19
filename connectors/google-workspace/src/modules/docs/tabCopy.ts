@@ -173,13 +173,16 @@ export interface TabCopyDeps {
  * (`attemptedWrite`: a write whose reply was lost may still have applied).
  */
 export class TabCopyError extends Error {
+  /** The original failure: the native, non-enumerable `Error` cause. */
+  declare readonly cause: unknown;
+
   constructor(
     readonly phase: string,
     readonly wroteContent: boolean,
     readonly attemptedWrite: boolean,
-    readonly cause: unknown
+    cause: unknown
   ) {
-    super(`Copy failed during "${phase}": ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(`Copy failed during "${phase}": ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
     this.name = 'TabCopyError';
   }
 }

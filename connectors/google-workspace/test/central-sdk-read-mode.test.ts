@@ -163,7 +163,7 @@ describe('Google SDK request-scoped file read metadata', () => {
   function expectSuccess(result: CallToolResult) {
     if (result.isError) {
       // Diagnose the pre-fix RED separately from startup, auth, path or provider failures.
-      expect(JSON.parse(resultText(result))).toMatchObject({ ok: false, action_required: metadataError });
+      expect(JSON.parse(resultText(result))).toMatchObject({ ok: false, action_required: expect.stringContaining(metadataError) });
       expect(readContext.mock.calls.at(-1)?.[0]).toEqual(capabilities);
       expect(readContext.mock.calls.at(-1)?.[1]).toEqual({ signal: expect.any(AbortSignal) });
       expect(sendBodies).toEqual([]);
@@ -226,7 +226,7 @@ describe('Google SDK request-scoped file read metadata', () => {
     await initializeClient(capabilities);
     const result = await callTool({ name: 'send_workspace_email', arguments: sendArgs(approved), _meta: meta });
     expect(result.isError).toBe(true);
-    expect(JSON.parse(resultText(result))).toMatchObject({ ok: false, action_required: metadataError });
+    expect(JSON.parse(resultText(result))).toMatchObject({ ok: false, action_required: expect.stringContaining(metadataError) });
     expect(sendBodies).toEqual([]);
   });
 

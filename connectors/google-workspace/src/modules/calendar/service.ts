@@ -71,7 +71,8 @@ export class CalendarService {
       throw new CalendarError(
         'Failed to initialize Calendar service',
         'INIT_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        error instanceof Error ? error.message : 'Unknown error',
+        error
       );
     }
   }
@@ -162,7 +163,8 @@ export class CalendarService {
       throw new CalendarError(
         'Failed to initialize Calendar client',
         'AUTH_ERROR',
-        'Please try again or contact support if the issue persists'
+        'Please try again or contact support if the issue persists',
+        error
       );
     }
   }
@@ -260,7 +262,8 @@ export class CalendarService {
         throw new CalendarError(
           `Could not ${attachment.driveFileId ? 'find the Drive file for' : 'upload'} attachment "${label}": ${describeError(error)}`,
           'ATTACHMENT_ERROR',
-          'No event was created'
+          'No event was created',
+          error
         );
       }
 
@@ -368,7 +371,8 @@ export class CalendarService {
           throw new CalendarError(
             'Invalid date format',
             'INVALID_DATE',
-            'Please provide dates in ISO format or YYYY-MM-DD format'
+            'Please provide dates in ISO format or YYYY-MM-DD format',
+            error
           );
         }
       }
@@ -413,7 +417,8 @@ export class CalendarService {
             "You don't have permission to view events on this calendar. " +
             "Your access may be 'freeBusyReader' only. Use find_free_slots to check availability instead.",
             'PERMISSION_DENIED',
-            `Calendar ID: ${calendarId}`
+            `Calendar ID: ${calendarId}`,
+            error
           );
         }
         throw error;
@@ -457,7 +462,8 @@ export class CalendarService {
           throw new CalendarError(
             hint,
             'NOT_FOUND',
-            `Event ID: ${eventId}`
+            `Event ID: ${eventId}`,
+            error
           );
         }
         // Handle permission errors for shared calendars
@@ -466,7 +472,8 @@ export class CalendarService {
             "You don't have permission to view events on this calendar. " +
             "Your access may be 'freeBusyReader' only. Use find_free_slots to check availability instead.",
             'PERMISSION_DENIED',
-            `Calendar ID: ${calendarId}`
+            `Calendar ID: ${calendarId}`,
+            error
           );
         }
         throw error;
@@ -574,7 +581,8 @@ export class CalendarService {
             "You need 'writer' access to add events to shared calendars. " +
             "Use list_workspace_calendars to check your access level.",
             'PERMISSION_DENIED',
-            `Calendar ID: ${targetCalendarId}`
+            `Calendar ID: ${targetCalendarId}`,
+            error
           );
         }
         throw error;

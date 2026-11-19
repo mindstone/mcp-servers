@@ -21,6 +21,7 @@ import {
   readAliasedValue
 } from './arg-aliases.js';
 import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
+import { operationFailure } from '../utils/apiError.js';
 
 // Handler argument types
 interface ReadPresentationArgs {
@@ -215,7 +216,7 @@ export async function handleReadPresentation(args: ReadPresentationArgs): Promis
     const result = await slidesService.getPresentation(email, presentationId, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to read presentation');
+      throw operationFailure(result, result.error || 'Failed to read presentation');
     }
     
     if (returnJson) {
@@ -247,7 +248,7 @@ export async function handleCreatePresentation(args: CreatePresentationArgs): Pr
     const result = await slidesService.createPresentation(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to create presentation');
+      throw operationFailure(result, result.error || 'Failed to create presentation');
     }
     
     const presResponse = result.data as PresentationResponse;
@@ -273,7 +274,7 @@ export async function handleListSlides(args: ListSlidesArgs): Promise<McpToolRes
     const result = await slidesService.listSlides(email, presentationId, includeNotes);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to list slides');
+      throw operationFailure(result, result.error || 'Failed to list slides');
     }
     
     const slides = result.data as SlideInfo[];
@@ -308,7 +309,7 @@ export async function handleGetSlide(args: GetSlideArgs): Promise<McpToolRespons
     const result = await slidesService.getSlide(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to get slide');
+      throw operationFailure(result, result.error || 'Failed to get slide');
     }
     
     if (returnJson) {
@@ -368,7 +369,7 @@ export async function handleBatchUpdatePresentation(args: BatchUpdatePresentatio
     const result = await slidesService.batchUpdate(email, presentationId, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to update presentation');
+      throw operationFailure(result, result.error || 'Failed to update presentation');
     }
     
     if (returnJson) {
@@ -420,7 +421,7 @@ export async function handleGetSlideThumbnail(args: GetSlideThumbnailArgs): Prom
     const result = await slidesService.getPageThumbnail(email, presentationId, slideId as string, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to get slide thumbnail');
+      throw operationFailure(result, result.error || 'Failed to get slide thumbnail');
     }
     
     // Format as human-readable text

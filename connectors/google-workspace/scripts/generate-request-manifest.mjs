@@ -47,7 +47,6 @@ const endpointOverrides = new Map(Object.entries({
   update_workspace_draft: ['gmail', 'PUT', 'https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/{id}'],
   delete_workspace_draft: ['gmail', 'DELETE', 'https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/{id}'],
   send_workspace_draft: ['gmail', 'POST', 'https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/send'],
-  manage_workspace_attachment: ['gmail', 'GET', 'https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}'],
   download_workspace_attachment: ['gmail', 'GET', 'https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}'],
   upload_workspace_attachment: ['local', 'LOCAL', 'local://attachments/upload'],
   delete_workspace_attachment: ['local', 'LOCAL', 'local://attachments/{id}'],

@@ -2,7 +2,7 @@ import { CalendarService } from '../modules/calendar/service.js';
 import { DriveService } from '../modules/drive/service.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { toMcpError } from '../utils/apiError.js';
-import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
+import { getAccountManager, validateEmail, resolveEmail, AccountError } from '../modules/accounts/index.js';
 import { EventResponse, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
 import { wrapUntrustedJsonValues } from '../utils/untrusted-content.js';
@@ -69,6 +69,9 @@ async function tryGetCalendarTimezone(email: string): Promise<string | null> {
     const settings = await calendar.settings.get({ setting: 'timezone' });
     return settings.data.value || null;
   } catch (err) {
+    // Best-effort for ordinary failures, but a refused saved sign-in must reach the tool
+    // result rather than become a silent UTC answer.
+    if (err instanceof AccountError && err.code === 'CREDENTIAL_FILE_REFUSED') throw err;
     console.warn('[calendar] Failed to fetch timezone from settings', err instanceof Error ? err.message : '');
     return null;
   }

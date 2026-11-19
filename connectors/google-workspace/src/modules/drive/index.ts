@@ -1,7 +1,6 @@
 import { driveService } from '../../services/drive/index.js';
 import { DriveService } from './service.js';
 import { DriveActivityService } from './activity-service.js';
-import { DriveOperationResult } from './types.js';
 
 // Export types and service
 export * from './types.js';
@@ -37,12 +36,4 @@ export async function getDriveActivityService(): Promise<DriveActivityService> {
 export async function initializeDriveModule(): Promise<void> {
   const service = await getDriveService();
   await service.ensureInitialized();
-}
-
-// Helper to handle errors consistently
-export function handleDriveError(error: unknown): DriveOperationResult {
-  return {
-    success: false,
-    error: error instanceof Error ? error.message : 'Unknown error occurred',
-  };
 }

@@ -728,7 +728,7 @@ describe('Google Workspace mock API error handling', () => {
     const handlers = await loadHandlers();
     const response = handlers.formatErrorResponse({ response: { status: 403 }, message: 'Forbidden' });
     expect(response).toMatchObject({ ok: false });
-    expect(JSON.stringify(response)).toContain('insufficient');
+    expect(response.next_step).toContain('ask the owner for access');
   });
 
   it('returns back-off recovery guidance for 429 errors', async () => {
@@ -780,8 +780,9 @@ describe('Google Workspace mock API error handling', () => {
       expect(response.isError, JSON.stringify(response)).toBe(true);
       const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
       expect(envelope.next_step, JSON.stringify({ response, envelope })).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
-      expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
-      expect(envelope.action_required).toContain('Too many requests');
+      expect(envelope.action_required).toBe("Google Workspace: Google received too many requests in a short time (status 429). Wait a minute, then try again.");
+      expect(envelope.error_detail).toContain('<untrusted-content source="google-workspace:api-error">');
+      expect(envelope.error_detail).toContain('Too many requests');
       expect(envelope).not.toHaveProperty('recoveryExhausted');
     }
     expect(spreadsheetRequests).toBe(4);
@@ -821,7 +822,8 @@ describe('Google Workspace mock API error handling', () => {
     });
     const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
     expect(response.isError).toBe(true);
-    expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
+    expect(envelope.action_required).toBe("Google Workspace: Google received too many requests in a short time (status 429). Wait a minute, then try again.");
+    expect(envelope.error_detail).toContain('<untrusted-content source="google-workspace:api-error">');
     expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
     expect(envelope).not.toHaveProperty('recoveryExhausted');
     expect(requests).toBe(1);
@@ -841,8 +843,9 @@ describe('Google Workspace mock API error handling', () => {
     });
     const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
     expect(response.isError).toBe(true);
-    expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
-    expect(envelope.action_required).toContain('Too many requests');
+    expect(envelope.action_required).toBe("Google Workspace: Google received too many requests in a short time (status 429). Wait a minute, then try again.");
+    expect(envelope.error_detail).toContain('<untrusted-content source="google-workspace:api-error">');
+    expect(envelope.error_detail).toContain('Too many requests');
     expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
     expect(envelope).not.toHaveProperty('recoveryExhausted');
     expect(requests).toBe(1);
@@ -869,9 +872,10 @@ describe('Google Workspace mock API error handling', () => {
     });
     const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
     expect(response.isError).toBe(true);
-    expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
-    expect(envelope.action_required).toContain('Daily Limit Exceeded');
-    expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
+    expect(envelope.action_required).toBe("Google Workspace: Google's daily limit was reached (status 429). Reason: dailyLimitExceeded. Try again tomorrow, or ask your Google Workspace administrator about the limit.");
+    expect(envelope.error_detail).toContain('<untrusted-content source="google-workspace:api-error">');
+    expect(envelope.error_detail).toContain('Daily Limit Exceeded');
+    expect(envelope.next_step).toBe("Google's daily limit for this account was reached, so retrying today will not help. Try again tomorrow, or ask the Google Workspace administrator about the limit.");
     expect(requests).toBe(1);
   });
 
@@ -898,7 +902,8 @@ describe('Google Workspace mock API error handling', () => {
     const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
     expect(response.isError).toBe(true);
     expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
-    expect(envelope.action_required).toContain('Too many requests');
+    expect(envelope.action_required).toContain("Google received too many requests in a short time (status 429)");
+    expect(envelope.error_detail).toContain('Too many requests');
     expect(sends).toBe(0);
   });
 
@@ -941,7 +946,8 @@ describe('Google Workspace mock API error handling', () => {
       const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
       expect(response.isError).toBe(true);
       expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
-      expect(envelope.action_required).toContain('<untrusted-content source="google-workspace:api-error">');
+      expect(envelope.action_required).toBe("Google Workspace: Google received too many requests in a short time (quota exceeded per minute) (status 403). Reason: rateLimitExceeded. Wait a minute, then try again.");
+      expect(envelope.error_detail).toContain('<untrusted-content source="google-workspace:api-error">');
     }
     expect(createRequests).toBe(1);
     expect(deleteRequests).toBe(1);
@@ -951,7 +957,7 @@ describe('Google Workspace mock API error handling', () => {
     const handlers = await loadHandlers();
     const response = handlers.formatErrorResponse({ response: { status: 500 }, message: 'Backend error' });
     expect(response).toMatchObject({ ok: false });
-    expect(JSON.stringify(response).toLowerCase()).toContain('retry');
+    expect(String(response.next_step)).toMatch(/retry|try again/i);
   });
 });
 
@@ -2191,7 +2197,8 @@ describe('Docs tab copy', () => {
     const envelope = JSON.parse(response.content[0].text) as Record<string, unknown>;
     expect(response.isError).toBe(true);
     expect(envelope.next_step).toBe('Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.');
-    expect(envelope.action_required).toContain('Target tab t.old was cleared and may be partly written; restore it from the document\'s version history.');
+    expect(envelope.action_required).toContain("Google received too many requests in a short time (status 429)");
+    expect(envelope.error_detail).toContain('Target tab t.old was cleared and may be partly written; restore it from the document\'s version history.');
     expect(batches.filter(batch => batch.requests.some(req => req.insertText))).toHaveLength(1);
   });
 

@@ -58,20 +58,25 @@ export class MeetService extends BaseGoogleService<MeetApiClient> {
       return new MeetError(
         gError.message || `Error ${action}`, // Fallback message
         gError.data?.code || "GOOGLE_SERVICE_ERROR", // Code from data
-        gError.data?.details // Details from data
+        gError.data?.details, // Details from data
+        error
       );
     }
     // Handle other potential errors (e.g. network errors)
     else if (error instanceof Error) {
       return new MeetError(
         `Failed to ${action}: ${error.message}`,
-        "UNKNOWN_API_ERROR" // More specific code
+        "UNKNOWN_API_ERROR", // More specific code
+        undefined,
+        error
       );
     }
     // Handle non-Error throws
     return new MeetError(
       `Failed to ${action} due to an unknown issue`,
-      "UNKNOWN_INTERNAL_ERROR" // More specific code
+      "UNKNOWN_INTERNAL_ERROR", // More specific code
+      undefined,
+      error
     );
   }
 

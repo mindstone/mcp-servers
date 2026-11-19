@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { isAbsolute } from 'node:path';
 
 /** Negotiation is connection-scoped; the selected mode belongs to one SDK request. */
@@ -21,7 +22,7 @@ const extraSchema = z.object({ _meta: z.object({ 'files/readMode': readModeSchem
 export function fileReadContext(capabilities: unknown, extra: unknown): FileReadContext {
   if (!capabilitiesSchema.safeParse(capabilities).success) return { version: 1, mode: 'standalone' };
   const parsed = extraSchema.safeParse(extra);
-  if (!parsed.success) throw new Error('Negotiated file reads require valid request files/readMode metadata.');
+  if (!parsed.success) throw new McpError(ErrorCode.InvalidParams, 'Negotiated file reads require valid request files/readMode metadata.');
   return parsed.data._meta['files/readMode'];
 }
 
@@ -30,6 +31,6 @@ export function centralReadPath(context: FileReadContext | undefined, rawPath: s
   if (!context || context.mode === 'standalone') return undefined;
   const matches = context.reads.filter(read => read.rawPath === rawPath &&
     read.location.length === location.length && read.location.every((part, index) => part === location[index]));
-  if (matches.length !== 1) throw new Error('Central file read requires exactly one allowed concrete operand.');
+  if (matches.length !== 1) throw new McpError(ErrorCode.InvalidParams, 'Central file read requires exactly one allowed concrete operand.');
   return matches[0].canonicalPath;
 }

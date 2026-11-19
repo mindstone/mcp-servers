@@ -1,4 +1,5 @@
 import { AttachmentIndexService } from './index-service.js';
+import { renderLogArg } from '../../utils/logger.js';
 
 /**
  * Service for managing attachment cleanup with intelligent scheduling
@@ -138,7 +139,7 @@ export class AttachmentCleanupService {
         );
       }
     } catch (error) {
-      console.error('Error during attachment cleanup:', error);
+      console.error('Error during attachment cleanup:', renderLogArg(error));
     }
   }
 }

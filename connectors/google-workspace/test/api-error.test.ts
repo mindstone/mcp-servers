@@ -3,10 +3,15 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import {
   describeApiError,
   extractHttpStatus,
+  failedResult,
   hasErrorDetails,
   isAuthHandoffError,
+  operationFailure,
   toMcpError,
+  withCause,
 } from '../src/utils/apiError.js';
+import { GmailError } from '../src/modules/gmail/types.js';
+import { BaseGoogleService, GoogleServiceError } from '../src/services/base/BaseGoogleService.js';
 
 describe('extractHttpStatus', () => {
   it('prefers response.status', () => {
@@ -169,5 +174,84 @@ describe('isAuthHandoffError', () => {
     expect(isAuthHandoffError('AUTH_REQUIRED')).toBe(false);
     expect(isAuthHandoffError(null)).toBe(false);
     expect(isAuthHandoffError(undefined)).toBe(false);
+  });
+});
+
+/** A Google 403 as googleapis throws it: the status lives on the transport error only. */
+function google403(): Error {
+  return Object.assign(new Error('Request had insufficient authentication scopes. File "Board pack"'), {
+    response: { status: 403, data: { error: { code: 403, errors: [{ reason: 'insufficientPermissions' }] } } },
+  });
+}
+
+class ProbeService extends BaseGoogleService<unknown> {
+  constructor() {
+    super({ serviceName: 'probe', version: 'v1' });
+  }
+
+  wrap(error: unknown): Error {
+    return this.handleError(error, 'Failed to probe');
+  }
+}
+
+describe('withCause', () => {
+  it('links the cause without making it enumerable', () => {
+    const original = google403();
+    const target = withCause({ success: false, error: 'Failed' }, original);
+
+    expect(target.cause).toBe(original);
+    expect(Object.keys(target)).toEqual(['success', 'error']);
+    expect(JSON.stringify(target)).toBe('{"success":false,"error":"Failed"}');
+    expect({ ...target }).not.toHaveProperty('cause');
+  });
+
+  it('never overwrites an existing cause', () => {
+    const first = new Error('first');
+    const target = new Error('wrapper', { cause: first });
+
+    withCause(target, new Error('second'));
+
+    expect(target.cause).toBe(first);
+  });
+
+  it('leaves the target untouched when there is no cause', () => {
+    const target = withCause({ success: false, error: 'Failed' }, undefined);
+
+    expect(Object.prototype.hasOwnProperty.call(target, 'cause')).toBe(false);
+  });
+});
+
+describe('status survives the connector wrappers', () => {
+  it('reads 403 through a GmailError built with a cause', () => {
+    const wrapped = new GmailError('Failed to search emails', 'SEARCH_ERROR', 'Error: x', google403());
+
+    expect(extractHttpStatus(wrapped)).toBe(403);
+    expect(JSON.stringify(wrapped)).not.toContain('Board pack');
+  });
+
+  it('reads 403 through a GoogleServiceError from BaseGoogleService.handleError', () => {
+    const wrapped = new ProbeService().wrap(google403());
+
+    expect(wrapped).toBeInstanceOf(GoogleServiceError);
+    expect(wrapped.message).toContain('Failed to probe');
+    expect(extractHttpStatus(wrapped)).toBe(403);
+    expect(Object.keys(wrapped)).not.toContain('cause');
+  });
+
+  it('reads 403 through a toMcpError wrapper', () => {
+    const wrapped = toMcpError(google403(), 'Failed to list files');
+
+    expect(wrapped).toBeInstanceOf(McpError);
+    expect(extractHttpStatus(wrapped)).toBe(403);
+  });
+
+  it('reads 403 through operationFailure built from failedResult', () => {
+    const result = failedResult(google403(), 'Request had insufficient authentication scopes. (status 403)');
+    const wrapped = operationFailure(result, `Failed to read spreadsheet: ${result.error}`);
+
+    expect(wrapped).toBeInstanceOf(McpError);
+    expect(wrapped.code).toBe(ErrorCode.InternalError);
+    expect(extractHttpStatus(wrapped)).toBe(403);
+    expect(JSON.stringify(result)).not.toContain('cause');
   });
 });

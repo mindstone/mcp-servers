@@ -2,7 +2,7 @@ import { getFormsService, FormsService } from '../modules/forms/index.js';
 import { getDriveService, DriveService } from '../modules/drive/index.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { toMcpError } from '../utils/apiError.js';
+import { operationFailure, toMcpError } from '../utils/apiError.js';
 import { Form, FormItem, FormResponse, Question } from '../modules/forms/types.js';
 import {
   readAliasedNumber,
@@ -331,8 +331,8 @@ export async function handleGetForm(params: GetFormParams) {
             `Form not found: "${formId}". Use list_forms to see available forms.`
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to get form: ${result.error}`
         );
       }
@@ -423,8 +423,8 @@ export async function handleListFormResponses(params: ListFormResponsesParams) {
             `Form not found: "${formId}". Use list_forms to see available forms.`
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to list form responses: ${result.error}`
         );
       }
@@ -517,8 +517,8 @@ export async function handleGetFormResponse(params: GetFormResponseParams) {
             'Use list_form_responses to see available responses.'
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to get form response: ${result.error}`
         );
       }

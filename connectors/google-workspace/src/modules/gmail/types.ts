@@ -344,8 +344,8 @@ export class GmailError extends Error implements GmailError {
   code: string;
   details?: string;
 
-  constructor(message: string, code: string, details?: string) {
-    super(message);
+  constructor(message: string, code: string, details?: string, cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'GmailError';
     this.code = code;
     this.details = details;

@@ -14,8 +14,7 @@ BaseToolArguments,
   DriveDownloadArgs,
   DriveFolderArgs,
   DrivePermissionArgs,
-  DriveDeleteArgs,
-  ManageAttachmentParams
+  DriveDeleteArgs
 } from './types.js';
 import { GetContactsParams } from '../modules/contacts/types.js';
 
@@ -545,30 +544,6 @@ export function isManageDraftParams(args: unknown): args is ManageDraftParams {
         (data.references === undefined || (Array.isArray(data.references) && data.references.every(ref => typeof ref === 'string'))) &&
         (data.inReplyTo === undefined || typeof data.inReplyTo === 'string');
     })());
-}
-
-export function isManageAttachmentParams(args: unknown): args is ManageAttachmentParams {
-  if (typeof args !== 'object' || args === null) return false;
-  const params = args as Partial<ManageAttachmentParams>;
-  const rawParams = args as Record<string, unknown>;
-  const messageId = readAliasedArg<string>(rawParams, 'message_id', 'messageId');
-  const mimeType = readAliasedArg<string>(rawParams, 'mime_type', 'mimeType');
-  
-  return (params.email === undefined || typeof params.email === 'string') &&
-    typeof params.action === 'string' &&
-    ['download', 'upload', 'delete'].includes(params.action) &&
-    typeof params.source === 'string' &&
-    ['email', 'calendar'].includes(params.source) &&
-    typeof messageId === 'string' &&
-    typeof params.filename === 'string' &&
-    (mimeType === undefined || typeof mimeType === 'string') &&
-    (params.content === undefined || typeof params.content === 'string');
-}
-
-export function assertManageAttachmentParams(args: unknown): asserts args is ManageAttachmentParams {
-  if (!isManageAttachmentParams(args)) {
-    throw new Error('Invalid attachment management parameters. Required: email, action, source, message_id, filename');
-  }
 }
 
 export function assertManageDraftParams(args: unknown): asserts args is ManageDraftParams {

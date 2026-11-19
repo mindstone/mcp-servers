@@ -2,7 +2,7 @@ import { ToolMetadata } from "../../modules/tools/registry.js";
 
 // Gmail Tools
 export const gmailTools: ToolMetadata[] = [
-  // --- Individual attachment tools (replaced legacy manage_workspace_attachment) ---
+  // --- Attachment tools ---
 
   {
     name: 'download_workspace_attachment',
@@ -97,26 +97,6 @@ export const gmailTools: ToolMetadata[] = [
         }
       },
       required: ['source', 'message_id', 'filename']
-    }
-  },
-  {
-    name: 'manage_workspace_attachment',
-    category: 'Gmail/Messages',
-    description: `Legacy consolidated attachment tool. Prefer download_workspace_attachment, upload_workspace_attachment, or delete_workspace_attachment for new calls.`,
-    aliases: ['manage_attachment'],
-    annotations: { readOnlyHint: false, destructiveHint: true },
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', description: 'Email address of the workspace account' },
-        action: { type: 'string', enum: ['download', 'upload', 'delete'], description: 'Attachment action to perform' },
-        source: { type: 'string', enum: ['email', 'calendar'], description: 'Source type' },
-        message_id: { type: 'string', description: 'ID of the email/event containing the attachment' },
-        filename: { type: 'string', description: 'Attachment filename' },
-        mime_type: { type: 'string', description: 'MIME type for upload' },
-        content: { type: 'string', description: 'Base64 content for upload' }
-      },
-      required: ['action', 'source', 'message_id', 'filename']
     }
   },
   {

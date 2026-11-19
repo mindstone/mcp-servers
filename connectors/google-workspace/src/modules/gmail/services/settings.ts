@@ -125,7 +125,8 @@ export class SettingsService {
       throw new GmailError(
         'Failed to get Gmail settings',
         'SETTINGS_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       );
     }
   }
@@ -210,7 +211,8 @@ export class SettingsService {
       throw new GmailError(
         'Failed to update vacation responder',
         'SETTINGS_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       );
     }
   }
@@ -242,7 +244,8 @@ export class SettingsService {
       throw new GmailError(
         'Failed to list send-as aliases',
         'SETTINGS_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       );
     }
   }

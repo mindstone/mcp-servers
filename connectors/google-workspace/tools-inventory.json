@@ -49,14 +49,6 @@
       }
     },
     {
-      "name": "manage_workspace_attachment",
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "openWorldHint": true
-      }
-    },
-    {
       "name": "search_workspace_emails",
       "annotations": {
         "readOnlyHint": true,

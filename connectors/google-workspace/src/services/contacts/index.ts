@@ -89,21 +89,26 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
         throw new ContactsError(
           gError.message || "Error retrieving contacts", // Fallback message
           gError.data?.code || "GOOGLE_SERVICE_ERROR", // Code from data
-          gError.data?.details // Details from data
+          gError.data?.details, // Details from data
+          error
         );
       }
       // Handle other potential errors (e.g. network errors)
       else if (error instanceof Error) {
         throw new ContactsError(
           `Failed to retrieve contacts: ${error.message}`,
-          "UNKNOWN_API_ERROR" // More specific code
+          "UNKNOWN_API_ERROR", // More specific code
+          undefined,
+          error
         );
       }
       // Handle non-Error throws
       else {
         throw new ContactsError(
           "Failed to retrieve contacts due to an unknown issue",
-          "UNKNOWN_INTERNAL_ERROR" // More specific code
+          "UNKNOWN_INTERNAL_ERROR", // More specific code
+          undefined,
+          error
         );
       }
     }
@@ -176,17 +181,22 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
         throw new ContactsError(
           gError.message || 'Error searching contacts',
           gError.data?.code || 'GOOGLE_SERVICE_ERROR',
-          gError.data?.details
+          gError.data?.details,
+          error
         );
       } else if (error instanceof Error) {
         throw new ContactsError(
           `Failed to search contacts: ${error.message}`,
-          'SEARCH_ERROR'
+          'SEARCH_ERROR',
+          undefined,
+          error
         );
       } else {
         throw new ContactsError(
           'Failed to search contacts due to an unknown issue',
-          'UNKNOWN_ERROR'
+          'UNKNOWN_ERROR',
+          undefined,
+          error
         );
       }
     }
@@ -258,13 +268,14 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
       return new ContactsError(
         gError.message || `Error ${action} contact`,
         gError.data?.code || 'GOOGLE_SERVICE_ERROR',
-        gError.data?.details
+        gError.data?.details,
+        error
       );
     }
     if (error instanceof Error) {
-      return new ContactsError(`Failed to ${action} contact: ${describeApiError(error)}`, 'WRITE_ERROR');
+      return new ContactsError(`Failed to ${action} contact: ${describeApiError(error)}`, 'WRITE_ERROR', undefined, error);
     }
-    return new ContactsError(`Failed to ${action} contact due to an unknown issue`, 'UNKNOWN_ERROR');
+    return new ContactsError(`Failed to ${action} contact due to an unknown issue`, 'UNKNOWN_ERROR', undefined, error);
   }
 
   /**

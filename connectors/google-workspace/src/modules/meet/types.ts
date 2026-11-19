@@ -102,8 +102,8 @@ export class MeetError extends Error {
   code: string;
   details?: string;
 
-  constructor(message: string, code: string, details?: string) {
-    super(message);
+  constructor(message: string, code: string, details?: string, cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
     this.name = "MeetError";
     this.code = code;
     this.details = details;

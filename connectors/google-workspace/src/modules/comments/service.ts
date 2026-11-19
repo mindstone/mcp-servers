@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError, isPassthroughGoogleError } from '../../utils/apiError.js';
+import { describeApiError, failedResult, isPassthroughGoogleError } from '../../utils/apiError.js';
 import { DRIVE_SCOPES } from '../drive/scopes.js';
 import {
   CommentsOperationResult,
@@ -133,10 +133,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: describeApiError(error),
-      };
+      return failedResult(error, describeApiError(error));
     }
   }
 
@@ -185,10 +182,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: describeApiError(error),
-      };
+      return failedResult(error, describeApiError(error));
     }
   }
 
@@ -226,10 +220,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: describeApiError(error),
-      };
+      return failedResult(error, describeApiError(error));
     }
   }
 
@@ -266,10 +257,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: describeApiError(error),
-      };
+      return failedResult(error, describeApiError(error));
     }
   }
 
@@ -301,10 +289,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: describeApiError(error),
-      };
+      return failedResult(error, describeApiError(error));
     }
   }
 }

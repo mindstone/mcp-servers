@@ -2,11 +2,16 @@ import crypto from 'node:crypto';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { Account, AccountsConfig, AccountError, AccountModuleConfig } from './types.js';
+import { Account, AccountsConfig, AccountError, AccountModuleConfig, TokenRenewalResult } from './types.js';
 import { scopeRegistry } from '../tools/scope-registry.js';
 import { TokenManager } from './token.js';
 import { atomicCredentialWrite, sweepStaleTemps } from '../../utils/atomicCredentialWrite.js';
 import { GoogleOAuthClient } from './oauth.js';
+import {
+  CREDENTIAL_FILE_REFUSED_RESOLUTION,
+  CredentialFileRefusedError,
+  readCredentialFile,
+} from '../../utils/guardedCredentialRead.js';
 import logger from '../../utils/logger.js';
 import { isUnauthorizedError } from './unauthorized.js';
 
@@ -41,8 +46,20 @@ export class AccountManager {
     
     // Add auth status to each account and attempt auto-renewal if needed
     for (const account of accounts) {
-      const renewalResult = await this.tokenManager.autoRenewToken(account.email);
-      
+      let renewalResult: TokenRenewalResult;
+      try {
+        renewalResult = await this.tokenManager.autoRenewToken(account.email);
+      } catch (error) {
+        if (!(error instanceof AccountError && error.code === 'CREDENTIAL_FILE_REFUSED')) throw error;
+        // One refused sign-in file must not fail the whole list.
+        account.auth_status = {
+          valid: false,
+          status: 'ERROR',
+          reason: CREDENTIAL_FILE_REFUSED_RESOLUTION
+        };
+        continue;
+      }
+
       if (renewalResult.success) {
         account.auth_status = {
           valid: true,
@@ -154,22 +171,31 @@ export class AccountManager {
       // Ensure directory exists with restrictive permissions
       await fs.mkdir(path.dirname(this.accountsPath), { recursive: true, mode: 0o700 });
       
-      let data: string;
+      let data: string | null;
       try {
-        data = await fs.readFile(this.accountsPath, 'utf-8');
+        data = await readCredentialFile(this.accountsPath);
       } catch (error) {
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-          // Create empty accounts file if it doesn't exist
-          logger.info('Creating new accounts file');
-          data = JSON.stringify({ accounts: [] });
-          await atomicCredentialWrite(this.accountsPath, data, { mode: 0o600 });
-        } else {
+        if (error instanceof CredentialFileRefusedError) {
+          logger.warn('Refused to read the saved accounts list', { reason: error.reason });
           throw new AccountError(
-            'Failed to read accounts configuration',
-            'ACCOUNTS_READ_ERROR',
-            'Please ensure the accounts file is readable'
+            'Accounts list was not read',
+            'CREDENTIAL_FILE_REFUSED',
+            CREDENTIAL_FILE_REFUSED_RESOLUTION,
+            error
           );
         }
+        throw new AccountError(
+          'Failed to read accounts configuration',
+          'ACCOUNTS_READ_ERROR',
+          'Please ensure the accounts file is readable'
+        );
+      }
+
+      if (data === null) {
+        // Create empty accounts file if it doesn't exist
+        logger.info('Creating new accounts file');
+        data = JSON.stringify({ accounts: [] });
+        await atomicCredentialWrite(this.accountsPath, data, { mode: 0o600 });
       }
 
       try {

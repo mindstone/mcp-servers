@@ -664,14 +664,6 @@
     "handlerModule": "src/tools/sheets-handlers.ts"
   },
   {
-    "tool": "manage_workspace_attachment",
-    "service": "gmail",
-    "method": "GET",
-    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}",
-    "handlerId": "handleManageWorkspaceAttachment",
-    "handlerModule": "src/tools/gmail-handlers.ts"
-  },
-  {
     "tool": "manage_workspace_calendar_event",
     "service": "calendar",
     "method": "PATCH",

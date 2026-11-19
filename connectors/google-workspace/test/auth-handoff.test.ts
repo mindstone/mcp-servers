@@ -59,7 +59,8 @@ describe('auth-handoff surfacing through toMcpError → formatErrorResponse', ()
     const response = formatErrorResponse(thrown);
     expect(response.status).not.toBe('auth_required');
     expect(response.ok).toBe(false);
-    // The real cause is still folded into the surfaced message (opacity-sweep behaviour).
-    expect(String(response.action_required)).toContain('Insufficient permissions');
+    // The real cause reaches the model enveloped, not in the trusted summary.
+    expect(String(response.action_required)).not.toContain('Insufficient permissions');
+    expect(String(response.error_detail)).toMatch(/^<untrusted-content source="google-workspace:api-error">[\s\S]*Insufficient permissions: The caller does not have permission[\s\S]*<\/untrusted-content>$/);
   });
 });

@@ -1,7 +1,7 @@
 import { getTasksService } from '../modules/tasks/index.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { toMcpError } from '../utils/apiError.js';
+import { operationFailure, toMcpError } from '../utils/apiError.js';
 import { ListTasksOptions } from '../modules/tasks/types.js';
 import {
   readAliasedBoolean,
@@ -142,8 +142,8 @@ export async function handleListTaskLists(params: ListTaskListsParams) {
       const result = await tasksService.listTaskLists(email);
       
       if (!result.success) {
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to list task lists: ${result.error}`
         );
       }
@@ -206,8 +206,8 @@ export async function handleListTasks(params: ListTasksParams) {
             `Task list not found: "${taskListId}". Call list_task_lists to see available task lists.`
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to list tasks: ${result.error}`
         );
       }
@@ -252,8 +252,8 @@ export async function handleCreateTask(params: CreateTaskParams) {
             `Task list not found: "${taskListId}". Call list_task_lists to see available task lists.`
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to create task: ${result.error}`
         );
       }
@@ -315,8 +315,8 @@ export async function handleUpdateTask(params: UpdateTaskParams) {
             'Use list_tasks to see available tasks.'
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to update task: ${result.error}`
         );
       }
@@ -367,8 +367,8 @@ export async function handleCompleteTask(params: CompleteTaskParams) {
             'Use list_tasks to see available tasks.'
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to complete task: ${result.error}`
         );
       }
@@ -414,8 +414,8 @@ export async function handleDeleteTask(params: DeleteTaskParams) {
             'Use list_tasks to see available tasks.'
           );
         }
-        throw new McpError(
-          ErrorCode.InternalError,
+        throw operationFailure(
+          result,
           `Failed to delete task: ${result.error}`
         );
       }

@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.5.5](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [124](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
+- **Tools:** [123](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -156,13 +156,13 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (124)
+## Tools (123)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
 | Domain | Tools | Notes |
 | --- | --- | --- |
-| Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
+| Gmail | 22 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
 | Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
 | Docs | 13 | Read, create, append, replace, find/replace (whole doc or one tab), insert text at an anchor, tab tree, add/rename/move/delete tabs, copy a tab's content into another tab, and batch updates. Read, append, replace and find/replace can target one tab (`tab_id`); reads can also cover every tab (`all_tabs`). |
@@ -256,7 +256,7 @@ A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a
 
 - Token and account writes use temp-file plus rename, restrictive permissions, fsync, and symlink rejection.
 - Token refresh can be disabled by the host so a single authority owns refresh-token rotation (`GOOGLE_WORKSPACE_DISABLE_REFRESH=1`).
-- User-recoverable failures return host-neutral recovery guidance with `action_required` and `next_step` fields.
+- User-recoverable failures return host-neutral recovery guidance with `action_required` and `next_step` fields. For a Google failure, `action_required` is the connector's own summary (what happened, HTTP status, Google's reason code and what to do next); Google's error text, which can quote document content, is returned only in `error_detail`, inside one `<untrusted-content>` envelope.
 - The bundled callback server was removed; OAuth URLs and callback handling stay with the MCP host.
 - Attachment filenames are sanitised to prevent path traversal via crafted `upload_workspace_attachment` filename arguments.
 - `<untrusted-content>` envelopes cover Contacts, Calendar, Comments, Forms, Tasks, and JSON-return paths.

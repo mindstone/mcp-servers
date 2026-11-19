@@ -32,46 +32,6 @@ export interface OAuthConfig {
   token_uri: string;
 }
 
-// Authentication Types
-export interface GoogleAuthParams {
-  email: string;
-  category?: string;
-  description?: string;
-  required_scopes: string[];
-  auth_code?: string;
-}
-
-// API Request Types
-export interface GoogleApiRequestParams extends GoogleAuthParams {
-  api_endpoint: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  params?: Record<string, any>;
-}
-
-// API Response Types
-export type GoogleApiResponse = 
-  | {
-      status: 'success';
-      data?: any;
-      message?: string;
-    }
-  | {
-      status: 'auth_required';
-      auth_url: string;
-      message?: string;
-      instructions: string;
-    }
-  | {
-      status: 'refreshing';
-      message: string;
-    }
-  | {
-      status: 'error';
-      error: string;
-      message?: string;
-      resolution?: string;
-    };
-
 // Error Types
 export class GoogleApiError extends Error {
   constructor(
@@ -82,14 +42,4 @@ export class GoogleApiError extends Error {
     super(message);
     this.name = 'GoogleApiError';
   }
-}
-
-// Utility Types
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
-
-export interface ApiRequestParams {
-  endpoint: string;
-  method: HttpMethod;
-  params?: Record<string, any>;
-  token: string;
 }

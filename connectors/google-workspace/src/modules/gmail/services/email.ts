@@ -331,7 +331,8 @@ export class EmailService {
       throw preserveGoogleRetryDecision(new GmailError(
         `Failed to get thread ${threadId}`,
         'THREAD_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       ), error);
     }
   }
@@ -488,7 +489,8 @@ export class EmailService {
       throw preserveGoogleRetryDecision(new GmailError(
         'Failed to get emails',
         'FETCH_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       ), error);
     }
   }
@@ -567,7 +569,8 @@ export class EmailService {
       throw preserveGoogleRetryDecision(new GmailError(
         'Failed to send email',
         'SEND_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       ), error);
     }
   }

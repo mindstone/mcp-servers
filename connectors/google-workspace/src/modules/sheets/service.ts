@@ -1,6 +1,6 @@
 import { google, sheets_v4 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError, describeApiErrorUntrusted, isPassthroughGoogleError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, failedResult, isPassthroughGoogleError, withCause } from '../../utils/apiError.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import {
   AnchorMode,
@@ -92,6 +92,8 @@ interface FormulaPreReadResult {
   formulaCells: ExistingFormulaCell[];
   error?: string;
   errorKind?: 'permission' | 'transient' | 'unknown';
+  /** The failed pre-read's original error (non-enumerable, via withCause). */
+  readonly cause?: unknown;
 }
 
 export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
@@ -717,10 +719,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
           });
 
           if (!shapedResult.success || !shapedResult.data) {
-            return {
+            return withCause({
               success: false,
               error: shapedResult.error ?? 'Failed to read spreadsheet values',
-            };
+            }, shapedResult.cause);
           }
 
           if (this.isAnchorReadResponse(shapedResult.data)) {
@@ -781,10 +783,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -858,16 +857,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
-        return {
-          success: false,
-          error: `${error.message} ${error.suggestion}`,
-        };
+        return failedResult(error, `${error.message} ${error.suggestion}`);
       }
 
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -947,16 +940,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
-        return {
-          success: false,
-          error: `${error.message} ${error.suggestion}`,
-        };
+        return failedResult(error, `${error.message} ${error.suggestion}`);
       }
 
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1024,15 +1011,16 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     errorCode: FormulaSafetyErrorCode,
     error: string,
     formulaCells?: Array<{ a1: string; formula: string; proposedValue: unknown }>,
+    cause?: unknown,
   ): SheetsOperationResult {
-    return {
+    return withCause({
       success: false,
       error,
       errorCode,
       retryWith: { overwrite_formulas: true },
       alternatives: this.getFormulaSafetyAlternatives(),
       formulaCells,
-    };
+    }, cause);
   }
 
   private async fetchExistingFormulas(
@@ -1094,11 +1082,11 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         },
       });
 
-      return {
+      return withCause({
         formulaCells: [],
         error: this.buildFormulaSafetyUnverifiableMessage(kind, rewrittenError),
         errorKind: kind,
-      };
+      }, error);
     }
   }
 
@@ -1342,10 +1330,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1422,10 +1407,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1460,6 +1442,8 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
           return this.makeFormulaRefusalResult(
             'formula_safety_unverifiable',
             preReadResult.error,
+            undefined,
+            preReadResult.cause,
           );
         }
 
@@ -1517,10 +1501,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1557,10 +1538,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1622,10 +1600,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1669,10 +1644,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1714,10 +1686,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -1989,10 +1958,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
             });
 
             if (!anchorResult.success || !anchorResult.data || !this.isAnchorReadResponse(anchorResult.data)) {
-              return {
+              return withCause({
                 success: false,
                 error: anchorResult.error ?? `Failed to anchor-read range '${range}'`,
-              };
+              }, anchorResult.cause);
             }
 
             perRangeResults.push({
@@ -2010,10 +1979,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
             anchorMode: 'never',
           });
           if (!singleRangeResult.success || !singleRangeResult.data) {
-            return {
+            return withCause({
               success: false,
               error: singleRangeResult.error ?? `Failed to read range '${range}'`,
-            };
+            }, singleRangeResult.cause);
           }
 
           const valueRange = singleRangeResult.data as sheets_v4.Schema$ValueRange;
@@ -2060,16 +2029,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
-        return {
-          success: false,
-          error: `${error.message} ${error.suggestion}`,
-        };
+        return failedResult(error, `${error.message} ${error.suggestion}`);
       }
 
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -2100,10 +2063,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
           });
 
           if (!shapedResult.success || !shapedResult.data) {
-            return {
+            return withCause({
               success: false,
               error: shapedResult.error ?? `Failed to read shaped range '${range}'`,
-            };
+            }, shapedResult.cause);
           }
 
           if (this.isAnchorReadResponse(shapedResult.data)) {
@@ -2196,16 +2159,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
       if (error instanceof ContinuationTokenError) {
-        return {
-          success: false,
-          error: `${error.message} ${error.suggestion}`,
-        };
+        return failedResult(error, `${error.message} ${error.suggestion}`);
       }
 
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -2240,13 +2197,13 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
           );
 
           if (preReadResult.error) {
-            return {
+            return withCause({
               success: false,
               error: preReadResult.error,
               errorCode: 'formula_safety_unverifiable',
               retryWith: { overwrite_formulas: true },
               alternatives: this.getFormulaSafetyAlternatives(),
-            };
+            }, preReadResult.cause);
           }
 
           const overwrites = detectFormulaOverwrite(
@@ -2309,10 +2266,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -2369,10 +2323,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
@@ -2509,10 +2460,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     } catch (error) {
       // Keep the reconnect signal: an expired/revoked grant must not collapse to a plain string.
       if (isPassthroughGoogleError(error)) throw error;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      return failedResult(error, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 }
@@ -2526,7 +2474,7 @@ function toSheetTabFailure<T>(error: unknown): SheetTabOperationResult<T> {
   // An expired/revoked grant must keep its reconnect signal.
   if (isPassthroughGoogleError(error)) throw error;
   if (error instanceof SheetsInputError) throw error;
-  return { success: false, error: describeApiErrorUntrusted(error, 'google-workspace:sheets:api-error') };
+  return failedResult(error, describeApiErrorUntrusted(error, 'google-workspace:sheets:api-error'));
 }
 
 function requireSheetTitle(title: string): string {

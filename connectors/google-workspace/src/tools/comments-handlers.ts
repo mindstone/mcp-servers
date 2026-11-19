@@ -4,6 +4,7 @@ import { resolveEmail } from '../modules/accounts/index.js';
 import { CommentInfo, ReplyInfo } from '../modules/comments/types.js';
 import { McpToolResponse } from './types.js';
 import { wrapUntrustedContent } from '../utils/untrusted-controls.js';
+import { withCause } from '../utils/apiError.js';
 import {
   readAliasedBoolean,
   readAliasedNumber,
@@ -99,7 +100,7 @@ export async function handleListComments(args: ListCommentsArgs): Promise<McpToo
     });
 
     if (!result.success) {
-      throw new Error(`Failed to list comments: ${result.error}`);
+      throw withCause(new Error(`Failed to list comments: ${result.error}`), result.cause);
     }
 
     const comments = result.data as CommentInfo[];
@@ -143,7 +144,7 @@ export async function handleCreateComment(args: CreateCommentArgs): Promise<McpT
     });
 
     if (!result.success) {
-      throw new Error(`Failed to create comment: ${result.error}`);
+      throw withCause(new Error(`Failed to create comment: ${result.error}`), result.cause);
     }
 
     const comment = result.data as CommentInfo;
@@ -171,7 +172,7 @@ export async function handleResolveComment(args: ResolveCommentArgs): Promise<Mc
     });
 
     if (!result.success) {
-      throw new Error(`Failed to ${args.action} comment: ${result.error}`);
+      throw withCause(new Error(`Failed to ${args.action} comment: ${result.error}`), result.cause);
     }
 
     const reply = result.data as ReplyInfo;
@@ -199,7 +200,7 @@ export async function handleReplyToComment(args: ReplyToCommentArgs): Promise<Mc
     });
 
     if (!result.success) {
-      throw new Error(`Failed to create reply: ${result.error}`);
+      throw withCause(new Error(`Failed to create reply: ${result.error}`), result.cause);
     }
 
     const reply = result.data as ReplyInfo;
@@ -226,7 +227,7 @@ export async function handleDeleteComment(args: DeleteCommentArgs): Promise<McpT
     });
 
     if (!result.success) {
-      throw new Error(`Failed to delete comment: ${result.error}`);
+      throw withCause(new Error(`Failed to delete comment: ${result.error}`), result.cause);
     }
 
     return `Comment ${commentId} deleted successfully.`;

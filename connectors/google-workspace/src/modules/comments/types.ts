@@ -60,5 +60,7 @@ export interface CommentsOperationResult {
   success: boolean;
   data?: CommentInfo | CommentInfo[] | ReplyInfo;
   error?: string;
+  /** Original failure behind `error` (non-enumerable, set by failedResult/withCause). */
+  readonly cause?: unknown;
   nextPageToken?: string;
 }

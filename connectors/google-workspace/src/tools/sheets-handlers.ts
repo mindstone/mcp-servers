@@ -55,7 +55,8 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
+import { envelopeErrorDetail, isServerFormattedError, operationFailure, summariseGoogleError } from '../utils/apiError.js';
 
 // Handler argument types
 interface ReadSpreadsheetArgs {
@@ -333,20 +334,52 @@ function isFormulaSafetyErrorCode(errorCode: unknown): errorCode is FormulaSafet
   return errorCode === 'formula_overwrite_refused' || errorCode === 'formula_safety_unverifiable';
 }
 
+const FORMULA_REFUSAL_SOURCE = 'google-workspace:sheets:formula-refusal';
+const FORMULA_UNVERIFIABLE_CAUTION = "Some of those cells may contain formulas. If you approve skipping the check, any formula there is replaced with your new value, and a formula replaced with a fixed value stops calculating; you can bring it back from the sheet's version history.";
+const FORMULA_REFUSAL_SENTENCES: Record<FormulaSafetyErrorCode, string> = {
+  // Every formula_overwrite_refused result carries formula_cells, so the assistant can list them.
+  formula_overwrite_refused: "Stopped so that formulas in the cells you asked to change are not replaced. A formula replaced with a fixed value stops calculating, though you can bring it back from the sheet's version history. The assistant can show which cells contain formulas. Use other cells, or approve replacing those formulas.",
+  formula_safety_unverifiable: `Could not check whether the cells you asked to change contain formulas, so nothing was changed. Try again. ${FORMULA_UNVERIFIABLE_CAUTION}`,
+};
+// With a Google summary, its own next step replaces the generic retry advice; the
+// summary sits after the lead-in and ends with a full stop, so the caution follows it.
+const FORMULA_UNVERIFIABLE_WITH_CAUSE_LEAD = "Could not check whether the cells you asked to change contain formulas, so nothing was changed. Why the check failed:";
+
+/**
+ * The refusal's `error` is connector text only. The service's message (cell
+ * addresses with sheet titles, collaborators' formulas, Google's error) goes
+ * to `error_detail`, and each formula cell's text fields are enveloped.
+ */
 function buildFormulaRefusalToolResult(input: {
   errorCode: FormulaSafetyErrorCode;
   error?: string;
   retryWith?: { overwrite_formulas: true };
   alternatives?: string[];
   formulaCells?: Array<{ a1: string; formula: string; proposedValue: unknown }>;
+  /** The failed formula pre-read's original error (formula_safety_unverifiable only). */
+  cause?: unknown;
 }): McpToolResponse {
+  // An account problem behind a failed pre-read is not a formula refusal: its
+  // resolution, not "retry with overwrite_formulas", is the next step.
+  if (isServerFormattedError(input.cause)) throw input.cause;
+  const sentence = FORMULA_REFUSAL_SENTENCES[input.errorCode];
+  const error = input.errorCode === 'formula_safety_unverifiable' && input.cause !== undefined
+    ? `${FORMULA_UNVERIFIABLE_WITH_CAUSE_LEAD} ${summariseGoogleError(input.cause, 'Google Sheets')} ${FORMULA_UNVERIFIABLE_CAUTION}`
+    : sentence;
   const payload: FormulaOverwriteRefusal = {
     status: 'refused',
     error_code: input.errorCode,
-    error: input.error || 'Write refused by formula safety guard.',
+    error,
+    ...(input.error ? { error_detail: envelopeErrorDetail(input.error, FORMULA_REFUSAL_SOURCE) } : {}),
     retry_with: input.retryWith ?? { overwrite_formulas: true },
     alternatives: input.alternatives ?? FORMULA_SAFETY_ALTERNATIVES,
-    formula_cells: input.formulaCells,
+    formula_cells: input.formulaCells?.map(cell => ({
+      a1: wrapUntrustedContent(cell.a1, FORMULA_REFUSAL_SOURCE),
+      formula: wrapUntrustedContent(cell.formula, FORMULA_REFUSAL_SOURCE),
+      proposedValue: typeof cell.proposedValue === 'string'
+        ? wrapUntrustedContent(cell.proposedValue, FORMULA_REFUSAL_SOURCE)
+        : cell.proposedValue,
+    })),
   };
 
   return {
@@ -393,8 +426,8 @@ export async function handleReadSpreadsheet(args: ReadSpreadsheetArgs): Promise<
     const result = await sheetsService.getSpreadsheet(email, spreadsheetId as string, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to read spreadsheet', 'read_workspace_spreadsheet', rawArgs),
       );
     }
@@ -467,8 +500,8 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
       : await sheetsService.getValues(email, spreadsheetId as string, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to read spreadsheet values', 'read_workspace_spreadsheet_values', rawArgs),
       );
     }
@@ -517,8 +550,8 @@ export async function handleCreateSpreadsheet(args: CreateSpreadsheetArgs): Prom
     const result = await sheetsService.createSpreadsheet(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to create spreadsheet', 'create_workspace_spreadsheet', rawArgs),
       );
     }
@@ -563,8 +596,8 @@ export async function handleAppendValues(args: AppendValuesArgs): Promise<McpToo
     const result = await sheetsService.appendValues(email, options);
     
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to append values', 'append_to_workspace_spreadsheet', rawArgs),
       );
     }
@@ -614,11 +647,12 @@ export async function handleUpdateValues(args: UpdateValuesArgs): Promise<McpToo
           retryWith: result.retryWith,
           alternatives: result.alternatives,
           formulaCells: result.formulaCells,
+          cause: result.cause,
         });
       }
 
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to update values', 'update_workspace_spreadsheet_values', rawArgs),
       );
     }
@@ -656,8 +690,8 @@ export async function handleClearValues(args: ClearValuesArgs): Promise<McpToolR
     const result = await sheetsService.clearValues(email, options);
     
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to clear values', 'clear_workspace_spreadsheet_values', rawArgs),
       );
     }
@@ -689,8 +723,8 @@ export async function handleListSheets(args: ListSheetsArgs): Promise<McpToolRes
     const result = await sheetsService.listSheets(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to list sheets', 'list_workspace_spreadsheet_sheets', rawArgs),
       );
     }
@@ -725,8 +759,8 @@ export async function handleAddSheet(args: AddSheetArgs): Promise<McpToolRespons
     const result = await sheetsService.addSheet(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to add sheet', 'add_workspace_spreadsheet_sheet', rawArgs),
       );
     }
@@ -758,8 +792,8 @@ export async function handleDeleteSheet(args: DeleteSheetArgs): Promise<McpToolR
     const result = await sheetsService.deleteSheet(email, options);
     
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to delete sheet', 'delete_workspace_spreadsheet_sheet', rawArgs),
       );
     }
@@ -804,8 +838,8 @@ export async function handleDuplicateSheet(args: DuplicateSheetArgs): Promise<Mc
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         // Already enveloped by the service; the range-error rewriter would unwrap it.
         result.error || 'Failed to duplicate sheet',
       );
@@ -838,8 +872,8 @@ export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolR
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         // Already enveloped by the service; the range-error rewriter would unwrap it.
         result.error || 'Failed to update sheet',
       );
@@ -873,8 +907,8 @@ export async function handleInsertDimension(args: InsertDimensionArgs): Promise<
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         // Already enveloped by the service; the range-error rewriter would unwrap it.
         result.error || 'Failed to insert rows or columns',
       );
@@ -941,8 +975,8 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
       : await sheetsService.batchGetValues(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to batch read values', 'batch_read_workspace_spreadsheet_values', rawArgs),
       );
     }
@@ -1022,11 +1056,12 @@ export async function handleBatchUpdateValues(args: BatchUpdateValuesArgs): Prom
           retryWith: result.retryWith,
           alternatives: result.alternatives,
           formulaCells: result.formulaCells,
+          cause: result.cause,
         });
       }
 
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to batch update values', 'batch_update_workspace_spreadsheet_values', rawArgs),
       );
     }
@@ -1078,8 +1113,8 @@ export async function handleFindReplace(args: FindReplaceArgs): Promise<McpToolR
     const result = await sheetsService.findAndReplace(email, options);
     
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to find and replace', 'find_and_replace_workspace_spreadsheet', rawArgs),
       );
     }
@@ -1138,8 +1173,8 @@ export async function handleFormatCells(args: FormatCellsArgs): Promise<McpToolR
     const result = await sheetsService.formatCells(email, options);
     
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InternalError,
+      throw operationFailure(
+        result,
         rewriteSheetsHandlerError(result.error, 'Failed to format cells', 'format_workspace_spreadsheet_cells', rawArgs),
       );
     }

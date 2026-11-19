@@ -77,7 +77,8 @@ export class GmailService extends BaseGoogleService<ReturnType<typeof google.gma
       throw new GmailError(
         'Failed to initialize Gmail service',
         'INIT_ERROR',
-        describeApiError(error)
+        describeApiError(error),
+        error
       );
     }
   }

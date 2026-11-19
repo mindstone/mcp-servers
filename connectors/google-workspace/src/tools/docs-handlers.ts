@@ -30,6 +30,7 @@ import {
 } from './arg-aliases.js';
 import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-controls.js';
 import { preserveGoogleRetryDecision } from '../utils/google-retry.js';
+import { operationFailure } from '../utils/apiError.js';
 
 // Handler argument types
 interface ReadDocumentArgs {
@@ -292,7 +293,7 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
     const result = await docsService.getDocument(email, documentId as string, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to read document');
+      throw operationFailure(result, result.error || 'Failed to read document');
     }
     
     if (returnJson) {
@@ -328,7 +329,7 @@ export async function handleCreateDocument(args: CreateDocumentArgs): Promise<Mc
     const result = await docsService.createDocument(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to create document');
+      throw operationFailure(result, result.error || 'Failed to create document');
     }
     
     const docResponse = result.data as DocumentResponse;
@@ -360,7 +361,7 @@ export async function handleAppendDocument(args: AppendDocumentArgs): Promise<Mc
     const result = await docsService.appendToDocument(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to append to document');
+      throw operationFailure(result, result.error || 'Failed to append to document');
     }
     
     const docResponse = result.data as DocumentResponse;
@@ -392,7 +393,7 @@ export async function handleReplaceDocument(args: ReplaceDocumentArgs): Promise<
     const result = await docsService.replaceDocument(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to replace document content');
+      throw operationFailure(result, result.error || 'Failed to replace document content');
     }
     
     const docResponse = result.data as DocumentResponse;
@@ -429,7 +430,7 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
     const result = await docsService.findAndReplace(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to find and replace');
+      throw operationFailure(result, result.error || 'Failed to find and replace');
     }
     
     const occurrences = result.occurrencesChanged ?? 0;
@@ -490,7 +491,7 @@ export async function handleListDocumentTabs(args: ListTabsArgs): Promise<McpToo
     const result = await docsService.listTabs(email, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to list document tabs');
+      throw operationFailure(result, result.error || 'Failed to list document tabs');
     }
     
     const tabList = result.data as TabListResponse;
@@ -544,7 +545,7 @@ export async function handleBatchUpdateDocument(args: BatchUpdateDocumentArgs): 
     const result = await docsService.batchUpdate(email, documentId, options);
     
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to update document');
+      throw operationFailure(result, result.error || 'Failed to update document');
     }
     
     if (returnJson) {
@@ -692,7 +693,7 @@ export async function handleAddDocumentTab(args: AddDocumentTabArgs): Promise<Mc
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to add document tab');
+      throw operationFailure(result, result.error || 'Failed to add document tab');
     }
     return formatTabAddedAsText(result.data as TabWriteResponse);
   });
@@ -721,7 +722,7 @@ export async function handleUpdateDocumentTab(args: UpdateDocumentTabArgs): Prom
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to update document tab');
+      throw operationFailure(result, result.error || 'Failed to update document tab');
     }
     return formatTabUpdatedAsText(result.data as TabWriteResponse);
   });
@@ -747,7 +748,7 @@ export async function handleDeleteDocumentTab(args: DeleteDocumentTabArgs): Prom
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to delete document tab');
+      throw operationFailure(result, result.error || 'Failed to delete document tab');
     }
     return formatTabDeletedAsText(result.data as TabDeleteResponse);
   });
@@ -781,7 +782,7 @@ export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Pr
     });
 
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to insert text');
+      throw operationFailure(result, result.error || 'Failed to insert text');
     }
     return formatInsertTextAsText(result.data as InsertTextResponse);
   });
@@ -925,8 +926,7 @@ export async function handleCopyDocumentTab(args: CopyDocumentTabArgs): Promise<
     );
 
     if (!result.success || !result.data) {
-      const failure = new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab');
-      Object.assign(failure, { cause: result.cause });
+      const failure = operationFailure(result, result.error || 'Failed to copy document tab');
       if (result.status !== undefined) Object.assign(failure, { status: result.status });
       throw preserveGoogleRetryDecision(failure, result);
     }

@@ -11,7 +11,9 @@ const EXTENDED_RATE_LIMIT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const MAX_RATE_LIMIT_RETRIES = 7;
 const MAX_RETRY_AFTER_MS = 64_000;
 const MAX_BACKOFF_MS = 32_000;
-const LONG_WINDOW_QUOTA = /\b(?:dailyLimitExceeded|quotaExceeded)\b|per\s+day/i;
+export const LONG_WINDOW_QUOTA = /\b(?:dailyLimitExceeded|quotaExceeded)\b|per\s+day/i;
+/** Google's message for a short-window quota metric (per minute, per second, per 100 seconds). */
+const SHORT_WINDOW_QUOTA = /quota exceeded for quota metric[\s\S]*per\s+(minute|second|100\s+seconds)/i;
 export const GOOGLE_RATE_LIMIT_NEXT_STEP = 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.';
 
 /** The error's message and response body, where Google puts structured reasons. */
@@ -43,7 +45,7 @@ export function isShortWindowRateLimit(error: unknown): boolean {
   if (LONG_WINDOW_QUOTA.test(text)) return false;
   return status === 429 || (status === 403 && (
     /\b(?:rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED)\b/.test(text) ||
-    /quota exceeded for quota metric[\s\S]*per\s+(?:minute|second|100\s+seconds)/i.test(text)
+    SHORT_WINDOW_QUOTA.test(text)
   ));
 }
 

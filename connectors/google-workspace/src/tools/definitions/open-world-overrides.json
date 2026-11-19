@@ -82,7 +82,6 @@
   "list_workspace_presentation_slides": true,
   "list_workspace_send_as": true,
   "list_workspace_spreadsheet_sheets": true,
-  "manage_workspace_attachment": true,
   "manage_workspace_calendar_event": true,
   "manage_workspace_draft": true,
   "manage_workspace_label": true,

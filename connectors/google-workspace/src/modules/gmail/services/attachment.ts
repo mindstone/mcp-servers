@@ -168,7 +168,8 @@ export class GmailAttachmentService {
       throw new GmailError(
         'Failed to get attachment',
         'ATTACHMENT_ERROR',
-        `Error: ${describeApiError(error)}`
+        `Error: ${describeApiError(error)}`,
+        error
       );
     }
   }

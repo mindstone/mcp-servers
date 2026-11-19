@@ -3,7 +3,7 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager } from '../../modules/accounts/index.js';
 import { AccountError } from '../../modules/accounts/types.js';
 import { findMissingScopes, getServiceNamesForScopes } from '../../utils/scope-hierarchy.js';
-import { isPassthroughGoogleError } from '../../utils/apiError.js';
+import { isPassthroughGoogleError, withCause } from '../../utils/apiError.js';
 
 /**
  * Base error class for Google services
@@ -12,9 +12,11 @@ export class GoogleServiceError extends McpError {
   constructor(
     message: string,
     code: string,
-    details?: string
+    details?: string,
+    cause?: unknown
   ) {
     super(ErrorCode.InternalError, message, { code, details });
+    withCause(this, cause);
   }
 }
 
@@ -184,7 +186,8 @@ export abstract class BaseGoogleService<TClient> {
     return new GoogleServiceError(
       context,
       errorCode,
-      `Error: ${errorMessage}`
+      `Error: ${errorMessage}`,
+      error
     );
   }
 
