@@ -151,4 +151,20 @@ describe("formatError", () => {
     expect(result).not.toContain("Bearer");
     expect(result).not.toContain("LEAKY_TOKEN");
   });
+
+  it("drops a 5xx body, which describes Xero's insides", () => {
+    const internal = "Internal exception at internalField SECRET";
+    const fromAxios = makeAxiosError(500, internal);
+    const fromSdk = JSON.stringify({
+      response: { statusCode: 503, body: { Message: internal } },
+      body: { Message: internal },
+    });
+
+    expect(formatError(fromAxios)).toBe(
+      "Xero had a problem on its side (500). Please try again later.",
+    );
+    expect(formatError(fromSdk)).toBe(
+      "Xero had a problem on its side (503). Please try again later.",
+    );
+  });
 });

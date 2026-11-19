@@ -32,6 +32,7 @@ import {
   XeroClientCredentialsRefusedError,
   XeroRefreshError,
 } from "../src/clients/xero-client.js";
+import { XeroConnectorError } from "../src/helpers/connector-error.js";
 import { START_AUTH_PATH, signInToXero } from "../src/tools/sign-in.tool.js";
 
 // The real bridge wrapper and vendored reader talk to this stand-in host.
@@ -158,9 +159,20 @@ describe("xero_sign_in", () => {
   });
 
   it("shows a Custom Connection's own setup error, such as missing scopes, without opening the browser", async () => {
-    state.authenticate.mockRejectedValue(new Error("missing 1 scope: accounting.invoices"));
+    state.authenticate.mockRejectedValue(new XeroConnectorError("missing 1 scope: accounting.invoices"));
 
     expect(await signInToXero()).toEqual({ ok: false, error: "missing 1 scope: accounting.invoices" });
+    expect(host.requests).toHaveLength(0);
+  });
+
+  it("replaces an unexpected error's own text with a fixed sentence", async () => {
+    state.authenticate.mockRejectedValue(new Error("socket hang up at 10.0.0.5:443"));
+
+    const result = await signInToXero();
+    expect(result).toEqual({
+      ok: false,
+      error: "An unexpected error occurred while communicating with Xero.",
+    });
     expect(host.requests).toHaveLength(0);
   });
 

@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { EmployeeLeaveType } from "xero-node/dist/gen/model/payroll-nz/employeeLeaveType.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 /**
  * Internal function to fetch employee leave types from Xero
@@ -11,7 +12,7 @@ async function fetchEmployeeLeaveTypes(employeeId: string): Promise<EmployeeLeav
   await xeroClient.authenticate();
 
   if (!employeeId) {
-    throw new Error("Employee ID is required to fetch employee leave types");
+    throw new XeroConnectorError("Employee ID is required to fetch employee leave types");
   }
 
   const response = await xeroClient.payrollNZApi.getEmployeeLeaveTypes(

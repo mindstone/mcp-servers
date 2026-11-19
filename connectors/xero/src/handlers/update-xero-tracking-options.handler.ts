@@ -3,6 +3,7 @@ import { xeroClient } from "../clients/xero-client.js";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { XeroClientResponse } from "../types/tool-response.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 type TrackingOptionStatus = "ACTIVE" | "ARCHIVED";
 
@@ -58,7 +59,7 @@ export async function updateXeroTrackingOption(
     const existingTrackingOptions = await getTrackingOptions(trackingCategoryId);
 
     if (!existingTrackingOptions) {
-      throw new Error("Could not find tracking options.");
+      throw new XeroConnectorError("Could not find tracking options.");
     }
 
     const updatedTrackingOptions = await Promise.all(options?.map(async (option) => {
@@ -71,7 +72,7 @@ export async function updateXeroTrackingOption(
     }));
 
     if (!updatedTrackingOptions) {
-      throw new Error("Failed to update tracking options.");
+      throw new XeroConnectorError("Failed to update tracking options.");
     }
 
     return {

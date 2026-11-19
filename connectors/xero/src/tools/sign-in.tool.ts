@@ -90,7 +90,7 @@ export async function signInToXero(): Promise<SignInResult> {
     if (error instanceof XeroRefreshError && needsNewSignIn(error.failure)) {
       return signInInBrowser();
     }
-    return failed(error instanceof Error ? error.message : formatError(error));
+    return failed(formatError(error));
   }
 }
 

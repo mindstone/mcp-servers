@@ -3,6 +3,7 @@ import { xeroClient } from "../clients/xero-client.js";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { XeroClientResponse } from "../types/tool-response.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 type TrackingCategoryStatus = "ACTIVE" | "ARCHIVED";
 
@@ -50,7 +51,7 @@ export async function updateXeroTrackingCategory(
     const existingTrackingCategory = await getTrackingCategory(trackingCategoryId);
 
     if (!existingTrackingCategory) {
-      throw new Error("Could not find tracking category.");
+      throw new XeroConnectorError("Could not find tracking category.");
     }
 
     const updatedTrackingCategory = await updateTrackingCategory(
@@ -61,7 +62,7 @@ export async function updateXeroTrackingCategory(
     );
 
     if (!updatedTrackingCategory) {
-      throw new Error("Failed to update tracking category.");
+      throw new XeroConnectorError("Failed to update tracking category.");
     }
 
     return {

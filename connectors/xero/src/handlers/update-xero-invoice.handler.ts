@@ -4,6 +4,7 @@ import { formatError } from "../helpers/format-error.js";
 import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { assertXeroCurrencyEnabled } from "../helpers/xero-currencies.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -100,7 +101,7 @@ export async function updateXeroInvoice(
     );
 
     if (!updatedInvoice) {
-      throw new Error("Invoice update failed.");
+      throw new XeroConnectorError("Invoice update failed.");
     }
 
     return {

@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { HistoryRecord, HistoryRecords } from "xero-node";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 type GetHistoryMethod = (
   xeroTenantId: string,
@@ -75,7 +76,7 @@ export async function addEntityNote(
     const created = response.body.historyRecords?.[0];
 
     if (!created) {
-      throw new Error("Note creation failed - no record returned.");
+      throw new XeroConnectorError("Note creation failed - no record returned.");
     }
 
     return {

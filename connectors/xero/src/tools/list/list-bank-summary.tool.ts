@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listXeroBankSummary } from "../../handlers/list-xero-bank-summary.handler.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
+import { formatReportRows } from "../../helpers/format-report-rows.js";
 
 const ListBankSummaryTool = CreateXeroTool(
   "list-bank-summary",
@@ -42,7 +43,7 @@ const ListBankSummaryTool = CreateXeroTool(
         },
         {
           type: "text" as const,
-          text: JSON.stringify(report.rows, null, 2),
+          text: formatReportRows(report.rows),
         },
       ],
     };

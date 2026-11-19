@@ -4,6 +4,7 @@ import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 // Import the correct types - using the proper namespace
 import { EmployeeLeave } from "xero-node/dist/gen/model/payroll-nz/employeeLeave.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface FetchEmployeeLeaveParams {
   employeeId?: string;
@@ -16,7 +17,7 @@ async function fetchEmployeeLeave({ employeeId }: FetchEmployeeLeaveParams): Pro
   await xeroClient.authenticate();
 
   if (!employeeId) {
-    throw new Error("Employee ID is required to fetch employee leave");
+    throw new XeroConnectorError("Employee ID is required to fetch employee leave");
   }
 
   const response = await xeroClient.payrollNZApi.getEmployeeLeaves(

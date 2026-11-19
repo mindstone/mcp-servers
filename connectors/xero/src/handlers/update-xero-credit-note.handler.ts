@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { CreditNote } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface CreditNoteLineItem {
   description: string;
@@ -87,7 +88,7 @@ export async function updateXeroCreditNote(
     );
 
     if (!updatedCreditNote) {
-      throw new Error("Credit note update failed.");
+      throw new XeroConnectorError("Credit note update failed.");
     }
 
     return {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listXeroProfitAndLoss } from "../../handlers/list-xero-profit-and-loss.handler.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
+import { formatReportRows } from "../../helpers/format-report-rows.js";
 
 const ListProfitAndLossTool = CreateXeroTool(
   "list-profit-and-loss",
@@ -53,7 +54,7 @@ const ListProfitAndLossTool = CreateXeroTool(
         },
         {
           type: "text" as const,
-          text: JSON.stringify(profitAndLossReport.rows, null, 2),
+          text: formatReportRows(profitAndLossReport.rows),
         },
       ],
     };

@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { Contact, Phone } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 async function createContact(
   name: string,
@@ -49,7 +50,7 @@ export async function createXeroContact(
     const createdContact = await createContact(name, email, phone);
 
     if (!createdContact) {
-      throw new Error("Contact creation failed.");
+      throw new XeroConnectorError("Contact creation failed.");
     }
 
     return {

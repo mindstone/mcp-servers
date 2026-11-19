@@ -8,6 +8,7 @@ import { xeroClient } from "../clients/xero-client.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 async function updateManualJournal(
   narration: string,
@@ -75,7 +76,7 @@ export async function updateXeroManualJournal(
     );
 
     if (!updatedManualJournal) {
-      throw new Error("Manual journal update failed.");
+      throw new XeroConnectorError("Manual journal update failed.");
     }
 
     return {

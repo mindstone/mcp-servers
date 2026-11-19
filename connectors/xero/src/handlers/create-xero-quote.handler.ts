@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { Quote, QuoteStatusCodes } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface QuoteLineItem {
   description: string;
@@ -77,7 +78,7 @@ export async function createXeroQuote(
     );
 
     if (!createdQuote) {
-      throw new Error("Quote creation failed.");
+      throw new XeroConnectorError("Quote creation failed.");
     }
 
     return {

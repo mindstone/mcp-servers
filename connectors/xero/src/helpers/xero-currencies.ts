@@ -1,6 +1,7 @@
 import { Currency, CurrencyCode } from "xero-node";
 import { xeroClient } from "../clients/xero-client.js";
 import { getClientHeaders } from "./get-client-headers.js";
+import { XeroConnectorError } from "./connector-error.js";
 
 export async function listXeroCurrencies(): Promise<Currency[]> {
   await xeroClient.authenticate();
@@ -31,7 +32,7 @@ export async function assertXeroCurrencyEnabled(
     ? enabledCurrencyCodes.join(", ")
     : "none";
 
-  throw new Error(
+  throw new XeroConnectorError(
     `Currency ${currencyCode} is not enabled in this Xero organisation. Enabled currencies: ${enabledList}. Add ${currencyCode} in Xero before creating or updating records in that currency.`,
   );
 }

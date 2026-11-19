@@ -1,4 +1,6 @@
-import { AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
+
+import { XeroConnectorError } from "./connector-error.js";
 
 interface XeroSdkProblem {
   title?: string;
@@ -116,6 +118,33 @@ function parseXeroSdkErrorString(error: string): unknown {
   }
 }
 
+const TIMEOUT_MESSAGE = "Xero did not answer in time. Please try again.";
+const NETWORK_MESSAGE = "Could not reach Xero. Please check the connection and try again.";
+
+/** An axios request abandoned at its timeout. */
+export function isTimeout(error: AxiosError): boolean {
+  return error.code === AxiosError.ECONNABORTED || error.code === AxiosError.ETIMEDOUT;
+}
+
+/** The stand-in sdk-axios.ts rejects with when Xero gave no answer. */
+function formatTransportFailure(body: unknown): string {
+  return isRecord(body) && body.XeroConnectorTransportFailure === "timeout"
+    ? TIMEOUT_MESSAGE
+    : NETWORK_MESSAGE;
+}
+
+/**
+ * A 4xx keeps Xero's own explanation (a validation message, say), which Xero
+ * writes for the caller. A 5xx body is about Xero's insides, so it is dropped.
+ */
+function formatStatus(status: number, body: unknown): string {
+  if (status === 0) return formatTransportFailure(body);
+  const mapped = formatHttpStatus(status);
+  if (mapped) return mapped;
+  if (status >= 500) return `Xero had a problem on its side (${status}). Please try again later.`;
+  return formatXeroResponseBody(status, body);
+}
+
 /**
  * Format error messages for return to the LLM.
  *
@@ -124,16 +153,11 @@ function parseXeroSdkErrorString(error: string): unknown {
  * whitelisted response fields are exposed.
  */
 export function formatError(error: unknown): string {
-  if (error instanceof AxiosError) {
+  // isAxiosError, not instanceof: xero-node's CommonJS axios has its own class.
+  if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-
-    if (status !== undefined) {
-      const mapped = formatHttpStatus(status);
-      if (mapped) return mapped;
-
-      return formatXeroResponseBody(status, error.response?.data);
-    }
-    return "An error occurred while communicating with Xero.";
+    if (status !== undefined) return formatStatus(status, error.response?.data);
+    return isTimeout(error) ? TIMEOUT_MESSAGE : NETWORK_MESSAGE;
   }
 
   if (typeof error === "string") {
@@ -148,14 +172,17 @@ export function formatError(error: unknown): string {
     if (status === undefined) {
       return "An unexpected error occurred while communicating with Xero.";
     }
-    const mapped = formatHttpStatus(status);
-    if (mapped) return mapped;
-
-    return formatXeroResponseBody(status, getXeroBody(error.response));
+    return formatStatus(status, getXeroBody(error.response));
   }
 
-  if (error instanceof Error) {
+  // Only words this connector wrote are passed on. Any other error (a bug, a
+  // socket error, an SDK failure) can quote internals, so it gets a fixed
+  // sentence; its name goes to stderr for whoever reads the connector's log.
+  if (error instanceof XeroConnectorError) {
     return error.message;
+  }
+  if (error instanceof Error) {
+    console.error(`Xero: unexpected ${error.name}; a fixed message was returned instead.`);
   }
 
   return "An unexpected error occurred while communicating with Xero.";

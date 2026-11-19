@@ -4,6 +4,7 @@ import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { assertXeroCurrencyEnabled } from "../helpers/xero-currencies.js";
 import { CurrencyCode, PurchaseOrder } from "xero-node";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface PurchaseOrderLineItem {
   description: string;
@@ -79,7 +80,7 @@ export async function createXeroPurchaseOrder(
     );
 
     if (!createdPurchaseOrder) {
-      throw new Error("Purchase order creation failed.");
+      throw new XeroConnectorError("Purchase order creation failed.");
     }
 
     return {

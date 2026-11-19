@@ -8,6 +8,7 @@ import { xeroClient } from "../clients/xero-client.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 async function createManualJournal(
   narration: string,
@@ -83,7 +84,7 @@ export async function createXeroManualJournal(
     );
 
     if (!createdManualJournal) {
-      throw new Error("Manual journal creation failed.");
+      throw new XeroConnectorError("Manual journal creation failed.");
     }
 
     return {

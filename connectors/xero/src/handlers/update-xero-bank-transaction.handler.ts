@@ -3,6 +3,7 @@ import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { XeroClientResponse } from "../types/tool-response.js";
 import { BankTransaction } from "xero-node";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface BankTransactionLineItem {
   description: string;
@@ -70,7 +71,7 @@ export async function updateXeroBankTransaction(
     const existingBankTransaction = await getBankTransaction(bankTransactionId);
 
     if (!existingBankTransaction) {
-      throw new Error(`Could not find bank transaction`);
+      throw new XeroConnectorError(`Could not find bank transaction`);
     }
 
     const updatedBankTransaction = await updateBankTransaction(
@@ -84,7 +85,7 @@ export async function updateXeroBankTransaction(
     );
 
     if (!updatedBankTransaction) {
-      throw new Error(`Failed to update bank transaction`);
+      throw new XeroConnectorError(`Failed to update bank transaction`);
     }
 
     return {

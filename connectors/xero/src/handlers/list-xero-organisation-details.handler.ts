@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { Organisation } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 async function getOrganisationDetails(): Promise<Organisation> {
   await xeroClient.authenticate();
@@ -15,7 +16,7 @@ async function getOrganisationDetails(): Promise<Organisation> {
   const organisation = response.body.organisations?.[0];
 
   if (!organisation) {
-    throw new Error("Failed to retrieve organisation details");
+    throw new XeroConnectorError("Failed to retrieve organisation details");
   }
 
   return organisation;

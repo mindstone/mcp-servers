@@ -56,9 +56,16 @@ describe("email-invoice tool", () => {
 
   it("surfaces a formatted error when Xero rejects the email", async () => {
     const { emailInvoiceTool } = await importWithMockedClient();
-    mockEmailInvoice.mockRejectedValue(
-      new Error("Invoice not of valid status for modification"),
-    );
+    mockEmailInvoice.mockRejectedValue({
+      response: {
+        statusCode: 400,
+        body: {
+          Elements: [
+            { ValidationErrors: [{ Message: "Invoice not of valid status for modification" }] },
+          ],
+        },
+      },
+    });
 
     const result = await emailInvoiceTool().handler(
       { invoiceId: "inv-draft" },

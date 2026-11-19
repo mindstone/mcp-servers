@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { BankTransaction } from "xero-node";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface BankTransactionLineItem {
   description: string;
@@ -66,7 +67,7 @@ export async function createXeroBankTransaction(
     const createdTransaction = await createBankTransaction(type, bankAccountId, contactId, lineItems, reference, date);
   
     if (!createdTransaction) {
-      throw new Error("Bank transaction creation failed.");
+      throw new XeroConnectorError("Bank transaction creation failed.");
     }
 
     return {

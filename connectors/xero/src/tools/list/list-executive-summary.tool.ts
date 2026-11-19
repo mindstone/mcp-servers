@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listXeroExecutiveSummary } from "../../handlers/list-xero-executive-summary.handler.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
+import { formatReportRows } from "../../helpers/format-report-rows.js";
 
 const ListExecutiveSummaryTool = CreateXeroTool(
   "list-executive-summary",
@@ -37,7 +38,7 @@ const ListExecutiveSummaryTool = CreateXeroTool(
         },
         {
           type: "text" as const,
-          text: JSON.stringify(report.rows, null, 2),
+          text: formatReportRows(report.rows),
         },
       ],
     };

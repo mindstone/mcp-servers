@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { EmployeeLeaveBalance } from "xero-node/dist/gen/model/payroll-nz/employeeLeaveBalance.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 /**
  * Internal function to fetch employee leave balances from Xero
@@ -11,7 +12,7 @@ async function fetchEmployeeLeaveBalances(employeeId: string): Promise<EmployeeL
   await xeroClient.authenticate();
 
   if (!employeeId) {
-    throw new Error("Employee ID is required to fetch employee leave balances");
+    throw new XeroConnectorError("Employee ID is required to fetch employee leave balances");
   }
 
   const response = await xeroClient.payrollNZApi.getEmployeeLeaveBalances(

@@ -12,11 +12,13 @@
  */
 
 import { z } from "zod";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 export const XERO_TOKEN_URL = "https://identity.xero.com/connect/token";
 export const XERO_CONNECTIONS_URL = "https://api.xero.com/connections";
 
-const TOKEN_REQUEST_TIMEOUT_MS = 30_000;
+/** How long any one request to Xero may take before it is abandoned. */
+export const XERO_REQUEST_TIMEOUT_MS = 30_000;
 
 /** The OAuth 2.0 error codes (RFC 6749 §5.2). */
 const OAUTH_ERROR_CODES = [
@@ -90,7 +92,7 @@ export async function requestRefreshGrant(
     response = await fetch(XERO_TOKEN_URL, {
       method: "POST",
       redirect: "error",
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(XERO_REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: authHeader,
         "Content-Type": "application/x-www-form-urlencoded",
@@ -200,11 +202,11 @@ export async function fetchFirstTenantId(accessToken: string): Promise<string> {
   try {
     response = await fetch(XERO_CONNECTIONS_URL, {
       redirect: "error",
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(XERO_REQUEST_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
   } catch (error) {
-    throw new Error(
+    throw new XeroConnectorError(
       error instanceof Error && error.name === "TimeoutError"
         ? "Xero took too long to list your companies. Please try again."
         : "Could not reach Xero to list your companies. Please try again.",
@@ -212,17 +214,17 @@ export async function fetchFirstTenantId(accessToken: string): Promise<string> {
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
-    throw new Error(`Could not list your Xero companies (HTTP ${response.status}).`);
+    throw new XeroConnectorError(`Could not list your Xero companies (HTTP ${response.status}).`);
   }
   let data: unknown;
   try {
     data = await response.json();
   } catch {
-    throw new Error("Xero answered the company list with something unreadable. Please try again.");
+    throw new XeroConnectorError("Xero answered the company list with something unreadable. Please try again.");
   }
   const parsed = connectionsSchema.safeParse(data);
   if (!parsed.success) {
-    throw new Error("Xero answered the company list in an unexpected shape. Please try again.");
+    throw new XeroConnectorError("Xero answered the company list in an unexpected shape. Please try again.");
   }
   const tenants = parsed.data;
   const organisation = tenants.find((t) => t.tenantType === "ORGANISATION");

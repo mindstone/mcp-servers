@@ -2,6 +2,7 @@ import axios from "axios";
 
 import { XERO_CUSTOM_CONNECTION_SCOPE_MESSAGE } from "../clients/xero-scopes.js";
 import { isInvalidScopeError } from "./find-missing-scopes.js";
+import { isTimeout } from "./format-error.js";
 
 const SCOPE_FIX_PREFIX =
   "Go to https://developer.xero.com/app/manage, select your app, ";
@@ -46,6 +47,9 @@ export function formatTokenRequestError(error: unknown): string {
     default:
       if (status !== undefined) {
         return `Xero authentication failed with HTTP ${status}. Please check your Xero connection details.`;
+      }
+      if (isTimeout(error)) {
+        return "Xero authentication failed: Xero did not answer in time. Please try again.";
       }
       return "Xero authentication failed before Xero returned a response. Please check your network connection and connection details.";
   }

@@ -4,6 +4,7 @@ import { formatError } from "../helpers/format-error.js";
 import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 import { assertXeroCurrencyEnabled } from "../helpers/xero-currencies.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -79,7 +80,7 @@ export async function createXeroInvoice(
     );
 
     if (!createdInvoice) {
-      throw new Error("Invoice creation failed.");
+      throw new XeroConnectorError("Invoice creation failed.");
     }
 
     return {

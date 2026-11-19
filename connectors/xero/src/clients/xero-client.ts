@@ -21,12 +21,20 @@ import { bridgeRequest } from "../auth/bridge.js";
 import {
   ClientKeys,
   TokenGrantFailure,
+  XERO_REQUEST_TIMEOUT_MS,
   describeRefreshFailure,
   fetchFirstTenantId,
   requestRefreshGrant,
 } from "../auth/token-grant.js";
+import { XeroConnectorError } from "../helpers/connector-error.js";
+import { configureSdkAxios, loadSdkAxios } from "./sdk-axios.js";
 
 dotenv.config();
+
+// Bound this connector's own axios requests, then xero-node's, which go
+// through a separate CommonJS copy of axios (see sdk-axios.ts).
+axios.defaults.timeout = XERO_REQUEST_TIMEOUT_MS;
+configureSdkAxios(loadSdkAxios());
 
 const client_id = process.env.XERO_CLIENT_ID;
 const client_secret = process.env.XERO_CLIENT_SECRET;
@@ -84,7 +92,7 @@ export abstract class MCPXeroClient extends XeroClient {
     const organisation = organisationResponse.body.organisations?.[0];
 
     if (!organisation) {
-      throw new Error("Failed to retrieve organisation");
+      throw new XeroConnectorError("Failed to retrieve organisation");
     }
 
     return organisation;
@@ -96,7 +104,7 @@ export abstract class MCPXeroClient extends XeroClient {
         const organisation = await this.getOrganisation();
         this.shortCode = organisation.shortCode ?? "";
       } catch (error: unknown) {
-        throw new Error(
+        throw new XeroConnectorError(
           `Failed to get Organisation short code: ${formatError(error)}`,
         );
       }
@@ -110,7 +118,7 @@ export abstract class MCPXeroClient extends XeroClient {
  * get this (only a Custom Connection may use that grant), so "Sign in with
  * Xero" is the way in.
  */
-export class XeroClientCredentialsRefusedError extends Error {
+export class XeroClientCredentialsRefusedError extends XeroConnectorError {
   constructor(message: string) {
     super(message);
     this.name = "XeroClientCredentialsRefusedError";
@@ -201,12 +209,12 @@ export class CustomConnectionsXeroClient extends MCPXeroClient {
         const missing = await findMissingScopes((scope, signal) =>
           this.requestToken(scope, signal),
         );
-        if (missing) throw new Error(formatMissingScopesMessage(missing));
+        if (missing) throw new XeroConnectorError(formatMissingScopesMessage(missing));
       }
       if (isClientCredentialsRefused(error)) {
         throw new XeroClientCredentialsRefusedError(formatTokenRequestError(error));
       }
-      throw new Error(formatTokenRequestError(error));
+      throw new XeroConnectorError(formatTokenRequestError(error));
     }
   }
 
@@ -229,7 +237,7 @@ export class CustomConnectionsXeroClient extends MCPXeroClient {
 }
 
 /** A refresh-token grant that failed; `failure` says why, in standard OAuth terms. */
-export class XeroRefreshError extends Error {
+export class XeroRefreshError extends XeroConnectorError {
   constructor(public readonly failure: TokenGrantFailure) {
     super(describeRefreshFailure(failure));
     this.name = "XeroRefreshError";
@@ -316,7 +324,7 @@ export class RefreshTokenXeroClient extends MCPXeroClient {
     if (!this.tenantId) {
       const tenantId = await fetchFirstTenantId(this.accessToken);
       if (!tenantId) {
-        throw new Error(
+        throw new XeroConnectorError(
           "Your Xero sign-in has no company connected. Click Connect on the Xero connector and pick a company on Xero's page.",
         );
       }
