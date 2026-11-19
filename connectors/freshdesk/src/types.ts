@@ -1,10 +1,5 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
 
-export interface BridgeState {
-  port: number;
-  token: string;
-}
-
 export class FreshdeskError extends Error {
   constructor(
     message: string,

@@ -4,6 +4,7 @@ import { createFreshdeskHandlers } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { createTempConfig } from '@mindstone/mcp-test-harness';
 import fs, {
+  chmodSync,
   existsSync,
   readFileSync,
   readdirSync,
@@ -142,8 +143,13 @@ describe('Freshdesk accounts.json file handling', () => {
 
   // ─── Atomic replace ──────────────────────────────────────────────
 
-  it('leaves no temp file behind and keeps owner-only modes after a save', async () => {
+  it('leaves no temp file behind and makes the folder and file owner-only after a save', async () => {
     const { configPath, accountsPath } = await setup();
+    // Start permissive, so a save that skips the hardening step fails here.
+    if (!isWindows) {
+      chmodSync(configPath, 0o755);
+      chmodSync(accountsPath, 0o644);
+    }
 
     const configured = await callTool('configure_freshdesk', { domain: 'newdomain', api_key: 'new-key' });
     expect(configured.ok).toBe(true);

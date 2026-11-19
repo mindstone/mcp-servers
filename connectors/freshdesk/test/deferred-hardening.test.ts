@@ -171,7 +171,7 @@ describe('Deferred-findings hardening', () => {
     expect(text).not.toContain(MARKER);
     const parsed = JSON.parse(text);
     expect(parsed.ok).toBe(false);
-    expect(parsed.error).toContain('unparseable');
+    expect(parsed.error).toContain('malformed response');
   });
 
   it('envelopes bridge-authored error text in the failure message', async () => {
@@ -195,7 +195,7 @@ describe('Deferred-findings hardening', () => {
     const parsed = JSON.parse(text);
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('BRIDGE_ERROR');
-    expect(parsed.error).toContain('<untrusted-content source="external-bridge">');
+    expect(parsed.error).toContain('<untrusted-content source="freshdesk:bridge.error">');
     expect(stripEnvelopes(parsed.error)).not.toContain(MARKER);
   });
 
@@ -219,7 +219,7 @@ describe('Deferred-findings hardening', () => {
     });
     const parsed = JSON.parse(text);
     expect(parsed.ok).toBe(true);
-    expect(parsed.message).toContain('<untrusted-content source="external-bridge">');
+    expect(parsed.message).toContain('<untrusted-content source="freshdesk:bridge.warning">');
     expect(stripEnvelopes(parsed.message)).not.toContain(MARKER);
   });
 

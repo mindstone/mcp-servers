@@ -3,8 +3,6 @@ import { mswServer } from './helpers/setup.js';
 import {
   createFreshdeskHandlers,
   createFreshdeskBridgeHandlers,
-  createFreshdeskBridge401Handlers,
-  createFreshdeskBridge403Handlers,
   createFreshdeskBridgeFailureHandlers,
 } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -12,6 +10,8 @@ import { createTempConfig } from '@mindstone/mcp-test-harness';
 import { writeFileSync, readFileSync, statSync, mkdtempSync, mkdirSync, rmSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 describe('Freshdesk account management', () => {
   let testClient: McpTestClient;
@@ -370,56 +370,52 @@ describe('Freshdesk bridge integration', () => {
     expect(parsed.message).toContain('bridgetest.freshdesk.com');
   });
 
-  it('bridge 401 returns isError: true', async () => {
+  // A real loopback server with msw stopped: the shared reader cancels an
+  // unauthorized reply's body unread, and under msw that cancel never settles.
+  it.each([401, 403])('bridge %i returns isError: true', async (status) => {
     const tc = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
     cleanupConfig = tc.cleanup;
 
-    const bridgePath = join(tc.configPath, 'bridge-state.json');
-    writeFileSync(bridgePath, JSON.stringify({ port: BRIDGE_PORT, token: BRIDGE_TOKEN }));
-
-    mswServer.use(...createFreshdeskBridge401Handlers(BRIDGE_PORT));
-
-    testClient = await createTestClient({
-      env: { FRESHDESK_CONFIG_PATH: tc.configPath, MCP_HOST_BRIDGE_STATE: bridgePath },
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
     });
-
-    const result = await testClient.client.callTool({
-      name: 'configure_freshdesk',
-      arguments: { domain: 'test401', api_key: 'mcp-test-freshdesk-key' },
+    // A refused bind (a sandbox without loopback) fails the test at once
+    // with its error, rather than as an unhandled error and a timeout.
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
     });
+    const port = (server.address() as AddressInfo).port;
+    mswServer.close();
 
-    expect(result.isError).toBe(true);
-    const parsed = JSON.parse(
-      (result.content as Array<{ type: string; text: string }>)[0].text,
-    );
-    expect(parsed.ok).toBe(false);
-    expect(parsed.code).toBe('BRIDGE_ERROR');
-  });
+    try {
+      const bridgePath = join(tc.configPath, 'bridge-state.json');
+      writeFileSync(bridgePath, JSON.stringify({ port, token: BRIDGE_TOKEN }));
 
-  it('bridge 403 returns isError: true', async () => {
-    const tc = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
-    cleanupConfig = tc.cleanup;
+      testClient = await createTestClient({
+        env: { FRESHDESK_CONFIG_PATH: tc.configPath, MCP_HOST_BRIDGE_STATE: bridgePath },
+      });
 
-    const bridgePath = join(tc.configPath, 'bridge-state.json');
-    writeFileSync(bridgePath, JSON.stringify({ port: BRIDGE_PORT, token: BRIDGE_TOKEN }));
+      const result = await testClient.client.callTool({
+        name: 'configure_freshdesk',
+        arguments: { domain: `test${status}`, api_key: 'mcp-test-freshdesk-key' },
+      });
 
-    mswServer.use(...createFreshdeskBridge403Handlers(BRIDGE_PORT));
-
-    testClient = await createTestClient({
-      env: { FRESHDESK_CONFIG_PATH: tc.configPath, MCP_HOST_BRIDGE_STATE: bridgePath },
-    });
-
-    const result = await testClient.client.callTool({
-      name: 'configure_freshdesk',
-      arguments: { domain: 'test403', api_key: 'mcp-test-freshdesk-key' },
-    });
-
-    expect(result.isError).toBe(true);
-    const parsed = JSON.parse(
-      (result.content as Array<{ type: string; text: string }>)[0].text,
-    );
-    expect(parsed.ok).toBe(false);
-    expect(parsed.code).toBe('BRIDGE_ERROR');
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.ok).toBe(false);
+      expect(parsed.code).toBe('BRIDGE_ERROR');
+      expect(parsed.error).toContain(`Bridge returned ${status}: unauthorized`);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      mswServer.listen({ onUnhandledRequest: 'error' });
+    }
   });
 
   it('bridge { success: false } returns isError: true', async () => {

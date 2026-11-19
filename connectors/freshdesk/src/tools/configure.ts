@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { loadAccounts, getAccountsConfig, removeAccount, upsertAccount } from '../auth.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { bridgeRequest, isBridgeConfigured } from '../bridge.js';
 import { FreshdeskError } from '../types.js';
 import { withErrorHandling, validateSubdomain } from '../utils.js';
 
@@ -33,8 +33,8 @@ export function registerConfigureTools(server: McpServer): void {
       // Validate subdomain before any storage or network call
       validateSubdomain(domain);
 
-      // If bridge is available, persist via bridge
-      if (BRIDGE_STATE_PATH) {
+      // If a bridge path is configured, persist via bridge (fail closed: never fall back to a local write)
+      if (isBridgeConfigured()) {
         try {
           const result = await bridgeRequest('/bundled/freshdesk/configure', {
             domain,
