@@ -31,8 +31,16 @@
  * Any local process able to bind the port can answer a request, and would
  * receive the token and the request body; nothing here can detect that, so it
  * rests on the host app owning the port. The reply is therefore schema-checked,
- * never cast, and its free text is enveloped before it can reach the model. Each refusal logs one fixed stderr line; file content and
- * error messages (which can quote the path) are never logged.
+ * never cast, and its free text (`username`, `warning`, `error`) is enveloped
+ * before it can reach the model; an empty or absent text field stays absent, so
+ * a caller's own fallback text still applies. Each refusal logs one fixed stderr
+ * line; file content and error messages (which can quote the path) are never
+ * logged.
+ *
+ * `isBridgeConfigured` is the one way for a connector to ask whether it runs
+ * under the host app (for example, to pick its auth mode) without naming the env
+ * vars itself. It means "a bridge state path is configured", not "the bridge is
+ * readable or reachable": `postToBridge` still validates the file on every call.
  */
 import * as fs from 'fs';
 import { z } from 'zod';
@@ -49,6 +57,7 @@ export type BridgeState = z.infer<typeof bridgeStateSchema>;
 
 const bridgeResponseSchema = z.object({
   success: z.boolean(),
+  username: z.string().optional(),
   warning: z.string().optional(),
   error: z.string().optional(),
 });
@@ -58,6 +67,11 @@ export type BridgeResponse = z.infer<typeof bridgeResponseSchema>;
 /** The state file path: `MCP_HOST_BRIDGE_STATE`, else the legacy `MINDSTONE_REBEL_BRIDGE_STATE`. */
 export function bridgeStatePath(env: NodeJS.ProcessEnv = process.env): string {
   return env.MCP_HOST_BRIDGE_STATE || env.MINDSTONE_REBEL_BRIDGE_STATE || '';
+}
+
+/** Whether a bridge state path is configured (not whether the bridge is usable). */
+export function isBridgeConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return bridgeStatePath(env) !== '';
 }
 
 function refuse(connector: string, reason: string): null {
@@ -177,13 +191,11 @@ export async function postToBridge(
   if (!parsed.success) {
     return { success: false, error: 'Bridge returned an unexpected response shape' };
   }
+  const { success, username, warning, error } = parsed.data;
   return {
-    success: parsed.data.success,
-    ...(parsed.data.warning !== undefined
-      ? { warning: wrapUntrusted(parsed.data.warning, `${connector}:bridge.warning`) }
-      : {}),
-    ...(parsed.data.error !== undefined
-      ? { error: wrapUntrusted(parsed.data.error, `${connector}:bridge.error`) }
-      : {}),
+    success,
+    ...(username ? { username: wrapUntrusted(username, `${connector}:bridge.username`) } : {}),
+    ...(warning ? { warning: wrapUntrusted(warning, `${connector}:bridge.warning`) } : {}),
+    ...(error ? { error: wrapUntrusted(error, `${connector}:bridge.error`) } : {}),
   };
 }
