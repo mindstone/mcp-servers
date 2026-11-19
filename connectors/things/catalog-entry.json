@@ -1,0 +1,10 @@
+{
+  "id": "bundled-things",
+  "name": "Things 3",
+  "description": "Read, add, change and complete your Things 3 to-dos on this Mac. 'What's on my Today list?' or 'What did I finish this week?'",
+  "category": "productivity",
+  "icon": "check-square",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": false
+}
