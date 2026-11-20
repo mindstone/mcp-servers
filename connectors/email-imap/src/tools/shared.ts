@@ -172,7 +172,7 @@ export async function streamToBuffer(stream: Readable): Promise<Buffer> {
  * body is sender-controlled and otherwise unbounded; past this the rest of the
  * part is not downloaded, and the result says the body was cut.
  */
-export const MAX_BODY_PART_BYTES = 1024 * 1024;
+export const MAX_BODY_PART_BYTES = 25 * 1024 * 1024;
 
 export interface DownloadedText {
   text: string;

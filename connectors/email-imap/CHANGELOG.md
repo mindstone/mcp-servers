@@ -19,7 +19,7 @@ to end the label early.
 ### Security
 
 - The host bridge state file is now read with the shared hardened bridge reader: a symlinked, non-regular, oversized or malformed file is refused, and the bridge's reply is schema-checked with its text enveloped.
-- `email_get_message` caps each text and HTML body at 1 MiB and stops downloading there, so one very large message cannot exhaust memory; a cut body is listed in the new `bodyTruncated` field, with the cap.
+- `email_get_message` caps each text and HTML body at 25 MiB and stops downloading there, so one very large message cannot exhaust memory; a cut body is listed in the new `bodyTruncated` field, with the cap.
 
 ### Changed
 

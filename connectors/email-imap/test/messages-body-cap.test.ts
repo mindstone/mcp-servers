@@ -11,7 +11,7 @@ import { createMailboxes } from './fixtures/email-data.js';
 
 // Mirrors src/tools/shared.ts; a static import would load imapflow before
 // vi.mock replaces it. The first test checks the two agree.
-const MAX_BODY_PART_BYTES = 1024 * 1024;
+const MAX_BODY_PART_BYTES = 25 * 1024 * 1024;
 
 function message(uid: number, text: string, html: string): MockMessageData {
   return {
@@ -129,6 +129,11 @@ describe('email_get_message — body size cap', () => {
   it('uses the cap the connector exports', async () => {
     const shared = await import('../src/tools/shared.js');
     expect(shared.MAX_BODY_PART_BYTES).toBe(MAX_BODY_PART_BYTES);
+  });
+
+  it('caps each body part at 25 MiB, so ordinary long emails come through whole', async () => {
+    const shared = await import('../src/tools/shared.js');
+    expect(shared.MAX_BODY_PART_BYTES).toBe(26_214_400);
   });
 
   it('asks the server for at most one byte past the cap', async () => {
