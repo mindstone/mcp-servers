@@ -152,7 +152,7 @@ RETURNS: computers (name, provider, state: running | stopped | starting | stoppi
       description: `Create (buy) a new computer on one of the person's cloud accounts and set it up with a browser.
 
 WHEN TO USE:
-- Only after the person explicitly asks for a computer or agrees to one. If they have not, explain the cost below and ask first.
+- The person asks for a computer, or a task needs one and computer_list shows none that fits.
 - Reuse an existing computer when one will do (computer_list): each computer costs the person money while it runs, and a little for storage while stopped.
 
 COST: billed by the provider to the person's own account. Roughly: Fly.io and Google Cloud a few cents an hour while running; E2B per second while running. Computers stop (or pause) by themselves after 15 idle minutes.
@@ -197,8 +197,6 @@ WHEN TO USE:
 - Anything you'd do in a terminal: install software (sudo apt-get install -y …, pip install …), run scripts, convert or process files, download from the web (curl, wget), check what's there (ls, cat).
 - Prefer this over computer_browser when a site has an API or a file can be downloaded directly.
 
-ASK FIRST: before a destructive or irreversible command the person has not already asked for (deleting or overwriting files, wiping data, changing or deleting things on other services), show what it will do and ask.
-
 GOOD TO KNOW:
 - Already installed: python3 with pip, venv and matplotlib, git, curl, jq, zip/unzip, file, ping, pdftotext, and the browser (agent-browser). Install anything else with sudo apt-get install -y …, pip or npm.
 - The home folder (relative paths start there) is kept between days. Keep the person's work there. On Fly.io computers, programs installed with apt outside the home folder are gone after a restart (the everyday tools above come back by themselves); pip install --user and anything under the home folder stay.
@@ -233,7 +231,7 @@ RETURNS: state (finished | running | stopped), exit_code, output, job, next_offs
 WHEN TO USE:
 - A previous result had state "running": call this with its job until state is "finished" or "stopped".
 - A result had more_output: call this with offset = next_offset to read the rest.
-- To stop a command early: cancel: true (ends the command and everything it started). Unless the person asked to stop it, check with them before cancelling work they are waiting for.
+- To stop a command early: cancel: true (ends the command and everything it started).
 
 RETURNS: the same shape as computer_run.`,
       inputSchema: {
@@ -258,8 +256,6 @@ RETURNS: the same shape as computer_run.`,
 
 WHEN TO USE:
 - Websites with no API or download link: reading pages, filling forms, clicking through flows, uploading a file that's on the computer.
-
-ASK FIRST: before submitting a form, sending a message or uploading a file, changing an account, making a purchase or deleting data, explain what will happen and ask, unless the person has already requested that action. Routine browsing and searches do not need another confirmation.
 
 HOW:
 - args is one agent-browser command as a list, for example:
@@ -308,7 +304,7 @@ WHEN TO USE:
 - A command or website on the computer needs one of the person's files: pass library_path.
 - You need to write a file on the computer: pass content. This is easier than writing it through computer_run, with no quoting.
 
-GOOD TO KNOW: one file at a time, up to 200 MB (zip a folder first). By default it won't overwrite a file on the computer; pass replace: true to overwrite, and check with the person first unless they asked for it.
+GOOD TO KNOW: one file at a time, up to 200 MB (zip a folder first). By default it won't overwrite a file on the computer; pass replace: true to overwrite.
 
 RETURNS: the path it landed at on the computer and its size.`,
       _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['library_path'], base: 'workspaceRealpath', expandTilde: false, when: [{ relativeTo: 'root', selector: ['content'], test: 'undefined' }] }] } },
@@ -360,7 +356,7 @@ RETURNS: library_path (where it was saved) and its size.`,
 WHEN TO USE:
 - You worked out a multi-step job that will be needed again (a weekly report, a file clean-up, a site check). Test it with computer_run first, then save it.
 
-GOOD TO KNOW: the script is bash (or anything with a #! line); arguments arrive as $1, $2…; it runs in the home folder. Saving with an existing name replaces that tool: check with the person before replacing one they did not ask you to change.
+GOOD TO KNOW: the script is bash (or anything with a #! line); arguments arrive as $1, $2…; it runs in the home folder. Saving with an existing name replaces that tool.
 
 RETURNS: the tool's name and where it is saved (~/tools/<name>).`,
       inputSchema: {
@@ -401,8 +397,6 @@ RETURNS: tools (name, description). If a saved tool's file could not be read, un
 
 GOOD TO KNOW: tools work on files on the computer. To use a Library file, copy it in first (computer_copy_in); to give the person a result, copy it out afterwards (computer_copy_out).
 
-ASK FIRST: if the tool deletes, overwrites or changes something that can't be undone and the person has not already asked for that, show what it will do and ask.
-
 ${JOB_HELP}
 
 RETURNS: the same shape as computer_run.`,
@@ -427,7 +421,7 @@ RETURNS: the same shape as computer_run.`,
     {
       description: `Stop (turn off) a computer now. Everything on it is kept; a stopped computer costs only storage and starts again by itself the next time a tool uses it. Running commands are ended.
 
-WHEN TO USE: the work is done and the person won't need it for a while. Computers also stop by themselves after 15 idle minutes, so this is optional. If commands are still running and the person has not already asked to stop this computer or its work, explain that stopping will end those commands and ask first.
+WHEN TO USE: the work is done and the person won't need it for a while. Computers also stop by themselves after 15 idle minutes, so this is optional.
 
 RETURNS: the computer's name and new state.`,
       inputSchema: { computer: computerArg },
