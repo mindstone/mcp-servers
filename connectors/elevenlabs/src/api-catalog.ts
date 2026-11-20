@@ -4,7 +4,7 @@ import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
-import { audioRepresentation, binaryExtensions } from './api-media.mjs';
+import { base64AudioSchema, audioRepresentation, binaryExtensions } from './api-media.mjs';
 
 export type JsonSchema = boolean | Record<string, unknown>;
 export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
@@ -81,7 +81,7 @@ export function isBinaryResponseMedia(media: string | null): media is typeof bin
   return binaryResponseMedia.some(candidate => candidate === media);
 }
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
-  output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
+  base64_audio: base64AudioSchema.optional(), output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
@@ -286,10 +286,11 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       if (response.output_formats) {
         const binding = response.output_formats;
         const query = op.parameters.query.properties.output_format;
-        if (response.media_type !== 'audio/mpeg' || !isRecord(query)
+        if ((response.media_type !== 'audio/mpeg' && !response.base64_audio) || !isRecord(query)
           || JSON.stringify(query.enum) !== JSON.stringify(binding.values) || query.default !== binding.default
           || !binding.values.includes(binding.default) || binding.values.some(format => !audioRepresentation(format))) invalid('Invalid reviewed output-format binding.');
       }
+      if (response.base64_audio && (response.media_type !== 'application/json' || !sensitivePathExists(response.schema, response.base64_audio.array ? [response.base64_audio.array, '*', response.base64_audio.field] : [response.base64_audio.field], catalog))) invalid('Unbound base64 audio response.');
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
       if (response.media_type === 'text/csv' && (!isRecord(response.schema) || response.schema.type !== 'string' || response.schema.format !== 'binary')) invalid('CSV requires a binary success schema.');
       if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type) || response.media_type === 'audio/*');

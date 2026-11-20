@@ -19,6 +19,8 @@ The API tools also cover crawl jobs, RAG indexes, document summaries and chunks,
 
 Binary downloads are saved incrementally. Clients that request progress receive byte counts and, when a workspace is configured, a relative file reference. If a call fails after reporting saved bytes, the non-empty file is kept and the error identifies it as incomplete. A stalled progress receiver cannot extend the call deadline. This does not promise that an incomplete audio file is playable.
 
+The API tools also save timestamped speech and dialogue, voice-design and remix previews, and existing voice-sample and speaker audio from JSON responses as workspace files. Receipts keep alignment, voice segments and each preview's generated voice ID beside its file; inline audio is omitted. Preview generation may consume credits and does not save a permanent voice. Malformed audio or an unsupported audio media type is an error; completed files are kept and listed if a later preview or receipt fails. Timestamp streaming routes remain unavailable.
+
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements

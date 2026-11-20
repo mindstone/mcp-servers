@@ -1,3 +1,4 @@
+import base64Cases from './api-base64-wire-cases.json' with { type: 'json' };
 import processingCases from './api-processing-wire-cases.json' with { type: 'json' };
 import speechCases from './api-speech-wire-cases.json' with { type: 'json' };
 import callingCases from './api-calling-wire-cases.json' with { type: 'json' };
@@ -35,6 +36,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...base64Cases as WireCase[],
   ...speechCases as WireCase[],
   ...callingCases as WireCase[],
   ...batchCallingCases as WireCase[],

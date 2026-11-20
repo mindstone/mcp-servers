@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **219 admitted + 187 planned + 109 excluded = 515**.
+Partition: **226 admitted + 180 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 219 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 226 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -273,7 +273,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_public_llm_expected_cost_calculation | POST | /v1/convai/llm-usage/calculate | admitted | 7 | llm-usage | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_public_template | GET | /v1/flows/templates/{template_id} | planned | 10 | flows | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_public_template_run | GET | /v1/flows/templates/{template_id}/runs/{run_id} | planned | 10 | flows | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_pvc_sample_audio | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/audio | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_pvc_sample_audio | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/audio | admitted | 9 | voices | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_pvc_sample_speakers | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_pvc_sample_visual_waveform | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/waveform | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_pvc_voice_captcha | GET | /v1/voices/pvc/{voice_id}/captcha | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -289,7 +289,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_similar_library_voices | POST | /v1/similar-voices | admitted | 9 | similar-voices | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_similar_voices_for_speaker | GET | /v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_single_use_token | POST | /v1/single-use-token/{token_type} | planned | 9 | single-use-token | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_speaker_audio | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers/{speaker_id}/audio | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_speaker_audio | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers/{speaker_id}/audio | admitted | 9 | voices | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_speech_engine | GET | /v1/speech-engine/{speech_engine_id} | planned | 10 | speech-engine | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_speech_history | GET | /v1/history | planned | 9 | history | — | partial | @mindstone/mcp-server-elevenlabs:list_history | Supports page_size, start_after_history_item_id, voice_id and search; omits current history filters. |
 | get_speech_history_item_by_id | GET | /v1/history/{history_item_id} | planned | 9 | history | — | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -497,17 +497,17 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | submit_merge_proposal_review_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/reviews | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_search_conversation_messages_route | GET | /v1/convai/conversations/messages/text-search | admitted | 7 | conversations | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_to_dialogue | POST | /v1/text-to-dialogue | admitted | 9 | text-to-dialogue | run_job | partial | @mindstone/mcp-server-elevenlabs:text_to_dialogue | Supports dialogue inputs, model_id, language_code and seed; settings, context, pronunciation locators and other current controls and timestamp/stream variants are absent. |
-| text_to_dialogue_full_with_timestamps | POST | /v1/text-to-dialogue/with-timestamps | planned | 9 | text-to-dialogue | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| text_to_dialogue_full_with_timestamps | POST | /v1/text-to-dialogue/with-timestamps | admitted | 9 | text-to-dialogue | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_to_dialogue_stream | POST | /v1/text-to-dialogue/stream | planned | 9 | text-to-dialogue | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_to_dialogue_stream_with_timestamps | POST | /v1/text-to-dialogue/stream/with-timestamps | planned | 9 | text-to-dialogue | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_to_speech_full | POST | /v1/text-to-speech/{voice_id} | admitted | 9 | text-to-speech | run_job | partial | @mindstone/mcp-server-elevenlabs:generate_speech | Supports voice_id, text, model_id, selected voice settings, seed, output_format and pronunciation locators; omits other current synthesis fields and streaming variants. |
-| text_to_speech_full_with_timestamps | POST | /v1/text-to-speech/{voice_id}/with-timestamps | planned | 9 | text-to-speech | — | partial | @mindstone/mcp-server-elevenlabs:generate_speech_with_timestamps | Supports voice_id, text, model_id, selected voice settings, seed, output_format and pronunciation locators; omits other current synthesis fields and streaming variants. |
+| text_to_speech_full_with_timestamps | POST | /v1/text-to-speech/{voice_id}/with-timestamps | admitted | 9 | text-to-speech | run_job | partial | @mindstone/mcp-server-elevenlabs:generate_speech_with_timestamps | Supports voice_id, text, model_id, selected voice settings, seed, output_format and pronunciation locators; omits other current synthesis fields and streaming variants. |
 | text_to_speech_stream | POST | /v1/text-to-speech/{voice_id}/stream | planned | 9 | text-to-speech | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_to_speech_stream_with_timestamps | POST | /v1/text-to-speech/{voice_id}/stream/with-timestamps | planned | 9 | text-to-speech | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| text_to_voice | POST | /v1/text-to-voice/create-previews | planned | 9 | text-to-voice | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| text_to_voice_design | POST | /v1/text-to-voice/design | planned | 9 | text-to-voice | — | partial | @mindstone/mcp-server-elevenlabs:design_voice | Supports voice_description, optional text, model_id and auto_generate_text; output_format, seed, loudness, guidance_scale and other current preview controls are absent. |
+| text_to_voice | POST | /v1/text-to-voice/create-previews | admitted | 9 | text-to-voice | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
+| text_to_voice_design | POST | /v1/text-to-voice/design | admitted | 9 | text-to-voice | run_job | partial | @mindstone/mcp-server-elevenlabs:design_voice | Supports voice_description, optional text, model_id and auto_generate_text; output_format, seed, loudness, guidance_scale and other current preview controls are absent. |
 | text_to_voice_preview_stream | GET | /v1/text-to-voice/{generated_voice_id}/stream | planned | 9 | text-to-voice | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| text_to_voice_remix | POST | /v1/text-to-voice/{voice_id}/remix | planned | 9 | text-to-voice | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| text_to_voice_remix | POST | /v1/text-to-voice/{voice_id}/remix | admitted | 9 | text-to-voice | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | transcribe | POST | /v1/dubbing/resource/{dubbing_id}/transcribe | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | translate | POST | /v1/dubbing/resource/{dubbing_id}/translate | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | unassign_conversation_tag_route | DELETE | /v1/convai/conversations/{conversation_id}/tags/{tag_id} | admitted | 7 | conversations | delete | missing | — | No existing tool maps to this exact HTTP operation. |

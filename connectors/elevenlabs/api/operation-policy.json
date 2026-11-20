@@ -122,6 +122,8 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "text-to-voice": { "read": { "unavailable_reason": "No reliable result lookup for this preview generation is admitted in the catalogue." } },
+    "voices": { "read": { "unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue." } },
     "agent": {"read": "get_agents_route"},
     "agent-testing": {"read": "list_chat_response_tests_route"},
     "agents": {"read": "get_agents_route", "tests": "get_test_invocation_route"},
@@ -5332,19 +5334,28 @@
     "get_pvc_sample_audio": {
       "method": "GET",
       "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads existing voice sample audio without modifying the voice or sample.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pvc_sample_audio", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "base64_audio": {"field": "audio_base_64", "media_type_field": "media_type"},
+      "timeout": "standard"
     },
     "get_pvc_sample_speakers": {
       "method": "GET",
@@ -5696,19 +5707,28 @@
     "get_speaker_audio": {
       "method": "GET",
       "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers/{speaker_id}/audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads existing speaker audio without modifying the voice or sample.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_speaker_audio", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example", "speaker_id": "speaker_example"}}],
+      "base64_audio": {"field": "audio_base_64", "media_type_field": "media_type"},
+      "timeout": "standard"
     },
     "get_speech_engine": {
       "method": "GET",
@@ -10159,19 +10179,29 @@
     "text_to_dialogue_full_with_timestamps": {
       "method": "POST",
       "path": "/v1/text-to-dialogue/with-timestamps",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-dialogue",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates dialogue audio with alignment and voice-segment metadata and may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "text_to_dialogue_full_with_timestamps", "query_params": {"output_format": "mp3_44100_128"}, "body": {"inputs": [{"text": "Welcome.", "voice_id": "voice_example"}]}}],
+      "base64_audio": {"field": "audio_base64", "media_type": "audio/mpeg"},
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_dialogue_stream": {
       "method": "POST",
@@ -10257,12 +10287,17 @@
     "text_to_speech_full_with_timestamps": {
       "method": "POST",
       "path": "/v1/text-to-speech/{voice_id}/with-timestamps",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-speech",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates speech audio and alignment data from text and may consume credits.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -10273,7 +10308,12 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/speech.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "text_to_speech_full_with_timestamps", "path_params": {"voice_id": "voice_example"}, "query_params": {"output_format": "wav_44100"}, "body": {"text": "Welcome to the guide."}}],
+      "base64_audio": {"field": "audio_base64", "media_type": "audio/mpeg"},
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_speech_stream": {
       "method": "POST",
@@ -10312,29 +10352,43 @@
     "text_to_voice": {
       "method": "POST",
       "path": "/v1/text-to-voice/create-previews",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-voice",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates new voice previews without saving a permanent voice and may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "text_to_voice", "body": {"voice_description": "A calm, warm and clear guide voice.", "auto_generate_text": true}}],
+      "base64_audio": {"field": "audio_base_64", "array": "previews", "media_type_field": "media_type"},
+      "timeout": "long"
     },
     "text_to_voice_design": {
       "method": "POST",
       "path": "/v1/text-to-voice/design",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-voice",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates designed voice previews without saving a permanent voice and may consume credits.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -10345,7 +10399,11 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/voice-design.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "text_to_voice_design", "body": {"voice_description": "A calm, warm and clear guide voice.", "auto_generate_text": true}}],
+      "base64_audio": {"field": "audio_base_64", "array": "previews", "media_type_field": "media_type"},
+      "timeout": "long"
     },
     "text_to_voice_preview_stream": {
       "method": "GET",
@@ -10367,19 +10425,28 @@
     "text_to_voice_remix": {
       "method": "POST",
       "path": "/v1/text-to-voice/{voice_id}/remix",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-voice",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates remixed voice previews without changing the source voice and may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "text_to_voice_remix", "body": {"voice_description": "A calm, warm and clear guide voice.", "auto_generate_text": true}, "path_params": {"voice_id": "voice_example"}}],
+      "base64_audio": {"field": "audio_base_64", "array": "previews", "media_type_field": "media_type"},
+      "timeout": "long"
     },
     "transcribe": {
       "method": "POST",

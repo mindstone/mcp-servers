@@ -59,7 +59,7 @@ async function apiResult(action: () => Promise<unknown>): Promise<CallToolResult
     const failure = error instanceof ApiBoundaryError ? error.toJSON()
       : error instanceof ElevenLabsError ? { ok: false, error: error.message, code: error.code, resolution: error.resolution }
       : { ok: false, error: 'The local API tool could not complete.', code: 'INTERNAL_ERROR', resolution: 'Report the operation_id and this structured error to the connector maintainer. Keep raw arguments private.' };
-    return { content: [{ type: 'text', text: JSON.stringify({ ...failure, ...(error instanceof ElevenLabsError && error.retained_output ? { retained_output: error.retained_output } : {}) }) }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify({ ...failure, ...(error instanceof ElevenLabsError && error.retained_output ? { retained_output: error.retained_output } : {}), ...(error instanceof ElevenLabsError && error.retained_outputs?.length ? { retained_outputs: error.retained_outputs } : {}) }) }], isError: true };
   }
 }
 

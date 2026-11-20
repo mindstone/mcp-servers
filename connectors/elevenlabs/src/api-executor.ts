@@ -1,9 +1,12 @@
 import { createRedactor, sensitiveValues, type Redactor } from './api-sensitive.js';
 import { getApiKey } from './auth.js';
 import { ApiBoundaryError, getOperation, isBinaryResponseMedia, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
-import { createSuccessReceipt, validateRequest } from './api-validation.js';
+import { z } from 'zod';
+import { base64Schema } from './api-schemas.js';
+import type { RetainedOutput } from './api-streaming.js';
+import { createSuccessReceipt, jsonArtifactSchema, loadApiValidator, validateRequest } from './api-validation.js';
 import { elevenLabsFetch } from './client.js';
-import { binaryRepresentation } from './api-media.mjs';
+import { base64Representation, binaryRepresentation } from './api-media.mjs';
 import { unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { writeWorkspaceArtifactStream } from './tools/path-safety.js';
@@ -77,6 +80,27 @@ async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSigna
   return new ApiBoundaryError(error.code, redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`), resolution);
 }
 
+/** Replace only declared audio operands; keep metadata beside each file, including preview identity. */
+async function materializeAudio(data: unknown, descriptor: ApiOperation['responses'][number], outputFormat: unknown, signal: AbortSignal, saved: RetainedOutput[]) {
+  const binding = descriptor.base64_audio!;
+  const root = z.custom<Record<string, unknown>>(isRecord).parse(data);
+  const items = binding.array ? z.array(z.custom<Record<string, unknown>>(isRecord)).parse(root[binding.array]) : [root];
+  const converted = [];
+  for (const [index, item] of items.entries()) {
+    const audio = base64Schema.refine(value => Buffer.from(value, 'base64').toString('base64') === value).parse(item[binding.field]);
+    const representation = base64Representation(descriptor, item, outputFormat);
+    if (!representation) throw new Error('Undeclared audio media type.');
+    const bytes = Buffer.from(audio, 'base64');
+    const artifact = { ...await writeWorkspaceArtifactStream(`elevenlabs_${randomUUID()}.${representation.extension}`,
+      new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(bytes); controller.close(); } }), signal),
+      media_type: representation.media_type, source_path: binding.array ? [binding.array, index, binding.field] : [binding.field],
+      ...('format' in representation ? { format: representation.format } : {}) };
+    saved.push({ ...artifact, state: 'complete' });
+    converted.push(Object.fromEntries([...Object.entries(item).filter(([key]) => key !== binding.field), ['artifact', jsonArtifactSchema.parse(artifact)]]));
+  }
+  return binding.array ? { ...root, [binding.array]: converted } : converted[0];
+}
+
 /** Shared production path for all eight profiles; file context is resolved only after validation. */
 export async function executeApiOperation(profile: ApiProfile, rawInput: unknown, readContext?: () => FileReadContext, cancellationSignal?: AbortSignal, progressContext?: ProgressContext) {
   const normalized = normalizedInput(rawInput);
@@ -140,7 +164,8 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
   const outputFormat = input.query_params?.output_format;
   const descriptor = empty ?? declared.find(candidate => candidate.media_type === media || binaryRepresentation(candidate, media, outputFormat));
   if (!descriptor) throw await responseFailure(op, 'The provider returned an undeclared success status or media type.');
-  let data: unknown = null;
+  let data: unknown = null, fileData: unknown;
+  const saved: RetainedOutput[] = [];
   const representation = descriptor.media_type === null ? undefined : binaryRepresentation(descriptor, media, outputFormat);
   const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal);
   if (descriptor.media_type !== null) {
@@ -152,18 +177,23 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
       }
       else if (isBinaryResponseMedia(descriptor.media_type) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
       else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
+      if (descriptor.base64_audio) {
+        (await loadApiValidator()).validateResponse(op, response.status, descriptor.media_type, data, redactor);
+        fileData = await materializeAudio(data, descriptor, outputFormat, signal, saved);
+      }
     } catch (error) {
       const retained_output = error instanceof ElevenLabsError ? error.retained_output ?? progress.retained() : progress.retained();
       const failure = signal.aborted || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
         ? await timeoutFailure(op, signal.aborted && signal.reason?.name !== 'TimeoutError')
         : await responseFailure(op, retained_output ? 'The output could not be completed. The partial output file was kept.' : error instanceof ElevenLabsError && error.code === 'PROGRESS_DELIVERY_FAILED' ? error.message : 'The provider response could not be read in its declared format.');
+      if (saved.length) throw Object.assign(failure, { retained_outputs: saved, message: `${failure.message} Saved output files were kept.` });
       if (retained_output) throw Object.assign(failure, { retained_output, message: `${failure.message}${signal.aborted ? ' The partial output file was kept.' : ''}` });
       if (error instanceof ElevenLabsError && error.code.startsWith('OUTPUT_')) throw error;
       throw failure;
     }
   }
   try {
-    const receipt = await createSuccessReceipt(op.operation_id, response.status, representation?.media_type ?? descriptor.media_type, data, redactor, outputFormat);
+    const receipt = await createSuccessReceipt(op.operation_id, response.status, representation?.media_type ?? descriptor.media_type, data, redactor, outputFormat, fileData);
     if (progressContext) signal.throwIfAborted();
     await progress.finish('complete');
     return receipt;
@@ -180,6 +210,7 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
     if (deliveryFailed) message += ' Output progress could not be delivered.';
     const failure = signal.aborted ? await timeoutFailure(op, signal.reason?.name !== 'TimeoutError') : await responseFailure(op, message);
     if (progress.retained()) failure.message += ' The partial output file was kept.';
-    throw Object.assign(failure, { retained_output: progress.retained() });
+    if (saved.length) failure.message += ' Saved output files were kept.';
+    throw Object.assign(failure, { retained_output: progress.retained(), ...(saved.length ? { retained_outputs: saved } : {}) });
   }
 }

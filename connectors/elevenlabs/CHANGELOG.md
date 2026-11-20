@@ -13,9 +13,10 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Timestamped speech and dialogue, voice-design and remix previews, and voice-sample audio through the API tools. Audio becomes workspace files; timing and preview identities stay with them. Completed files survive a later response failure. Previews are auditions, not permanent voices.
 - Generic speech isolation, voice conversion, transcription and alignment, plus file-based voice similarity and lexicon uploads. Local files stream from disk; large recordings no longer need a matching slab of memory.
 - A media job tool for speech, dialogue and sound generation, plus an audio-effects catalogue lookup. Advanced controls included; surprise extra recordings are not.
-- Compact operation contracts and incremental binary output, with the requested audio format preserved and failed partial files removed.
+- Compact operation contracts and incremental binary output, with the requested audio format preserved. Partial files already reported through progress are kept on failure.
 
 - Outbound provider calls, WhatsApp calls and template messages, plus batch submission, inspection, cancellation, retry, deletion and CSV export. Recipient contacts use the destructive call tool. A receipt is not an answered phone.
 

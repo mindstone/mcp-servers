@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { ElevenLabsError } from './types.js';
 import { getAudioWorkspaceRoot } from './tools/path-safety.js';
 
-export type RetainedOutput = { file_path: string; size_bytes: number; media_type: string; state: 'incomplete' };
+export type RetainedOutput = { file_path: string; size_bytes: number; media_type: string; state: 'incomplete' | 'complete' };
 export type ProgressContext = { progressToken: string | number; sendNotification: (notification: ProgressNotification) => Promise<void> };
 type StreamValue = { ref: string; bytes: number; mime: string; state: 'running' | 'complete' | 'incomplete' };
 // Standalone wire copy; the serialized conformance fixture is checked by the receiver too.

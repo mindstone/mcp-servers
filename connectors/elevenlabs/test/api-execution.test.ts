@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 208 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(208);
+  it('has independent cases for every admission, with exactly 215 non-multipart cases', async () => {
+    expect(apiWireCases).toHaveLength(215);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(219);
+    expect(new Set(expectedIds).size).toBe(226);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route']);
@@ -175,6 +175,19 @@ describe('literal provider wire contracts through the real SDK registration', ()
       expect(fs.readdirSync(workspace)).toEqual([path.basename(artifact.file_path)]);
       expect(fs.readFileSync(artifact.file_path).toString()).toBe(wire.response);
       expect(result.text).not.toContain(wire.response);
+    } else if (wire.response && typeof wire.response === 'object' && ('audio_base64' in wire.response || 'audio_base_64' in wire.response || 'previews' in wire.response)) {
+      const data = JSON.parse(unwrapUntrusted(String(result.json.data)));
+      const expected = structuredClone(wire.response) as Record<string, unknown>;
+      const items = Array.isArray(expected.previews) ? expected.previews as Record<string, unknown>[] : [expected];
+      const actual = Array.isArray(data.previews) ? data.previews : [data];
+      for (const [index, item] of items.entries()) {
+        const field = 'audio_base64' in item ? 'audio_base64' : 'audio_base_64';
+        expect(fs.readFileSync(actual[index].artifact.file_path)).toEqual(Buffer.from(String(item[field]), 'base64'));
+        expect(result.text).not.toContain(item[field]);
+        delete item[field];
+        item.artifact = actual[index].artifact;
+      }
+      expect(data).toEqual(expected);
     } else if (wire.media === null) expect(result.json.data).toBeNull();
     else {
       if (wire.media === 'audio/mpeg') {

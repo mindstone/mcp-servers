@@ -262,6 +262,7 @@ function nextStepFor(followUps: readonly ApiOperation[], source?: ApiOperation):
 }
 export type ResponseContract = z.infer<typeof responseContractSchema>;
 const artifactSchema = z.object({ file_path: z.string().min(1), size_bytes: z.number().int().nonnegative().safe(), media_type: z.enum(binaryResponseMedia), format: z.string().min(1).optional() }).strict();
+export const jsonArtifactSchema = artifactSchema.extend({ source_path: z.array(z.union([z.string().min(1), z.number().int().nonnegative().safe()])).nonempty() });
 const receiptEnvelopeSchema = z.object({
   ok: z.literal(true), operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), status: z.number().int().min(200).max(299),
   content_type: responseMediaSchema.nullable(), data: envelopeText.nullable(), artifact: artifactSchema.optional(),
@@ -284,15 +285,16 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
   });
 }
-export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor, outputFormat?: unknown) {
+export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor, outputFormat?: unknown, fileData?: unknown) {
   const op = await getOperation(operationId);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media, outputFormat);
+  if (descriptor.base64_audio && fileData === undefined) throw new ApiBoundaryError('INVALID_RESPONSE', 'Audio must be saved before creating its receipt.', responseRepair);
   const binary = isBinaryResponseMedia(media);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
-  if (!binary) parsedData = redactor.redact(parsedData, op);
+  if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, op);
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: media,

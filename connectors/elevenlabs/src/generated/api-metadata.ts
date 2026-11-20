@@ -31,16 +31,18 @@ export const apiFamilies = {
   "test-invocations": "tests",
   "text-to-dialogue": "text-to-dialogue",
   "text-to-speech": "text-to-speech",
+  "text-to-voice": "text-to-voice",
   "tools": "tools",
   "triage-tickets": "triage-tickets",
   "twilio": "twilio",
   "users": "users",
   "v2/phone-numbers": "v2/phone-numbers",
   "voice-changer": "voice-changer",
+  "voices": "voices",
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","similar-voices","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","triage-tickets","twilio","users","v2/phone-numbers","voice-changer","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","similar-voices","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","users","v2/phone-numbers","voice-changer","voices","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -92,6 +94,7 @@ export const profileOperationIds = {
     "get_procedure_draft_route",
     "get_procedure_route",
     "get_public_llm_expected_cost_calculation",
+    "get_pvc_sample_audio",
     "get_rag_index_overview",
     "get_rag_indexes",
     "get_secret_dependencies_route",
@@ -99,6 +102,7 @@ export const profileOperationIds = {
     "get_secrets_route",
     "get_settings_route",
     "get_similar_library_voices",
+    "get_speaker_audio",
     "get_test_invocation_route",
     "get_tool_dependent_agents_route",
     "get_tool_executions_route",
@@ -257,7 +261,12 @@ export const profileOperationIds = {
     "speech_to_speech_full",
     "speech_to_text",
     "text_to_dialogue",
-    "text_to_speech_full"
+    "text_to_dialogue_full_with_timestamps",
+    "text_to_speech_full",
+    "text_to_speech_full_with_timestamps",
+    "text_to_voice",
+    "text_to_voice_design",
+    "text_to_voice_remix"
   ],
   "tests": [
     "cancel_test_invocation_route",

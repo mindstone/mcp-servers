@@ -1,0 +1,305 @@
+[
+  {
+    "id": "text_to_speech_full_with_timestamps",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-speech/voice%2Fa%20%3F%23/with-timestamps",
+    "query": [
+      [
+        "output_format",
+        "wav_44100"
+      ]
+    ],
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "query_params": {
+        "output_format": "wav_44100"
+      },
+      "body": {
+        "text": "Welcome to the guide."
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "audio_base64": "AP8RgA==",
+      "alignment": {
+        "characters": [
+          "H",
+          "i"
+        ],
+        "character_start_times_seconds": [
+          0,
+          0.1
+        ],
+        "character_end_times_seconds": [
+          0.1,
+          0.2
+        ]
+      },
+      "normalized_alignment": {
+        "characters": [
+          "H",
+          "i"
+        ],
+        "character_start_times_seconds": [
+          0,
+          0.1
+        ],
+        "character_end_times_seconds": [
+          0.1,
+          0.2
+        ]
+      }
+    },
+    "body": {
+      "text": "Welcome to the guide."
+    }
+  },
+  {
+    "id": "text_to_dialogue_full_with_timestamps",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-dialogue/with-timestamps",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ]
+    ],
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128"
+      },
+      "body": {
+        "inputs": [
+          {
+            "text": "Welcome.",
+            "voice_id": "voice_example"
+          }
+        ]
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "audio_base64": "AP8RgA==",
+      "alignment": {
+        "characters": [
+          "H",
+          "i"
+        ],
+        "character_start_times_seconds": [
+          0,
+          0.1
+        ],
+        "character_end_times_seconds": [
+          0.1,
+          0.2
+        ]
+      },
+      "normalized_alignment": {
+        "characters": [
+          "H",
+          "i"
+        ],
+        "character_start_times_seconds": [
+          0,
+          0.1
+        ],
+        "character_end_times_seconds": [
+          0.1,
+          0.2
+        ]
+      },
+      "voice_segments": [
+        {
+          "voice_id": "voice_example",
+          "start_time_seconds": 0,
+          "end_time_seconds": 0.2,
+          "character_start_index": 0,
+          "character_end_index": 2,
+          "dialogue_input_index": 0
+        }
+      ]
+    },
+    "body": {
+      "inputs": [
+        {
+          "text": "Welcome.",
+          "voice_id": "voice_example"
+        }
+      ]
+    }
+  },
+  {
+    "id": "text_to_voice",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-voice/create-previews",
+    "query": [],
+    "args": {
+      "body": {
+        "voice_description": "A calm, warm and clear guide voice.",
+        "auto_generate_text": true
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "previews": [
+        {
+          "audio_base_64": "AP8RgA==",
+          "generated_voice_id": "generated_first",
+          "media_type": "audio/mpeg",
+          "duration_secs": 1.5,
+          "language": "en"
+        },
+        {
+          "audio_base_64": "UklGRg==",
+          "generated_voice_id": "generated_second",
+          "media_type": "audio/wav",
+          "duration_secs": 2,
+          "language": null
+        }
+      ],
+      "text": "Welcome to the preview."
+    },
+    "body": {
+      "voice_description": "A calm, warm and clear guide voice.",
+      "auto_generate_text": true
+    }
+  },
+  {
+    "id": "text_to_voice_design",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-voice/design",
+    "query": [],
+    "args": {
+      "body": {
+        "voice_description": "A calm, warm and clear guide voice.",
+        "auto_generate_text": true
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "previews": [
+        {
+          "audio_base_64": "AP8RgA==",
+          "generated_voice_id": "generated_first",
+          "media_type": "audio/mpeg",
+          "duration_secs": 1.5,
+          "language": "en"
+        },
+        {
+          "audio_base_64": "UklGRg==",
+          "generated_voice_id": "generated_second",
+          "media_type": "audio/wav",
+          "duration_secs": 2,
+          "language": null
+        }
+      ],
+      "text": "Welcome to the preview."
+    },
+    "body": {
+      "voice_description": "A calm, warm and clear guide voice.",
+      "auto_generate_text": true
+    }
+  },
+  {
+    "id": "text_to_voice_remix",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-voice/voice%2Fa%20%3F%23/remix",
+    "query": [],
+    "args": {
+      "body": {
+        "voice_description": "A calm, warm and clear guide voice.",
+        "auto_generate_text": true
+      },
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "previews": [
+        {
+          "audio_base_64": "AP8RgA==",
+          "generated_voice_id": "generated_first",
+          "media_type": "audio/mpeg",
+          "duration_secs": 1.5,
+          "language": "en"
+        },
+        {
+          "audio_base_64": "UklGRg==",
+          "generated_voice_id": "generated_second",
+          "media_type": "audio/wav",
+          "duration_secs": 2,
+          "language": null
+        }
+      ],
+      "text": "Welcome to the preview."
+    },
+    "body": {
+      "voice_description": "A calm, warm and clear guide voice.",
+      "auto_generate_text": true
+    }
+  },
+  {
+    "id": "get_pvc_sample_audio",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/audio",
+    "query": [
+      [
+        "remove_background_noise",
+        "false"
+      ]
+    ],
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      },
+      "query_params": {
+        "remove_background_noise": false
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "audio_base_64": "AP8RgA==",
+      "voice_id": "voice/a ?#",
+      "sample_id": "sample/a ?#",
+      "media_type": "audio/mpeg",
+      "duration_secs": 1.5
+    }
+  },
+  {
+    "id": "get_speaker_audio",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/speakers/speaker%2Fa%20%3F%23/audio",
+    "query": [],
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#",
+        "speaker_id": "speaker/a ?#"
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "audio_base_64": "AP8RgA==",
+      "media_type": "audio/mpeg",
+      "duration_secs": 1.5
+    }
+  }
+]

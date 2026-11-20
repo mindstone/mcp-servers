@@ -6,6 +6,7 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 export const LONG_REQUEST_TIMEOUT_MS = 120_000;
 
 export class ElevenLabsError extends Error {
+  public retained_outputs?: RetainedOutput[];
   constructor(
     message: string,
     public readonly code: string,

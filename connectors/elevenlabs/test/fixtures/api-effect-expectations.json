@@ -2407,5 +2407,82 @@
       "openWorldHint": true
     },
     "method": "POST"
+  },
+  "text_to_speech_full_with_timestamps": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_dialogue_full_with_timestamps": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_voice": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_voice_design": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_voice_remix": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "get_pvc_sample_audio": {
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET",
+    "tool": "elevenlabs_read_resource"
+  },
+  "get_speaker_audio": {
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET",
+    "tool": "elevenlabs_read_resource"
   }
 }
