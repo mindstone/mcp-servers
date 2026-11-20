@@ -262,8 +262,10 @@ export const profileOperationIds = {
     "speech_to_text",
     "text_to_dialogue",
     "text_to_dialogue_full_with_timestamps",
+    "text_to_dialogue_stream_with_timestamps",
     "text_to_speech_full",
     "text_to_speech_full_with_timestamps",
+    "text_to_speech_stream_with_timestamps",
     "text_to_voice",
     "text_to_voice_design",
     "text_to_voice_remix"

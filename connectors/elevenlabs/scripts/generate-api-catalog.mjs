@@ -68,7 +68,7 @@ const stage7Profiles = {
 };
 const stage92Profiles = { read: 'get_similar_library_voices', create: 'add_from_file', run_job: 'audio_isolation speech_to_speech_full speech_to_text forced_alignment' };
 const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_speech_full text_to_dialogue sound_generation' };
-const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix' };
+const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix text_to_speech_stream_with_timestamps text_to_dialogue_stream_with_timestamps' };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -275,7 +275,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 226, planned: 180, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 228, planned: 178, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -307,7 +307,7 @@ function validateProductionCensus(policy) {
   };
   for (const [id, row] of Object.entries(policy.operations)) {
     requireEqual(row.file_bindings, fileBindings[id], `reviewed file binding ${id}`);
-    requireEqual(row.response_format_binding, [...stage91Profiles.run_job.split(' '), 'speech_to_speech_full', 'text_to_speech_full_with_timestamps', 'text_to_dialogue_full_with_timestamps'].includes(id) ? 'output_format' : undefined, `reviewed response format binding ${id}`);
+    requireEqual(row.response_format_binding, [...stage91Profiles.run_job.split(' '), 'speech_to_speech_full', 'text_to_speech_full_with_timestamps', 'text_to_dialogue_full_with_timestamps', 'text_to_speech_stream_with_timestamps', 'text_to_dialogue_stream_with_timestamps'].includes(id) ? 'output_format' : undefined, `reviewed response format binding ${id}`);
   }
   requireEqual(policy.operations.create_file_document_route.timeout, 'long', 'create-file long timeout');
   requireEqual(policy.milestones, [{ number: 1, proposed_version: '0.6.0', version: null }, ...[7, 8, 9, 10].map(number => ({ number, version: null }))], 'unpublished milestones');

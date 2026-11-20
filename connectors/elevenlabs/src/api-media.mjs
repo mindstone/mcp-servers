@@ -13,9 +13,10 @@ const boundAliases = Object.freeze({
 });
 const codecs = Object.freeze({ mp3: 'audio/mpeg', wav: 'audio/wav', pcm: 'audio/pcm', ulaw: 'audio/basic', alaw: 'audio/alaw', opus: 'audio/opus' });
 export const audioMedia = Object.keys(binaryExtensions).filter(media => media.startsWith('audio/'));
-export const base64AudioSchema = z.object({ field: z.string().min(1), array: z.string().min(1).optional(),
+export const canonicalAudio = value => Buffer.from(value, 'base64').toString('base64') === value;
+export const base64AudioSchema = z.object({ field: z.string().min(1), array: z.string().min(1).optional(), sequence: z.literal(true).optional(),
   media_type: z.enum(audioMedia).optional(), media_type_field: z.string().min(1).optional(),
-}).strict().refine(value => Boolean(value.media_type) !== Boolean(value.media_type_field));
+}).strict().refine(value => Boolean(value.media_type) !== Boolean(value.media_type_field)).refine(value => !value.sequence || (!value.array && Boolean(value.media_type)));
 export function base64Representation(descriptor, item, outputFormat) {
   const binding = descriptor.base64_audio;
   const media = binding.media_type_field ? item[binding.media_type_field] : binding.media_type;

@@ -292,7 +292,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   if (descriptor.base64_audio && fileData === undefined) throw new ApiBoundaryError('INVALID_RESPONSE', 'Audio must be saved before creating its receipt.', responseRepair);
   const binary = isBinaryResponseMedia(media);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
-  const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
+  const response_contract = binary || descriptor.base64_audio?.sequence ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
   if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, op);
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);

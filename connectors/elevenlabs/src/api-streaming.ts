@@ -10,13 +10,13 @@ type StreamValue = { ref: string; bytes: number; mime: string; state: 'running' 
 export const buildStreamedResultMeta = (value: StreamValue) => ({ 'com.mindstone/stream': { version: 1 as const, ...value } });
 
 /** Call-local leading/trailing counter coalescer; the executor owns terminal settlement. */
-export function artifactProgress(mime: string, context?: ProgressContext, signal?: AbortSignal) {
+export function artifactProgress(mime: string, context?: ProgressContext, signal?: AbortSignal, retainUnpublished = false) {
   let latest: { file_path: string; size_bytes: number } | undefined;
   let published = false, settled = false, ordinal = 0, last = -Infinity;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending = Promise.resolve();
   let failure: ElevenLabsError | undefined;
-  const retained = (): RetainedOutput | undefined => published && latest
+  const retained = (): RetainedOutput | undefined => (published || retainUnpublished) && latest?.size_bytes
     ? { ...latest, media_type: mime, state: 'incomplete' } : undefined;
   const emit = async (state: StreamValue['state']) => {
     if (!context || !latest?.size_bytes) return;

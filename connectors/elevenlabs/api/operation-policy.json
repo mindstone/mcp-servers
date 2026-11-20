@@ -10223,19 +10223,48 @@
     "text_to_dialogue_stream_with_timestamps": {
       "method": "POST",
       "path": "/v1/text-to-dialogue/stream/with-timestamps",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-dialogue",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates streamed dialogue audio with alignment metadata and may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "text_to_dialogue_stream_with_timestamps",
+          "query_params": {
+            "output_format": "mp3_44100_128"
+          },
+          "body": {
+            "inputs": [
+              {
+                "text": "Welcome.",
+                "voice_id": "voice_example"
+              }
+            ]
+          }
+        }
+      ],
+      "base64_audio": {
+        "field": "audio_base64",
+        "sequence": true,
+        "media_type": "audio/mpeg"
+      },
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_speech_full": {
       "method": "POST",
@@ -10335,19 +10364,46 @@
     "text_to_speech_stream_with_timestamps": {
       "method": "POST",
       "path": "/v1/text-to-speech/{voice_id}/stream/with-timestamps",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-speech",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates streamed speech audio with alignment metadata and may consume credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "text_to_speech_stream_with_timestamps",
+          "path_params": {
+            "voice_id": "voice_example"
+          },
+          "query_params": {
+            "output_format": "mp3_44100_128"
+          },
+          "body": {
+            "text": "Welcome."
+          }
+        }
+      ],
+      "base64_audio": {
+        "field": "audio_base64",
+        "sequence": true,
+        "media_type": "audio/mpeg"
+      },
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_voice": {
       "method": "POST",

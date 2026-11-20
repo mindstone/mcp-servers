@@ -1,0 +1,165 @@
+[
+  {
+    "id": "text_to_speech_stream_with_timestamps",
+    "profile": "run_job",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "query_params": {
+        "output_format": "mp3_44100_128"
+      },
+      "body": {
+        "text": "Welcome.",
+        "model_id": "eleven_multilingual_v2"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/text-to-speech/voice%2Fa%20%3F%23/stream/with-timestamps",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ]
+    ],
+    "body": {
+      "text": "Welcome.",
+      "model_id": "eleven_multilingual_v2"
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": " \n{\"audio_base64\": \"AP8RgA==\", \"alignment\": {\"characters\": [\"é\", \"\\\"\", \"\\\\\"], \"character_start_times_seconds\": [0, 0.1, 0.2], \"character_end_times_seconds\": [0.1, 0.2, 0.3]}, \"normalized_alignment\": null}{\"audio_base64\": \"UklGRg==\", \"alignment\": null, \"normalized_alignment\": {\"characters\": [\"次\"], \"character_start_times_seconds\": [0], \"character_end_times_seconds\": [0.1]}}\t",
+    "sequence": [
+      {
+        "audio_base64": "AP8RgA==",
+        "alignment": {
+          "characters": [
+            "é",
+            "\"",
+            "\\"
+          ],
+          "character_start_times_seconds": [
+            0,
+            0.1,
+            0.2
+          ],
+          "character_end_times_seconds": [
+            0.1,
+            0.2,
+            0.3
+          ]
+        },
+        "normalized_alignment": null
+      },
+      {
+        "audio_base64": "UklGRg==",
+        "alignment": null,
+        "normalized_alignment": {
+          "characters": [
+            "次"
+          ],
+          "character_start_times_seconds": [
+            0
+          ],
+          "character_end_times_seconds": [
+            0.1
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "text_to_dialogue_stream_with_timestamps",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128"
+      },
+      "body": {
+        "inputs": [
+          {
+            "text": "Welcome.",
+            "voice_id": "voice_example"
+          }
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/text-to-dialogue/stream/with-timestamps",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ]
+    ],
+    "body": {
+      "inputs": [
+        {
+          "text": "Welcome.",
+          "voice_id": "voice_example"
+        }
+      ]
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": " \n{\"audio_base64\": \"AP8RgA==\", \"alignment\": {\"characters\": [\"é\", \"\\\"\", \"\\\\\"], \"character_start_times_seconds\": [0, 0.1, 0.2], \"character_end_times_seconds\": [0.1, 0.2, 0.3]}, \"normalized_alignment\": null, \"voice_segments\": [{\"voice_id\": \"voice_0\", \"start_time_seconds\": 0, \"end_time_seconds\": 0.3, \"character_start_index\": 0, \"character_end_index\": 3, \"dialogue_input_index\": 0}]}{\"audio_base64\": \"UklGRg==\", \"alignment\": null, \"normalized_alignment\": {\"characters\": [\"次\"], \"character_start_times_seconds\": [0], \"character_end_times_seconds\": [0.1]}, \"voice_segments\": [{\"voice_id\": \"voice_1\", \"start_time_seconds\": 0, \"end_time_seconds\": 0.3, \"character_start_index\": 0, \"character_end_index\": 3, \"dialogue_input_index\": 1}]}\t",
+    "sequence": [
+      {
+        "audio_base64": "AP8RgA==",
+        "alignment": {
+          "characters": [
+            "é",
+            "\"",
+            "\\"
+          ],
+          "character_start_times_seconds": [
+            0,
+            0.1,
+            0.2
+          ],
+          "character_end_times_seconds": [
+            0.1,
+            0.2,
+            0.3
+          ]
+        },
+        "normalized_alignment": null,
+        "voice_segments": [
+          {
+            "voice_id": "voice_0",
+            "start_time_seconds": 0,
+            "end_time_seconds": 0.3,
+            "character_start_index": 0,
+            "character_end_index": 3,
+            "dialogue_input_index": 0
+          }
+        ]
+      },
+      {
+        "audio_base64": "UklGRg==",
+        "alignment": null,
+        "normalized_alignment": {
+          "characters": [
+            "次"
+          ],
+          "character_start_times_seconds": [
+            0
+          ],
+          "character_end_times_seconds": [
+            0.1
+          ]
+        },
+        "voice_segments": [
+          {
+            "voice_id": "voice_1",
+            "start_time_seconds": 0,
+            "end_time_seconds": 0.3,
+            "character_start_index": 0,
+            "character_end_index": 3,
+            "dialogue_input_index": 1
+          }
+        ]
+      }
+    ]
+  }
+]

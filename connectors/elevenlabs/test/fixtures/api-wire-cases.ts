@@ -1,3 +1,4 @@
+import timestampStreamCases from './api-timestamp-stream-wire-cases.json' with { type: 'json' };
 import base64Cases from './api-base64-wire-cases.json' with { type: 'json' };
 import processingCases from './api-processing-wire-cases.json' with { type: 'json' };
 import speechCases from './api-speech-wire-cases.json' with { type: 'json' };
@@ -25,6 +26,7 @@ export interface WireCase {
   status: number;
   media: 'application/json' | 'text/html' | 'audio/mpeg' | 'text/csv' | null;
   response: unknown;
+  sequence?: Record<string, unknown>[];
 }
 
 const access = { is_creator: true, creator_name: 'Jane Example', creator_email: 'jane@example.com', role: 'admin' };
@@ -37,6 +39,7 @@ const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
   ...base64Cases as WireCase[],
+  ...timestampStreamCases as WireCase[],
   ...speechCases as WireCase[],
   ...callingCases as WireCase[],
   ...batchCallingCases as WireCase[],

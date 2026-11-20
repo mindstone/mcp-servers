@@ -6,7 +6,8 @@ import { base64Schema } from './api-schemas.js';
 import type { RetainedOutput } from './api-streaming.js';
 import { createSuccessReceipt, jsonArtifactSchema, loadApiValidator, validateRequest } from './api-validation.js';
 import { elevenLabsFetch } from './client.js';
-import { base64Representation, binaryRepresentation } from './api-media.mjs';
+import { materializeAudioSequence } from './api-json-sequence.js';
+import { base64Representation, binaryRepresentation, canonicalAudio } from './api-media.mjs';
 import { unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { writeWorkspaceArtifactStream } from './tools/path-safety.js';
@@ -87,7 +88,7 @@ async function materializeAudio(data: unknown, descriptor: ApiOperation['respons
   const items = binding.array ? z.array(z.custom<Record<string, unknown>>(isRecord)).parse(root[binding.array]) : [root];
   const converted = [];
   for (const [index, item] of items.entries()) {
-    const audio = base64Schema.refine(value => Buffer.from(value, 'base64').toString('base64') === value).parse(item[binding.field]);
+    const audio = base64Schema.refine(canonicalAudio).parse(item[binding.field]);
     const representation = base64Representation(descriptor, item, outputFormat);
     if (!representation) throw new Error('Undeclared audio media type.');
     const bytes = Buffer.from(audio, 'base64');
@@ -170,14 +171,17 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
   const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal);
   if (descriptor.media_type !== null) {
     try {
-      if (representation) {
+      if (descriptor.base64_audio?.sequence) {
+        fileData = await materializeAudioSequence(response, op, descriptor, outputFormat, signal, redactor, saved, progressContext);
+      }
+      else if (representation) {
         if (!response.body) throw new Error('Missing binary body.');
         data = { ...await writeWorkspaceArtifactStream(`elevenlabs_${randomUUID()}.${representation.extension}`, response.body, signal, progress),
           media_type: representation.media_type, ...('format' in representation ? { format: representation.format } : {}) };
       }
       else if (isBinaryResponseMedia(descriptor.media_type) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
       else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
-      if (descriptor.base64_audio) {
+      if (descriptor.base64_audio && !descriptor.base64_audio.sequence) {
         (await loadApiValidator()).validateResponse(op, response.status, descriptor.media_type, data, redactor);
         fileData = await materializeAudio(data, descriptor, outputFormat, signal, saved);
       }

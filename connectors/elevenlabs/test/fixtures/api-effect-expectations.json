@@ -2484,5 +2484,27 @@
     },
     "method": "GET",
     "tool": "elevenlabs_read_resource"
+  },
+  "text_to_speech_stream_with_timestamps": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_dialogue_stream_with_timestamps": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
   }
 }
