@@ -120,20 +120,7 @@
       "openWorldHint": false
     }
   },
-  "reserved_profiles": [
-    {
-      "profile": "run_job",
-      "tool": "elevenlabs_run_job",
-      "milestone": 9,
-      "effects": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": true
-      },
-      "reason": "Reserved for actual paid audio resource creation; unregistered."
-    }
-  ],
+  "reserved_profiles": [],
   "family_retry_checks": {
     "agent": {"read": "get_agents_route"},
     "agent-testing": {"read": "list_chat_response_tests_route"},
@@ -154,6 +141,16 @@
     "secrets": {"read": "get_secrets_route"},
     "environment-variables": {"read": "list_environment_variables"},
     "mcp-servers": {"read": "list_mcp_servers_route"},
+    "text-to-speech": {"read": {"unavailable_reason": "This synchronous generation has no reliable result lookup in the admitted catalogue."}},
+    "text-to-dialogue": {"read": {"unavailable_reason": "This synchronous generation has no reliable result lookup in the admitted catalogue."}},
+    "sound-generation": {"read": {"unavailable_reason": "Speech history excludes sound effects, so it cannot verify this generation."}},
+    "audio-effects": {"read": "get_audio_effects_catalog"},
+    "audio-isolation": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "voice-changer": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "speech-to-text": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "forced-alignment": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "similar-voices": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "pronunciation-dictionaries": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
     "conversation": {"read": "get_conversation_histories_route"},
     "realtime": {"read": "get_conversation_histories_route"},
     "twilio": {"read": "get_conversation_histories_route"},
@@ -236,19 +233,50 @@
     "add_from_file": {
       "method": "POST",
       "path": "/v1/pronunciation-dictionaries/add-from-file",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates a pronunciation dictionary from an uploaded lexicon.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "add_from_file",
+          "body": {
+            "name": "Acme Lexicon",
+            "workspace_access": "viewer"
+          },
+          "files": [
+            {
+              "field": "file",
+              "file_path": "/workspace/lexicon.pls"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": "document",
+          "allowed_media_types": [
+            "application/pls+xml"
+          ]
+        }
+      ],
+      "timeout": "long"
     },
     "add_from_rules": {
       "method": "POST",
@@ -603,12 +631,17 @@
     "audio_isolation": {
       "method": "POST",
       "path": "/v1/audio-isolation",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "audio-isolation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Processes supplied audio into a new isolated speech recording.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -619,7 +652,26 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/audio-isolation.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "audio_isolation",
+          "files": [
+            {
+              "field": "audio",
+              "file_path": "/workspace/recording.wav"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "audio",
+          "kind": "audio"
+        }
+      ],
+      "timeout": "long"
     },
     "audio_isolation_stream": {
       "method": "POST",
@@ -3427,12 +3479,17 @@
     "forced_alignment": {
       "method": "POST",
       "path": "/v1/forced-alignment",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "forced-alignment",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Performs paid audio-to-text alignment and produces timing data.",
       "existing_coverage": {
         "status": "covered",
         "tools": [
@@ -3443,7 +3500,30 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/alignment.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "forced_alignment",
+          "body": {
+            "text": "Welcome to Acme."
+          },
+          "files": [
+            {
+              "field": "file",
+              "file_path": "/workspace/recording.wav"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": "audio",
+          "max_bytes": 999999999
+        }
+      ],
+      "timeout": "long"
     },
     "generate": {
       "method": "POST",
@@ -3861,19 +3941,30 @@
     "get_audio_effects_catalog": {
       "method": "GET",
       "path": "/v1/audio-effects/catalog",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "audio-effects",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists audio-effect presets without generating or changing audio.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "get_audio_effects_catalog"
+        }
+      ]
     },
     "get_audio_from_sample": {
       "method": "GET",
@@ -5525,19 +5616,48 @@
     "get_similar_library_voices": {
       "method": "POST",
       "path": "/v1/similar-voices",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "similar-voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Searches shared-library voices using a supplied audio sample without saving a new voice.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "get_similar_library_voices",
+          "body": {
+            "similarity_threshold": 0.5,
+            "top_k": 5
+          },
+          "files": [
+            {
+              "field": "audio_file",
+              "file_path": "/workspace/recording.wav"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "audio_file",
+          "kind": "audio"
+        }
+      ],
+      "timeout": "long",
+      "reviewed_post_read": "Searches existing shared-library voices from an audio sample; no voice is created or changed."
     },
     "get_similar_voices_for_speaker": {
       "method": "GET",
@@ -9672,12 +9792,17 @@
     "sound_generation": {
       "method": "POST",
       "path": "/v1/sound-generation",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "sound-generation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates a new sound effect from the supplied description.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -9688,17 +9813,36 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/speech.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "sound_generation",
+          "body": {
+            "text": "A soft doorbell.",
+            "duration_seconds": 2,
+            "prompt_influence": 0.6,
+            "loop": false
+          }
+        }
+      ],
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "speech_to_speech_full": {
       "method": "POST",
       "path": "/v1/voice-changer/{voice_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "voice-changer",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates a new voice-converted recording from supplied audio.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -9709,7 +9853,39 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/voice-changer.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "speech_to_speech_full",
+          "path_params": {
+            "voice_id": "voice_example"
+          },
+          "query_params": {
+            "output_format": "wav_44100"
+          },
+          "body": {
+            "model_id": "eleven_english_sts_v2",
+            "seed": 123,
+            "remove_background_noise": true,
+            "voice_settings": "{\"stability\":0.4}"
+          },
+          "files": [
+            {
+              "field": "audio",
+              "file_path": "/workspace/recording.wav"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "audio",
+          "kind": "audio"
+        }
+      ],
+      "timeout": "long",
+      "response_format_binding": "output_format"
     },
     "speech_to_speech_stream": {
       "method": "POST",
@@ -9731,12 +9907,17 @@
     "speech_to_text": {
       "method": "POST",
       "path": "/v1/speech-to-text",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "speech-to-text",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Produces a transcription synchronously or submits asynchronous transcription work.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -9747,7 +9928,51 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/transcription.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "speech_to_text",
+          "body": {
+            "model_id": "scribe_v2",
+            "additional_formats": [
+              {
+                "format": "srt",
+                "include_speakers": true
+              }
+            ],
+            "keyterms": [
+              "Acme",
+              "Rebel"
+            ],
+            "webhook_metadata": {
+              "reference": "example"
+            }
+          },
+          "files": [
+            {
+              "field": "file",
+              "file_path": "/workspace/recording.wav"
+            }
+          ]
+        }
+      ],
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": "audio",
+          "max_bytes": 4999999999
+        }
+      ],
+      "timeout": "long",
+      "sensitive_request_fields": [
+        [
+          "cloud_storage_url"
+        ],
+        [
+          "source_url"
+        ]
+      ]
     },
     "start_speaker_separation": {
       "method": "POST",
@@ -9884,12 +10109,17 @@
     "text_to_dialogue": {
       "method": "POST",
       "path": "/v1/text-to-dialogue",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-dialogue",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates a new recording from multiple text and voice inputs.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -9900,7 +10130,31 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/dialogue.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "text_to_dialogue",
+          "query_params": {
+            "output_format": "mp3_44100_128"
+          },
+          "body": {
+            "inputs": [
+              {
+                "text": "Hello.",
+                "voice_id": "voice_example"
+              },
+              {
+                "text": "Welcome.",
+                "voice_id": "voice_second"
+              }
+            ],
+            "seed": 42
+          }
+        }
+      ],
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_dialogue_full_with_timestamps": {
       "method": "POST",
@@ -9956,12 +10210,17 @@
     "text_to_speech_full": {
       "method": "POST",
       "path": "/v1/text-to-speech/{voice_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-speech",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Generates a new speech recording from text and may consume credits.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -9972,7 +10231,28 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/speech.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [
+        {
+          "operation_id": "text_to_speech_full",
+          "path_params": {
+            "voice_id": "voice_example"
+          },
+          "query_params": {
+            "output_format": "wav_44100"
+          },
+          "body": {
+            "text": "Welcome to the guide.",
+            "audio_effects": {
+              "filter_preset_id": "old_radio",
+              "distance": 0.3
+            }
+          }
+        }
+      ],
+      "response_format_binding": "output_format",
+      "timeout": "long"
     },
     "text_to_speech_full_with_timestamps": {
       "method": "POST",

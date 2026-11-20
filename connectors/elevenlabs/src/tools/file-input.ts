@@ -52,7 +52,7 @@ export function readSandboxedFile(rawFilePath: string, context?: FileReadContext
 
 const DOCUMENT_RESOLUTION = 'Provide an existing readable regular document file. With negotiated file reads, the host must authorize this exact files[index].file_path operand; standalone files must be inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). For a provider-fetched URL, use create_url_document_route instead.';
 
-function readFileInput(rawFilePath: string, context: FileReadContext | undefined, location: (string | number)[], kind: FileInputKind | FileInputKind[], limits: FileInputLimits): SandboxedFileInput {
+function resolveFileInput(rawFilePath: string, context: FileReadContext | undefined, location: (string | number)[], kind: FileInputKind | FileInputKind[], limits: FileInputLimits): Omit<SandboxedFileInput, 'buffer'> {
   // Only the curated audio tools keep their earlier URL and error behaviour; every generic-executor binding passes limits.
   const legacyAudio = kind === 'audio' && Object.keys(limits).length === 0;
   if (!legacyAudio && isRemoteUrl(rawFilePath)) throw new ElevenLabsError('File operands must be local paths, not remote URLs.', 'FILE_NOT_FOUND', DOCUMENT_RESOLUTION);
@@ -111,10 +111,54 @@ function readFileInput(rawFilePath: string, context: FileReadContext | undefined
   if ((kind === 'image' && media === 'application/octet-stream') || (limits.allowed_media_types && !limits.allowed_media_types.includes(media))) {
     throw new ElevenLabsError('The file type is not supported by this upload.', 'INVALID_FILE_TYPE', 'Use a file type listed in the discovered file binding.');
   }
-  const buffer = kind !== 'audio' || limits.allowed_media_types || limits.max_bytes
-    ? readDocumentDescriptor(verifiedPath, limits.max_bytes) : fs.readFileSync(verifiedPath);
+  return { fileName, verifiedPath };
+}
 
-  return { buffer, fileName, verifiedPath };
+function readFileInput(rawFilePath: string, context: FileReadContext | undefined, location: (string | number)[], kind: FileInputKind | FileInputKind[], limits: FileInputLimits): SandboxedFileInput {
+  const file = resolveFileInput(rawFilePath, context, location, kind, limits);
+  const buffer = kind !== 'audio' || limits.allowed_media_types || limits.max_bytes
+    ? readDocumentDescriptor(file.verifiedPath, limits.max_bytes) : fs.readFileSync(file.verifiedPath);
+  return { ...file, buffer };
+}
+
+export async function openSandboxedUpload(...args: Parameters<typeof openUploadDescriptor>) {
+  try { return await openUploadDescriptor(...args); } catch (error) {
+    if (error instanceof ElevenLabsError) throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (['ENOENT', 'ENOTDIR', 'ELOOP'].includes(code ?? '')) throw new ElevenLabsError('The upload is missing or changed.', 'FILE_NOT_FOUND', DOCUMENT_RESOLUTION);
+    throw new ElevenLabsError('The upload cannot be opened for reading.', 'FILE_UNREADABLE', DOCUMENT_RESOLUTION);
+  }
+}
+
+/** Generic uploads own one verified descriptor until completion, refusal or cancellation. */
+async function openUploadDescriptor(rawFilePath: string, context: FileReadContext | undefined, location: (string | number)[], kind: FileInputKind | FileInputKind[], limits: FileInputLimits) {
+  const file = resolveFileInput(rawFilePath, context, location, kind, limits);
+  const before = fs.statSync(file.verifiedPath);
+  if (!before.isFile()) throw new ElevenLabsError('The upload must be a regular file.', 'INVALID_FILE_TYPE', DOCUMENT_RESOLUTION);
+  if (!Number.isSafeInteger(before.size) || before.size > (limits.max_bytes ?? Number.MAX_SAFE_INTEGER)) throw new ElevenLabsError('The upload exceeds the declared file size limit.', 'FILE_TOO_LARGE', DOCUMENT_RESOLUTION);
+  const descriptor = await fs.promises.open(file.verifiedPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  let closing: Promise<void> | undefined;
+  const close = () => closing ??= descriptor.close();
+  const same = (stat: fs.Stats) => stat.isFile() && before.dev === stat.dev && before.ino === stat.ino && before.size === stat.size && before.mtimeMs === stat.mtimeMs;
+  const verify = async () => {
+    if (!same(await descriptor.stat()) || fs.realpathSync(file.verifiedPath) !== file.verifiedPath || !same(fs.statSync(file.verifiedPath))) throw new ElevenLabsError('The upload changed while being read.', 'FILE_NOT_FOUND', CHANGED_RESOLUTION);
+  };
+  try { await verify(); } catch (error) { await close(); throw error; }
+  return { ...file, size: before.size, close, async *chunks(signal: AbortSignal) {
+    let position = 0;
+    try {
+      signal.throwIfAborted();
+      while (position < before.size) {
+        signal.throwIfAborted();
+        const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, before.size - position));
+        const { bytesRead: read } = await descriptor.read(buffer, 0, buffer.length, position);
+        if (!read) throw new ElevenLabsError('The upload changed while being read.', 'FILE_NOT_FOUND', CHANGED_RESOLUTION);
+        position += read;
+        yield buffer.subarray(0, read);
+      }
+      signal.throwIfAborted(); await verify();
+    } finally { await close(); }
+  } };
 }
 
 function readDocumentDescriptor(verifiedPath: string, maxBytes = bufferConstants.MAX_LENGTH): Buffer {
@@ -140,7 +184,7 @@ const DOCUMENT_MIME: Record<string, string> = {
   pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', markdown: 'text/markdown',
   html: 'text/html', htm: 'text/html', doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  epub: 'application/epub+zip', rtf: 'application/rtf', csv: 'text/csv', json: 'application/json',
+  epub: 'application/epub+zip', rtf: 'application/rtf', csv: 'text/csv', pls: 'application/pls+xml', json: 'application/json',
 };
 
 export function documentMimeTypeForFileName(fileName: string): string {

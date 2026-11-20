@@ -1,0 +1,99 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { binaryRepresentation, audioRepresentation } from '../src/api-media.mjs';
+import { writeWorkspaceArtifactStream } from '../src/tools/path-safety.js';
+import { executeApiOperation } from '../src/api-executor.js';
+import { setApiKey } from '../src/auth.js';
+
+const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'binary-media-')));
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); setApiKey(''); });
+import { afterAll } from 'vitest';
+afterAll(() => fs.rmSync(workspace, { recursive: true, force: true }));
+function stream(bytes: Uint8Array) {
+  return new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(bytes.subarray(0, 2)); controller.enqueue(bytes.subarray(2)); controller.close(); } });
+}
+
+describe('checked binary representations', () => {
+  it.each([
+    ['audio/mpeg', 'mp3'], ['audio/wav', 'wav'], ['audio/pcm', 'pcm'], ['audio/basic', 'ulaw'],
+    ['audio/alaw', 'alaw'], ['audio/opus', 'opus'], ['application/zip', 'zip'], ['text/csv', 'csv'], ['video/mp4', 'mp4'],
+  ])('writes byte-exact %s incrementally', async (media_type, extension) => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    const representation = binaryRepresentation({ media_type }, media_type, undefined);
+    expect(representation).toEqual({ media_type, extension });
+    const bytes = new Uint8Array([0, 255, 82, 73, 70, 70]);
+    const artifact = await writeWorkspaceArtifactStream(`test.${extension}`, stream(bytes), new AbortController().signal);
+    expect(artifact.size_bytes).toBe(bytes.length);
+    expect(fs.readFileSync(artifact.file_path)).toEqual(Buffer.from(bytes));
+    expect(path.dirname(artifact.file_path)).toBe(workspace);
+  });
+
+  it('supports only known concrete wildcard audio and explicit format-selected MPEG bindings', () => {
+    expect(binaryRepresentation({ media_type: 'audio/*' }, 'audio/wav', undefined)).toEqual({ media_type: 'audio/wav', extension: 'wav' });
+    expect(binaryRepresentation({ media_type: 'audio/*' }, 'audio/made-up', undefined)).toBeUndefined();
+    const descriptor = { media_type: 'audio/mpeg', output_formats: { default: 'mp3_44100_128', values: ['mp3_44100_128', 'pcm_16000', 'wav_44100', 'ulaw_8000', 'alaw_8000', 'opus_48000_128'] } };
+    for (const format of descriptor.output_formats.values) {
+      const representation = audioRepresentation(format)!;
+      expect(binaryRepresentation(descriptor, 'audio/mpeg', format)).toMatchObject(representation);
+      expect(binaryRepresentation(descriptor, representation.media_type, format)).toMatchObject(representation);
+    }
+    expect(binaryRepresentation(descriptor, 'video/mp4', 'wav_44100')).toBeUndefined();
+    expect(binaryRepresentation(descriptor, 'audio/wav', 'unknown')).toBeUndefined();
+    expect(binaryRepresentation({ media_type: 'audio/mpeg' }, 'audio/wav', undefined)).toBeUndefined();
+    expect(binaryRepresentation({ media_type: 'audio/mpeg' }, 'application/octet-stream', undefined)).toBeUndefined();
+  });
+});
+
+describe('incremental artifact ownership and cleanup', () => {
+  it('honours host cancellation through the executor while collecting a body', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    setApiKey('synthetic-cancellation-key');
+    const before = fs.readdirSync(workspace);
+    const abort = new AbortController();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1])); }, cancel });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body, { headers: { 'Content-Type': 'audio/mpeg' } }));
+    const pending = executeApiOperation('read', { operation_id: 'get_conversation_audio_route', path_params: { conversation_id: 'conversation_example' } }, undefined, abort.signal);
+    setTimeout(() => abort.abort(), 20);
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED', resolution: expect.stringContaining('Cancellation does not undo provider effects.') });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fs.readdirSync(workspace)).toEqual(before);
+  });
+  it('removes only the new partial file on read failure', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    const preserved = path.join(workspace, 'preserved'); fs.writeFileSync(preserved, 'keep');
+    let chunks = 0;
+    const broken = new ReadableStream<Uint8Array>({ pull(controller) {
+      if (chunks++ === 0) controller.enqueue(new Uint8Array([1, 2]));
+      else controller.error(new Error('Synthetic body failure'));
+    } });
+    await expect(writeWorkspaceArtifactStream('partial', broken, new AbortController().signal)).rejects.toThrow();
+    expect(fs.existsSync(path.join(workspace, 'partial'))).toBe(false);
+    expect(fs.readFileSync(preserved, 'utf8')).toBe('keep');
+    await expect(writeWorkspaceArtifactStream('preserved', stream(new Uint8Array([7])), new AbortController().signal)).rejects.toThrow();
+    expect(fs.readFileSync(preserved, 'utf8')).toBe('keep');
+  });
+
+  it('cancels a pending read and removes the partial file', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    const abort = new AbortController();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1])); }, cancel });
+    const writing = writeWorkspaceArtifactStream('cancelled', body, abort.signal);
+    setTimeout(() => abort.abort(), 20);
+    await expect(writing).rejects.toThrow();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fs.existsSync(path.join(workspace, 'cancelled'))).toBe(false);
+  });
+
+  it('refuses output escapes and planted symlinks', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    await expect(writeWorkspaceArtifactStream('../escape', stream(new Uint8Array()), new AbortController().signal)).rejects.toMatchObject({ code: 'OUTPUT_PATH_SANDBOX_VIOLATION' });
+    const planted = path.join(workspace, 'planted');
+    fs.symlinkSync(path.join(workspace, 'preserved'), planted);
+    await expect(writeWorkspaceArtifactStream('planted', stream(new Uint8Array()), new AbortController().signal)).rejects.toThrow();
+    expect(fs.lstatSync(planted).isSymbolicLink()).toBe(true);
+  });
+});

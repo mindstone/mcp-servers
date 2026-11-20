@@ -10,6 +10,25 @@ afterEach(() => {
 });
 
 describe('family fallback without a same-route read or usable follow-up', () => {
+  it('reports unavailable verification honestly without issuing a read or retry', async () => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    const op = raw.operations.find(op => op.operation_id === 'create_agent_route')!;
+    Object.assign(op, { check_before_retry: { unavailable_reason: 'This family has no reliable result lookup.' }, follow_ups: [] });
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const { setApiKey } = await import('../src/auth.js');
+    const { executeApiOperation } = await import('../src/api-executor.js');
+    setApiKey('synthetic-retry-key');
+    let requests = 0;
+    mswServer.use(http.all('https://api.elevenlabs.io/*', () => { requests++; return new HttpResponse(null, { status: 503 }); }));
+    try {
+      await expect(executeApiOperation('create', { operation_id: op.operation_id, body: { conversation_config: {} } })).rejects.toMatchObject({
+        code: 'HTTP_503', resolution: expect.stringContaining('No verifiable lookup: This family has no reliable result lookup.'),
+      });
+      expect(requests).toBe(1);
+    } finally { setApiKey(''); }
+  });
   it.each([
     ['agents', 'get_agents_route'], ['llm', 'list_available_llms'],
     ['tools', 'get_tools_route'], ['knowledge-base', 'get_knowledge_base_list_route'],

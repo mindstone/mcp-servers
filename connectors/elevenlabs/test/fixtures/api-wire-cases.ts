@@ -1,3 +1,5 @@
+import processingCases from './api-processing-wire-cases.json' with { type: 'json' };
+import speechCases from './api-speech-wire-cases.json' with { type: 'json' };
 import callingCases from './api-calling-wire-cases.json' with { type: 'json' };
 import batchCallingCases from './api-batch-calling-wire-cases.json' with { type: 'json' };
 import phoneManagementCases from './api-phone-management-wire-cases.json' with { type: 'json' };
@@ -10,7 +12,7 @@ import lifecycleCases from './api-agent-lifecycle-wire-cases.json' with { type: 
 import jsonFamilyCases from './api-json-family-wire-cases.json' with { type: 'json' };
 // Literal expectations transcribed from the 2026-11-08 provider snapshot, not the generated catalogue.
 // Original and additional JSON family expectations are literal; multipart cases carry their own file bytes and receipts.
-export type WireProfile = 'read' | 'create' | 'change' | 'delete' | 'tests' | 'query_knowledge' | 'place_call';
+export type WireProfile = 'read' | 'create' | 'change' | 'delete' | 'tests' | 'query_knowledge' | 'run_job' | 'place_call';
 export interface WireCase {
   id: string;
   profile: WireProfile;
@@ -33,6 +35,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...speechCases as WireCase[],
   ...callingCases as WireCase[],
   ...batchCallingCases as WireCase[],
   ...liveSessionCases as WireCase[],
@@ -225,6 +228,7 @@ export interface MultipartWireCase extends WireCase {
   multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[] };
 }
 export const multipartCases: MultipartWireCase[] = [
+  ...processingCases as MultipartWireCase[],
   {
     id: 'post_agent_avatar_route', profile: 'change', args: { path_params: { agent_id: 'agent/a ?#' } },
     method: 'POST', path: '/v1/convai/agents/agent%2Fa%20%3F%23/avatar', query: [],

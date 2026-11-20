@@ -10,6 +10,8 @@ import {
   type JsonSchema, type ValidationIssue,
 } from './api-catalog.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { binaryFileShape } from './api-multipart-shapes.mjs';
+import { binaryRepresentation } from './api-media.mjs';
 
 const scalar = z.union([z.string(), z.number().finite(), z.boolean()]);
 function ownRecord<T>(schema: z.ZodType<T>) {
@@ -26,7 +28,7 @@ const executionEnvelopeSchema = z.object({
   path_params: ownRecord(pathOperand).describe('Declared path parameter names and nonempty string values; inspect this operation with elevenlabs_discover_api.').optional(),
   query_params: ownRecord(z.union([scalar, z.null(), z.array(scalar)])).describe('Declared query parameter names with string, number, boolean, null or scalar-array values. Arrays repeat; null is omitted.').optional(),
   body: z.unknown().describe('The provider request body for this operation, preserving its schema, arrays and nulls. Omit for bodyless operations; local file operands belong in files.').optional(),
-  files: z.array(z.object({ field: z.string().min(1), file_path: z.string().min(1) }).strict()).optional(),
+  files: z.array(z.union([z.object({ field: z.string().min(1), file_path: z.string().min(1).nullable() }).strict(), z.object({ field: z.string().min(1), file_paths: z.array(z.string().min(1)).nullable() }).strict()])).optional(),
 }).strict();
 export const executionInputSchema = z.preprocess(value => isRecord(value) ? Object.fromEntries(Object.entries(value)) : value, executionEnvelopeSchema);
 export type ApiExecutionInput = z.infer<typeof executionInputSchema>;
@@ -51,7 +53,7 @@ function argumentFailure(issues: ValidationIssue[], redactor: Redactor): ApiBoun
   return new ApiBoundaryError('VALIDATION_ERROR', 'The API arguments do not satisfy the local contract.', 'Correct the reported fields. Inspect allowed values with elevenlabs_discover_api using this operation_id; use a bare name from contract.definitions for a definition lookup. Ask the connector maintainer to refresh the reviewed catalogue dated 2026-11-08 if the provider added a value. If unsure who that is, contact whoever manages your connector installation.', issues);
 }
 function executionIssues(issues: z.ZodIssue[]): ValidationIssue[] {
-  return inputIssues(issues, path => path[0] === 'files' ? ['field', 'file_path'] : Object.keys(executionEnvelopeSchema.shape));
+  return inputIssues(issues, path => path[0] === 'files' ? ['field', 'file_path', 'file_paths'] : Object.keys(executionEnvelopeSchema.shape));
 }
 const catalogueRepair = 'Ask the connector maintainer to rebuild the connector from a consistent, reviewed catalogue. If unsure who that is, contact whoever manages your connector installation.';
 const responseRepair = 'A request returning a 2xx response may have completed even when its response is invalid. Check the result through elevenlabs_read_resource before retrying a mutation. Report the operation_id, status and media type when available, and the structured error to the connector maintainer. If unsure who that is, contact whoever manages your connector installation. Keep raw response content private.';
@@ -105,6 +107,7 @@ export class ApiValidator {
     collect(catalog);
     this.ajv = new Ajv2020({ ...catalog.validator_options, ownProperties: true });
     formats.default(this.ajv, { mode: 'full', formats: ['date', 'date-time', 'uri'] });
+    this.ajv.addFormat('binary', { type: 'string', validate: () => true });
     this.ajv.addFormat('zoneinfo', { type: 'string', validate(value: string) {
       try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
     } });
@@ -113,6 +116,7 @@ export class ApiValidator {
     for (const op of catalog.operations) {
       this.addRoot(op, 'path', op.parameters.path); this.addRoot(op, 'query', op.parameters.query);
       if (op.request.schema !== undefined) this.addRoot(op, 'body', op.request.schema);
+      for (const file of op.request.files ?? []) this.addRoot(op, `file.${file.field}`, file.schema);
       op.responses.forEach((response, index) => {
         if (response.schema !== undefined) this.addRoot(op, this.responseRoot(op, index), response.schema);
       });
@@ -176,7 +180,7 @@ export class ApiValidator {
           if (Object.hasOwn(anchor, alias)) issue([...rule.prompt_path, alias], `Use ${[...rule.prompt_path, correction].join('.')}${alias === 'knowledge_base_document_ids' ? ' with structured knowledge locators' : ''}.`, 'forbidden_alias');
         }
       }
-      if (input.files !== undefined && !['create', 'change'].includes(op.profile)) issue(['files'], 'This profile does not accept file operands.');
+      if (input.files !== undefined && !['read', 'create', 'change', 'run_job'].includes(op.profile)) issue(['files'], 'This profile does not accept file operands.');
       if (input.files !== undefined && op.request.media_type !== 'multipart/form-data') issue(['files'], 'This operation declares no multipart file operands.');
       const bindings = op.request.files ?? [];
       for (const binding of bindings) if (isRecord(input.body) && Object.hasOwn(input.body, binding.field)) {
@@ -184,7 +188,14 @@ export class ApiValidator {
       }
       const seen = new Set<string>();
       for (const [index, file] of (input.files ?? []).entries()) {
-        if (!bindings.some(binding => binding.field === file.field)) issue(['files', index, 'field'], 'No declared file binding.');
+        const binding = bindings.find(binding => binding.field === file.field);
+        if (!binding) issue(['files', index, 'field'], 'No declared file binding.');
+        else {
+          const shape = binaryFileShape(binding.schema);
+          const multiple = 'file_paths' in file;
+          const value = multiple ? file.file_paths : file.file_path;
+          if (multiple !== shape?.multiple || !this.compile(op, `file.${file.field}`)(ownData(value))) issue(['files', index], 'File shape, nullability or cardinality does not match the declared binding.');
+        }
         if (seen.has(file.field)) issue(['files', index, 'field'], 'Duplicate file operand.');
         seen.add(file.field);
       }
@@ -198,8 +209,8 @@ export class ApiValidator {
     if (!result.success) throw argumentFailure(executionIssues(result.error.issues), redactor);
     return result.data;
   }
-  responseDescriptor(op: ApiOperation, status: number, media: string | null): ApiResponseDescriptor {
-    const response = op.responses.find(candidate => candidate.status === status && candidate.media_type === media);
+  responseDescriptor(op: ApiOperation, status: number, media: string | null, outputFormat?: unknown): ApiResponseDescriptor {
+    const response = op.responses.find(candidate => candidate.status === status && (candidate.media_type === media || binaryRepresentation(candidate, media, outputFormat)));
     if (!response) throw new ApiBoundaryError('INVALID_RESPONSE', 'The response status or media does not match a declared success response.', responseRepair);
     return response;
   }
@@ -250,7 +261,7 @@ function nextStepFor(followUps: readonly ApiOperation[], source?: ApiOperation):
   return `Before using or attaching this result in any other call, read it with elevenlabs_read_resource using one of these operation_ids: ${followUps.map(op => operationReference(op, source)).join(', ')}; use IDs from data or the request where needed, then check the result.`;
 }
 export type ResponseContract = z.infer<typeof responseContractSchema>;
-const artifactSchema = z.object({ file_path: z.string().min(1), size_bytes: z.number().int().nonnegative().safe(), media_type: z.enum(binaryResponseMedia) }).strict();
+const artifactSchema = z.object({ file_path: z.string().min(1), size_bytes: z.number().int().nonnegative().safe(), media_type: z.enum(binaryResponseMedia), format: z.string().min(1).optional() }).strict();
 const receiptEnvelopeSchema = z.object({
   ok: z.literal(true), operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), status: z.number().int().min(200).max(299),
   content_type: responseMediaSchema.nullable(), data: envelopeText.nullable(), artifact: artifactSchema.optional(),
@@ -273,18 +284,18 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
   });
 }
-export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor) {
+export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor, outputFormat?: unknown) {
   const op = await getOperation(operationId);
   const validator = await loadApiValidator();
-  const descriptor = validator.responseDescriptor(op, status, media);
-  const binary = isBinaryResponseMedia(descriptor.media_type);
+  const descriptor = validator.responseDescriptor(op, status, media, outputFormat);
+  const binary = isBinaryResponseMedia(media);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
   if (!binary) parsedData = redactor.redact(parsedData, op);
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
-  return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: descriptor.media_type,
+  return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: media,
     data, ...(artifact ? { artifact } : {}), response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
 }
 

@@ -137,7 +137,10 @@ describe('agent media contracts', () => {
     } else if (kind === 'too-large') {
       const stat = fs.statSync(image); vi.spyOn(fs, 'statSync').mockReturnValue({ ...stat, size: bufferConstants.MAX_LENGTH + 1, isFile: () => true }); expected = 'FILE_TOO_LARGE';
     } else {
-      const stat = fs.statSync(image); vi.spyOn(fs, 'fstatSync').mockReturnValue({ ...stat, ino: stat.ino + 1, isFile: () => true }); expected = 'FILE_NOT_FOUND';
+      const stat = fs.statSync(image); const open = fs.promises.open;
+      vi.spyOn(fs.promises, 'open').mockImplementationOnce(async (...args) => {
+        const handle = await open(...args); vi.spyOn(handle, 'stat').mockResolvedValueOnce({ ...stat, ino: stat.ino + 1, isFile: () => true }); return handle;
+      }); expected = 'FILE_NOT_FOUND';
     }
     const read = vi.mocked(fs.readFileSync).mockClear();
     const result = await call(input, undefined, kind === 'conversation-audio' ? 'elevenlabs_create_resource' : 'elevenlabs_change_resource');

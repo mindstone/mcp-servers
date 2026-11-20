@@ -13,6 +13,10 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Generic speech isolation, voice conversion, transcription and alignment, plus file-based voice similarity and lexicon uploads. Local files stream from disk; large recordings no longer need a matching slab of memory.
+- A media job tool for speech, dialogue and sound generation, plus an audio-effects catalogue lookup. Advanced controls included; surprise extra recordings are not.
+- Compact operation contracts and incremental binary output, with the requested audio format preserved and failed partial files removed.
+
 - Outbound provider calls, WhatsApp calls and template messages, plus batch submission, inspection, cancellation, retry, deletion and CSV export. Recipient contacts use the destructive call tool. A receipt is not an answered phone.
 
 - Phone and WhatsApp account configuration, stored SIP messages and conversation groups. Live routing changes use the change tool; removing accounts, groups or group associations uses delete. Rearrange the desk without ringing anyone.
@@ -24,6 +28,9 @@ are maintained manually as part of the PR review checklist.
 - Stored custom SIP header values are hidden from phone-number reads and other responses containing phone-number configurations.
 
 - Returned connection credentials stay usable only at their declared response paths. Submitted secrets and the API key remain redacted there too; echoed custom SIP header values are also protected.
+### Fixed
+
+- Selected audio formats accept their exact common response-header aliases and keep the requested file format. Output refusals keep their useful error codes, and a failed receipt removes its completed file.
 
 ## [0.7.0] - 2026-11-16
 

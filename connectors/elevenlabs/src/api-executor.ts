@@ -1,17 +1,17 @@
 import { createRedactor, sensitiveValues, type Redactor } from './api-sensitive.js';
 import { getApiKey } from './auth.js';
-import { z } from 'zod';
 import { ApiBoundaryError, getOperation, isBinaryResponseMedia, isRecord, loadApiCatalog, operationReference, type ApiOperation, type ApiProfile } from './api-catalog.js';
 import { createSuccessReceipt, validateRequest } from './api-validation.js';
-import { elevenLabsFetch, extensionFromContentType } from './client.js';
+import { elevenLabsFetch } from './client.js';
+import { binaryRepresentation } from './api-media.mjs';
+import { unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { writeWorkspaceArtifact } from './tools/path-safety.js';
+import { writeWorkspaceArtifactStream } from './tools/path-safety.js';
 import { ElevenLabsError, LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, getErrorResolution } from './types.js';
 import { unwrapUntrusted, wrapUntrusted } from './untrusted-content.js';
 import type { FileReadContext } from './file-read-context.js';
-import { fileMimeTypeForFileName, readSandboxedFile } from './tools/file-input.js';
-
-const multipartScalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
+import { multipartUpload } from './api-multipart.js';
+import { artifactProgress, type ProgressContext } from './api-streaming.js';
 
 /** Values only: provider map keys and schema properties are caller-owned data. */
 function unwrapValues(value: unknown): unknown {
@@ -28,6 +28,7 @@ function normalizedInput(input: unknown): unknown {
 }
 
 async function checkBeforeRetry(op: ApiOperation): Promise<string> {
+  if (typeof op.check_before_retry !== 'string') return `No verifiable lookup: ${op.check_before_retry.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
   if (op.profile === 'create' && op.credential_return_fields) return 'No credential was confirmed. Request a new one if it is still needed.';
   const reads: string[] = [];
   let callable = false;
@@ -45,11 +46,12 @@ async function checkBeforeRetry(op: ApiOperation): Promise<string> {
   return `Check the result with ${reads.join(' or ')} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
 }
 
-async function timeoutFailure(op: ApiOperation): Promise<ApiBoundaryError> {
-  return new ApiBoundaryError('TIMEOUT', op.effects.readOnlyHint
-    ? 'The ElevenLabs request timed out.'
-    : 'The ElevenLabs request timed out after dispatch; the operation may have completed.',
-  `${await checkBeforeRetry(op)} A timeout does not undo provider effects. No automatic retry was made.`);
+async function timeoutFailure(op: ApiOperation, cancelled = false): Promise<ApiBoundaryError> {
+  const interruption = cancelled ? 'was cancelled' : 'timed out';
+  return new ApiBoundaryError(cancelled ? 'CANCELLED' : 'TIMEOUT', op.effects.readOnlyHint
+    ? `The ElevenLabs request ${interruption}.`
+    : `The ElevenLabs request ${interruption} after dispatch; the operation may have completed.`,
+  `${await checkBeforeRetry(op)} ${cancelled ? 'Cancellation' : 'A timeout'} does not undo provider effects. No automatic retry was made.`);
 }
 
 async function responseFailure(op: ApiOperation, message: string): Promise<ApiBoundaryError> {
@@ -58,7 +60,7 @@ async function responseFailure(op: ApiOperation, message: string): Promise<ApiBo
 }
 
 async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSignal, redactor: Redactor): Promise<ElevenLabsError> {
-  if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof ElevenLabsError && error.code === 'TIMEOUT')) return timeoutFailure(op);
+  if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof ElevenLabsError && error.code === 'TIMEOUT')) return timeoutFailure(op, signal.aborted && signal.reason?.name !== 'TimeoutError');
   if (!(error instanceof ElevenLabsError) || error.code === 'NETWORK_ERROR') return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
     `The operation may have completed after dispatch. ${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
 
@@ -75,8 +77,8 @@ async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSigna
   return new ApiBoundaryError(error.code, redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`), resolution);
 }
 
-/** Shared production path for all seven profiles; file context is resolved only after validation. */
-export async function executeApiOperation(profile: ApiProfile, rawInput: unknown, readContext?: () => FileReadContext) {
+/** Shared production path for all eight profiles; file context is resolved only after validation. */
+export async function executeApiOperation(profile: ApiProfile, rawInput: unknown, readContext?: () => FileReadContext, cancellationSignal?: AbortSignal, progressContext?: ProgressContext) {
   const normalized = normalizedInput(rawInput);
   // Resolve policy before validation, without authentication or network access.
   const op = isRecord(normalized) && typeof normalized.operation_id === 'string'
@@ -85,14 +87,14 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
     ...sensitiveValues(isRecord(rawInput) ? rawInput.body : undefined, op?.sensitive_request_fields ?? []),
     ...sensitiveValues(isRecord(normalized) ? normalized.body : undefined, op?.sensitive_request_fields ?? []),
   ]);
-  return executeValidated(profile, normalized, redactor, readContext);
+  return executeValidated(profile, normalized, redactor, readContext, cancellationSignal, progressContext);
 }
 
-async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor: Redactor, readContext?: () => FileReadContext) {
+async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor: Redactor, readContext?: () => FileReadContext, cancellationSignal?: AbortSignal, progressContext?: ProgressContext) {
   const input = await validateRequest(profile, rawInput, redactor);
   const op = await getOperation(input.operation_id, profile);
   let path: string;
-  let body: string | FormData | undefined;
+  let body: string | ReadableStream<Uint8Array> | undefined;
   try {
     path = op.path.replace(/\{([^{}]+)\}/g, (_placeholder, name: string) => encodeURIComponent(input.path_params![name]));
     body = op.request.media_type === 'multipart/form-data' || input.body === undefined ? undefined : JSON.stringify(input.body);
@@ -105,75 +107,79 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
     for (const item of Array.isArray(value) ? value : [value]) query.append(name, String(item));
   }
   const suffix = query.toString();
+  const deadline = AbortSignal.timeout(op.timeout === 'long' ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+  const signal = cancellationSignal ? AbortSignal.any([deadline, cancellationSignal]) : deadline;
+  let upload: Awaited<ReturnType<typeof multipartUpload>> | undefined;
   if (op.request.media_type === 'multipart/form-data') {
-    const form = new FormData();
-    for (const [name, value] of Object.entries(input.body ?? {})) {
-      const scalar = multipartScalar.safeParse(value);
-      if (!scalar.success) throw new ApiBoundaryError('VALIDATION_ERROR',
-        'Multipart body fields must be scalar values.', 'Use the declared scalar fields from discovery; local document paths belong only in files.');
-      if (scalar.data !== null) form.append(name, String(scalar.data));
-    }
     let reads: FileReadContext | undefined;
     try { reads = readContext?.(); } catch {
-      throw new ApiBoundaryError('FILE_AUTHORIZATION_ERROR', 'Valid request file authorization is required for document operands.',
-        'Ask the host to authorize the exact files[index].file_path operand and supply valid files/readMode metadata.');
+      throw new ApiBoundaryError('FILE_AUTHORIZATION_ERROR', 'Valid request file authorization is required for local file operands.',
+        'Ask the host to authorize each exact files[index].file_path or files[index].file_paths[index] operand.');
     }
-    for (const [index, operand] of (input.files ?? []).entries()) {
-      const binding = op.request.files!.find(file => file.field === operand.field)!;
-      let file: ReturnType<typeof readSandboxedFile>;
-      try {
-        file = readSandboxedFile(operand.file_path, reads, ['files', index, 'file_path'], binding.kind, binding);
-      } catch (error) {
-        if (error instanceof ElevenLabsError) throw new ElevenLabsError(wrapUntrusted('The files.file_path operand [REDACTED] could not be read safely. File operands must be local paths. Check files.field and files.file_path against the declared file contract and host authorization.', `elevenlabs:api:${op.operation_id}`)!, error.code, 'Provide an authorized file matching the declared type and size.');
-        throw error;
-      }
-      form.append(operand.field, new Blob([new Uint8Array(file.buffer)], { type: fileMimeTypeForFileName(file.fileName, binding.kind) }), file.fileName);
-    }
-    body = form;
+    upload = await multipartUpload(op, input, reads, signal);
+    body = upload.body;
   }
-  const key = getApiKey();
-  redactor.include(key);
-  const signal = AbortSignal.timeout(op.timeout === 'long' ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
+    const key = getApiKey();
+    redactor.include(key);
     response = await elevenLabsFetch(key, `https://api.elevenlabs.io${path}${suffix ? `?${suffix}` : ''}`, {
       method: op.method, redirect: 'manual', signal, ...(body === undefined ? {} : { body }),
       redactor,
+      ...(upload ? { headers: upload.headers, duplex: 'half' as const } : {}),
       ...(typeof body === 'string' ? { headers: { 'Content-Type': op.request.media_type! } } : {}),
     }, op.operation_id);
   } catch (error) {
     throw await fetchFailure(error, op, signal, redactor);
-  }
+  } finally { await upload?.close(); }
 
   const declared = op.responses.filter(candidate => candidate.status === response.status);
   // An explicitly empty status has no payload to parse, regardless of incidental headers.
   const empty = declared.find(candidate => candidate.media_type === null);
   const media = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() ?? null;
-  const descriptor = empty ?? declared.find(candidate => candidate.media_type === media);
+  const outputFormat = input.query_params?.output_format;
+  const descriptor = empty ?? declared.find(candidate => candidate.media_type === media || binaryRepresentation(candidate, media, outputFormat));
   if (!descriptor) throw await responseFailure(op, 'The provider returned an undeclared success status or media type.');
   let data: unknown = null;
-  let binary: Buffer | undefined;
+  const representation = descriptor.media_type === null ? undefined : binaryRepresentation(descriptor, media, outputFormat);
+  const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal);
   if (descriptor.media_type !== null) {
     try {
-      if (isBinaryResponseMedia(descriptor.media_type)) binary = Buffer.from(await response.arrayBuffer());
+      if (representation) {
+        if (!response.body) throw new Error('Missing binary body.');
+        data = { ...await writeWorkspaceArtifactStream(`elevenlabs_${randomUUID()}.${representation.extension}`, response.body, signal, progress),
+          media_type: representation.media_type, ...('format' in representation ? { format: representation.format } : {}) };
+      }
+      else if (isBinaryResponseMedia(descriptor.media_type) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
       else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
     } catch (error) {
-      if (signal.aborted || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) throw await timeoutFailure(op);
-      throw await responseFailure(op, 'The provider response could not be read in its declared format.');
+      const retained_output = error instanceof ElevenLabsError ? error.retained_output ?? progress.retained() : progress.retained();
+      const failure = signal.aborted || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
+        ? await timeoutFailure(op, signal.aborted && signal.reason?.name !== 'TimeoutError')
+        : await responseFailure(op, retained_output ? 'The output could not be completed. The partial output file was kept.' : error instanceof ElevenLabsError && error.code === 'PROGRESS_DELIVERY_FAILED' ? error.message : 'The provider response could not be read in its declared format.');
+      if (retained_output) throw Object.assign(failure, { retained_output, message: `${failure.message}${signal.aborted ? ' The partial output file was kept.' : ''}` });
+      if (error instanceof ElevenLabsError && error.code.startsWith('OUTPUT_')) throw error;
+      throw failure;
     }
   }
-  if (binary !== undefined) {
-    // Never use provider headers, filenames or IDs in a filesystem path or receipt metadata.
-    const filePath = writeWorkspaceArtifact(`elevenlabs_${randomUUID()}.${extensionFromContentType(descriptor.media_type)}`, binary);
-    data = { file_path: filePath, size_bytes: binary.length, media_type: descriptor.media_type };
-  }
   try {
-    return await createSuccessReceipt(op.operation_id, response.status, descriptor.media_type, data, redactor);
+    const receipt = await createSuccessReceipt(op.operation_id, response.status, representation?.media_type ?? descriptor.media_type, data, redactor, outputFormat);
+    if (progressContext) signal.throwIfAborted();
+    await progress.finish('complete');
+    return receipt;
   } catch (error) {
-    let message = 'The provider returned success, but the connector could not safely process its response.';
+    let kept = false;
+    let deliveryFailed = false;
+    await progress.finish('incomplete').catch(() => { deliveryFailed = true; });
+    if (!progress.retained() && representation && isRecord(data) && typeof data.file_path === 'string') await unlink(data.file_path).catch(() => { kept = true; });
+    let message = error instanceof ElevenLabsError && error.code === 'PROGRESS_DELIVERY_FAILED' ? error.message : 'The provider returned success, but the connector could not safely process its response.';
     try {
       if (error instanceof ApiBoundaryError && error.code === 'INVALID_RESPONSE') message = redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`);
     } catch { /* Keep the safe post-dispatch guidance when redaction itself failed. */ }
-    throw await responseFailure(op, message);
+    if (kept) message += ' The saved output file could not be removed.';
+    if (deliveryFailed) message += ' Output progress could not be delivered.';
+    const failure = signal.aborted ? await timeoutFailure(op, signal.reason?.name !== 'TimeoutError') : await responseFailure(op, message);
+    if (progress.retained()) failure.message += ' The partial output file was kept.';
+    throw Object.assign(failure, { retained_output: progress.retained() });
   }
 }

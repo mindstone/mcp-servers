@@ -1,0 +1,356 @@
+[
+  {
+    "id": "audio_isolation",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "file_format": "other"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/audio-isolation",
+    "query": [],
+    "multipart": {
+      "scalars": [
+        [
+          "file_format",
+          "other"
+        ]
+      ],
+      "field": "audio",
+      "fileName": "isolate.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ]
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "isolated recording"
+  },
+  {
+    "id": "speech_to_speech_full",
+    "profile": "run_job",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "model_id": "eleven_english_sts_v2",
+        "voice_settings": "{\"stability\":0.4,\"similarity_boost\":0.8}",
+        "seed": 123,
+        "remove_background_noise": true,
+        "file_format": "other"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voice-changer/voice%2Fa%20%3F%23",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "multipart": {
+      "scalars": [
+        [
+          "model_id",
+          "eleven_english_sts_v2"
+        ],
+        [
+          "voice_settings",
+          "{\"stability\":0.4,\"similarity_boost\":0.8}"
+        ],
+        [
+          "seed",
+          "123"
+        ],
+        [
+          "remove_background_noise",
+          "true"
+        ],
+        [
+          "file_format",
+          "other"
+        ]
+      ],
+      "field": "audio",
+      "fileName": "convert.flac",
+      "mime": "audio/flac",
+      "bytes": [
+        102,
+        76,
+        97,
+        67,
+        0,
+        128,
+        255
+      ]
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "converted recording"
+  },
+  {
+    "id": "speech_to_text",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "model_id": "scribe_v2",
+        "language_code": "en",
+        "timestamps_granularity": "word",
+        "diarize": true,
+        "additional_formats": [
+          {
+            "format": "srt",
+            "include_speakers": true,
+            "include_timestamps": true
+          }
+        ],
+        "webhook_metadata": {
+          "reference": "example",
+          "nested": {
+            "source": "local"
+          }
+        },
+        "keyterms": [
+          "Acme",
+          "guide"
+        ],
+        "entity_detection": [
+          "other"
+        ],
+        "temperature": 0.1
+      }
+    },
+    "method": "POST",
+    "path": "/v1/speech-to-text",
+    "query": [],
+    "multipart": {
+      "scalars": [
+        [
+          "model_id",
+          "scribe_v2"
+        ],
+        [
+          "language_code",
+          "en"
+        ],
+        [
+          "timestamps_granularity",
+          "word"
+        ],
+        [
+          "diarize",
+          "true"
+        ],
+        [
+          "additional_formats",
+          "[{\"format\":\"srt\",\"include_speakers\":true,\"include_timestamps\":true}]"
+        ],
+        [
+          "webhook_metadata",
+          "{\"reference\":\"example\",\"nested\":{\"source\":\"local\"}}"
+        ],
+        [
+          "keyterms",
+          "Acme"
+        ],
+        [
+          "keyterms",
+          "guide"
+        ],
+        [
+          "entity_detection",
+          "other"
+        ],
+        [
+          "temperature",
+          "0.1"
+        ]
+      ],
+      "field": "file",
+      "fileName": "transcribe.mp4",
+      "mime": "video/mp4",
+      "bytes": [
+        0,
+        0,
+        0,
+        24,
+        102,
+        116,
+        121,
+        112,
+        255
+      ]
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "language_code": "en",
+      "language_probability": 0.98,
+      "text": "Welcome to Acme.",
+      "words": [],
+      "transcription_id": "transcript_example"
+    }
+  },
+  {
+    "id": "forced_alignment",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "text": "Welcome to Acme."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/forced-alignment",
+    "query": [],
+    "multipart": {
+      "scalars": [
+        [
+          "text",
+          "Welcome to Acme."
+        ]
+      ],
+      "field": "file",
+      "fileName": "alignment.ogg",
+      "mime": "audio/ogg",
+      "bytes": [
+        79,
+        103,
+        103,
+        83,
+        0,
+        128,
+        255
+      ]
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "characters": [],
+      "words": [
+        {
+          "text": "Welcome",
+          "start": 0,
+          "end": 0.5,
+          "loss": 0.1
+        }
+      ],
+      "loss": 0.1
+    }
+  },
+  {
+    "id": "get_similar_library_voices",
+    "profile": "read",
+    "args": {
+      "body": {
+        "similarity_threshold": 0.5,
+        "top_k": 5
+      }
+    },
+    "method": "POST",
+    "path": "/v1/similar-voices",
+    "query": [],
+    "multipart": {
+      "scalars": [
+        [
+          "similarity_threshold",
+          "0.5"
+        ],
+        [
+          "top_k",
+          "5"
+        ]
+      ],
+      "field": "audio_file",
+      "fileName": "similar.mp3",
+      "mime": "audio/mpeg",
+      "bytes": [
+        73,
+        68,
+        51,
+        0,
+        128,
+        255
+      ]
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voices": [],
+      "has_more": false,
+      "total_count": 0
+    }
+  },
+  {
+    "id": "add_from_file",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "Acme Lexicon",
+        "description": "Guide terms.",
+        "workspace_access": "viewer"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/pronunciation-dictionaries/add-from-file",
+    "query": [],
+    "multipart": {
+      "scalars": [
+        [
+          "name",
+          "Acme Lexicon"
+        ],
+        [
+          "description",
+          "Guide terms."
+        ],
+        [
+          "workspace_access",
+          "viewer"
+        ]
+      ],
+      "field": "file",
+      "fileName": "lexicon.pls",
+      "mime": "application/pls+xml",
+      "bytes": [
+        60,
+        108,
+        101,
+        120,
+        105,
+        99,
+        111,
+        110,
+        47,
+        62
+      ]
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "dictionary_example",
+      "version_id": "version_example",
+      "name": "Acme Lexicon",
+      "created_by": "user_example",
+      "creation_time_unix": 1,
+      "version_rules_num": 0,
+      "permission_on_resource": "viewer"
+    }
+  }
+]

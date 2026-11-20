@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import type { ArtifactProgress } from '../api-streaming.js';
 import { ElevenLabsError } from '../types.js';
 
 export type ResolveResult =
@@ -205,6 +206,60 @@ export function writeWorkspaceArtifact(fileName: string, data: Buffer | string):
     throw err;
   }
   return dest;
+}
+
+/** Incremental variant with the same containment and exclusive-creation rules. */
+export async function writeWorkspaceArtifactStream(fileName: string, body: ReadableStream<Uint8Array>, signal: AbortSignal, progress?: ArtifactProgress) {
+  if (signal.aborted) await body.cancel(signal.reason);
+  signal.throwIfAborted();
+  const dest = resolveWorkspaceOutputPath(fileName);
+  const file = await fs.promises.open(dest, 'wx', 0o600).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ElevenLabsError(
+      `Refusing to overwrite an existing file: ${dest}`, 'OUTPUT_FILE_EXISTS',
+      'The destination already exists (or is a symlink). Remove it and retry.');
+    throw error;
+  });
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try { reader = body.getReader(); } catch (error) {
+    try { await file.close(); } finally { await fs.promises.unlink(dest); }
+    throw error;
+  }
+  // Cancellation may race a failed read; the read loop reports that failure.
+  const cancel = () => { void reader.cancel(signal.reason).catch(() => undefined); };
+  signal.addEventListener('abort', cancel, { once: true });
+  let size_bytes = 0;
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const chunk = await reader.read();
+      signal.throwIfAborted();
+      if (chunk.done) break;
+      let offset = 0;
+      while (offset < chunk.value.length) {
+        signal.throwIfAborted();
+        const { bytesWritten } = await file.write(chunk.value, offset, chunk.value.length - offset);
+        if (!bytesWritten) throw new Error('Artifact write made no progress.');
+        offset += bytesWritten;
+        size_bytes += bytesWritten;
+        await progress?.update(dest, size_bytes, signal);
+      }
+    }
+    await file.close();
+    return { file_path: dest, size_bytes };
+  } catch (error) {
+    let failure = error;
+    await reader.cancel(error).catch(cleanup => { failure = cleanup; });
+    await file.close().catch(cleanup => { failure = cleanup; });
+    await progress?.finish('incomplete').catch(delivery => { failure = delivery; });
+    const retained = progress?.retained();
+    if (!retained) await fs.promises.unlink(dest);
+    if (failure instanceof ElevenLabsError && failure.code === 'PROGRESS_DELIVERY_FAILED') throw Object.assign(failure, { retained_output: retained });
+    if (retained) throw new ElevenLabsError('The output is incomplete; the saved file was kept.', 'STREAM_FAILED', 'No automatic retry was made.', retained);
+    throw failure;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
 }
 
 /**

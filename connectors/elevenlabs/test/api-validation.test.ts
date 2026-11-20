@@ -147,11 +147,11 @@ describe('API request validation over the preserved provider graph', () => {
     const type = await errorFrom(validateRequest('change', { ...patch({}), path_params: { agent_id: 42 } }, createRedactor([])));
     expect(type.issues).toContainEqual({ path: ['path_params', '[REDACTED]'], keyword: 'invalid_type', message: 'Expected string.' });
     const file = await errorFrom(validateRequest('create', { operation_id: 'create_file_document_route', files: [{ field: 'file', file_path: './guide.pdf', extra: 'private-value' }] }, createRedactor([])));
-    expect(file.issues).toContainEqual({ path: ['files', '0', '[REDACTED]'], keyword: 'unrecognized_keys', message: 'An undeclared field is present. Allowed fields here: field, file_path.' });
+    expect(file.issues).toContainEqual({ path: ['files', '0', '[REDACTED]'], keyword: 'unrecognized_keys', message: 'An undeclared field is present. Allowed fields here: field, file_path, file_paths.' });
     expect(JSON.stringify(file.toJSON())).not.toContain('private-value');
   });
 
-  it('keeps file requiredness separate and disallows undeclared/duplicate operands and read profile files', async () => {
+  it('keeps file requiredness separate and disallows undeclared/duplicate operands and files on reads with no declared file binding', async () => {
     const input = { operation_id: 'create_file_document_route', body: {}, files: [{ field: 'file', file_path: './guide.pdf' }] };
     expect((await validateRequest('create', input, createRedactor([]))).files).toEqual(input.files);
     expect((await validateRequest('create', { operation_id: input.operation_id, files: input.files }, createRedactor([]))).body).toBeUndefined();

@@ -3,15 +3,18 @@ import { z } from 'zod';
 import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
+import { audioRepresentation, binaryExtensions } from './api-media.mjs';
 
 export type JsonSchema = boolean | Record<string, unknown>;
-export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'place_call']);
+export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
 export type ApiProfile = z.infer<typeof profileSchema>;
 export const API_TOOLS = {
   discover: 'elevenlabs_discover_api', read: 'elevenlabs_read_resource',
   create: 'elevenlabs_create_resource', change: 'elevenlabs_change_resource',
   delete: 'elevenlabs_delete_resource', tests: 'elevenlabs_run_agent_tests',
-  query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
+  query_knowledge: 'elevenlabs_query_knowledge', run_job: 'elevenlabs_run_job',
+  place_call: 'elevenlabs_place_call',
 } as const;
 
 const reviewedGetCreates = ['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'];
@@ -72,22 +75,23 @@ export const effectsSchema = z.object({ readOnlyHint: z.boolean(), destructiveHi
 const parameterRecord = z.object({ type: z.literal('object'), properties: dictionary(schemaValue), required: z.array(text), additionalProperties: z.literal(false) }).strict();
 const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), required: z.boolean(), schema: schemaValue }).strict();
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
-export const binaryResponseMedia = ['audio/mpeg', 'text/csv'] as const;
-export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', ...binaryResponseMedia]);
+export const binaryResponseMedia = Object.keys(binaryExtensions) as [string, ...string[]];
+export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', 'audio/*', ...binaryResponseMedia]);
 export function isBinaryResponseMedia(media: string | null): media is typeof binaryResponseMedia[number] {
   return binaryResponseMedia.some(candidate => candidate === media);
 }
-const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional() }).strict();
+const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
+  output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
-  milestone: z.union([z.literal(1), z.literal(7), z.literal(8)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: text, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
+  milestone: z.union([z.literal(1), z.literal(7), z.literal(8), z.literal(9)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: z.union([text, z.object({ unavailable_reason: text }).strict()]), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),
   summary: z.string(), description: z.string(), deprecated: z.boolean(),
   parameters: z.object({ path: parameterRecord, query: parameterRecord, query_serialization: dictionary(z.literal('form-explode')) }).strict(),
-  request: z.object({ media_type: z.enum(['application/json', 'multipart/form-data']).nullable(), required: z.boolean(), schema: schemaValue.optional(), files: z.array(fileBinding).optional() }).strict(),
+  request: z.object({ media_type: z.enum(['application/json', 'multipart/form-data']).nullable(), required: z.boolean(), schema: schemaValue.optional(), files: z.array(fileBinding).optional(), fields: dictionary(z.enum(['scalar', 'repeated', 'json'])).optional() }).strict(),
   responses: z.array(responseSchema).nonempty(), pagination: z.object({ request: z.literal('cursor'), response: z.literal('next_cursor') }).strict().nullable(),
   timeout: z.enum(['standard', 'long']), authentication: z.object({ header: z.literal('xi-api-key'), supplied_by: z.literal('connector') }).strict(),
   search_aliases: z.array(text), rank: z.number().int(), follow_ups: z.array(text), examples: z.array(dictionary(z.unknown())),
@@ -224,7 +228,7 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (typeof schema.$ref === 'string') checkRef(schema.$ref);
     if (schema.format === 'binary' && (!binary || schema.type !== 'string')) invalid('Binary schema outside a declared file operand.');
     if (isRecord(schema.discriminator) && isRecord(schema.discriminator.mapping)) Object.values(schema.discriminator.mapping).forEach(ref => checkRef(String(ref)));
-    schemaChildren(schema).forEach(([name, child]) => walk(child, `${location}/${name}`));
+    schemaChildren(schema).forEach(([name, child]) => walk(child, `${location}/${name}`, binary));
   }
   Object.entries(catalog.$defs).forEach(([name, schema]) => walk(schema, `$defs/${name}`));
   const byId = new Map(catalog.operations.map(op => [op.operation_id, op]));
@@ -249,8 +253,10 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       || queries.includes('cursor') || properties.includes('next_cursor')
       || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : [])].includes(name)))) invalid('Invalid manual pagination.');
     if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
-    const retryOperation = byId.get(op.check_before_retry);
-    if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
+    if (typeof op.check_before_retry === 'string') {
+      const retryOperation = byId.get(op.check_before_retry);
+      if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
+    }
     if (/[?#\u0000-\u0020\u007f]/.test(op.path) || op.path.startsWith('//') || op.path.split('/').some(part => part === '.' || part === '..')) invalid('Invalid operation path.');
     const placeholders = [...op.path.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]).sort();
     const keys = Object.keys(op.parameters.path.properties).sort();
@@ -262,17 +268,31 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if ((op.request.media_type === null) !== (op.request.schema === undefined) || (op.request.media_type === null && op.request.required)) invalid('Request media/schema mismatch.');
     if (op.request.schema !== undefined) walk(op.request.schema, `${location}/request/schema`);
     const files = op.request.files ?? [];
-    if (files.length && (!['create', 'change'].includes(op.profile) || op.request.media_type !== 'multipart/form-data')) invalid('File operand/profile mismatch.');
+    if (files.length && (!['read', 'create', 'change', 'run_job'].includes(op.profile) || op.request.media_type !== 'multipart/form-data')) invalid('File operand/profile mismatch.');
     if (new Set(files.map(file => file.field)).size !== files.length) invalid('Duplicate file binding.');
+    const resolveMultipart = (schema: unknown): unknown => isRecord(schema) && typeof schema.$ref === 'string' ? resolveMultipart(catalog.$defs[definitionName(schema.$ref)]) : schema;
+    if (op.request.media_type === 'multipart/form-data') {
+      const root = resolveMultipart(op.request.schema);
+      if (!isRecord(root) || !isRecord(root.properties) || !op.request.fields
+        || JSON.stringify(Object.keys(root.properties).sort()) !== JSON.stringify(Object.keys(op.request.fields).sort())
+        || Object.entries(root.properties).some(([field, schema]) => op.request.fields![field] !== multipartFieldEncoding(schema, resolveMultipart))) invalid('Multipart field serialization mismatch.');
+    } else if (op.request.fields !== undefined) invalid('Misplaced multipart serialization.');
     files.forEach((file, index) => {
-      if (!isRecord(file.schema) || file.schema.type !== 'string' || file.schema.format !== 'binary') invalid('File binding does not declare a binary operand.');
+      if (!binaryFileShape(file.schema, resolveMultipart)) invalid('File binding does not declare a binary operand.');
       walk(file.schema, `${location}/request/files/${index}/schema`, true);
     });
     if (new Set(op.responses.map(response => `${response.status}:${response.media_type}`)).size !== op.responses.length) invalid('Duplicate response descriptor.');
     op.responses.forEach((response, index) => {
+      if (response.output_formats) {
+        const binding = response.output_formats;
+        const query = op.parameters.query.properties.output_format;
+        if (response.media_type !== 'audio/mpeg' || !isRecord(query)
+          || JSON.stringify(query.enum) !== JSON.stringify(binding.values) || query.default !== binding.default
+          || !binding.values.includes(binding.default) || binding.values.some(format => !audioRepresentation(format))) invalid('Invalid reviewed output-format binding.');
+      }
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
       if (response.media_type === 'text/csv' && (!isRecord(response.schema) || response.schema.type !== 'string' || response.schema.format !== 'binary')) invalid('CSV requires a binary success schema.');
-      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, response.media_type === 'text/csv');
+      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type) || response.media_type === 'audio/*');
     });
     for (const [paths, schemas] of [
       [op.sensitive_request_fields, [op.request.schema]],
@@ -381,6 +401,24 @@ export function expandSchema(schema: JsonSchema, catalog: ApiCatalog, depth = 2)
   return mapSchemaChildren(schema, child => expandSchema(child, catalog, depth));
 }
 const descriptions = new Map<string, ReturnType<typeof buildDescription>>();
+export function reachableDefinitions(op: ApiOperation, catalog: ApiCatalog): string[] {
+  const names = new Set<string>();
+  function visit(schema: JsonSchema | undefined): void {
+    if (!isRecord(schema)) return;
+    const refs = [schema.$ref, ...Object.values(isRecord(schema.discriminator) && isRecord(schema.discriminator.mapping) ? schema.discriminator.mapping : {})];
+    for (const ref of refs) {
+      if (typeof ref !== 'string') continue;
+      const name = definitionName(ref);
+      if (names.has(name)) continue;
+      names.add(name);
+      visit(catalog.$defs[name]);
+    }
+    schemaChildren(schema).forEach(([, child]) => visit(child));
+  }
+  [op.parameters.path, op.parameters.query, op.request.schema,
+    ...op.request.files?.map(file => file.schema) ?? [], ...op.responses.map(response => response.schema)].forEach(visit);
+  return [...names].sort();
+}
 export async function describeOperation(operationId: string, definition?: string) {
   const op = await getOperation(operationId);
   const catalog = await loadApiCatalog();
@@ -396,7 +434,7 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
   for (const example of examples) {
     try { await validateRequest(op.profile, example, createRedactor([])); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
-  const files = ['create', 'change'].includes(op.profile) ? op.request.files : undefined;
+  const files = ['create', 'change', 'run_job'].includes(op.profile) ? op.request.files : undefined;
   const effectNote = op.effect_note ? ` ${op.effect_note}` : '';
   const pagingNote = op.manual_pagination ? ` ${op.manual_pagination}` : '';
   const workspaceNote = ['update_settings_route', 'update_dashboard_settings_route'].includes(op.operation_id) ? ' This operation changes settings for the whole workspace.' : '';
@@ -404,7 +442,7 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
     contract: envelope({ summary: op.summary, description: op.description, deprecated: op.deprecated, method: op.method, path: op.path,
       request: { path_params: expandSchema(op.parameters.path, catalog), query_params: expandSchema(op.parameters.query, catalog), body: op.request.schema === undefined ? undefined : expandSchema(op.request.schema, catalog), ...(files?.length ? { files } : {}) },
       ...(definition === undefined ? {} : { definition: { name: definition, schema: expandSchema(catalog.$defs[definition], catalog) } }),
-      definitions: Object.keys(catalog.$defs).sort(), responses: op.responses, examples,
+      definitions: reachableDefinitions(op, catalog), responses: op.responses, examples,
       ...(examples.length ? { example_notes: [
         'Replace *_example IDs with IDs obtained from the corresponding resource list or create operations found through discovery. list_voices supplies voice IDs.',
         ...(files?.length ? ['A file_path such as ./guide.pdf names a file on the connector\'s machine, relative to the connector\'s working directory.'] : []),
@@ -423,6 +461,7 @@ const profileInstructions: Record<ApiProfile, string> = {
   change: 'COST: provider work may spend credits. WHEN TO USE: explicitly modify resources; updates can overwrite or replace content and arrays. The connector does not fetch or merge existing configuration, and does not guarantee that omitted PATCH fields survive at the provider. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"patch_agent_settings_route"}) before elevenlabs_change_resource.',
   delete: 'COST: provider limits apply. WHEN TO USE: explicitly delete a resource. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"delete_agent_route"}) before elevenlabs_delete_resource.',
   tests: 'COST: Tests may spend credits and invoke real integrations unless the caller explicitly configures mocks. Before running, use elevenlabs_read_resource to inspect the saved Test (get_agent_response_test_route), target agent (get_agent_route) and referenced tools (get_tool_route) for external actions. Check explicit mock configuration, including tool_mock_config, tool_mock_overrides and fallback behavior where supported. WHEN TO USE: run, cancel or resubmit saved Tests. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"run_agent_test_suite_route"}) before elevenlabs_run_agent_tests; running a saved Test does not itself configure mocks.',
+  run_job: 'COST: media processing may spend credits. WHEN TO USE: requested generation or processing. RELATED TOOLS: elevenlabs_discover_api, elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"text_to_speech_full"}) before elevenlabs_run_job.',
   place_call: 'COST: calls and provider services may incur charges. WHEN TO USE: explicitly place or schedule recipient calls, send WhatsApp template messages, retry failed or unanswered batch recipients, or register a live call connection. Provider acceptance is not proof of an answered call or delivered message. Returned TwiML is connection instructions, not proof of a connected call. No automatic retries or polling. RELATED TOOLS: elevenlabs_discover_api, elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"register_twilio_call"}) before elevenlabs_place_call.',
   query_knowledge: 'COST: knowledge queries may spend credits. WHEN TO USE: retrieve knowledge without creating a conversation. RELATED TOOLS: elevenlabs_read_resource. EXAMPLE: elevenlabs_discover_api({operation_id:"query_agent_knowledge_base_rag_route"}) before elevenlabs_query_knowledge.',
 };

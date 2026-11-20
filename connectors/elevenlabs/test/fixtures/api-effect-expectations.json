@@ -1,4 +1,48 @@
 {
+  "get_audio_effects_catalog": {
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "GET",
+    "tool": "elevenlabs_read_resource"
+  },
+  "text_to_speech_full": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "text_to_dialogue": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "sound_generation": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
   "add_tool_route": {
     "profile": "create",
     "tool": "elevenlabs_create_resource",
@@ -1912,6 +1956,72 @@
       "openWorldHint": true
     },
     "method": "POST"
+  },
+  "audio_isolation": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "speech_to_speech_full": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "speech_to_text": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "forced_alignment": {
+    "profile": "run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_run_job"
+  },
+  "get_similar_library_voices": {
+    "profile": "read",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_read_resource"
+  },
+  "add_from_file": {
+    "profile": "create",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "method": "POST",
+    "tool": "elevenlabs_create_resource"
   },
   "create_realtime_session": {
     "method": "POST",

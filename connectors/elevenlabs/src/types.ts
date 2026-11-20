@@ -1,3 +1,5 @@
+import type { RetainedOutput } from './api-streaming.js';
+
 export const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Per-call override for slow synchronous endpoints (dialogue, voice design). */
@@ -8,6 +10,7 @@ export class ElevenLabsError extends Error {
     message: string,
     public readonly code: string,
     public readonly resolution: string,
+    public readonly retained_output?: RetainedOutput,
   ) {
     super(message);
     this.name = 'ElevenLabsError';

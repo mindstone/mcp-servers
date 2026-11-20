@@ -22,6 +22,7 @@ import { envelopeApiErrorDetail, formatApiErrorMessage } from './error-detail.js
 import { writeWorkspaceArtifact } from './tools/path-safety.js';
 
 export interface ElevenLabsFetchOptions extends RequestInit {
+  duplex?: 'half';
   /** Per-call timeout override (default REQUEST_TIMEOUT_MS). Explicit `signal` wins. */
   timeoutMs?: number;
   redactor?: Redactor;

@@ -81,7 +81,7 @@ describe('exact nested document read authorization through supported SDK context
     for (const name of ['elevenlabs_create_resource', 'elevenlabs_change_resource']) {
       expect(definitions.find(tool => tool.name === name)!._meta?.['files/readInputs']).toMatchObject({
         version: sharedFileWire.declaration.version,
-        inputs: [{ selector: ['files', '*', 'file_path'], base: sharedFileWire.declaration.inputs[0].base, expandTilde: true }],
+        inputs: [{ selector: ['files', '*', 'file_path'], base: sharedFileWire.declaration.inputs[0].base, expandTilde: true }, { selector: ['files', '*', 'file_paths', '*'], base: sharedFileWire.declaration.inputs[0].base, expandTilde: true }],
       });
     }
     const outside = path.join(base, 'other.txt');

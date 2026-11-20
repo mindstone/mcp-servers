@@ -11,11 +11,13 @@ Use it when you want your assistant to produce narration, voiceovers or transcri
 
 - **Version:** [0.7.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [40](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers, phone and WhatsApp account configuration and conversation groups)
+- **Tools:** [41](./src/tools/) (account and usage, voices and pronunciation, speech and dialogue, music and sound effects, transcription and audio processing, dubbing and history, API discovery and voice-agent lifecycle, agent tools, knowledge bases and tests, conversations and review, workspace secrets, environments and MCP servers, phone and WhatsApp account configuration and conversation groups)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 The API tools also cover crawl jobs, RAG indexes, document summaries and chunks, source-file URLs, moves and bulk deletion. Crawl creation asks the provider to fetch a URL and may consume credits. Cancelling a crawl also deletes its associated documents and folders, so cancellation, like index and bulk deletion, uses the delete tool.
+
+Binary downloads are saved incrementally. Clients that request progress receive byte counts and, when a workspace is configured, a relative file reference. If a call fails after reporting saved bytes, the non-empty file is kept and the error identifies it as incomplete. A stalled progress receiver cannot extend the call deadline. This does not promise that an incomplete audio file is playable.
 
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
@@ -129,7 +131,7 @@ node dist/index.js
 }
 ```
 
-## Tools (40)
+## Tools (41)
 
 ### Agents, tools, knowledge and saved Tests
 
@@ -139,19 +141,28 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The eight API tools cover **209 admitted operations in source** from the
-2026-11-08 API snapshot. Here, admitted means supported by these eight tools in
+The nine API tools cover **219 admitted operations in source** from the
+2026-11-08 API snapshot. Here, admitted means supported by these nine tools in
 this connector snapshot; consult the package changelog for release history and find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 209 admitted, 197 planned and 109 excluded, with reasons and
+515 operations: 219 admitted, 187 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
 The usage calculators and test-summary lookup use reviewed read-only POST requests;
 they do not run tests or generate audio. Deletion stays in the delete profile.
 
+Generic media coverage includes the audio-effects catalogue and speech, dialogue and sound generation. Discover the contract for advanced inputs such as audio effects, continuity settings and sound duration. Binary responses are collected incrementally into workspace files; provider filenames are ignored. Requested output formats determine file extensions and format metadata, including raw PCM without a WAV container. These calls use the existing 120-second deadline. Failed or cancelled collection removes its own partial file. Completed recordings need no follow-up read; errors name unavailable retry verification rather than suggesting an unrelated status check. No retry or polling is automatic.
+
+Generic file processing includes speech isolation, voice conversion, transcription and forced alignment through the media job tool. File-based shared-voice similarity is a read; lexicon upload creates a pronunciation dictionary. Transcription preserves synchronous, multichannel and queued responses. A queued response is an acceptance receipt, not a completed transcript; webhooks, polling and retries remain caller choices.
+
+Local uploads stream from verified file descriptors in bounded chunks. Singular operands use `{field, file_path}`; array contracts use `{field, file_paths: [...]}`, preserving order and declared cardinality. A required empty array must be supplied explicitly. Each concrete path needs its own negotiated authorization; standalone reads stay inside the workspace. Only nullable bindings accept `file_path: null`. Multipart has no null, so an omitted field and an explicit null both send no part. Structured fields such as transcription `additional_formats` and object metadata are JSON-encoded once; caller strings stay strings. Scalar arrays such as keyterms repeat the field name. These shapes are described in each operation's contract.
+
+Transcription local files must be smaller than 5 GB; alignment files must be smaller than 1 GB, using decimal units. Streaming removes the need to buffer a whole upload, but the existing 120-second deadline still applies. Cancellation and errors close open upload descriptors and remove this call's partial output. Provider-fetched transcription URLs belong in the body, never in local file operands. Existing convenience tools keep their upload behavior.
+
+Operation contracts list only their reachable schema definitions. Complete operation inventories remain available through paginated discovery and the generated coverage ledger.
 Phone-number imports and routing changes, and WhatsApp account setting changes,
 use the destructive change tool because they affect live calls or messages. Reads
 include stored SIP messages and paged number configuration. Stored custom SIP header
@@ -223,11 +234,12 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 89 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 31 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_read_resource` | 91 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 32 creates, including agents, documents, indexes and saved Tests | May consume credits |
 | `elevenlabs_change_resource` | 47 edits, including file replacement | May overwrite content, configuration or arrays |
 | `elevenlabs_delete_resource` | 30 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
+| `elevenlabs_run_job` | Speech, dialogue and sound generation | May consume credits and create provider records |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 | `elevenlabs_place_call` | 8 call, message, batch submit/retry and live registration operations | Destructive; provider services may incur charges |
 
@@ -328,7 +340,7 @@ and credit disclosure; it does not create conversations or place calls.
 
 Secrets, environment variables and MCP server configurations are also available through discovery.
 Agent-link tokens and signed source-file URLs delegate access the read already has to whoever holds them; they are intentionally returned by those reads.
-Argument and local file errors from the eight API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
+Argument and local file errors from the nine API tools omit caller keys and values. Recognized body credentials are removed from complete raw, URL/form and decoded JSON echoes; partial echoes, other transformations and unrecognized fields remain unprotected. Known issues: redaction can stall a call for several seconds, or end it with a generic error, when a submitted credential thousands of characters long meets a long response that nearly matches it; responses nested thousands of levels deep are also slow to redact. Neither shows a credential.
 MCP approval changes and overrides of existing MCP tools use the change profile; removals, including environment-value removal by update, use delete.
 
 ### Configuration
@@ -387,7 +399,7 @@ For standalone clients, including clients that do not negotiate `files/readModes
 
 ## Maintainer notes: API catalogue
 
-The API catalogue generator produces the pinned contracts used by the eight API
+The API catalogue generator produces the pinned contracts used by the nine API
 tools. Regenerate with `npm run api:generate -- --spec <pinned.json-or-gzip>` and
 verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. The input must match
 the recorded original-byte pin; the whole provider snapshot is not distributed

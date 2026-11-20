@@ -15,6 +15,7 @@ const newToolAnnotations = {
   elevenlabs_change_resource: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_delete_resource: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_run_agent_tests: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  elevenlabs_run_job: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   elevenlabs_query_knowledge: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 };
 
@@ -24,7 +25,7 @@ function expectIntegratedRoster(tools: Tool[]) {
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
   const legacyNames = new Set(legacyTools.map(tool => tool.name));
   expect(legacyTools).toHaveLength(32);
-  expect(wireTools).toHaveLength(40);
+  expect(wireTools).toHaveLength(41);
   expect(wireTools.filter(tool => legacyNames.has(tool.name)).sort(byName))
     .toStrictEqual([...legacyTools].sort(byName));
   expect(wireTools.filter(tool => !legacyNames.has(tool.name)).map(({ name, annotations }) => ({ name, annotations })).sort(byName))

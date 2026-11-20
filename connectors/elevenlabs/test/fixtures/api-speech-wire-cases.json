@@ -1,0 +1,153 @@
+[
+  {
+    "id": "get_audio_effects_catalog",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/audio-effects/catalog",
+    "query": [],
+    "args": {},
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "filter_presets": [
+        {
+          "filter_preset_id": "old_radio",
+          "name": "Old radio",
+          "description": "A vintage radio filter."
+        }
+      ],
+      "environments": [],
+      "background_noises": []
+    }
+  },
+  {
+    "id": "text_to_speech_full",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-speech/voice%2Fa%20%3F%23",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "text": "Welcome.",
+        "model_id": "eleven_multilingual_v2",
+        "audio_effects": {
+          "filter_preset_id": "old_radio",
+          "distance": 0.3
+        },
+        "apply_text_normalization": "off"
+      }
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "ID3 synthetic speech bytes",
+    "body": {
+      "text": "Welcome.",
+      "model_id": "eleven_multilingual_v2",
+      "audio_effects": {
+        "filter_preset_id": "old_radio",
+        "distance": 0.3
+      },
+      "apply_text_normalization": "off"
+    }
+  },
+  {
+    "id": "text_to_dialogue",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/text-to-dialogue",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ]
+    ],
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128"
+      },
+      "body": {
+        "inputs": [
+          {
+            "text": "Hello.",
+            "voice_id": "voice_example"
+          },
+          {
+            "text": "Welcome.",
+            "voice_id": "voice_second"
+          }
+        ],
+        "seed": 42,
+        "settings": {
+          "stability": 0.5
+        }
+      }
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "ID3 synthetic dialogue bytes",
+    "body": {
+      "inputs": [
+        {
+          "text": "Hello.",
+          "voice_id": "voice_example"
+        },
+        {
+          "text": "Welcome.",
+          "voice_id": "voice_second"
+        }
+      ],
+      "seed": 42,
+      "settings": {
+        "stability": 0.5
+      }
+    }
+  },
+  {
+    "id": "sound_generation",
+    "profile": "run_job",
+    "method": "POST",
+    "path": "/v1/sound-generation",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ]
+    ],
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128"
+      },
+      "body": {
+        "text": "A soft doorbell.",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      }
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "ID3 synthetic sound bytes",
+    "body": {
+      "text": "A soft doorbell.",
+      "duration_seconds": 2,
+      "prompt_influence": 0.6,
+      "loop": false
+    }
+  }
+]

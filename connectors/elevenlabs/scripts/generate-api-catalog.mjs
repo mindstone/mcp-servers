@@ -7,6 +7,8 @@ import { gunzipSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
+import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
+import { audioRepresentation, binaryExtensions } from '../src/api-media.mjs';
 
 export const PINNED_SOURCE = Object.freeze({
   url: 'https://api.elevenlabs.io/openapi.json',
@@ -64,10 +66,12 @@ const stage7Profiles = {
   change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route update_branch_route create_agent_draft_route merge_branch_into_target rebase_branch_onto_main create_agent_deployment_route update_merge_proposal_route accept_merge_proposal_route submit_merge_proposal_review_route update_procedure_draft_route post_knowledge_base_move_route post_knowledge_base_bulk_move_route assign_conversation_tags_route post_conversation_feedback_route run_conversation_analysis run_conversation_evaluations create_agent_conversation_ticket_route merge_agent_conversation_tickets_route update_agent_conversation_ticket_route',
   delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment delete_agent_draft_route remove_procedure_route delete_procedure_draft_route delete_rag_index post_knowledge_base_bulk_delete_route cancel_crawl_job_route cancel_file_upload_route delete_conversation_route unassign_conversation_tag_route delete_agent_conversation_ticket_route delete_agent_hold_audio_route',
 };
+const stage92Profiles = { read: 'get_similar_library_voices', create: 'add_from_file', run_job: 'audio_isolation speech_to_speech_full speech_to_text forced_alignment' };
+const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_speech_full text_to_dialogue sound_generation' };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
-  tests: [false, true, false, true], query_knowledge: [true, false, false, true], place_call: [false, true, false, true],
+  run_job: [false, false, false, true], tests: [false, true, false, true], query_knowledge: [true, false, false, true], place_call: [false, true, false, true],
 };
 const annotationNames = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'];
 export const PROFILE_EFFECTS = Object.fromEntries(Object.entries(profileTuples)
@@ -75,9 +79,9 @@ export const PROFILE_EFFECTS = Object.fromEntries(Object.entries(profileTuples)
 export const PROFILE_TOOLS = Object.freeze({
   read: 'elevenlabs_read_resource', create: 'elevenlabs_create_resource',
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
-  tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
+  run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -115,7 +119,7 @@ const sourceSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/), bytes: z.number().int().positive(),
   paths: z.number().int().nonnegative(), operations: z.number().int().positive(),
 }).strict();
-const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'place_call']);
+const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
 const aliasSchema = z.object({
   operation_ids: z.array(text).nonempty(), prompt_path: z.array(text).nonempty(),
   own_properties: z.object({ llm_model: z.literal('llm'), knowledge_base_document_ids: z.literal('knowledge_base') }).strict(), reason: text,
@@ -131,6 +135,7 @@ const operationSchema = z.object({
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
   discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
+  response_format_binding: z.literal('output_format').optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
@@ -151,7 +156,7 @@ export const policySchema = z.object({
   reserved_profiles: z.array(z.object({
     profile: z.literal('run_job'), tool: text, milestone: z.number().int().positive(), effects: effectsSchema, reason: text,
   }).strict()),
-  family_retry_checks: z.record(z.object({ read: text, tests: text.optional() }).strict()),
+  family_retry_checks: z.record(z.object({ read: z.union([text, z.object({ unavailable_reason: text }).strict()]), tests: text.optional() }).strict()),
   operations: z.record(operationSchema),
 }).strict();
 
@@ -187,7 +192,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -231,7 +236,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
     if (row.status === 'admitted') {
-      if (![1, 7, 8].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
+      if (![1, 7, 8, 9].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
       const reviewedProfile = reviewedProfiles[id];
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
@@ -246,10 +251,12 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (credentialIssuers.includes(id) && !row.credential_return_fields) refuse('missing credential return fields', id);
       if (id === 'create_realtime_session' && ['sensitive_request_fields', 'sensitive_response_fields'].some(field => !row[field]?.some(path => isDeepStrictEqual(path, realtimeAuthorizationPath)))) refuse('missing realtime authorization protection', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
-      const retryOperation = policy.operations[retryCheck];
-      if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
+      if (typeof retryCheck === 'string') {
+        const retryOperation = policy.operations[retryCheck];
+        if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
+      } else if (!retryCheck) refuse('missing family retry metadata', id);
     } else {
-      if (row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -267,7 +274,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 209, planned: 197, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 219, planned: 187, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -285,6 +292,12 @@ function validateProductionCensus(policy) {
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
   const fileBindings = {
+    audio_isolation: [{ field: 'audio', kind: 'audio' }],
+    speech_to_speech_full: [{ field: 'audio', kind: 'audio' }],
+    speech_to_text: [{ field: 'file', kind: 'audio', max_bytes: 4_999_999_999 }],
+    forced_alignment: [{ field: 'file', kind: 'audio', max_bytes: 999_999_999 }],
+    get_similar_library_voices: [{ field: 'audio_file', kind: 'audio' }],
+    add_from_file: [{ field: 'file', kind: 'document', allowed_media_types: ['application/pls+xml'] }],
     create_file_document_route: [{ field: 'file', kind: 'document' }],
     update_file_document_route: [{ field: 'file', kind: 'document' }],
     post_agent_avatar_route: [{ field: 'avatar_file', kind: 'image' }],
@@ -293,11 +306,11 @@ function validateProductionCensus(policy) {
   };
   for (const [id, row] of Object.entries(policy.operations)) {
     requireEqual(row.file_bindings, fileBindings[id], `reviewed file binding ${id}`);
+    requireEqual(row.response_format_binding, [...stage91Profiles.run_job.split(' '), 'speech_to_speech_full'].includes(id) ? 'output_format' : undefined, `reviewed response format binding ${id}`);
   }
   requireEqual(policy.operations.create_file_document_route.timeout, 'long', 'create-file long timeout');
   requireEqual(policy.milestones, [{ number: 1, proposed_version: '0.6.0', version: null }, ...[7, 8, 9, 10].map(number => ({ number, version: null }))], 'unpublished milestones');
   requireEqual(policy.reserved_profiles.map(row => ({ profile: row.profile, tool: row.tool, milestone: row.milestone, effects: row.effects })), [
-    { profile: 'run_job', tool: 'elevenlabs_run_job', milestone: 9, effects: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } },
   ], 'unregistered reserved profiles');
 }
 
@@ -365,7 +378,7 @@ function resolveSchema(schema, spec, visited = new Set()) {
   visited.add(name);
   const target = componentSchema(spec, name);
   const { $ref, ...siblings } = schema;
-  if (Object.keys(siblings).some(key => !['description', 'title', ...SCHEMA_METADATA_KEYWORDS].includes(key))) refuse('constrained root reference', name);
+  if (Object.keys(siblings).some(key => !['description', 'title', 'examples', ...SCHEMA_METADATA_KEYWORDS].includes(key))) refuse('constrained root reference', name);
   return { ...resolveSchema(target, spec, visited), ...siblings };
 }
 function scalarShape(schema, spec, allowArray, visited = new Set()) {
@@ -400,7 +413,7 @@ function schemaCompiler(spec) {
         if (!Object.hasOwn(defs, name)) {
           const component = componentSchema(spec, name);
           defs[name] = true;
-          defs[name] = transform(component, `components/${name}`);
+          defs[name] = transform(component, `components/${name}`, binary);
         }
         output[key] = '#/$defs/' + name;
       } else if (key === 'format') {
@@ -410,9 +423,9 @@ function schemaCompiler(spec) {
         output[key] = Object.fromEntries(Object.entries(value).map(([name, child]) => [name, transform(child, `${location}/${key}/${name}`)]));
       } else if (schemaArrays.has(key)) {
         if (!Array.isArray(value)) refuse('invalid schema composition', `${location}/${key}`);
-        output[key] = value.map((child, i) => transform(child, `${location}/${key}/${i}`));
+        output[key] = value.map((child, i) => transform(child, `${location}/${key}/${i}`, binary));
       } else if (schemaSingles.has(key)) {
-        output[key] = transform(value, `${location}/${key}`);
+        output[key] = transform(value, `${location}/${key}`, binary);
       } else if (key === 'discriminator' && value?.mapping) {
         output[key] = { ...value, mapping: Object.fromEntries(Object.entries(value.mapping).map(([name, ref]) => {
           const relocated = transform({ $ref: ref }, `${location}/discriminator/${name}`).$ref;
@@ -474,22 +487,24 @@ function requestDescriptor(operation, row, spec, transform, id) {
   const bindings = new Map((row.file_bindings ?? []).map(binding => [binding.field, binding]));
   if (bindings.size !== (row.file_bindings ?? []).length) refuse('duplicate binary binding', id);
   const files = [];
+  const fields = {};
   for (const [field, schema] of Object.entries(root.properties)) {
     const resolved = resolveSchema(schema, spec);
-    if (resolved?.format === 'binary') {
+    const shape = binaryFileShape(resolved, value => resolveSchema(value, spec));
+    if (shape) {
       const binding = bindings.get(field);
-      if (!binding || resolved.type !== 'string') refuse('unbound or mismatched binary field', `${id}: ${field}`);
+      if (!binding) refuse('unbound or mismatched binary field', `${id}: ${field}`);
       files.push({ ...binding, required: (root.required ?? []).includes(field), schema: transform(resolved, `${id}/file/${field}`, true) });
       bindings.delete(field);
       delete scalar.properties[field];
       if (scalar.required) scalar.required = scalar.required.filter(name => name !== field);
     } else {
       if (bindings.has(field)) refuse('mismatched binary binding', `${id}: ${field}`);
-      if (!scalarShape(schema, spec, false)) refuse('non-scalar multipart', `${id}: ${field}`);
+      fields[field] = multipartFieldEncoding(schema, value => resolveSchema(value, spec));
     }
   }
   if (bindings.size) refuse('unbound binary field', `${id}: ${[...bindings.keys()].join(', ')}`);
-  return { media_type: media, required: body.required === true, schema: transform(scalar, `${id}/multipart-fields`), files: files.sort((a, b) => a.field < b.field ? -1 : 1) };
+  return { media_type: media, required: body.required === true, schema: transform(scalar, `${id}/multipart-fields`), fields, files: files.sort((a, b) => a.field < b.field ? -1 : 1) };
 }
 
 // Paths describe data operands, not schema syntax. * visits a declared map or array.
@@ -543,7 +558,7 @@ function checkSensitivePaths(paths, schemas, defs, id) {
   }
 }
 
-function successDescriptors(operation, transform, id) {
+function successDescriptors(operation, transform, id, row) {
   const responses = [];
   for (const [status, response] of Object.entries(operation.responses ?? {}).sort()) {
     if (!/^2[0-9][0-9]$/.test(status)) continue;
@@ -551,10 +566,17 @@ function successDescriptors(operation, transform, id) {
     const content = Object.entries(response.content ?? {});
     if (content.length === 0) responses.push({ status: Number(status), media_type: null });
     for (const [media, data] of content.sort()) {
-      if (!['application/json', 'text/plain', 'text/html', 'audio/mpeg', 'text/csv'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
-      if (media === 'audio/mpeg' && data.schema !== undefined) refuse('unsupported binary success schema', id);
+      const binary = media === 'audio/*' || Object.hasOwn(binaryExtensions, media);
+      if (!binary && !['application/json', 'text/plain', 'text/html'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
+      if (binary && data.schema !== undefined && (data.schema.type !== 'string' || data.schema.format !== 'binary' || Object.keys(data.schema).some(key => !['type', 'format'].includes(key)))) refuse('unsupported binary success schema', id);
       if (media === 'text/csv' && (data.schema?.type !== 'string' || data.schema?.format !== 'binary')) refuse('CSV requires a binary success schema', id);
-      responses.push({ status: Number(status), media_type: media, ...(data.schema === undefined ? {} : { schema: transform(data.schema, `${id}/response/${status}/${media}`, media === 'text/csv') }) });
+      let output_formats;
+      if (row.response_format_binding) {
+        const schema = operation.parameters?.find(parameter => parameter.in === 'query' && parameter.name === row.response_format_binding)?.schema;
+        if (media !== 'audio/mpeg' || !schema?.enum?.length || !schema.enum.includes(schema.default) || schema.enum.some(format => !audioRepresentation(format))) refuse('invalid output-format binding', id);
+        output_formats = { default: schema.default, values: schema.enum };
+      }
+      responses.push({ status: Number(status), media_type: media, ...(output_formats ? { output_formats } : {}), ...(data.schema !== undefined ? { schema: transform(data.schema, `${id}/response/${status}/${media}`, binary) } : {}) });
     }
   }
   if (responses.length === 0) refuse('missing concrete success response', id);
@@ -618,7 +640,7 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     const placeholders = [...row.path.matchAll(/\{([^}]+)\}/g)].map(match => match[1]).sort();
     requireEqual(Object.keys(records.path.properties).sort(), placeholders, `path operand bindings ${id}`);
     const request = requestDescriptor(operation, row, spec, transform, id);
-    const responses = successDescriptors(operation, transform, id);
+    const responses = successDescriptors(operation, transform, id, row);
     checkSensitivePaths(row.sensitive_request_fields, [request.schema], defs, id);
     checkSensitivePaths(row.sensitive_response_fields, responses.map(response => response.schema), defs, id);
     if (row.credential_return_fields?.some(path => !path.length) && !responses.some(response => response.schema?.type === 'string' && ['text/plain', 'text/html'].includes(response.media_type))) refuse('whole credential return requires scalar text', id);
@@ -679,7 +701,7 @@ export function renderCoverage(rawPolicy, rosters) {
     `Source census: ${policy.source.paths} paths; ${policy.source.operations} HTTP operation IDs; ${policy.source.bytes.toLocaleString('en-US')} bytes.`, '',
     `Partition: **${counts.admitted} admitted + ${counts.planned} planned + ${counts.excluded} excluded = ${rows.length}**.`, '',
     'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.', '',
-    `Only admitted descriptors and their reachable component graph enter the generated catalogue. Eight registered API tools expose local discovery and seven execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (40 total). The separate Agents package is unchanged. Reserved run_job is unregistered.`, '',
+    `Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.`, '',
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',
     'Provider constraints (including enums, required fields, maps and open objects) are preserved. Only synthesized path/query records are closed. Forbidden aliases are exact anchored own-property checks described in the compatibility overlay, separate from discovery search aliases. Enum errors refer to the 2026-11-08 snapshot and recommend a reviewed catalogue refresh.', '',

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { apiCatalog as generated } from '../src/generated/api-catalog.js';
 import {
   API_TOOLS, describeOperation, discoverOperations, expandSchema, getOperation,
-  ApiBoundaryError, loadApiCatalog, validateApiCatalog, type ApiCatalog,
+  ApiBoundaryError, loadApiCatalog, validateApiCatalog, reachableDefinitions, type ApiCatalog,
 } from '../src/api-catalog.js';
 import { validateRequest } from '../src/api-validation.js';
 import { unwrapUntrusted } from '../src/untrusted-content.js';
@@ -12,12 +12,12 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(209);
+    expect(catalog.operations).toHaveLength(219);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
       'elevenlabs_discover_api', 'elevenlabs_read_resource', 'elevenlabs_create_resource',
-      'elevenlabs_change_resource', 'elevenlabs_delete_resource', 'elevenlabs_run_agent_tests', 'elevenlabs_query_knowledge', 'elevenlabs_place_call',
+      'elevenlabs_change_resource', 'elevenlabs_delete_resource', 'elevenlabs_run_agent_tests', 'elevenlabs_query_knowledge', 'elevenlabs_run_job', 'elevenlabs_place_call',
     ]);
   });
 
@@ -53,6 +53,33 @@ describe('strict catalogue metadata and reference integrity', () => {
 });
 
 describe('discovery', () => {
+  it('discloses only reachable schemas, retaining cycles and discriminator mappings', async () => {
+    const catalog = structuredClone(await loadApiCatalog());
+    const op = catalog.operations.find(op => op.operation_id === 'get_test_invocation_route')!;
+    const before = reachableDefinitions(op, catalog);
+    catalog.$defs.Unrelated = { type: 'string' };
+    expect(reachableDefinitions(op, catalog)).toEqual(before);
+    catalog.$defs.Cycle = { $ref: '#/$defs/Cycle', discriminator: { propertyName: 'kind', mapping: { branch: '#/$defs/Branch' } } };
+    catalog.$defs.Branch = { type: 'object', properties: { back: { $ref: '#/$defs/Cycle' } } };
+    op.request.schema = { $ref: '#/$defs/Cycle', example: { $ref: '#/$defs/Unrelated' } };
+    expect(reachableDefinitions(op, catalog)).toEqual([...before, 'Branch', 'Cycle'].sort());
+    const described = JSON.parse(unwrapUntrusted((await describeOperation(op.operation_id)).contract));
+    expect(described.definitions).toEqual(before);
+    const explicit = JSON.parse(unwrapUntrusted((await describeOperation(op.operation_id, 'KnowledgeBaseLocator')).contract));
+    expect(explicit.definition.name).toBe('KnowledgeBaseLocator');
+  });
+
+  it('keeps the complete inventory reachable through paginated discovery', async () => {
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await discoverOperations({ limit: 25, cursor });
+      if (!('operations' in page)) throw new Error('Expected discovery page');
+      ids.push(...page.operations.map(op => op.operation_id));
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor);
+    expect(ids.sort()).toEqual((await loadApiCatalog()).operations.map(op => op.operation_id).sort());
+  });
   it.each([
     ['tests', 'run_agent_test_suite_route'],
     ['knowledge', 'query_agent_knowledge_base_rag_route'],
@@ -114,7 +141,7 @@ describe('discovery', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiBoundaryError);
       const failure = error as ApiBoundaryError;
-      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, batch-calling, conversation, conversations, environment-variables, environments, exotel, llm-usage, mcp-servers, phone-numbers, realtime, secrets, settings, sip-trunk, tags, triage-tickets, twilio, users, v2/phone-numbers, whatsapp, whatsapp-accounts.' });
+      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, audio-effects, audio-isolation, batch-calling, conversation, conversations, environment-variables, environments, exotel, forced-alignment, llm-usage, mcp-servers, phone-numbers, pronunciation-dictionaries, realtime, secrets, settings, similar-voices, sip-trunk, sound-generation, speech-to-text, tags, text-to-dialogue, text-to-speech, triage-tickets, twilio, users, v2/phone-numbers, voice-changer, whatsapp, whatsapp-accounts.' });
       expect(failure.resolution).toContain('elevenlabs_discover_api({query:"agents"})');
       expect(failure.resolution).toContain("previous discovery result's next_cursor");
       expect(failure.resolution).toContain('Replace create_agent_route in both examples with the operation_id you intend to use.');
