@@ -334,7 +334,7 @@ export function registerMessageTools(server: McpServer): void {
                   limitBytes: MAX_BODY_PART_BYTES,
                   note:
                     `Each body part is capped at ${MAX_BODY_PART_BYTES} bytes; the listed ` +
-                    'parts reached the cap and the rest of them was not downloaded.',
+                    'parts reached the cap and the rest of them was left out.',
                 },
               }
             : {}),

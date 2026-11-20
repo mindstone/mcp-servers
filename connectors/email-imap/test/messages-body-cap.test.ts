@@ -1,6 +1,6 @@
 /**
  * `email_get_message` caps each body part at MAX_BODY_PART_BYTES: the
- * sender controls the body's size, so the rest is not downloaded, and the
+ * sender controls the body's size, so the rest is left out, and the
  * result says which parts were cut and at what size.
  */
 

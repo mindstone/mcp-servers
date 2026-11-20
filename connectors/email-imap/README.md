@@ -269,7 +269,7 @@ confirmation as `email_send`.
 
 ### Messages
 - `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination (returns at most 50 messages when `limit` is omitted; `hasMore: true` signals more results)
-- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes). Each text and HTML body is capped at 25 MiB (26214400 bytes); the rest of a longer body is not downloaded, and the result's `bodyTruncated` field lists the cut bodies and the cap
+- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes). Each text and HTML body is capped at 25 MiB (26214400 bytes); the rest of a longer body is left out, and the result's `bodyTruncated` field lists the cut bodies and the cap
 - `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`); writes are exclusive-create, so existing files are never overwritten
 - `email_move_messages` — Move emails between folders (fallback expunge of the source is gated on a verified-complete copy; destructive)
 - `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; aborts with an error if the Trash move fails; destructive)

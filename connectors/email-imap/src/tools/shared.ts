@@ -170,7 +170,9 @@ export async function streamToBuffer(stream: Readable): Promise<Buffer> {
 /**
  * Cap on each text or HTML body part `email_get_message` returns. A message
  * body is sender-controlled and otherwise unbounded; past this the rest of the
- * part is not downloaded, and the result says the body was cut.
+ * part is left out, and the result says the body was cut. For most encodings the
+ * rest is not downloaded either, but imapflow decodes a quoted-printable part in
+ * full before this cap applies.
  */
 export const MAX_BODY_PART_BYTES = 25 * 1024 * 1024;
 
