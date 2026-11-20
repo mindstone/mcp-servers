@@ -1504,7 +1504,7 @@ describe('Input validation hardening (adversarial)', () => {
   });
 });
 
-describe('Write tools ask for confirmation first', () => {
+describe('Write tools leave asking to the host', () => {
   let testClient: McpTestClient;
 
   afterEach(async () => {
@@ -1512,7 +1512,7 @@ describe('Write tools ask for confirmation first', () => {
     vi.unstubAllEnvs();
   });
 
-  it('every write tool except configure tells the model to confirm with the user', async () => {
+  it('every write tool except configure is marked destructive and does not tell the model to confirm', async () => {
     testClient = await createTestClient({ env: defaultEnv() });
     const { tools } = await testClient.client.listTools();
     const writeTools = tools.filter(
@@ -1531,7 +1531,8 @@ describe('Write tools ask for confirmation first', () => {
       'update_quickbooks_vendor',
     ]);
     for (const tool of writeTools) {
-      expect(tool.description, tool.name).toMatch(/Confirm .*with the user before calling/);
+      expect(tool.annotations?.destructiveHint, tool.name).toBe(true);
+      expect(tool.description, tool.name).not.toMatch(/confirm .*with the user/i);
     }
   });
 });

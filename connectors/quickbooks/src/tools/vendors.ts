@@ -56,7 +56,7 @@ Example: { "searchTerm": "Office" }`,
 Example: { "displayName": "Office Depot" }
 Example: { "displayName": "Acme Supplies", "email": "billing@acme.example", "companyName": "Acme Supplies Ltd" }
 
-IMPORTANT: Confirm the vendor details with the user before calling — this adds a real vendor to the company's books.`,
+This adds a real vendor to the company's books.`,
       inputSchema: z.object({
         displayName: z.string().describe('Vendor display name (required, must be unique)'),
         email: z.string().email().optional().describe('Primary email address'),
@@ -95,7 +95,7 @@ If syncToken is omitted the vendor is read
 first to obtain the current one (QuickBooks rejects stale SyncTokens).
 Setting active to false deactivates the vendor.
 
-IMPORTANT: Confirm the change with the user before calling — this changes a real vendor record in the company's books.`,
+This changes a real vendor record in the company's books.`,
       inputSchema: z.object({
         vendorId: z.string().describe('Vendor ID (required)'),
         syncToken: z.string().optional()

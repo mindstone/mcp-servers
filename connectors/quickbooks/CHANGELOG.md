@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Write tools no longer tell the model to confirm with the user before calling. They are marked destructive, so the host app's permission settings decide when to ask. Their descriptions still say what each one changes, such as that sending an invoice emails a real customer immediately.
+
 ### Security
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.

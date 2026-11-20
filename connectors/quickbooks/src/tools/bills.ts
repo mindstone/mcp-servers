@@ -53,7 +53,7 @@ WORKFLOW:
 2. Use list_quickbooks_accounts to find expense account IDs
 3. Create with line items
 
-IMPORTANT: Confirm the vendor, line items and amounts with the user before calling — this adds a real bill to the company's books.`,
+This adds a real bill to the company's books.`,
       inputSchema: z.object({
         vendorId: z.string().describe('Vendor ID (required)'),
         lines: z.array(z.object({
