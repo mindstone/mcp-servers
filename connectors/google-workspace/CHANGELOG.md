@@ -12,6 +12,8 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Chat space, contact, Meet conference record and transcript, and Slides presentation IDs must now be plain IDs (letters, digits, `-` and `_`). A malformed ID is refused before anything is sent to Google, so it can no longer point a request somewhere other than the named space, contact, transcript or presentation. The Slides read, list and get-slide tools now also accept a presentation URL, like the Slides update and thumbnail tools already did.
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 - When a Google request fails, the assistant now gets a short summary (what happened, status, Google's reason code and what to do next) with Google's own error text kept inside the untrusted-content envelope. Formula-overwrite refusals envelope sheet titles and formulas, and a failed formula check now says what Google returned (status and reason).
+- Reading a document as raw JSON without naming a tab now lists named ranges the same way tab reads do, so a range name an editor chose never appears as a bare JSON key outside the untrusted-content envelope.
+- Calendar and event IDs of `.` or `..` are now refused before anything is sent to Google, so a delete or edit can no longer reach the calendar itself instead of one event.
 - Saved sign-in files are now read the way they are written: a file replaced by a link, or anything that is not a plain file, is refused instead of being followed. A refused sign-in token reaches the assistant with the reason; a refused accounts list stops the connector from starting.
 
 ### Removed
@@ -21,6 +23,9 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Fixed
 
 - `manage_workspace_calendar_event` can now rename an event: pass `summary` with the `update_time` action, with or without new times. It and `delete_workspace_calendar_event` take an optional `calendar_id`, so events on shared calendars can be moved, renamed and deleted; without it they act on your primary calendar as before.
+- Deleting "this and following" occurrences of a repeating event no longer removes earlier ones. It now acts only where the result is certain: a series with one repeat rule and no extra one-off dates, where the chosen occurrence has not been moved and its time is exact. The series then ends just before that occurrence, whatever the timezone of the computer running the connector, including a series limited by a count of occurrences. Anything else is refused before any change, with a message suggesting deleting the occurrences one by one, or deleting the series and recreating the part to keep.
+- Deleting a whole repeating series by giving one of its occurrences now deletes the series, not only that occurrence. Deleting "this and following" from a series' first occurrence now deletes the whole series instead of keeping the first one.
+- Deleting "this and following" never lengthens a series that already ends earlier.
 - `list_workspace_drafts` names each draft it could not read and why, in a new `unreadableDrafts` result field, instead of silently leaving it out of the list.
 - Corrected the `batch_update_workspace_document` examples to use Google Docs' native nested request keys.
 - Calendar event attachments are now returned and attached as Drive files, with new content uploaded to Drive; Sheets anchor continuation tokens from spreadsheet and batch reads can be passed back as given.

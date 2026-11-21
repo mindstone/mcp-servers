@@ -67,9 +67,9 @@ afterEach(() => {
 });
 
 describe('calendar this_and_following PATCH failures', () => {
+  // Only an occurrence PATCHes the series; this_and_following from the series' first
+  // occurrence deletes the whole series (calendar-edit-calendar-id.test.ts covers that).
   it.each([
-    { branch: 'master', status: 429, eventId: 'master-event' },
-    { branch: 'master', status: 500, eventId: 'master-event' },
     { branch: 'instance', status: 429, eventId: 'instance-event' },
     { branch: 'instance', status: 500, eventId: 'instance-event' },
   ])('does not delete or report success when the $branch recurrence PATCH returns $status', async ({ branch, status, eventId }) => {
@@ -83,6 +83,7 @@ describe('calendar this_and_following PATCH failures', () => {
             id: 'instance-event',
             recurringEventId: 'master-event',
             start: { dateTime: '2026-01-02T10:00:00Z' },
+            originalStartTime: { dateTime: '2026-01-02T10:00:00Z' },
           });
         }
         return HttpResponse.json({

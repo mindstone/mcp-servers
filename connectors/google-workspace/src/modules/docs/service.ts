@@ -185,7 +185,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         });
         return {
           success: true,
-          data: response.data,
+          data: withNamedRangeList(response.data),
         };
       }
 
@@ -1324,9 +1324,14 @@ function hadHttpErrorResponse(cause: unknown): boolean {
   );
 }
 
-/** The tab's documentTab with `namedRanges` turned from a name-keyed map into a list (see TabJsonDocumentTab). */
-function withNamedRangeList(documentTab: docs_v1.Schema$DocumentTab): TabJsonDocumentTab {
-  const { namedRanges, ...rest } = documentTab;
+/**
+ * A document or tab with `namedRanges` turned from a name-keyed map into a list (see TabJsonDocumentTab):
+ * the names are author-chosen, and JSON keys pass the untrusted-content envelope unwrapped.
+ */
+function withNamedRangeList<T extends { namedRanges?: docs_v1.Schema$Document['namedRanges'] }>(
+  doc: T,
+): Omit<T, 'namedRanges'> & { namedRanges?: docs_v1.Schema$NamedRanges[] } {
+  const { namedRanges, ...rest } = doc;
   return namedRanges ? { ...rest, namedRanges: Object.values(namedRanges) } : rest;
 }
 

@@ -3,16 +3,18 @@
 // its own file because that helper is byte-pinned to its upstream copy.
 //
 // The lstat is the policy check: a path that is already a link is refused with a
-// clear error. On POSIX, O_NOFOLLOW on the open is the race-free part (a link
-// swapped in after the lstat makes the open fail with ELOOP/EMLINK), O_NONBLOCK
+// clear error. On POSIX, O_NOFOLLOW on the open closes the race for the file
+// itself (a link swapped in after the lstat makes the open fail with
+// ELOOP/EMLINK), though not for a parent folder replaced by a link; O_NONBLOCK
 // keeps a FIFO from hanging the open, and the fstat on the opened descriptor
 // refuses anything that is not a plain file. Contents are read only through that
 // descriptor, so a swap after the open cannot redirect the read.
 //
-// Windows residual: O_NOFOLLOW is unavailable there, so the read is lstat-then-open
-// and a link swapped in between the two calls is followed. Exploiting that needs a
-// local process that can already create links in the credentials directory, which
-// could just as well overwrite the token itself; accepted without extra machinery.
+// Residuals: on Windows O_NOFOLLOW is unavailable, so the read is lstat-then-open
+// and a link swapped in between the two calls is followed; on every platform a
+// parent folder swapped for a link between the calls redirects the open. Exploiting
+// either needs a local process that can already change the credentials folder,
+// which could just as well overwrite the token itself; accepted without extra machinery.
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 

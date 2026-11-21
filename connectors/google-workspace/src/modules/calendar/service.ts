@@ -51,6 +51,107 @@ function describeError(error: unknown): string {
 /**
  * Google Calendar Service Implementation
  */
+/**
+ * Calendar and event ids become URL path segments. Percent-encoding does not neutralise
+ * dot-only segments, so "." or ".." would make the request target the parent resource
+ * (e.g. the calendar itself instead of one event). Refuse them before any request.
+ */
+function assertPathId(value: string, label: string): string {
+  if (value === '.' || value === '..') {
+    throw new CalendarError(`Invalid ${label}`, 'INVALID_REQUEST', `${label} cannot be "${value}"`);
+  }
+  return value;
+}
+
+type EventSlot = { date?: string | null; dateTime?: string | null; timeZone?: string | null };
+type SeriesEvent = { recurrence?: string[] | null; start?: EventSlot | null };
+type OccurrenceEvent = { start?: EventSlot | null; originalStartTime?: EventSlot | null };
+
+const EXPLICIT_OFFSET = /(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * An event time as an exact, comparable value: `D:YYYY-MM-DD` for an all-day date, or
+ * `T:<epoch ms>` for a date-time that carries its own offset. Null for anything else
+ * (e.g. an offset-less date-time that relies on a separate timeZone), so nothing is guessed.
+ */
+function exactSlot(slot: EventSlot | null | undefined): string | null {
+  if (slot?.date && !slot.dateTime && /^\d{4}-\d{2}-\d{2}$/.test(slot.date)) return `D:${slot.date}`;
+  if (slot?.dateTime && EXPLICIT_OFFSET.test(slot.dateTime)) {
+    const ms = Date.parse(slot.dateTime);
+    if (!Number.isNaN(ms)) return `T:${ms}`;
+  }
+  return null;
+}
+
+/**
+ * RRULE UNTIL just before an exact slot: an all-day slot gets the previous date (UTC date
+ * maths), a timed slot gets the UTC date-time one second earlier.
+ */
+function untilBefore(slot: string): string {
+  if (slot.startsWith('T:')) {
+    return new Date(Number(slot.slice(2)) - 1000).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  }
+  const [y, m, d] = slot.slice(2).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+const THIS_AND_FOLLOWING_HELP =
+  'Deleting "this and following" works only on a plain repeating event: one repeat rule, no extra one-off dates, ' +
+  'the chosen occurrence not moved, and times Google gives with an exact offset. ' +
+  'Instead, delete the occurrences one by one, or delete the whole series and recreate the part to keep.';
+
+const refuseThisAndFollowing = (reason: string) =>
+  new CalendarError('Cannot delete this and following here', 'INVALID_REQUEST', `${reason} ${THIS_AND_FOLLOWING_HELP}`);
+
+/**
+ * What "this and following" does, decided only for the case it can prove; anything else is
+ * refused, because a refused delete loses nothing and a wrong one loses meetings.
+ * - The series must be one RRULE plus optional EXDATE lines (no RDATE, EXRULE, second RRULE or
+ *   folded line),
+ *   so the series' start is its first occurrence and every occurrence comes from that rule.
+ * - Given the series itself (no occurrence), or its first occurrence: the whole series goes.
+ * - Given a later occurrence that has not been moved, with exact times: the rule gets an UNTIL
+ *   just before it. An existing UNTIL of the same form that is earlier stays (never lengthen);
+ *   a COUNT is replaced, since the occurrence comes from the rule and the count reaches it.
+ */
+function planThisAndFollowing(
+  series: SeriesEvent,
+  occurrence?: OccurrenceEvent
+): { kind: 'whole-series' } | { kind: 'cut'; recurrence: string[] } {
+  const rules = series.recurrence ?? [];
+  const rrules = rules.filter(rule => /^RRULE:/i.test(rule));
+  if (rrules.length !== 1 || rules.some(rule => !/^(RRULE|EXDATE)[:;]/i.test(rule) || /[\r\n]/.test(rule))) {
+    throw refuseThisAndFollowing('This series has extra dates or more than one repeat rule.');
+  }
+  if (!occurrence) return { kind: 'whole-series' };
+
+  const original = exactSlot(occurrence.originalStartTime);
+  const first = exactSlot(series.start);
+  if (!original || !first || original[0] !== first[0]) {
+    throw refuseThisAndFollowing('The times of this occurrence or series could not be read exactly.');
+  }
+  if (exactSlot(occurrence.start) !== original) throw refuseThisAndFollowing('The chosen occurrence has been moved.');
+
+  const order = original[0] === 'D' ? original.localeCompare(first) : Number(original.slice(2)) - Number(first.slice(2));
+  if (order === 0) return { kind: 'whole-series' };
+  if (order < 0) throw refuseThisAndFollowing('The chosen occurrence is before the start of its series.');
+
+  const until = untilBefore(original);
+  const recurrence = rules.map(rule => {
+    if (!/^RRULE:/i.test(rule)) return rule;
+    const parts = rule.slice('RRULE:'.length).split(';').filter(Boolean);
+    const existing = parts.find(part => /^UNTIL=/i.test(part))?.slice('UNTIL='.length);
+    let end = until;
+    if (existing !== undefined) {
+      const sameForm = existing.length === until.length && existing.endsWith('Z') === until.endsWith('Z');
+      if (!sameForm) throw refuseThisAndFollowing('The series end date is in a form that cannot be compared exactly.');
+      if (existing < until) end = existing;
+    }
+    return `RRULE:${[...parts.filter(part => !/^(UNTIL|COUNT)=/i.test(part)), `UNTIL=${end}`].join(';')}`;
+  });
+  return { kind: 'cut', recurrence };
+}
+
 export class CalendarService {
   private oauth2Client!: OAuth2Client;
   private driveService?: DriveService;
@@ -340,7 +441,7 @@ export class CalendarService {
    */
   async getEvents({ email, query, maxResults = 10, timeMin, timeMax, pageToken: initialPageToken, calendarId }: GetEventsParams): Promise<EventResponse[]> {
     const calendar = await this.getCalendarClient(email);
-    const targetCalendarId = calendarId || 'primary';
+    const targetCalendarId = assertPathId(calendarId || 'primary', 'calendar_id');
 
     // Google Calendar API requires timeMin when orderBy: 'startTime' is set.
     // Default to now if not provided.
@@ -433,8 +534,9 @@ export class CalendarService {
    * @param calendarId Optional calendar ID (defaults to 'primary')
    */
   async getEvent(email: string, eventId: string, calendarId?: string): Promise<EventResponse> {
+    assertPathId(eventId, 'event_id');
     const calendar = await this.getCalendarClient(email);
-    const targetCalendarId = calendarId || 'primary';
+    const targetCalendarId = assertPathId(calendarId || 'primary', 'calendar_id');
 
     return this.handleCalendarOperation(email, async () => {
       try {
@@ -486,7 +588,7 @@ export class CalendarService {
    */
   async createEvent({ email, summary, description, location, start, end, attendees, attachments = [], calendarId, recurrence, reminders, colorId, transparency }: CreateEventParams): Promise<CreateEventResponse> {
     const calendar = await this.getCalendarClient(email);
-    const targetCalendarId = calendarId || 'primary';
+    const targetCalendarId = assertPathId(calendarId || 'primary', 'calendar_id');
 
     // Resolved once, outside the insert's auth retry, so a retry never uploads twice.
     const eventAttachments = await this.resolveAttachmentsForInsert(email, attachments);
@@ -594,8 +696,9 @@ export class CalendarService {
    * Manage calendar event responses and updates
    */
   async manageEvent({ email, eventId, action, comment, newTimes, colorId, summary, calendarId }: ManageEventParams): Promise<ManageEventResponse> {
+    assertPathId(eventId, 'event_id');
     const calendar = await this.getCalendarClient(email);
-    const targetCalendarId = calendarId || 'primary';
+    const targetCalendarId = assertPathId(calendarId || 'primary', 'calendar_id');
 
     return this.handleCalendarOperation(email, async () => {
       const event = await calendar.events.get({
@@ -741,13 +844,13 @@ export class CalendarService {
     deletionScope?: 'entire_series' | 'this_and_following',
     calendarId?: string
   ): Promise<void> {
+    assertPathId(eventId, 'event_id');
     const calendar = await this.getCalendarClient(email);
-    const targetCalendarId = calendarId || 'primary';
+    const targetCalendarId = assertPathId(calendarId || 'primary', 'calendar_id');
 
     return this.handleCalendarOperation(email, async () => {
-      // If no deletion scope is specified or it's set to delete entire series,
-      // use the default behavior
-      if (!deletionScope || deletionScope === 'entire_series') {
+      // No deletion scope: delete exactly the event given (an occurrence id cancels that occurrence).
+      if (!deletionScope) {
         await calendar.events.delete({
           calendarId: targetCalendarId,
           eventId,
@@ -756,15 +859,22 @@ export class CalendarService {
         return;
       }
 
-      // For 'this_and_following', we need to check if this is a recurring event
       const { data: event } = await calendar.events.get({
         calendarId: targetCalendarId,
         eventId
       });
+
+      // Entire series: given an occurrence, delete its series, not just that occurrence.
+      if (deletionScope === 'entire_series') {
+        await calendar.events.delete({
+          calendarId: targetCalendarId,
+          eventId: event.recurringEventId || eventId,
+          sendUpdates
+        });
+        return;
+      }
         
-      const isRecurring = !!event.recurringEventId || !!event.recurrence;
-        
-      if (!isRecurring) {
+      if (!event.recurringEventId && !event.recurrence) {
         throw new CalendarError(
           'Deletion scope can only be applied to recurring events',
           'INVALID_REQUEST',
@@ -772,98 +882,26 @@ export class CalendarService {
         );
       }
 
-      // For 'this_and_following', we need to use a different approach
-      // Google Calendar API handles recurring events differently
-        
-      if (event.recurringEventId) {
-          // This is an instance of a recurring event
-          // We need to get the master event to update its recurrence rules
-          const { data: masterEvent } = await calendar.events.get({
-            calendarId: targetCalendarId,
-            eventId: event.recurringEventId
-          });
-          
-          if (!masterEvent || !masterEvent.recurrence) {
-            throw new CalendarError(
-              'Failed to retrieve master event',
-              'NOT_FOUND',
-              'Could not find the master event for this recurring instance'
-            );
-          }
-          
-          // Get the instance date to use as the cutoff
-          const instanceDate = new Date(event.start?.dateTime || event.start?.date || '');
-          
-          // Format the date as YYYYMMDD for UNTIL parameter in RRULE
-          // Subtract one day to make it exclusive (end before this instance)
-          instanceDate.setDate(instanceDate.getDate() - 1);
-          const formattedDate = instanceDate.toISOString().slice(0, 10).replace(/-/g, '');
-          
-          // Update the recurrence rules to end before this instance
-          const updatedRules = masterEvent.recurrence.map(rule => {
-            if (rule.startsWith('RRULE:')) {
-              // If the rule already has an UNTIL parameter, we need to replace it
-              if (rule.includes('UNTIL=')) {
-                return rule.replace(/UNTIL=\d+T\d+Z?/, `UNTIL=${formattedDate}`);
-              } else {
-                // Otherwise, add the UNTIL parameter
-                return `${rule};UNTIL=${formattedDate}`;
-              }
-            }
-            return rule;
-          });
-          
-          // Update the master event with the new recurrence rules
-          await calendar.events.patch({
-            calendarId: targetCalendarId,
-            eventId: event.recurringEventId,
-            sendUpdates,
-            requestBody: {
-              recurrence: updatedRules
-            }
-          });
-          
-          // Now delete this specific instance
-          await calendar.events.delete({
-            calendarId: targetCalendarId,
-            eventId,
-            sendUpdates
-          });
-      } else if (event.recurrence) {
-          // This is a master event with recurrence rules
-          // We need to update the recurrence rule to end before this instance
-          const eventDate = new Date(event.start?.dateTime || event.start?.date || '');
-          
-          // Format the date as YYYYMMDD for UNTIL parameter in RRULE
-          const formattedDate = eventDate.toISOString().slice(0, 10).replace(/-/g, '');
-          
-          // Get the existing recurrence rules
-          const recurrenceRules = event.recurrence || [];
-          
-          // Update the RRULE to include UNTIL parameter
-          const updatedRules = recurrenceRules.map(rule => {
-            if (rule.startsWith('RRULE:')) {
-              // If the rule already has an UNTIL parameter, we need to replace it
-              if (rule.includes('UNTIL=')) {
-                return rule.replace(/UNTIL=\d+T\d+Z?/, `UNTIL=${formattedDate}`);
-              } else {
-                // Otherwise, add the UNTIL parameter
-                return `${rule};UNTIL=${formattedDate}`;
-              }
-            }
-            return rule;
-          });
-          
-          // Update the master event with the new recurrence rules
-          await calendar.events.patch({
-            calendarId: targetCalendarId,
-            eventId,
-            sendUpdates,
-            requestBody: {
-              recurrence: updatedRules
-            }
-          });
+      // this_and_following: act only on the case planThisAndFollowing can prove.
+      const seriesId = event.recurringEventId || eventId;
+      const series = event.recurringEventId
+        ? (await calendar.events.get({ calendarId: targetCalendarId, eventId: seriesId })).data
+        : event;
+      const plan = planThisAndFollowing(series, event.recurringEventId ? event : undefined);
+
+      if (plan.kind === 'whole-series') {
+        await calendar.events.delete({ calendarId: targetCalendarId, eventId: seriesId, sendUpdates });
+        return;
       }
+
+      // Not atomic: if the DELETE fails after the PATCH, the series stays cut and the error is reported.
+      await calendar.events.patch({
+        calendarId: targetCalendarId,
+        eventId: seriesId,
+        sendUpdates,
+        requestBody: { recurrence: plan.recurrence }
+      });
+      await calendar.events.delete({ calendarId: targetCalendarId, eventId, sendUpdates });
     });
   }
 }
