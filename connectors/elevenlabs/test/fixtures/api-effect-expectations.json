@@ -1,4 +1,13 @@
 {
+  "create_public_template_run": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "get_public_template": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "get_public_template_run": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "list_public_template_runs": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "list_public_templates": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "requests_list": {"profile": "read", "method": "POST", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "usage_by_product_over_time": {"profile": "read", "method": "POST", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "workspace_usage": {"profile": "read", "method": "POST", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "get_workspace_audit_logs": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "create_image_generation": {"profile": "run_job", "method": "POST", "tool": "elevenlabs_run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
   "get_image_generation": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "list_image_generations": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},

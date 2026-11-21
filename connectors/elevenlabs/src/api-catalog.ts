@@ -260,7 +260,10 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       || (!documents && !tokens && !history && !['page', 'limit'].some(name => queries.includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
       || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : []), ...(history ? ['start_after_history_item_id'] : [])].includes(name)))) invalid('Invalid manual pagination.');
-    if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
+    const cursorPagination = queries.includes('cursor') && properties.includes('next_cursor');
+    if (op.manual_pagination === undefined && (queries.some(name => unsupportedPagination.has(name) && !(name === 'limit' && cursorPagination))
+      || properties.some(name => unsupportedPagination.has(name)))) invalid('Undeclared manual pagination.');
+    if (queries.includes('cursor') !== properties.includes('next_cursor') || Boolean(op.pagination) !== cursorPagination) invalid('Invalid cursor pagination pair.');
     if (op.optional_header_omissions && new Set(op.optional_header_omissions.map(header => header.name.toLowerCase())).size !== op.optional_header_omissions.length) invalid('Duplicate optional header omission.');
     for (const check of [op.check_before_retry, op.retry_check]) {
       if (typeof check !== 'string') continue;

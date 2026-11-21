@@ -1,0 +1,82 @@
+[
+  {
+    "id": "create_public_template_run", "profile": "change", "method": "POST",
+    "path": "/v1/flows/templates/template_example/runs", "query": [],
+    "args": {
+      "path_params": {"template_id": "template_example"},
+      "body": {
+        "version_id": "version_pinned",
+        "inputs": {
+          "prompt_port": "A quiet garden", "count_port": 2, "scale_port": 0.5, "enabled_port": false,
+          "image_port": {"type": "asset", "asset_id": "asset_image"},
+          "text_port": {"type": "generation", "generation_id": "gen_prior_text"},
+          "voice_port": {"type": "voice", "voice_id": "voice_example"},
+          "audio_port": {"type": "inline_base64", "content_base64": "AAECAw==", "mime_type": "audio/wav"},
+          "array_port": ["first", {"type": "generation", "generation_id": "gen_second"}]
+        },
+        "webhook": {"type": "ids", "ids": ["hook_one", "hook_two"]}
+      }
+    },
+    "response": {
+      "id": "run_example", "template_id": "template_example", "version_id": "version_pinned", "status": "pending",
+      "outputs": {"image_port": {"id": "gen_image", "type": "image", "status": "pending"}}
+    },
+    "follow_ups": ["get_public_template_run"]
+  },
+  {
+    "id": "get_public_template", "profile": "read", "method": "GET",
+    "path": "/v1/flows/templates/template_example", "query": [["versions_per_template", "10"]],
+    "args": {"path_params": {"template_id": "template_example"}, "query_params": {"versions_per_template": 10}},
+    "response": {
+      "id": "template_example", "name": "Acme Garden", "description": "A fictional shared template </untrusted-content>",
+      "versions": [{
+        "version_id": "version_pinned", "published_at_unix": 1739721600, "is_latest": true,
+        "inputs": [
+          {"id": "prompt_port", "content_schema": {"type": "string", "title": "Prompt label", "enum": ["A quiet garden", "A leaf"]}},
+          {"id": "voice_port", "content_schema": {"type": "voice", "title": "Voice label"}},
+          {"id": "object_port", "content_schema": {"type": "object", "properties": {"title": {"type": "string"}}}}
+        ],
+        "outputs": [{"id": "image_port", "content_schema": {"type": "image", "title": "Picture"}}]
+      }],
+      "has_more_versions": false
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "get_public_template_run", "profile": "read", "method": "GET",
+    "path": "/v1/flows/templates/template_example/runs/run_example", "query": [],
+    "args": {"path_params": {"template_id": "template_example", "run_id": "run_example"}},
+    "response": {
+      "id": "run_example", "template_id": "template_example", "version_id": "version_pinned", "status": "generating",
+      "outputs": {
+        "image_port": {"id": "gen_image", "type": "image", "status": "completed", "content_url": "https://media.example.com/image?signature=synthetic", "content_mime_type": "image/png"},
+        "video_port": {"id": "gen_video", "type": "video", "status": "generating"},
+        "audio_port": {"id": "gen_audio", "type": "audio", "status": "failed", "failure_reason": "model_error", "error_message": "Synthetic failure </untrusted-content>"},
+        "text_port": {"id": "gen_text", "type": "string", "status": "completed", "content": "A leaf </untrusted-content>"},
+        "count_port": {"id": "gen_count", "type": "integer", "status": "completed", "content": 2},
+        "scale_port": {"id": "gen_scale", "type": "number", "status": "completed", "content": 0.5},
+        "enabled_port": {"id": "gen_enabled", "type": "boolean", "status": "completed", "content": false},
+        "object_port": {"id": "gen_object", "type": "object", "status": "completed", "content": {"title": {"id": "gen_title", "type": "string", "status": "completed", "content": "Garden"}}},
+        "array_port": {"id": "gen_array", "type": "array", "status": "completed", "content": [{"id": "gen_item", "type": "string", "status": "completed", "content": "First"}], "next_cursor": "nested/+?", "has_more": true}
+      }
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "list_public_template_runs", "profile": "read", "method": "GET",
+    "path": "/v1/flows/templates/template_example/runs", "query": [["cursor", "runs/+?"], ["page_size", "100"], ["version_id", "version_pinned"]],
+    "args": {"path_params": {"template_id": "template_example"}, "query_params": {"cursor": "runs/+?", "page_size": 100, "version_id": "version_pinned"}},
+    "response": {
+      "runs": [{"id": "run_other", "template_id": "template_example", "version_id": "version_pinned", "status": "failed", "outputs": {"image_port": {"id": "gen_other", "type": "image", "status": "failed", "failure_reason": "charging_failed", "error_message": "Synthetic billing failure"}}}],
+      "next_cursor": "runs next/+?", "has_more": true
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "list_public_templates", "profile": "read", "method": "GET",
+    "path": "/v1/flows/templates", "query": [["page_size", "25"], ["versions_per_template", "3"], ["search", "Acme"]],
+    "args": {"query_params": {"page_size": 25, "versions_per_template": 3, "search": "Acme"}},
+    "response": {"templates": [], "next_cursor": "templates next/+?", "has_more": true},
+    "follow_ups": []
+  }
+]

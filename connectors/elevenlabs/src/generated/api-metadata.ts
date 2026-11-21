@@ -54,9 +54,11 @@ export const apiFamilies = {
   "voices": "voices",
   "voices-v2": "voices-v2",
   "whatsapp": "whatsapp",
-  "whatsapp-accounts": "whatsapp-accounts"
+  "whatsapp-accounts": "whatsapp-accounts",
+  "workspace/analytics": "workspace/analytics",
+  "workspace/audit-logs": "workspace/audit-logs"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts","workspace/analytics","workspace/audit-logs"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -143,6 +145,8 @@ export const profileOperationIds = {
     "get_pronunciation_dictionary_metadata",
     "get_pronunciation_dictionary_version_pls",
     "get_public_llm_expected_cost_calculation",
+    "get_public_template",
+    "get_public_template_run",
     "get_pvc_sample_audio",
     "get_pvc_sample_speakers",
     "get_pvc_sample_visual_waveform",
@@ -177,6 +181,7 @@ export const profileOperationIds = {
     "get_voice_settings_default",
     "get_voices",
     "get_whatsapp_account",
+    "get_workspace_audit_logs",
     "get_workspace_batch_calls",
     "list_agent_conversation_tickets_route",
     "list_agent_deployments_route",
@@ -198,6 +203,8 @@ export const profileOperationIds = {
     "list_phone_numbers_page_route",
     "list_phone_numbers_route",
     "list_procedures_route",
+    "list_public_template_runs",
+    "list_public_templates",
     "list_sip_messages",
     "list_speech_engines",
     "list_test_invocations_route",
@@ -207,6 +214,7 @@ export const profileOperationIds = {
     "list_workspace_conversation_tickets_route",
     "merge_preview_route",
     "rebase_preview_route",
+    "requests_list",
     "resolve_conversation_reference_route",
     "search_knowledge_base_content_route",
     "smart_search_conversation_messages_route",
@@ -214,7 +222,9 @@ export const profileOperationIds = {
     "stream_project_snapshot_archive_endpoint",
     "text_search_conversation_messages_route",
     "text_to_voice_preview_stream",
-    "usage_characters"
+    "usage_by_product_over_time",
+    "usage_characters",
+    "workspace_usage"
   ],
   "create": [
     "add_chapter",
@@ -285,6 +295,7 @@ export const profileOperationIds = {
     "create_clip",
     "create_mcp_server_route",
     "create_phone_number_route",
+    "create_public_template_run",
     "create_speaker",
     "dub",
     "dubbing_target_transcript_regenerate",

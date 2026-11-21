@@ -109,6 +109,37 @@ describe('generator subprocess contracts', () => {
     });
   });
 
+  it.each(['cursor limit', 'limit offset', 'limit alone', 'response limit', 'missing next cursor', 'missing cursor', 'manual limit'])('checks generic pagination: %s', async kind => {
+    await scratch(async directory => {
+      const spec = structuredClone(miniInput);
+      const policy = miniPolicy();
+      delete policy.operations.get_agents_route.manual_pagination;
+      addQueryParameter(spec, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } });
+      if (kind === 'limit offset') addQueryParameter(spec, { name: 'offset', in: 'query', schema: { type: 'integer' } });
+      if (['limit alone', 'missing cursor', 'manual limit'].includes(kind)) {
+        spec.paths['/v1/convai/agents'].get.parameters = spec.paths['/v1/convai/agents'].get.parameters.filter(parameter => parameter.name !== 'cursor');
+      }
+      if (['limit alone', 'missing next cursor', 'manual limit'].includes(kind)) {
+        Reflect.deleteProperty(spec.components.schemas.Page.properties, 'next_cursor');
+        spec.components.schemas.Page.required = spec.components.schemas.Page.required.filter(name => name !== 'next_cursor');
+      }
+      if (kind === 'response limit') Object.assign(spec.components.schemas.Page.properties, { limit: { type: 'integer' } });
+      if (kind === 'manual limit') policy.operations.get_agents_route.manual_pagination = 'Repeat with an explicit limit.';
+      const sha = createHash('sha256').update(JSON.stringify(spec, null, 2) + '\n').digest('hex');
+      const result = await compileFixture(directory, spec, sha, policy);
+      if (!['cursor limit', 'manual limit'].includes(kind)) {
+        expectRefusal(result, 'unsupported pagination');
+        return;
+      }
+      await expectImportedCatalog(directory, result, `
+        const op = apiCatalog.operations.find(op => op.operation_id === 'get_agents_route');
+        assert.deepEqual(op.pagination, ${kind === 'manual limit' ? 'null' : "{ request: 'cursor', response: 'next_cursor' }"});
+        assert.deepEqual(op.parameters.query.properties.limit, { type: 'integer', minimum: 1, maximum: 100 });
+        assert.equal(op.parameters.query_serialization.limit, 'form-explode');
+      `);
+    });
+  });
+
   it.each(['missing', 'non-read', 'non-GET', 'planned', 'empty reason', 'blank reason'])('refuses a %s retry override', async kind => {
     await scratch(async directory => {
       const policy = miniPolicy();

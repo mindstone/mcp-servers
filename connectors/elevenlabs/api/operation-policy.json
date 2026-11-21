@@ -122,6 +122,8 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "workspace/analytics": { "read": { "unavailable_reason": "No persisted-result lookup verifies this analytics query; repeat the same read with the same arguments if needed." } },
+    "workspace/audit-logs": { "read": "get_workspace_audit_logs" },
     "flows": { "read": { "unavailable_reason": "No reliable lookup identifies a generation after losing its ID; list items do not expose submitted inputs. Do not repeat generation blindly." } },
     "speech-engine": {
       "read": "get_speech_engine"
@@ -1881,19 +1883,32 @@
     "create_public_template_run": {
       "method": "POST",
       "path": "/v1/flows/templates/{template_id}/runs",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Executes a published template that may belong to another workspace, passes supplied data through its workflow, and can deliver outputs to configured webhooks. Generation may consume credits; individual failed generations are uncharged, without a blanket refund promise for a failed run.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_public_template_run"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No reliable lookup after losing the run ID: the run list holds no submitted inputs or correlation token. With a known run ID use get_public_template_run with the template ID; do not repeat execution blindly."
+      },
+      "effect_note": "Executes a published template that may belong to another workspace, passes supplied data through its workflow, and can deliver outputs to configured webhooks. Generation may consume credits; individual failed generations are uncharged, without a blanket refund promise for a failed run. Use the returned run ID with get_public_template_run and the template ID; after losing it, run lists have no submitted inputs or correlation token. Inputs are keyed by port ID; every version input is required, and object input ports cannot be bound. Pin version_id or omit it/use latest for the latest published version; the owner can pin a saved unpublished snapshot, never the live draft. References stay JSON with no file reads or automatic uploads. Webhook selects all or specific IDs of configured workspace Flows webhooks; the provider delivers the terminal run there. Inspect each output; no automatic polling, retry or URL fetching."
     },
     "create_pvc_voice": {
       "method": "POST", "path": "/v1/voices/pvc", "status": "admitted", "milestone": 9, "family": "voices",
@@ -5424,36 +5439,54 @@
     "get_public_template": {
       "method": "GET",
       "path": "/v1/flows/templates/{template_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads an accessible template and its runnable published versions, including shared or other-workspace templates; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_public_template",
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Empty versions means no published version is runnable through this API. Inputs are keyed by port ID, not display title; object input ports cannot be bound. Shared-by-link and other-workspace Explore templates can be inspected by ID."
     },
     "get_public_template_run": {
       "method": "GET",
       "path": "/v1/flows/templates/{template_id}/runs/{run_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads an existing template run and each output state without executing a template or fetching media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_public_template_run",
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Inspect each output, not just the rolled-up run state. Object and array outputs remain data; nested output cursors have no admitted continuation endpoint. Signed media URLs expire about an hour after the read; re-read for fresh URLs. No media fetching or automatic polling."
     },
     "get_pvc_sample_audio": {
       "method": "GET",
@@ -6245,19 +6278,28 @@
     "get_workspace_audit_logs": {
       "method": "GET",
       "path": "/v1/workspace/audit-logs",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/audit-logs",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads authorized enterprise workspace audit records containing personal and network data without mutation; the tier requirement is not a per-query tariff.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_workspace_audit_logs",
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Enterprise-only and requires audit_log_read; a denial is returned as the provider error. Results contain personal data: emails, names, IPs, hostnames, user agents and request URLs. Preserve requested audit evidence, including open metadata/session fields, wrapped as untrusted content; this is not a PII scrubber. No credential-return exemption. Page explicitly with limit and cursor; time filters are milliseconds."
     },
     "get_workspace_batch_calls": {
       "method": "GET",
@@ -6935,36 +6977,54 @@
     "list_public_template_runs": {
       "method": "GET",
       "path": "/v1/flows/templates/{template_id}/runs",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists existing API-created runs of a template without executing it; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_public_template_runs",
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Continue explicitly with cursor. A matching version does not mean matching inputs: runs expose no submitted inputs or request correlation token. Nested output cursors remain data, with no invented continuation endpoint."
     },
     "list_public_templates": {
       "method": "GET",
       "path": "/v1/flows/templates",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists published templates in this workspace only without executing them; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_public_templates",
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Lists published templates in this workspace only, not templates shared by link or other workspaces' Explore templates. Continue explicitly even through an empty page while has_more is true. Empty versions means none can be run through this API."
     },
     "list_sip_messages": {
       "method": "GET",
@@ -8032,19 +8092,31 @@
     "requests_list": {
       "method": "POST",
       "path": "/v1/workspace/analytics/requests",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/analytics",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Queries existing API request records without creating provider work; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": {
+        "unavailable_reason": "No persisted-result lookup verifies this analytics query; repeat the same read with the same arguments if needed."
+      },
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. No persisted-result lookup; repeat the same read. Billing history in the output is not a charge for the query. Keep millisecond timestamps and tabular columns, column_types, column_units and rows unchanged. At least one of start_time or end_time is required by provider guidance, although the body/schema are optional. End-time queries default descending, otherwise start-time queries ascend; sort overrides it. Column filters and search stay provider-validated; no automatic paging.",
+      "reviewed_post_read": "POST carries query filters for existing request or billing records; it performs a read, starts no generation and creates no persisted query result."
     },
     "resolve_conversation_reference_route": {
       "method": "GET",
@@ -11419,12 +11491,17 @@
     "usage_by_product_over_time": {
       "method": "POST",
       "path": "/v1/workspace/analytics/query/usage-by-product-over-time",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/analytics",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Queries credit-billed usage history without generating media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "partial",
         "tools": [
@@ -11435,7 +11512,14 @@
           "@mindstone/mcp-server-elevenlabs/src/tools/account.ts"
         ]
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": {
+        "unavailable_reason": "No persisted-result lookup verifies this analytics query; repeat the same read with the same arguments if needed."
+      },
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. No persisted-result lookup; repeat the same read. Billing history in the output is not a charge for the query. Keep millisecond timestamps, credit units and the full tabular columns/types/units/rows including appended display names. For credit-billed workspaces; ranges reaching a switch to cost billing error, so use workspace_usage for cost billing. Preserve group_by, filters and time_zone: week multiples start Monday at local midnight, other whole days at local midnight, whole hours up to 24 hours at local hour boundaries; other intervals stay UTC-anchored.",
+      "reviewed_post_read": "POST carries query filters for existing request or billing records; it performs a read, starts no generation and creates no persisted query result."
     },
     "usage_characters": {
       "method": "GET",
@@ -11533,19 +11617,31 @@
     "workspace_usage": {
       "method": "POST",
       "path": "/v1/workspace/analytics/usage",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/analytics",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Queries cost-billed workspace usage history without generating media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": {
+        "unavailable_reason": "No persisted-result lookup verifies this analytics query; repeat the same read with the same arguments if needed."
+      },
+      "effect_note": "No endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. No persisted-result lookup; repeat the same read. Billing history in the output is not a charge for the query. For cost-billed workspaces; credit-billed workspaces use usage_by_product_over_time. Start/end are milliseconds; interval_seconds is at least 86400 and a multiple of 86400 (UTC days, weeks start Monday). Group/filter at most two of user_id, hashed_xi_api_key, region, reporting_workspace_id, billing_group_id, product_type, surface and actor; two groupings require an eq or in filter on one. model, request_source, fiat_charge_type and fiat_currency may always be added. total_cost is workspace-currency cost; total_charge_count is billed quantity. Preserve full columns/types/units/rows and appended display names; restrictions stay provider-validated.",
+      "reviewed_post_read": "POST carries query filters for existing request or billing records; it performs a read, starts no generation and creates no persisted query result."
     }
   }
 }

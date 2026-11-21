@@ -7,6 +7,26 @@ import legacyTools from './fixtures/legacy-tools.json' with { type: 'json' };
 import type { ApiCatalog } from '../src/api-catalog.js';
 import { mswServer } from './helpers/setup.js';
 
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { compileCatalog, loadCoverageRosters } from '../scripts/generate-api-catalog.mjs';
+import miniInput from './fixtures/mini-openapi.json' with { type: 'json' };
+import policyInput from '../api/operation-policy.json' with { type: 'json' };
+
+async function cursorLimitCatalog(): Promise<ApiCatalog> {
+  const spec = structuredClone(miniInput);
+  spec.paths['/v1/convai/agents'].get.parameters.push({ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } });
+  const bytes = Buffer.from(JSON.stringify(spec));
+  const source = { url: 'https://api.elevenlabs.io/openapi.json', retrieved_at: '2026-11-08T00:00:00+00:00',
+    sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, paths: 4, operations: 4 };
+  const operations = Object.fromEntries(['get_agents_route', 'create_agent_route', 'create_file_document_route', 'update_file_document_route']
+    .map(id => [id, { ...structuredClone(policyInput.operations[id as keyof typeof policyInput.operations]), follow_ups: [] }]));
+  delete operations.get_agents_route.manual_pagination;
+  const policy = { ...policyInput, source, operations,
+    family_retry_checks: { agents: { read: 'get_agents_route' }, 'knowledge-base': { read: 'get_agents_route' } } };
+  return compileCatalog(bytes, policy, source, await loadCoverageRosters(resolve(import.meta.dirname, '..'))) as ApiCatalog;
+}
+
 const newToolAnnotations = {
   elevenlabs_place_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   elevenlabs_discover_api: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -56,6 +76,55 @@ afterEach(() => {
 });
 
 describe('isolated lazy catalogue loading', () => {
+  it('loads a miniature cursor/limit pair with the existing cursor descriptor', async () => {
+    const { validateApiCatalog } = await import('../src/api-catalog.js');
+    const catalog = validateApiCatalog(await cursorLimitCatalog());
+    const op = catalog.operations.find(row => row.operation_id === 'get_agents_route')!;
+    expect(op.pagination).toEqual({ request: 'cursor', response: 'next_cursor' });
+    expect(op.parameters.query.properties.limit).toEqual({ type: 'integer', minimum: 1, maximum: 100 });
+  });
+
+  it.each(['offset', 'skip', 'page', 'limit alone', 'response limit', 'missing next cursor', 'missing cursor', 'missing descriptor', 'missing next cursor without limit', 'missing cursor without limit'])('rejects hand-edited miniature pagination: %s', async kind => {
+    const raw = await cursorLimitCatalog();
+    const op = raw.operations.find(row => row.operation_id === 'get_agents_route')!;
+    const page = raw.$defs.Page as { properties: Record<string, unknown>; required: string[] };
+    if (['offset', 'skip', 'page'].includes(kind)) {
+      op.parameters.query.properties[kind] = { type: 'integer' };
+      op.parameters.query_serialization[kind] = 'form-explode';
+    }
+    if (kind.endsWith(' without limit')) {
+      delete op.parameters.query.properties.limit;
+      delete op.parameters.query_serialization.limit;
+    }
+    if (['limit alone', 'missing cursor', 'missing cursor without limit'].includes(kind)) {
+      delete op.parameters.query.properties.cursor;
+      delete op.parameters.query_serialization.cursor;
+    }
+    if (['limit alone', 'missing next cursor', 'missing next cursor without limit'].includes(kind)) {
+      delete page.properties.next_cursor;
+      page.required = page.required.filter(name => name !== 'next_cursor');
+    }
+    if (kind === 'limit alone' || kind === 'missing descriptor') op.pagination = null;
+    if (kind === 'response limit') page.properties.limit = { type: 'integer' };
+    const { validateApiCatalog } = await import('../src/api-catalog.js');
+    expect(() => validateApiCatalog(raw)).toThrow('The local API catalogue is invalid.');
+    if (kind.endsWith(' without limit')) expect(() => validateApiCatalog(raw)).toThrow(expect.objectContaining({ issues: [expect.objectContaining({ message: 'Invalid cursor pagination pair.' })] }));
+  });
+
+  it('keeps the miniature manual-limit route unchanged', async () => {
+    const raw = await cursorLimitCatalog();
+    const op = raw.operations.find(row => row.operation_id === 'get_agents_route')!;
+    delete op.parameters.query.properties.cursor;
+    delete op.parameters.query_serialization.cursor;
+    const page = raw.$defs.Page as { properties: Record<string, unknown>; required: string[] };
+    delete page.properties.next_cursor;
+    page.required = page.required.filter(name => name !== 'next_cursor');
+    op.pagination = null;
+    op.manual_pagination = 'Repeat with an explicit limit.';
+    const { validateApiCatalog } = await import('../src/api-catalog.js');
+    expect(validateApiCatalog(raw).operations.find(row => row.operation_id === op.operation_id)?.manual_pagination).toBe(op.manual_pagination);
+  });
+
   it('loads milestone 10, preserves omission reasons in discovery, and never sends omitted headers', async () => {
     vi.resetModules();
     const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');

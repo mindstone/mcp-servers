@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Published-template inspection and execution, tabular analytics and enterprise audit reads through the API tools. Template runs can use another workspace's workflow and deliver outputs to configured webhooks; audit records keep their personal data. A run's headline status is no substitute for checking its outputs.
+
 - Asynchronous Flows image, video and speech generation, with explicit state reads, continuation and configured webhook delivery.
 
 - Speech Engine configuration and asset management through the API tools. Stored header credentials stay hidden, copies get their own IDs, and signed asset links remain links. Configuration does not start a conversation; later usage can still run up a tab.

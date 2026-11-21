@@ -12,6 +12,7 @@ import { createRedactor } from '../src/api-sensitive.js';
 import { unwrapUntrusted } from '../src/untrusted-content.js';
 import { mswServer } from './helpers/setup.js';
 import cases from './fixtures/api-flows-wire-cases.json' with { type: 'json' };
+import templates from './fixtures/api-templates-wire-cases.json' with { type: 'json' };
 
 let pair: McpTestClient, workspace: string;
 const args = (row: typeof cases[number]) => ({ operation_id: row.id, ...row.args });
@@ -195,5 +196,148 @@ it.each(cases)('$id refuses every wrong profile and all file bindings with zero 
     expect(refused.isError).toBe(true); expect(refused.text).toContain('WRONG_TOOL');
   }
   const refused = await pair.callTool(tool(row.profile), { ...args(row), files: [{ field: 'image', file_path: path.join(workspace, 'never-read') }] });
+  expect(refused.isError).toBe(true); expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each(templates)('$id preserves the literal template wire contract, destructive execution and wrapped outputs', async row => {
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  mswServer.use(http.all('https://api.elevenlabs.io/*', async ({ request }) => {
+    expect(request.method).toBe(row.method); expect(new URL(request.url).pathname).toBe(row.path);
+    expect([...new URL(request.url).searchParams]).toEqual(row.query);
+    expect(await request.text()).toBe(row.args.body === undefined ? '' : JSON.stringify(row.args.body));
+    expect(request.headers.get('xi-api-key')).toBe('synthetic-flows-key'); expect(request.redirect).toBe('manual');
+    return HttpResponse.json(row.response);
+  }));
+  const result = await pair.callTool(tool(row.profile), { operation_id: row.id, ...row.args });
+  expect(result.isError, result.text).not.toBe(true); expect(fetch).toHaveBeenCalledOnce();
+  expect(receipt(result.text)).toMatchObject({ status: 200, response_contract: 'matched', follow_up_operations: row.follow_ups,
+    effects: { readOnlyHint: row.profile === 'read', destructiveHint: row.profile === 'change', idempotentHint: row.profile === 'read', openWorldHint: true } });
+  expect(data(result.text)).toEqual(row.response);
+  expect(receipt(result.text).data.match(/<untrusted-content /g)).toHaveLength(1);
+  expect(receipt(result.text).data.match(/<\/untrusted-content>/g)).toHaveLength(1);
+  const op = await getOperation(row.id);
+  expect(op.timeout).toBe('standard'); expect(op.request.files).toBeUndefined();
+  expect(op.sensitive_request_fields ?? []).toEqual([]); expect(op.sensitive_response_fields ?? []).toEqual([]);
+  expect(op.credential_return_fields).toBeUndefined(); expect(fs.readdirSync(workspace)).toEqual([]);
+});
+
+it('validates template version, input port values, references and webhook selection without adding business validators', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  const run = (body: unknown) => validateRequest('change', { operation_id: 'create_public_template_run', path_params: { template_id: 'template_example' }, body }, createRedactor([]));
+  for (const version_id of [undefined, null, 'latest', 'version_pinned']) {
+    for (const webhook of [undefined, null, { type: 'all' }, { type: 'ids', ids: ['hook_one'] }]) {
+      await expect(run({ inputs: {}, version_id, webhook })).resolves.toBeDefined();
+    }
+  }
+  const inputs = { text_port: 'text', number_port: 0.5, integer_port: 2, boolean_port: false,
+    image_port: asset, video_port: generation, voice_port: { type: 'voice', voice_id: 'voice_example' },
+    audio_port: inline('audio/wav'), array_port: ['text', [true, 2, generation]] };
+  await expect(run({ inputs })).resolves.toMatchObject({ body: { inputs } });
+  for (const body of [
+    {}, { inputs: {}, version_id: '' }, { inputs: { object_port: { title: 'not bindable' } } },
+    { inputs: { voice_port: { type: 'voice' } } }, { inputs: { image_port: { type: 'asset' } } },
+    { inputs: { video_port: { type: 'generation' } } }, { inputs: { audio_port: inline('text/plain') } },
+    { inputs: { image_port: { type: 'url', url: 'https://media.example.com/image' } } },
+    { inputs: { array_port: Array(65).fill('text') } },
+    { inputs: Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`port_${i}`, 'text'])) },
+    { inputs: {}, webhook: { type: 'url', url: 'https://hooks.example.com' } },
+    { inputs: {}, webhook: { type: 'ids', ids: [] } }, { inputs: {}, webhook: { type: 'ids' } },
+  ]) await expect(run(body)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  // Published port IDs, required ports and port-specific enums are validated by the provider.
+  await expect(run({ inputs: { unknown_port: 'provider decides' } })).resolves.toBeDefined();
+  const catalog = await loadApiCatalog();
+  expect(catalog.$defs.TemplatePort).toMatchObject({ properties: { content_schema: { description: expect.stringContaining('object` inputs cannot be bound') } } });
+  expect(catalog.$defs.TemplateInputReference).toMatchObject({ discriminator: { propertyName: 'type', mapping: {
+    asset: '#/$defs/StaticAssetReference', generation: '#/$defs/GenerationReference', inline_base64: '#/$defs/InlineBase64Reference', voice: '#/$defs/VoiceReference',
+  } } });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps mixed typed output states and reserved nested output cursors as data without a continuation or media fetch', async () => {
+  const row = templates.find(row => row.id === 'get_public_template_run')!;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json(row.response));
+  const logs = [vi.spyOn(console, 'log'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'error')];
+  const result = await pair.callTool('elevenlabs_read_resource', { operation_id: row.id, ...row.args });
+  expect(result.isError, result.text).not.toBe(true); expect(receipt(result.text).response_contract).toBe('matched');
+  const run = data(result.text);
+  expect(run.status).toBe('generating'); expect(run.outputs.audio_port.status).toBe('failed');
+  expect(Object.values(run.outputs).map(output => (output as { type: string }).type).sort()).toEqual(['array', 'audio', 'boolean', 'image', 'integer', 'number', 'object', 'string', 'video']);
+  expect(run.outputs.array_port).toMatchObject({ next_cursor: 'nested/+?', has_more: true });
+  expect(run.outputs.object_port.content.title.content).toBe('Garden');
+  expect(receipt(result.text).next).toBeUndefined(); expect((await getOperation(row.id)).pagination).toBeNull();
+  expect(fetch).toHaveBeenCalledOnce(); expect(fs.readdirSync(workspace)).toEqual([]);
+  for (const log of logs) expect(JSON.stringify(log.mock.calls)).not.toContain('https://media.example.com');
+});
+
+it('uses a known run ID with the template ID, but never recommends the run list after response loss', async () => {
+  const row = templates[0];
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json(row.response));
+  const result = await pair.callTool('elevenlabs_change_resource', { operation_id: row.id, ...row.args });
+  expect(result.isError, result.text).not.toBe(true); expect(receipt(result.text).next_step).toContain('get_public_template_run');
+  expect(receipt(result.text).next_step).toContain('path_params.template_id'); expect(receipt(result.text).next_step).toContain('path_params.run_id');
+  const run = data(result.text);
+  fetch.mockResolvedValueOnce(Response.json(run));
+  const read = await pair.callTool('elevenlabs_read_resource', { operation_id: 'get_public_template_run', path_params: { template_id: run.template_id, run_id: run.id } });
+  expect(read.isError, read.text).not.toBe(true);
+  expect(String(fetch.mock.calls[1][0])).toBe('https://api.elevenlabs.io/v1/flows/templates/template_example/runs/run_example');
+  fetch.mockRejectedValueOnce(new TypeError('Synthetic response loss'));
+  const lost = await pair.callTool('elevenlabs_change_resource', { operation_id: row.id, ...row.args });
+  expect(lost.isError).toBe(true); expect(lost.text).toContain('No reliable lookup after losing the run ID');
+  expect(lost.text).toContain('no submitted inputs or correlation token'); expect(lost.text).toContain('No automatic retry');
+  expect(lost.text).not.toContain('Check the result with list_public_template_runs'); expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it.each(templates.filter(row => row.profile === 'read'))('$id overrides the unavailable Flows default with an explicit self retry check', async row => {
+  const op = await getOperation(row.id);
+  expect(op.retry_check).toBe(row.id);
+  expect(op.check_before_retry).toHaveProperty('unavailable_reason');
+  const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('Synthetic read interruption'));
+  const result = await pair.callTool('elevenlabs_read_resource', { operation_id: row.id, ...row.args });
+  expect(result.isError).toBe(true); expect(result.text).toContain(`Check the result with ${row.id}`);
+  expect(result.text).not.toContain('No reliable lookup identifies a generation'); expect(fetch).toHaveBeenCalledOnce();
+  const discovery = await pair.callTool('elevenlabs_discover_api', { operation_id: row.id });
+  expect(discovery.text).toContain('Repeat the same read');
+});
+
+it.each(templates.filter(row => row.id.startsWith('list_')))('$id pages explicitly, including empty workspace template pages', async row => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json(row.response));
+  const first = await pair.callTool('elevenlabs_read_resource', { operation_id: row.id, ...row.args });
+  expect(first.isError, first.text).not.toBe(true); expect(receipt(first.text).next).toContain('query_params.cursor'); expect(fetch).toHaveBeenCalledOnce();
+  const response = row.id === 'list_public_templates' ? { templates: [], next_cursor: null, has_more: false } : { runs: [], next_cursor: null, has_more: false };
+  fetch.mockResolvedValueOnce(Response.json(response));
+  const second = await pair.callTool('elevenlabs_read_resource', { operation_id: row.id, ...row.args, query_params: { ...row.args.query_params, cursor: data(first.text).next_cursor } });
+  expect(second.isError, second.text).not.toBe(true); expect(receipt(second.text).next).toBeUndefined();
+  expect(new URL(String(fetch.mock.calls[1][0])).searchParams.get('cursor')).toBe(row.response.next_cursor);
+  for (const page_size of [0, row.id === 'list_public_templates' ? 26 : 101]) {
+    expect((await pair.callTool('elevenlabs_read_resource', { operation_id: row.id, ...row.args, query_params: { page_size } })).isError).toBe(true);
+  }
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('discloses template scope, foreign workflows, billing, output inspection and unrunnable versions', async () => {
+  const expectations: Record<string, string[]> = {
+    create_public_template_run: ['another workspace', 'supplied data through its workflow', 'configured webhooks', 'may consume credits', 'individual failed generations are uncharged', 'without a blanket refund promise', 'keyed by port ID', 'object input ports cannot be bound', 'live draft'],
+    get_public_template: ['Empty versions means no published version is runnable', 'Shared-by-link', 'other-workspace Explore'],
+    get_public_template_run: ['Inspect each output, not just the rolled-up run state', 'no admitted continuation endpoint', 'about an hour'],
+    list_public_template_runs: ['A matching version does not mean matching inputs'],
+    list_public_templates: ['this workspace only', 'not templates shared by link', "other workspaces' Explore templates"],
+  };
+  for (const [operation_id, texts] of Object.entries(expectations)) {
+    const discovery = await pair.callTool('elevenlabs_discover_api', { operation_id });
+    expect(discovery.isError, discovery.text).not.toBe(true);
+    for (const text of texts) expect(discovery.text).toContain(text);
+  }
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ id: 'template_shared', name: 'Acme', versions: [], has_more_versions: false }));
+  const result = await pair.callTool('elevenlabs_read_resource', { operation_id: 'get_public_template', path_params: { template_id: 'template_shared' } });
+  expect(receipt(result.text).response_contract).toBe('matched'); expect(data(result.text).versions).toEqual([]); expect(fetch).toHaveBeenCalledOnce();
+});
+
+it.each(templates)('$id refuses every wrong profile and file operand with zero requests', async row => {
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  for (const profile of ['read_resource', 'create_resource', 'change_resource', 'delete_resource', 'run_job', 'run_agent_tests', 'query_knowledge', 'place_call'].filter(profile => `elevenlabs_${profile}` !== tool(row.profile))) {
+    const result = await pair.callTool(`elevenlabs_${profile}`, { operation_id: row.id, ...row.args });
+    expect(result.isError).toBe(true); expect(result.text).toContain('WRONG_TOOL'); expect(fetch).not.toHaveBeenCalled();
+  }
+  const refused = await pair.callTool(tool(row.profile), { operation_id: row.id, ...row.args, files: [{ field: 'inputs', file_path: path.join(workspace, 'never-read') }] });
   expect(refused.isError).toBe(true); expect(fetch).not.toHaveBeenCalled();
 });

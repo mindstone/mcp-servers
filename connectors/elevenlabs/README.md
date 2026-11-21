@@ -181,13 +181,13 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The nine API tools cover **382 admitted operations in source** from the
+The nine API tools cover **391 admitted operations in source** from the
 2026-11-08 API snapshot. Here, admitted means supported by these nine tools in
 this connector snapshot; consult the package changelog for release history and find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 382 admitted, 24 planned and 109 excluded, with reasons and
+515 operations: 391 admitted, 15 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.
@@ -203,6 +203,8 @@ Generic audio uploads accept recognised audio and video file extensions; discove
 Local uploads stream from verified file descriptors in bounded chunks. Singular operands use `{field, file_path}`; array contracts use `{field, file_paths: [...]}`, preserving order and declared cardinality. A required empty array must be supplied explicitly. Each concrete path needs its own negotiated authorization; standalone reads stay inside the workspace. Only nullable bindings accept `file_path: null`. Multipart has no null, so an omitted field and an explicit null both send no part. Structured fields such as transcription `additional_formats` and object metadata are JSON-encoded once; caller strings stay strings. Scalar arrays such as keyterms repeat the field name. These shapes are described in each operation's contract.
 
 Transcription local files must be smaller than 5 GB; alignment files must be smaller than 1 GB, using decimal units. Streaming removes the need to buffer a whole upload, but the existing 120-second deadline still applies. Cancellation and errors close open upload descriptors; paid jobs keep non-empty partial output as incomplete. Provider-fetched transcription URLs belong in the body, never in local file operands. Existing convenience tools keep their upload behavior.
+
+Published templates can be inspected and run with port-keyed inputs; running one uses the destructive change tool because it executes the template's workflow, which may belong to another workspace, and can deliver results to configured webhooks. Lists show this workspace's published templates only. Inspect each run output, not just its overall state. Analytics reads retain tabular values and units, including the distinction between credits and workspace-currency cost. Enterprise audit reads require audit_log_read and return personal data, including names, emails and IP addresses, as untrusted evidence. Paging and retries remain explicit.
 
 Operation contracts list only their reachable schema definitions. Complete operation inventories remain available through paginated discovery and the generated coverage ledger.
 Phone-number imports and routing changes, and WhatsApp account setting changes,
@@ -276,9 +278,9 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 156 resource reads and calculations | Read only |
+| `elevenlabs_read_resource` | 164 resource reads and calculations | Read only |
 | `elevenlabs_create_resource` | 46 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 87 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_change_resource` | 88 edits, including file replacement | May overwrite content, configuration or arrays |
 | `elevenlabs_delete_resource` | 48 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_run_job` | Speech, dialogue, sound and music generation, processing and training | May consume credits and create provider records |

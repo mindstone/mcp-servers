@@ -1,3 +1,5 @@
+import templateCases from './fixtures/api-templates-wire-cases.json' with { type: 'json' };
+import workspaceReadCases from './fixtures/api-workspace-reads-wire-cases.json' with { type: 'json' };
 import flowsCases from './fixtures/api-flows-wire-cases.json' with { type: 'json' };
 import speechEngineCases from './fixtures/api-speech-engine-wire-cases.json' with { type: 'json' };
 import assetCases from './fixtures/api-assets-wire-cases.json' with { type: 'json' };
@@ -20,7 +22,7 @@ import { unwrapUntrusted, wrapUntrusted } from '../src/untrusted-content.js';
 import { apiWireCases, multipartCases, type WireCase, type WireProfile } from './fixtures/api-wire-cases.js';
 import { mswServer } from './helpers/setup.js';
 
-const newWireCases = [...speechEngineCases, ...assetCases, ...flowsCases];
+const newWireCases = [...speechEngineCases, ...assetCases, ...flowsCases, ...templateCases, ...workspaceReadCases.map(row => ({ ...row, profile: 'read' as const }))];
 const key = 'synthetic-api-key-secret';
 const tools = {
   read: 'elevenlabs_read_resource', create: 'elevenlabs_create_resource', change: 'elevenlabs_change_resource',
@@ -145,7 +147,7 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(apiWireCases).toHaveLength(336);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'add_project', 'add_pvc_voice_samples', 'add_voice', 'audio_isolation', 'audio_isolation_stream', 'audio_native_project_update_content_endpoint', 'create_audio_native_project', 'create_dubbing', 'create_file_document_route', 'create_finetune', 'dubbing_project_create', 'edit_project_content', 'edit_voice', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'request_pvc_manual_verification', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_speech_stream', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
     const expectedIds = [...apiWireCases, ...multipartCases, ...newWireCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(382);
+    expect(new Set(expectedIds).size).toBe(391);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual([...multipartCases, ...newWireCases.filter(wire => 'multipart' in wire)].map(wire => wire.id).sort());
