@@ -51,11 +51,17 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 
+- Hide saved authentication values and custom header values wherever they appear in supported configurations, including unexpected structured values. References to saved secrets and dynamic variables remain readable.
+- Keep submitted conversation signatures and account keys out of replies, setup warnings and downstream errors. Audio tools take the major audio and video formats and refuse other files, and authenticated requests never follow redirects.
+- Declare signed media and template output links as intentional access links returned to the assistant. Those links remain usable; stored configuration URLs keep their existing behavior.
+
 - Stored custom SIP header values are hidden from phone-number reads and other responses containing phone-number configurations.
 
 - Stored SIP messages hide their raw text, which can carry stored header values.
 
 - Issued credentials are masked by field name outside their declared response paths, but copies inside unrelated string fields are not caught.
+
+- A credential passed as a path or query parameter, such as a single-use transcription token, is hidden from replies and provider errors, as body credentials already were.
 
 ### Fixed
 

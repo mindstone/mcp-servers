@@ -487,6 +487,17 @@ describe('credential class regressions at the registered handler', () => {
     expect(credentialRequestPaths({ $ref: '#/$defs/PostSecretRequest' }, { PostSecretRequest: { properties: { value: { type: 'string' } } } })).toEqual([['value']]);
   });
 
+  it('keeps every credential-named reply field masked whatever its declared type, so a mismatched reply cannot carry a stored secret', () => {
+    const schema = { properties: {
+      is_api_key_hashed: { type: 'boolean' }, has_api_key: { anyOf: [{ type: 'boolean' }, { type: 'null' }] }, key_flag: { $ref: '#/$defs/Flag' },
+      api_key: { type: 'string' }, api_key_pin: { type: 'integer' },
+    } };
+    const defs = { Flag: { type: 'boolean' } };
+    const response = credentialRequestPaths(schema, defs, [], new Set(), '', 'response');
+    for (const field of ['is_api_key_hashed', 'has_api_key', 'api_key', 'api_key_pin']) expect(response).toContainEqual([field]);
+    expect(response).not.toContainEqual(['key_flag']);
+  });
+
   it('scrubs mixed-length nested strings and a longest JSON-escaped key with one shared pattern', async () => {
     const value = 'example/ "credential"\n';
     let escaped = value;
@@ -626,5 +637,22 @@ describe('credential class regressions at the registered handler', () => {
     expect(data.metadata.created_at).toBe(1);
     expect(data.config.request_meta).toEqual({ number: marker, flag: marker });
     expect(result.text).toContain(marker);
+  });
+});
+
+describe('opaque sensitive leaves stay scoped to their declared paths', () => {
+  it('masks an object or array at a declared leaf and leaves objects and arrays under other fields untouched', () => {
+    const plain = { name: 'Guide', settings: { tags: ['alpha', 'beta'], limits: { max: 3 } }, rows: [{ id: 'row_1', note: { text: 'keep' } }] };
+    for (const stored of [{ wire: secret }, [secret], 'scalar-secret']) {
+      const input = { ...structuredClone(plain), config: { headers: { 'X-Private': stored } } };
+      const clean = sensitive.redactAtPaths(input, [['config', 'headers', '*']]) as typeof input;
+      expect(clean.config.headers['X-Private']).toBe(marker);
+      expect({ name: clean.name, settings: clean.settings, rows: clean.rows }).toEqual(plain);
+    }
+  });
+
+  it('collects no values from objects and arrays under non-secret fields', () => {
+    const input = { settings: { tags: ['alpha', 'beta'], limits: { max: 3 } }, rows: [{ id: 'row_1', note: { text: 'keep' } }], config: { headers: { 'X-Private': secret } } };
+    expect(sensitive.sensitiveValues(input, [['config', 'headers', '*']])).toEqual([secret]);
   });
 });

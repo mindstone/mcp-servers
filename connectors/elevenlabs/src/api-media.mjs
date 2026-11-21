@@ -6,6 +6,18 @@ export const binaryExtensions = Object.freeze({
   'audio/alaw': 'alaw', 'audio/opus': 'opus', 'audio/ogg': 'ogg',
   'text/plain': 'txt', 'application/zip': 'zip', 'application/x-zip': 'zip', 'text/csv': 'csv', 'video/mp4': 'mp4',
 });
+// Upload file extensions for every audio reader, older tools and generic bindings alike: the major audio and video formats.
+export const audioUploadExtensions = Object.freeze({
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg', flac: 'audio/flac',
+  webm: 'video/webm', mp4: 'video/mp4', mov: 'video/quicktime',
+  aac: 'audio/aac', opus: 'audio/opus', oga: 'audio/ogg', aiff: 'audio/aiff', aif: 'audio/aiff', wma: 'audio/x-ms-wma',
+  amr: 'audio/amr', mpga: 'audio/mpeg', '3gp': 'video/3gpp', mkv: 'video/x-matroska', avi: 'video/x-msvideo', m4v: 'video/mp4',
+  wmv: 'video/x-ms-wmv', flv: 'video/x-flv', mpeg: 'video/mpeg', mpg: 'video/mpeg', pcm: 'audio/pcm',
+});
+// Raw PCM needs an explicit binding: only request contracts that declare a PCM input format accept it.
+export function audioUploadMediaTypes(includePcm = false) {
+  return [...new Set(Object.values(audioUploadExtensions))].filter(media => includePcm || media !== 'audio/pcm');
+}
 const boundAliases = Object.freeze({
   'audio/wav': ['audio/x-wav', 'audio/wave', 'audio/vnd.wave'],
   'audio/opus': ['audio/ogg'], 'audio/pcm': ['application/octet-stream'],

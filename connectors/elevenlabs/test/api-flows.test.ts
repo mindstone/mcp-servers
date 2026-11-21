@@ -218,7 +218,9 @@ it.each(templates)('$id preserves the literal template wire contract, destructiv
   const op = await getOperation(row.id);
   expect(op.timeout).toBe('standard'); expect(op.request.files).toBeUndefined();
   expect(op.sensitive_request_fields ?? []).toEqual([]); expect(op.sensitive_response_fields ?? []).toEqual([]);
-  expect(op.credential_return_fields).toBeUndefined(); expect(fs.readdirSync(workspace)).toEqual([]);
+  if (row.id.includes('template_run')) expect(op.credential_return_fields).toContainEqual(row.id === 'list_public_template_runs' ? ['runs', '*', 'outputs', '*', 'content_url'] : ['outputs', '*', 'content_url']);
+  else expect(op.credential_return_fields).toBeUndefined();
+  expect(fs.readdirSync(workspace)).toEqual([]);
 });
 
 it('validates template version, input port values, references and webhook selection without adding business validators', async () => {

@@ -139,3 +139,18 @@ it.each(['audio/x-wav', 'audio/wave', 'audio/vnd.wave', 'audio/ogg', 'applicatio
   const result = await client.callTool('elevenlabs_run_job', { operation_id: 'audio_isolation', files: [{ field: 'audio', file_path: source }] });
   expect(result.json).toMatchObject({ code: 'INVALID_RESPONSE' }); expect(fs.readdirSync(workspace)).toEqual(['source.wav']);
 });
+
+it.each([200, 400, 401, 403, 422, 500])('keeps a submitted query-string token out of the HTTP %s result, raw and encoded', async status => {
+  const client = await setup(); const token = 'synthetic-single-use/token+value?';
+  const spellings = [token, encodeURIComponent(token), encodeURIComponent(token).replace(/%[0-9A-F]{2}/g, escape => escape.toLowerCase())];
+  const echo = spellings.join(' '); const sent: string[] = [];
+  mswServer.use(http.post('https://api.elevenlabs.io/v1/speech-to-text', ({ request }) => {
+    sent.push(new URL(request.url).searchParams.get('token') ?? '');
+    return HttpResponse.json(status === 200 ? { ...transcript, text: `Heard ${echo}` } : { detail: { message: `Bad token ${echo}` } }, { status });
+  }));
+  const result = await client.callTool('elevenlabs_run_job', { operation_id: 'speech_to_text', query_params: { token }, body: { model_id: 'scribe_v2', cloud_storage_url: 'https://example.com/clip.mp3' } });
+  expect(Boolean(result.isError), result.text).toBe(status !== 200);
+  expect(sent).toEqual([token]);
+  for (const value of spellings) expect(result.text).not.toContain(value);
+  if (status === 200) expect(result.text).toContain('[REDACTED]');
+});

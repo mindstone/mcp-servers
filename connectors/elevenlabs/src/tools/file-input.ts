@@ -4,6 +4,7 @@ import * as path from 'path';
 import { constants as bufferConstants } from 'node:buffer';
 import { ElevenLabsError } from '../types.js';
 import { getAudioWorkspaceRoot, isInsideAudioWorkspaceRoot, isRemoteUrl, resolveAudioPath } from './path-safety.js';
+import { audioUploadExtensions, audioUploadMediaTypes } from '../api-media.mjs';
 
 export type FileInputKind = 'audio' | 'document' | 'image';
 export interface FileInputLimits { allowed_media_types?: string[]; max_bytes?: number }
@@ -108,7 +109,7 @@ function resolveFileInput(rawFilePath: string, context: FileReadContext | undefi
   }
   const fileName = path.basename(verifiedPath);
   const media = fileMimeTypeForFileName(fileName, kind);
-  const allowed = limits.allowed_media_types ?? (!legacyAudio && kind === 'audio' ? audioUploadMediaTypes() : undefined);
+  const allowed = limits.allowed_media_types ?? (kind === 'audio' ? audioUploadMediaTypes(legacyAudio) : undefined);
   if ((kind === 'image' && media === 'application/octet-stream') || (allowed && !allowed.includes(media))) {
     const formats = kind === 'audio' ? Object.keys(EXTENSION_TO_MIME).filter(ext => allowed?.includes(EXTENSION_TO_MIME[ext])).join(', ') : allowed?.join(', ');
     throw new ElevenLabsError('The file type is not supported by this upload.', 'INVALID_FILE_TYPE', `Use ${kind === 'audio' ? 'an audio or video' : 'a supported'} file${formats ? ` (${formats})` : ' listed in the discovered file binding'}.`);
@@ -206,22 +207,8 @@ export function fileMimeTypeForFileName(fileName: string, kind: FileInputKind | 
 }
 
 /** Extension → MIME for multipart uploads (ElevenLabs rejects application/octet-stream). */
-const EXTENSION_TO_MIME: Record<string, string> = {
-  mp3: 'audio/mpeg',
-  wav: 'audio/wav',
-  m4a: 'audio/mp4',
-  ogg: 'audio/ogg',
-  flac: 'audio/flac',
-  webm: 'video/webm',
-  mp4: 'video/mp4',
-  mov: 'video/quicktime',
-  pcm: 'audio/pcm',
-};
-
-// Raw PCM needs an explicit binding because only some request contracts declare it.
-export function audioUploadMediaTypes(): string[] {
-  return Object.values(EXTENSION_TO_MIME).filter(media => media !== 'audio/pcm');
-}
+const EXTENSION_TO_MIME: Readonly<Record<string, string>> = audioUploadExtensions;
+export { audioUploadMediaTypes };
 
 /**
  * Resolve a MIME type from a file name extension for multipart uploads.

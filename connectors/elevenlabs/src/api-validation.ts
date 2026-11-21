@@ -1,4 +1,4 @@
-import { type Redactor } from './api-sensitive.js';
+import { type Redactor, type ReferenceGuard } from './api-sensitive.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import formats = require('ajv-formats');
@@ -12,6 +12,7 @@ import {
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape } from './api-multipart-shapes.mjs';
 import { binaryRepresentation } from './api-media.mjs';
+import { credentialIdentifiers } from './api-credential-keys.mjs';
 
 const scalar = z.union([z.string(), z.number().finite(), z.boolean()]);
 function ownRecord<T>(schema: z.ZodType<T>) {
@@ -146,6 +147,45 @@ export class ApiValidator {
     } catch {
       throw new ApiBoundaryError('CATALOG_INVALID', 'The local API schema could not be compiled.', catalogueRepair);
     }
+  }
+  /** Preserve only closed, schema-valid reference alternatives at sensitive paths. */
+  referenceGuard(schemas: readonly (JsonSchema | undefined)[]): ReferenceGuard { return this.schemaGuard(schemas, true); }
+  credentialReturnGuard(schemas: readonly (JsonSchema | undefined)[]): ReferenceGuard { return this.schemaGuard(schemas, false); }
+  private schemaGuard(schemas: readonly (JsonSchema | undefined)[], references: boolean): ReferenceGuard {
+    const pointer = (key: string) => key.replace(/~/g, '~0').replace(/\//g, '~1');
+    const visit = (schema: unknown, item: unknown, path: readonly string[], location = '', seen = new Set<string>()): boolean => {
+      if (!isRecord(schema)) return false;
+      if (typeof schema.$ref === 'string') {
+        const ref = schema.$ref;
+        if (seen.has(ref)) return false;
+        const next = new Set(seen); next.add(ref);
+        const name = ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
+        return visit(this.catalog.$defs[name], item, path, ref.slice(1), next);
+      }
+      const properties = isRecord(schema.properties) ? schema.properties : {};
+      if (isRecord(item) && Object.entries(properties).some(([key, child]) => isRecord(child) && Object.hasOwn(child, 'const')
+        && Object.hasOwn(item, key) && item[key] !== child.const)) return false;
+      const keys = Object.keys(properties);
+      const dynamic = isRecord(properties.type) && properties.type.const === 'dynamic';
+      const reference = keys.length > 0 && (keys.every(key => credentialIdentifiers.has(key)) || dynamic);
+      if (!references && path.length === 1 && Object.hasOwn(properties, path[0]) && location && isRecord(item)
+        && this.ajv.getSchema(`${this.graphId}#${location}`)?.(ownData(item))) return true;
+      if (references && reference && location && isRecord(item) && Object.keys(item).every(key => Object.hasOwn(properties, key))
+        && this.ajv.getSchema(`${this.graphId}#${location}`)?.(ownData(item))) return true;
+      for (const keyword of ['anyOf', 'oneOf', 'allOf']) {
+        const branches = schema[keyword];
+        if (Array.isArray(branches) && branches.some((branch, index) => visit(branch, item, path, `${location}/${keyword}/${index}`, new Set(seen)))) return true;
+      }
+      if (!path.length) return false;
+      const [field, ...rest] = path;
+      if (Array.isArray(item)) return visit(schema.items, item[Number(field)], rest, `${location}/items`);
+      if (!isRecord(item) || !Object.hasOwn(item, field)) return false;
+      return Object.hasOwn(properties, field)
+        ? visit(properties[field], item[field], rest, `${location}/properties/${pointer(field)}`)
+        : visit(schema.additionalProperties, item[field], rest, `${location}/additionalProperties`);
+    };
+    const roots = schemas.map(schema => ({ schema, location: Object.entries(this.roots).find(([, value]) => value === schema)?.[0] }));
+    return (root, path) => roots.some(({ schema, location }) => visit(schema, root, path, location ? `/$defs/${pointer(location)}` : ''));
   }
   requestSchema(op: ApiOperation) {
     const cached = this.requests.get(op.operation_id);
@@ -294,7 +334,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary || descriptor.base64_audio?.sequence || descriptor.multipart ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
-  if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, op);
+  if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, { ...op, reference: validator.referenceGuard([descriptor.schema]), credentialReturn: validator.credentialReturnGuard([descriptor.schema]) });
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' || descriptor.multipart ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   const metadata = Object.keys(headers).length ? wrapUntrusted(JSON.stringify(redactor.redact({ response_headers: headers }, op)), `elevenlabs:api:${op.operation_id}`) : undefined;

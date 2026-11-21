@@ -1,0 +1,474 @@
+[
+  {
+    "id": "add_tool_route",
+    "path": [
+      "tool_config",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "compile_procedures_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "compile_procedures_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "compile_procedures_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "platform_settings",
+      "workspace_overrides",
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_agent_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_settings_route",
+    "path": [
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_tool_route",
+    "path": [
+      "tool_config",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "get_tools_route",
+    "path": [
+      "tools",
+      "*",
+      "tool_config",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "platform_settings",
+      "workspace_overrides",
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "merge_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "platform_settings",
+      "workspace_overrides",
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "patch_agent_settings_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "platform_settings",
+      "workspace_overrides",
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "custom_llm",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "rebase_preview_route",
+    "path": [
+      "workflow",
+      "nodes",
+      "*",
+      "conversation_config",
+      "agent",
+      "prompt",
+      "tools",
+      "*",
+      "api_schema_overrides",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "update_settings_route",
+    "path": [
+      "conversation_initiation_client_data_webhook",
+      "request_headers",
+      "*"
+    ]
+  },
+  {
+    "id": "update_tool_route",
+    "path": [
+      "tool_config",
+      "api_schema",
+      "request_headers",
+      "*"
+    ]
+  }
+]

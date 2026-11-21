@@ -92,6 +92,7 @@ const operationSchema = z.object({
   milestone: z.union([z.literal(1), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: retryCheckSchema, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   retry_check: z.union([text, z.object({ unavailable_reason: text.trim().min(1) }).strict()]).optional(),
   optional_header_omissions: z.array(z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/).refine(name => !connectorHeaders.includes(name.toLowerCase())), reason: text.trim().min(1) }).strict()).nonempty().optional(),
+  parameter_credentials: z.array(z.object({ in: z.enum(['path', 'query', 'header']), name: text, secret: z.boolean(), reason: text }).strict()).nonempty().optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),
@@ -170,6 +171,8 @@ function sensitivePathExists(schema: JsonSchema | undefined, path: readonly stri
   }
   if (['allOf', 'anyOf', 'oneOf'].some(key => Array.isArray(schema[key]) && schema[key].some(branch => sensitivePathExists(branch as JsonSchema, path, catalog, new Set(seen))))) return true;
   const [field, ...rest] = path;
+  if (field === '**') return sensitivePathExists(schema, rest, catalog, new Set(seen))
+    || [...Object.values(isRecord(schema.properties) ? schema.properties : {}), schema.items, schema.additionalProperties].some(child => sensitivePathExists(child as JsonSchema, path, catalog, new Set(seen)));
   if (field === '*') return [schema.items, schema.additionalProperties].some(child => sensitivePathExists(child as JsonSchema, rest, catalog));
   return isRecord(schema.properties) && Object.hasOwn(schema.properties, field) && sensitivePathExists(schema.properties[field] as JsonSchema, rest, catalog);
 }

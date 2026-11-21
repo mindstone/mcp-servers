@@ -122,6 +122,7 @@ describe('family fallback without a same-route read or usable follow-up', () => 
     };
     delete op.reviewed_post_read;
     delete op.sensitive_request_fields; // The synthetic bodyless operation has no credential operands.
+    delete op.sensitive_response_fields; // Nor does its empty success have stored credentials.
     raw.operations.push(op);
     vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
     const { setApiKey } = await import('../src/auth.js');

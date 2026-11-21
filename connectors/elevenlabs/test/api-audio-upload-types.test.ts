@@ -8,8 +8,6 @@ import { executeApiOperation } from '../src/api-executor.js';
 import { binaryFileShape } from '../src/api-multipart-shapes.mjs';
 import { setApiKey } from '../src/auth.js';
 import { mimeTypeForFileName, readSandboxedFile } from '../src/tools/file-input.js';
-import { createInMemoryTestClient } from '@mindstone/mcp-test-harness';
-import { createServer } from '../src/server.js';
 import processing from './fixtures/api-processing-wire-cases.json' with { type: 'json' };
 import pvc from './fixtures/api-pvc-wire-cases.json' with { type: 'json' };
 import music from './fixtures/api-music-wire-cases.json' with { type: 'json' };
@@ -94,7 +92,7 @@ it('allows raw PCM only on the five declaring request contracts and sends its ex
   }
 });
 
-it('preserves the three explicit media lists and legacy acceptance of unknown extensions', async () => {
+it('preserves the three explicit media lists and refuses unknown extensions in curated readers', async () => {
   const catalog = await loadApiCatalog();
   const expected = {
     post_agent_hold_audio_route: ['audio/mpeg', 'audio/wav'],
@@ -112,18 +110,26 @@ it('preserves the three explicit media lists and legacy acceptance of unknown ex
     }
   }
   const source = path.join(workspace, 'sample.unknown'); fs.writeFileSync(source, 'legacy bytes');
-  expect(readSandboxedFile(source).buffer.toString()).toBe('legacy bytes');
-  expect(mimeTypeForFileName(source)).toBe('audio/mpeg');
+  expect(() => readSandboxedFile(source)).toThrowError(expect.objectContaining({ code: 'INVALID_FILE_TYPE' }));
   expect(mimeTypeForFileName('sample.pcm')).toBe('audio/pcm');
-  const client = await createInMemoryTestClient({ createServer });
-  const dispatch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
-    const form = await new Request(String(url), options as RequestInit).formData();
-    const file = form.get('file') as File;
-    expect(file.type).toBe('audio/mpeg'); expect(await file.text()).toBe('legacy bytes');
-    return Response.json({ language_code: 'en', language_probability: 1, text: 'A recording.', words: [] });
-  });
-  try {
-    const result = await client.callTool('transcribe_audio', { file_path: source });
-    expect(result.isError, result.text).not.toBe(true); expect(dispatch).toHaveBeenCalledOnce();
-  } finally { await client.close(); }
+});
+
+it('keeps the major audio and video formats on the older audio readers and generic bindings, and still refuses other files', async () => {
+  const formats = { aac: 'audio/aac', opus: 'audio/opus', oga: 'audio/ogg', aiff: 'audio/aiff', aif: 'audio/aiff', wma: 'audio/x-ms-wma',
+    amr: 'audio/amr', mpga: 'audio/mpeg', '3gp': 'video/3gpp', mkv: 'video/x-matroska', avi: 'video/x-msvideo', m4v: 'video/mp4',
+    wmv: 'video/x-ms-wmv', flv: 'video/x-flv', mpeg: 'video/mpeg', mpg: 'video/mpeg' };
+  for (const [extension, mime] of Object.entries(formats)) {
+    const source = path.join(workspace, `meeting.${extension.toUpperCase()}`); fs.writeFileSync(source, `bytes ${extension}`);
+    expect(readSandboxedFile(source).buffer.toString()).toBe(`bytes ${extension}`);
+    expect(mimeTypeForFileName(source)).toBe(mime);
+  }
+  for (const extension of ['json', 'txt', 'pdf']) {
+    const source = path.join(workspace, `notes.${extension}`); fs.writeFileSync(source, 'not audio');
+    expect(() => readSandboxedFile(source)).toThrowError(expect.objectContaining({ code: 'INVALID_FILE_TYPE' }));
+  }
+  const op = (await loadApiCatalog()).operations.find(row => row.operation_id === 'speech_to_text')!;
+  const bytes = Buffer.from('aac bytes'); const source = path.join(workspace, 'call.aac'); fs.writeFileSync(source, bytes);
+  const fetch = respond('speech_to_text', 'file', bytes, 'audio/aac');
+  await executeApiOperation(op.profile, args(op, 'file', source));
+  expect(fetch).toHaveBeenCalledOnce();
 });

@@ -114,10 +114,18 @@ export async function executeApiOperation(profile: ApiProfile, rawInput: unknown
   // Resolve policy before validation, without authentication or network access.
   const op = isRecord(normalized) && typeof normalized.operation_id === 'string'
     ? await getOperation(normalized.operation_id) : undefined;
-  const redactor = createRedactor([
-    ...sensitiveValues(isRecord(rawInput) ? rawInput.body : undefined, op?.sensitive_request_fields ?? []),
-    ...sensitiveValues(isRecord(normalized) ? normalized.body : undefined, op?.sensitive_request_fields ?? []),
-  ]);
+  const reference = op ? (await loadApiValidator()).referenceGuard([op.request.schema]) : undefined;
+  const parameterValues = (value: unknown, location: 'path' | 'query') => {
+    const classifications = op?.parameter_credentials?.filter(row => row.in === location) ?? [];
+    const operands = isRecord(value) ? Object.fromEntries(Object.entries(value).filter(([key]) => !classifications.some(row => row.name === key && !row.secret))) : value;
+    return sensitiveValues(operands, classifications.filter(row => row.secret).map(row => [row.name]));
+  };
+  // Credential-named path and query parameters (a single-use token, say) are secrets like body fields.
+  const redactor = createRedactor([rawInput, normalized].flatMap(input => isRecord(input) ? [
+    ...sensitiveValues(input.body, op?.sensitive_request_fields ?? [], reference),
+    ...parameterValues(input.path_params, 'path'),
+    ...parameterValues(input.query_params, 'query'),
+  ] : []));
   return executeValidated(profile, normalized, redactor, readContext, cancellationSignal, progressContext);
 }
 

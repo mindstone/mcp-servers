@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { connectorHeaders, credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
 import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
-import { audioRepresentation, base64AudioSchema, multipartResponseSchema, isBinaryMedia } from '../src/api-media.mjs';
+import { audioRepresentation, audioUploadMediaTypes, base64AudioSchema, multipartResponseSchema, isBinaryMedia } from '../src/api-media.mjs';
 
 export const PINNED_SOURCE = Object.freeze({
   url: 'https://api.elevenlabs.io/openapi.json',
@@ -188,6 +188,9 @@ const aliasSchema = z.object({
 }).strict();
 const retryCheckSchema = z.union([text, z.object({ unavailable_reason: text.trim().min(1) }).strict()]);
 const omittedHeaderSchema = z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/), reason: text.trim().min(1) }).strict();
+export const parameterCredentialSchema = z.object({
+  in: z.enum(['path', 'query', 'header']), name: text, secret: z.boolean(), reason: text.trim().min(1),
+}).strict();
 const operationSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE']),
   path: z.string().startsWith('/'), status: z.enum(['admitted', 'planned', 'excluded']),
@@ -202,6 +205,7 @@ const operationSchema = z.object({
   response_media_alternatives: z.record(z.array(text).nonempty()).optional(),
   base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), response_format_binding: z.literal('output_format').optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
+  parameter_credentials: z.array(parameterCredentialSchema).nonempty().optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
@@ -223,6 +227,7 @@ export const policySchema = z.object({
     profile: z.literal('run_job'), tool: text, milestone: z.number().int().positive(), effects: effectsSchema, reason: text,
   }).strict()),
   family_retry_checks: z.record(z.object({ read: z.union([text, z.object({ unavailable_reason: text }).strict()]), tests: text.optional() }).strict()),
+  parameter_credentials: z.array(parameterCredentialSchema),
   operations: z.record(operationSchema),
 }).strict();
 
@@ -325,7 +330,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
         if (read?.status !== 'admitted' || read.profile !== 'read' || read.method !== 'GET') refuse(`${kind} must be an admitted GET read`, id);
       }
     } else {
-      if (row.retry_check !== undefined || row.optional_header_omissions !== undefined || row.response_media_alternatives !== undefined || row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.retry_check !== undefined || row.optional_header_omissions !== undefined || row.response_media_alternatives !== undefined || row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined || row.parameter_credentials !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -360,7 +365,7 @@ function validateProductionCensus(policy) {
     for (const row of rows.filter(row => row.milestone === Number(milestone))) actual[row.family] = (actual[row.family] ?? 0) + 1;
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
-  const pcmMediaTypes = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"];
+  const pcmMediaTypes = audioUploadMediaTypes(true);
   const fileBindings = {
     upload_asset: [{ field: 'asset', kind: 'document' }],
     create_audio_native_project: [{ field: 'file', kind: 'document', allowed_media_types: ['text/plain', 'text/html'] }],
@@ -616,35 +621,76 @@ export function hasSensitivePath(schema, path, defs, seen = new Set()) {
   }
   if (['allOf', 'anyOf', 'oneOf'].some(key => (schema[key] ?? []).some(branch => hasSensitivePath(branch, path, defs, new Set(seen))))) return true;
   const [field, ...rest] = path;
+  if (field === '**') return hasSensitivePath(schema, rest, defs, new Set(seen))
+    || [...Object.values(schema.properties ?? {}), schema.items, schema.additionalProperties].some(child => hasSensitivePath(child, path, defs, new Set(seen)));
   if (field === '*') return [schema.items, schema.additionalProperties].some(child => hasSensitivePath(child, rest, defs));
   return Object.hasOwn(schema.properties ?? {}, field) && hasSensitivePath(schema.properties[field], rest, defs);
 }
-// Derive credential operands wherever a request reaches them, not per operation.
-export function credentialRequestPaths(schema, defs, path = [], seen = new Set(), component = '') {
+// Derive credential operands and intentional signed media returns from schema semantics.
+export function credentialRequestPaths(schema, defs, path = [], seen = new Set(), component = '', mode = 'request', terminal = false) {
   if (schema === null || typeof schema !== 'object') return [];
   if (schema.$ref) {
-    if (seen.has(schema.$ref)) return [];
+    if (seen.has(schema.$ref)) {
+      if (mode !== 'returns' || terminal) return [];
+      const name = schema.$ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
+      return credentialRequestPaths(defs[name], defs, [], new Set([schema.$ref]), name, mode, true).map(relative => [...path, '**', ...relative]);
+    }
     const next = new Set(seen); next.add(schema.$ref);
     const name = schema.$ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
-    return credentialRequestPaths(defs[name], defs, path, next, name);
+    return credentialRequestPaths(defs[name], defs, path, next, name, mode, terminal);
   }
   const paths = [];
+  const headerRecord = /header/i.test(component + ' ' + path.join('.')) && schema.properties?.value
+    && (schema.properties.key || schema.properties.name);
   for (const [key, child] of Object.entries(schema.properties ?? {})) {
     if (credentialIdentifiers.has(key)) continue;
     const operand = [...path, key];
-    if (['request_headers', 'request_meta'].includes(key)) paths.push([...operand, '*']);
-    else if (isCredentialKey(key)
-      || (key === 'value' && /secret/i.test(component))) paths.push(operand);
-    else paths.push(...credentialRequestPaths(child, defs, operand, new Set(seen), component));
+    if (mode === 'returns' ? /url$/i.test(key) && (key === 'signed_url' || /signed URL/i.test(child.description ?? '')) : isCredentialKey(key) && (mode !== 'response' || !schemaMetadataValue(child, defs))
+      || (key === 'value' && (/secret/i.test(component) || headerRecord))) {
+      paths.push(['request_headers', 'request_meta'].includes(key) ? [...operand, '*'] : operand);
+    } else if (mode !== 'returns' && /headers$/i.test(key) && !/variable name to header name/i.test(child.description ?? '')) {
+      // Maps carry arbitrary header names; arrays carry typed header records.
+      const nested = credentialRequestPaths(child, defs, operand, new Set(seen), component, mode, terminal);
+      paths.push(...nested);
+      const map = resolveMap(child, defs);
+      if (map) paths.push([...operand, '*']);
+    } else paths.push(...credentialRequestPaths(child, defs, operand, new Set(seen), component, mode, terminal));
   }
   for (const key of ['allOf', 'anyOf', 'oneOf']) for (const child of schema[key] ?? []) {
-    paths.push(...credentialRequestPaths(child, defs, path, new Set(seen), component));
+    paths.push(...credentialRequestPaths(child, defs, path, new Set(seen), component, mode, terminal));
   }
   for (const child of [schema.items, schema.additionalProperties]) {
-    if (child && typeof child === 'object') paths.push(...credentialRequestPaths(child, defs, [...path, '*'], new Set(seen), component));
+    if (child && typeof child === 'object') paths.push(...credentialRequestPaths(child, defs, [...path, '*'], new Set(seen), component, mode, terminal));
   }
   return paths;
 }
+function schemaMetadataValue(schema, defs) {
+  if (!schema || typeof schema !== 'object') return false;
+  if (schema.$ref) return schemaMetadataValue(defs[schema.$ref.slice('#/$defs/'.length)], defs);
+  return Boolean(schema.enum || Object.hasOwn(schema, 'const'));
+}
+function resolveMap(schema, defs, seen = new Set()) {
+  if (!schema || typeof schema !== 'object') return false;
+  if (schema.additionalProperties && schema.type === 'object') return true;
+  if (schema.$ref && !seen.has(schema.$ref)) {
+    seen.add(schema.$ref);
+    return resolveMap(defs[schema.$ref.slice('#/$defs/'.length)], defs, seen);
+  }
+  return ['anyOf', 'oneOf', 'allOf'].some(key => (schema[key] ?? []).some(child => resolveMap(child, defs, new Set(seen))));
+}
+export function parameterSuggestsCredential(parameter) {
+  return /token|signature|secret|key|password|credential|auth|signed|expir/i.test(parameter.name)
+    || /(?:^|[^a-z])(?:tokens?|signatures?|secrets?|keys?|passwords?|credentials?|auth(?:entication|orization|enticated)?|signed|expir[a-z]*)(?:$|[^a-z])/i
+      .test([parameter.description, parameter.schema?.description].join(' '));
+}
+export function classifyParameters(parameters, classifications, id) {
+  return parameters.filter(parameterSuggestsCredential).map(parameter => {
+    const matches = classifications.filter(row => row.in === parameter.in && row.name === parameter.name);
+    if (matches.length !== 1) refuse('unclassified credential-like parameter', `${id}: ${parameter.in}.${parameter.name}`);
+    return matches[0];
+  });
+}
+const uniquePaths = paths => [...new Map(paths.map(path => [JSON.stringify(path), path])).values()];
 
 function checkSensitivePaths(paths, schemas, defs, id) {
   const unique = new Set();
@@ -741,6 +787,7 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     if (row.status !== 'admitted') continue;
     const { operation, pathParameters } = operations.get(id);
     const parameters = [...pathParameters, ...(operation.parameters ?? [])];
+    const parameterCredentials = classifyParameters(parameters.map(parameter => ({ ...parameter, schema: parameter.schema?.$ref ? { ...componentSchema(spec, componentName(parameter.schema.$ref)), ...parameter.schema } : parameter.schema })), [...policy.parameter_credentials.filter(common => !(row.parameter_credentials ?? []).some(local => local.in === common.in && local.name === common.name)), ...(row.parameter_credentials ?? [])], id);
     const records = parameterRecords(parameters, spec, transform, id, row.optional_header_omissions);
     const placeholders = [...row.path.matchAll(/\{([^}]+)\}/g)].map(match => match[1]).sort();
     requireEqual(Object.keys(records.path.properties).sort(), placeholders, `path operand bindings ${id}`);
@@ -751,7 +798,10 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
       if (response.media_type !== 'application/json' || !hasSensitivePath(response.schema, binding.array ? [binding.array, '*', binding.field] : [binding.field], defs)) refuse('unbound base64 audio', id);
     }
     checkSensitivePaths(row.sensitive_request_fields, [request.schema], defs, id);
-    checkSensitivePaths(row.sensitive_response_fields, responses.map(response => response.schema), defs, id);
+    const credentialReturns = uniquePaths([...(row.credential_return_fields ?? []), ...responses.flatMap(response => credentialRequestPaths(response.schema, defs, [], new Set(), '', 'returns'))]);
+    const sensitiveResponses = uniquePaths([...(row.sensitive_response_fields ?? []), ...responses.flatMap(response => credentialRequestPaths(response.schema, defs, [], new Set(), '', 'response'))])
+      .filter(path => !credentialReturns.some(returned => path.length <= returned.length && path.every((part, i) => part === returned[i])));
+    checkSensitivePaths(sensitiveResponses, responses.map(response => response.schema), defs, id);
     if (row.credential_return_fields?.some(path => !path.length) && !responses.some(response => response.schema?.type === 'string' && ['text/plain', 'text/html'].includes(response.media_type))) refuse('whole credential return requires scalar text', id);
     checkSensitivePaths(row.credential_return_fields, responses.map(response => response.schema), defs, id);
     for (const returned of row.credential_return_fields ?? []) {
@@ -766,10 +816,11 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
       ...(row.reviewed_get_create ? { reviewed_get_create: row.reviewed_get_create } : {}),
-      ...(row.credential_return_fields ? { credential_return_fields: row.credential_return_fields } : {}),
+      ...(credentialReturns.length ? { credential_return_fields: credentialReturns } : {}),
+      ...(parameterCredentials.length ? { parameter_credentials: parameterCredentials } : {}),
       ...(row.reviewed_patch_delete ? { reviewed_patch_delete: row.reviewed_patch_delete } : {}),
       ...(sensitiveRequests.length ? { sensitive_request_fields: sensitiveRequests } : {}),
-      ...(row.sensitive_response_fields ? { sensitive_response_fields: row.sensitive_response_fields } : {}),
+      ...(sensitiveResponses.length ? { sensitive_response_fields: sensitiveResponses } : {}),
       ...(row.effect_note ? { effect_note: row.effect_note } : {}),
       ...(row.manual_pagination ? { manual_pagination: row.manual_pagination } : {}),
       summary: row.discovery_summary ?? operation.summary ?? id, description: operation.description ?? '', deprecated: operation.deprecated === true,

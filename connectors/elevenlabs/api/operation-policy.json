@@ -195,6 +195,92 @@
     "sip-trunk": {"read": "get_conversation_histories_route"},
     "whatsapp": {"read": "get_conversation_histories_route"}
   },
+  "parameter_credentials": [
+    {
+      "in": "header",
+      "name": "xi-api-key",
+      "secret": true,
+      "reason": "Account credential injected by the connector; never a caller-supplied header."
+    },
+    {
+      "in": "path",
+      "name": "secret_id",
+      "secret": false,
+      "reason": "Locator of a stored secret, not its value."
+    },
+    {
+      "in": "path",
+      "name": "auth_connection_id",
+      "secret": false,
+      "reason": "Locator of a stored auth connection, not its credentials."
+    },
+    {
+      "in": "path",
+      "name": "token_type",
+      "secret": false,
+      "reason": "Selects the type of token to issue; does not contain a token."
+    },
+    {
+      "in": "query",
+      "name": "conversation_signature",
+      "secret": true,
+      "reason": "Expiring credential enabling a conversation."
+    },
+    {
+      "in": "query",
+      "name": "created_by_user_id",
+      "secret": false,
+      "reason": "Creator identifier filter; authentication is descriptive context."
+    },
+    {
+      "in": "query",
+      "name": "cursor",
+      "secret": false,
+      "reason": "Continuation identifier for pagination, not authentication."
+    },
+    {
+      "in": "query",
+      "name": "dependency_limit",
+      "secret": false,
+      "reason": "Dependency count limit, not any stored secret."
+    },
+    {
+      "in": "query",
+      "name": "environment",
+      "secret": false,
+      "reason": "Environment selection, not the referenced authentication material."
+    },
+    {
+      "in": "query",
+      "name": "include_conversation_id",
+      "secret": false,
+      "reason": "Boolean controlling response identifiers, not the described signature."
+    },
+    {
+      "in": "query",
+      "name": "next_page_token",
+      "secret": false,
+      "reason": "Continuation identifier for pagination, not authentication."
+    },
+    {
+      "in": "query",
+      "name": "page_size",
+      "secret": false,
+      "reason": "Pagination size, not any returned secret."
+    },
+    {
+      "in": "query",
+      "name": "search",
+      "secret": false,
+      "reason": "Name prefix filter, not any stored secret."
+    },
+    {
+      "in": "query",
+      "name": "token",
+      "secret": true,
+      "reason": "Single-use authentication credential."
+    }
+  ],
   "operations": {
     "accept_merge_proposal_route": {
       "method": "POST",
@@ -707,7 +793,7 @@
         {
           "field": "audio",
           "kind": "audio",
-          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/aac", "audio/opus", "audio/aiff", "audio/x-ms-wma", "audio/amr", "video/3gpp", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv", "video/x-flv", "video/mpeg", "audio/pcm"]
         }
       ],
       "timeout": "long"
@@ -728,7 +814,7 @@
       "timeout": "long",
       "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Isolation history may show processing state but cannot prove the bytes of an interrupted stream.",
       "file_bindings": [{"field": "audio", "kind": "audio",
-          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]}]
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/aac", "audio/opus", "audio/aiff", "audio/x-ms-wma", "audio/amr", "video/3gpp", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv", "video/x-flv", "video/mpeg", "audio/pcm"]}]
     },
     "audio_native_project_update_content_endpoint": {
       "method": "POST",
@@ -3834,6 +3920,7 @@
       "discovery_summary": "Get document summaries by query_params.document_ids (document IDs, not an agent ID)."
     },
     "get_agent_link_route": {
+      "credential_return_fields": [["token", "conversation_token"]],
       "method": "GET",
       "path": "/v1/convai/agents/{agent_id}/link",
       "status": "admitted",
@@ -10055,7 +10142,7 @@
         {
           "field": "audio",
           "kind": "audio",
-          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/aac", "audio/opus", "audio/aiff", "audio/x-ms-wma", "audio/amr", "video/3gpp", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv", "video/x-flv", "video/mpeg", "audio/pcm"]
         }
       ],
       "timeout": "long",
@@ -10077,7 +10164,7 @@
       "timeout": "long",
       "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Speech history may help locate logged work but cannot prove the bytes of an interrupted stream; zero retention disables history.",
       "file_bindings": [{"field": "audio", "kind": "audio",
-          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]}],
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/aac", "audio/opus", "audio/aiff", "audio/x-ms-wma", "audio/amr", "video/3gpp", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv", "video/x-flv", "video/mpeg", "audio/pcm"]}],
       "response_format_binding": "output_format"
     },
     "speech_to_text": {
@@ -10137,7 +10224,7 @@
         {
           "field": "file",
           "kind": "audio",
-          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"],
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/aac", "audio/opus", "audio/aiff", "audio/x-ms-wma", "audio/amr", "video/3gpp", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv", "video/x-flv", "video/mpeg", "audio/pcm"],
           "max_bytes": 4999999999
         }
       ],

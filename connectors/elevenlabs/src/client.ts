@@ -73,6 +73,7 @@ export async function elevenLabsFetch(
   try {
     response = await fetch(url, {
       ...fetchOptions,
+      redirect: 'manual',
       signal: fetchOptions.signal ?? AbortSignal.timeout(timeoutMs ?? REQUEST_TIMEOUT_MS),
       headers,
     });
@@ -216,7 +217,7 @@ export async function elevenLabsJson<T>(
 ): Promise<T> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   try {
-    return (await response.json()) as T;
+    return createRedactor([apiKey]).redact(await response.json()) as T;
   } catch (error) {
     // A body-read abort or mid-stream timeout rejects here too — report it as
     // TIMEOUT so the remediation advice matches the actual fault, instead of

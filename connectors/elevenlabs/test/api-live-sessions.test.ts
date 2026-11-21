@@ -28,7 +28,7 @@ afterEach(async () => { await pair.close(); setApiKey(''); vi.restoreAllMocks();
 describe('live session credential boundaries', () => {
   it('declares the five session effects and the single-use issuer without assumed follow-up reads', async () => {
     const catalog = await loadApiCatalog();
-    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token', 'dubbing_language_create', 'dubbing_language_get', 'dubbing_language_list'].sort());
+    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token', 'dubbing_language_create', 'dubbing_language_get', 'dubbing_language_list', 'get_agent_link_route', 'get_knowledge_base_source_file_url', 'create_public_template_run', 'get_public_template_run', 'list_public_template_runs', 'get_asset', 'upload_asset', 'list_assets', 'get_image_generation', 'get_video_generation', 'get_text_to_speech_generation', 'list_image_generations', 'list_video_generations', 'list_text_to_speech_generations', 'get_project_by_id'].sort());
     for (const wire of cases) {
       const op = catalog.operations.find(op => op.operation_id === wire.id)!;
       expect(op.profile).toBe(wire.profile);
