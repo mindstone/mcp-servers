@@ -275,7 +275,7 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     for (const [path, text] of [['data', value.data], ['metadata', value.metadata ?? null], ['response_contract', typeof value.response_contract === 'object' ? value.response_contract.mismatch : null]] as const) {
       if (text !== null && wrapUntrusted(text, source) !== text) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message: 'Expected one intact operation envelope.' });
     }
-    const binary = isBinaryResponseMedia(value.content_type);
+    const binary = isBinaryResponseMedia(value.content_type, sourceOperation?.responses.find(response => response.status === value.status && response.media_type === value.content_type)?.schema);
     if ((value.content_type === null || binary) !== (value.data === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['data'], message: 'Empty and binary responses require null data.' });
     if (binary !== (value.artifact !== undefined) || (value.artifact && value.artifact.media_type !== value.content_type)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['artifact'], message: 'Binary responses require an artifact of the declared media type.' });
     if (value.has_more === true && value.next === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next'], message: 'A continuing page requires the static next instruction.' });
@@ -290,7 +290,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media, outputFormat);
   if ((descriptor.base64_audio || descriptor.multipart) && fileData === undefined) throw new ApiBoundaryError('INVALID_RESPONSE', 'Audio must be saved before creating its receipt.', responseRepair);
-  const binary = isBinaryResponseMedia(media);
+  const binary = isBinaryResponseMedia(media, descriptor.schema);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary || descriptor.base64_audio?.sequence || descriptor.multipart ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);

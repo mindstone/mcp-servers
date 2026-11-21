@@ -19,7 +19,8 @@ describe('family fallback without a same-route read or usable follow-up', () => 
       op.follow_ups.some(id => { const read = reads.find(r => r.operation_id === id); return read && params(read.path).every(name => op.path.includes(`{${name}}`)); })
     )).map(op => op.operation_id).sort();
     // A new read on the same route as a paid job must not silently replace its reviewed "no verifiable lookup" decision.
-    expect(overridden).toEqual(['add_pvc_voice_samples', 'add_sharing_voice', 'add_voice_to_user_voice_collection', 'create_finetune', 'create_or_update_user_voice_collection', 'delete_finetune', 'delete_pvc_voice_sample', 'delete_sample', 'delete_user_voice_collection', 'delete_voice', 'edit_pvc_voice', 'edit_pvc_voice_sample', 'edit_voice', 'edit_voice_settings', 'remove_voice_from_user_voice_collection', 'request_pvc_manual_verification', 'run_pvc_voice_training', 'start_speaker_separation', 'update_finetune', 'update_user_voice_collection']);
+    // Families with an admitted lookup (pronunciation dictionaries, audio isolation) name it directly, so their rows are not overrides.
+    expect(overridden).toEqual(['add_pvc_voice_samples', 'add_sharing_voice', 'add_voice_to_user_voice_collection', 'create_finetune', 'create_or_update_user_voice_collection', 'delete_finetune', 'delete_pvc_voice_sample', 'delete_sample', 'delete_transcript_by_id', 'delete_user_voice_collection', 'delete_voice', 'edit_pvc_voice', 'edit_pvc_voice_sample', 'edit_voice', 'edit_voice_settings', 'remove_voice_from_user_voice_collection', 'request_pvc_manual_verification', 'run_pvc_voice_training', 'speech_to_speech_stream', 'start_speaker_separation', 'text_to_dialogue_stream', 'text_to_speech_stream', 'update_finetune', 'update_user_voice_collection']);
   });
   it('reports unavailable verification honestly without issuing a read or retry', async () => {
     vi.resetModules();

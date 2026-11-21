@@ -122,6 +122,8 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "history": {"read": "get_speech_history"},
+    "usage": {"read": "usage_characters"},
     "dubbing": {"read": "dubbing_project_list"},
     "models": {"read": "get_models"},
     "user": {"read": "get_user_info"},
@@ -150,16 +152,16 @@
     "secrets": {"read": "get_secrets_route"},
     "environment-variables": {"read": "list_environment_variables"},
     "mcp-servers": {"read": "list_mcp_servers_route"},
-    "text-to-speech": {"read": {"unavailable_reason": "This synchronous generation has no reliable result lookup in the admitted catalogue."}},
-    "text-to-dialogue": {"read": {"unavailable_reason": "This synchronous generation has no reliable result lookup in the admitted catalogue."}},
+    "text-to-speech": {"read": {"unavailable_reason": "Speech history may show logged work but cannot prove this result, and zero retention disables history."}},
+    "text-to-dialogue": {"read": {"unavailable_reason": "Speech history may show logged work but cannot prove this result, and zero retention disables history."}},
     "sound-generation": {"read": {"unavailable_reason": "Speech history excludes sound effects, so it cannot verify this generation."}},
     "audio-effects": {"read": "get_audio_effects_catalog"},
-    "audio-isolation": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
-    "voice-changer": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "audio-isolation": {"read": "get_audio_isolation_history"},
+    "voice-changer": {"read": {"unavailable_reason": "Speech history may show logged work but cannot prove this result, and zero retention disables history."}},
     "speech-to-text": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
     "forced-alignment": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
     "similar-voices": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
-    "pronunciation-dictionaries": {"read": {"unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue."}},
+    "pronunciation-dictionaries": {"read": "get_pronunciation_dictionaries_metadata"},
     "conversation": {"read": "get_conversation_histories_route"},
     "realtime": {"read": "get_conversation_histories_route"},
     "twilio": {"read": "get_conversation_histories_route"},
@@ -290,23 +292,18 @@
     "add_from_rules": {
       "method": "POST",
       "path": "/v1/pronunciation-dictionaries/add-from-rules",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:add_pronunciation_dictionary"
-        ],
-        "reason": "Supports name, description and rules; provider workspace permission options are not exposed.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Creates a pronunciation dictionary and its initial version from supplied rules.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:add_pronunciation_dictionary"], "reason": "Supports name, description and rules; provider workspace permission options are not exposed.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"]},
+      "replacements": [],
+      "follow_ups": ["get_pronunciation_dictionaries_metadata"],
+      "examples": [{"operation_id": "add_from_rules", "body": {"name": "Acme Lexicon", "workspace_access": null, "rules": [{"type": "alias", "string_to_replace": "Acme", "alias": "Ack me"}]}}],
+      "timeout": "standard",
+      "effect_note": "Keep returned version identifiers exactly. Read current metadata and rules to verify the change; download a known version explicitly when needed."
     },
     "add_language": {
       "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/language", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
@@ -448,19 +445,18 @@
     "add_rules": {
       "method": "POST",
       "path": "/v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/add-rules",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Adds only the named rules, replacing rules with matching source strings, and creates a new dictionary version.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_pronunciation_dictionary_metadata"],
+      "examples": [{"operation_id": "add_rules", "path_params": {"pronunciation_dictionary_id": "dictionary_example"}, "body": {"rules": [{"type": "alias", "string_to_replace": "Acme", "alias": "Ack me"}]}}],
+      "timeout": "standard",
+      "effect_note": "Keep returned version identifiers exactly. Read current metadata and rules to verify the change; download a known version explicitly when needed."
     },
     "add_sharing_voice": {
       "method": "POST", "path": "/v1/voices/add/{public_user_id}/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -653,19 +649,19 @@
     "audio_isolation_stream": {
       "method": "POST",
       "path": "/v1/audio-isolation/stream",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "audio-isolation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Processes supplied audio into a new isolated speech recording through the streaming route and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_audio_isolation_history"],
+      "examples": [{"operation_id": "audio_isolation_stream", "files": [{"field": "audio", "file_path": "/workspace/recording.wav"}]}],
+      "timeout": "long",
+      "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Isolation history may show processing state but cannot prove the bytes of an interrupted stream.",
+      "file_bindings": [{"field": "audio", "kind": "audio"}]
     },
     "audio_native_project_update_content_endpoint": {
       "method": "POST",
@@ -2131,19 +2127,18 @@
     "delete_audio_isolation_history_item": {
       "method": "DELETE",
       "path": "/v1/audio-isolation/history/{history_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "audio-isolation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the selected isolation-history item and associated media files. Deletion does not refund work already billed.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_audio_isolation_history"],
+      "examples": [{"operation_id": "delete_audio_isolation_history_item", "path_params": {"history_item_id": "isolation_example"}}],
+      "timeout": "standard",
+      "effect_note": "Inspect the isolation-history list for the exact item ID, paging manually if needed. Absence from a single page is not proof of deletion; removed media cannot be read back."
     },
     "delete_auth_connection": {
       "method": "DELETE",
@@ -2638,19 +2633,18 @@
     "delete_speech_history_item": {
       "method": "DELETE",
       "path": "/v1/history/{history_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "history",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the selected speech-history item. Deletion does not refund work already billed.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_speech_history_item_by_id"],
+      "examples": [{"operation_id": "delete_speech_history_item", "path_params": {"history_item_id": "history_example"}}],
+      "timeout": "standard",
+      "effect_note": "Read the same history_item_id to check deletion; a missing or deleted item does not provide its removed audio."
     },
     "delete_tool_route": {
       "method": "DELETE",
@@ -2682,19 +2676,18 @@
     "delete_transcript_by_id": {
       "method": "DELETE",
       "path": "/v1/speech-to-text/transcripts/{transcription_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "speech-to-text",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the selected stored transcript. Deletion does not refund work already billed.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_transcript_by_id"],
+      "examples": [{"operation_id": "delete_transcript_by_id", "path_params": {"transcription_id": "transcript_example"}}],
+      "timeout": "standard",
+      "effect_note": "Read the same transcription_id to check that it is missing; deletion is distinct from reading and never returns the deleted transcript as present."
     },
     "delete_user_voice_collection": {
       "method": "DELETE", "path": "/v1/voices/collections/{collection_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -2799,19 +2792,20 @@
     "download_speech_history_items": {
       "method": "POST",
       "path": "/v1/history/download",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "history",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads existing history audio or a ZIP archive without generating speech.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "download_speech_history_items", "body": {"history_item_ids": ["history_example", "history_second"], "output_format": null}}],
+      "timeout": "standard",
+      "effect_note": "Keep history_item_ids in caller order. One ID returns audio; several return ZIP. Preserve the actual returned media type and bytes without extracting files.",
+      "reviewed_post_read": "Downloads existing generated items without starting generation.",
+      "response_media_alternatives": {"application/zip": ["audio/*"]}
     },
     "dub": {
       "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/dub", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
@@ -3792,40 +3786,34 @@
     "get_audio_full_from_speech_history_item": {
       "method": "GET",
       "path": "/v1/history/{history_item_id}/audio",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "history",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:get_history_item_audio"
-        ],
-        "reason": "Downloads by history_item_id on the exact endpoint; there are no operation-specific query options.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/history.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads existing history audio without generating speech.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:get_history_item_audio"], "reason": "Downloads by history_item_id on the exact endpoint; there are no operation-specific query options.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/history.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_audio_full_from_speech_history_item", "path_params": {"history_item_id": "history_example"}}],
+      "timeout": "standard"
     },
     "get_audio_isolation_history": {
       "method": "GET",
       "path": "/v1/audio-isolation/history",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "audio-isolation",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing audio-isolation generations without starting another job.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_audio_isolation_history", "query_params": {"page": 1, "page_size": 2, "search": "Acme"}}],
+      "timeout": "standard",
+      "effect_note": "page is 1-based and is only used when search is provided. No automatic paging or fetching download_url.",
+      "manual_pagination": "page is 1-based and used only with search; preserve has_more without automatic pagination."
     },
     "get_audio_native_project_settings_endpoint": {
       "method": "GET",
@@ -4964,61 +4952,49 @@
     "get_pronunciation_dictionaries_metadata": {
       "method": "GET",
       "path": "/v1/pronunciation-dictionaries",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:list_pronunciation_dictionaries"
-        ],
-        "reason": "Supports page_size, cursor and include_archived; sort and sort_direction are absent.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists accessible pronunciation dictionaries and their metadata.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:list_pronunciation_dictionaries"], "reason": "Supports page_size, cursor and include_archived; sort and sort_direction are absent.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pronunciation_dictionaries_metadata", "query_params": {"page_size": 2, "include_archived": true}}],
+      "timeout": "standard",
+      "effect_note": "include_archived controls archive visibility. Keep the provider cursor and version identifiers unchanged."
     },
     "get_pronunciation_dictionary_metadata": {
       "method": "GET",
       "path": "/v1/pronunciation-dictionaries/{pronunciation_dictionary_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:get_pronunciation_dictionary"
-        ],
-        "reason": "Reads pronunciation_dictionary_id on the exact metadata endpoint.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads a pronunciation dictionary metadata and current rules.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:get_pronunciation_dictionary"], "reason": "Reads pronunciation_dictionary_id on the exact metadata endpoint.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pronunciation_dictionary_metadata", "path_params": {"pronunciation_dictionary_id": "dictionary_example"}}],
+      "timeout": "standard"
     },
     "get_pronunciation_dictionary_version_pls": {
       "method": "GET",
       "path": "/v1/pronunciation-dictionaries/{dictionary_id}/{version_id}/download",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads an existing dictionary version lexicon as PLS bytes.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pronunciation_dictionary_version_pls", "path_params": {"dictionary_id": "dictionary_example", "version_id": "version_example"}}],
+      "timeout": "standard",
+      "effect_note": "Save the declared text/plain binary representation unchanged, without parsing XML or trusting provider filenames."
     },
     "get_public_llm_expected_cost_calculation": {
       "method": "POST",
@@ -5473,40 +5449,34 @@
     "get_speech_history": {
       "method": "GET",
       "path": "/v1/history",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "history",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:list_history"
-        ],
-        "reason": "Supports page_size, start_after_history_item_id, voice_id and search; omits current history filters.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/history.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing generated-speech history without generating audio; music and sound effects are not included.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:list_history"], "reason": "Supports page_size, start_after_history_item_id, voice_id and search; omits current history filters.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/history.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_speech_history", "query_params": {"page_size": 2, "start_after_history_item_id": "history_example", "source": "TTS"}}],
+      "timeout": "standard",
+      "effect_note": "Continuation is manual: pass last_history_item_id as start_after_history_item_id when has_more is true. Music and sound-effect generations cannot be verified through speech history.",
+      "manual_pagination": "Pass last_history_item_id as start_after_history_item_id when has_more is true; continuation is caller controlled."
     },
     "get_speech_history_item_by_id": {
       "method": "GET",
       "path": "/v1/history/{history_item_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "history",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads one existing speech-history item without generating audio.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_speech_history_item_by_id", "path_params": {"history_item_id": "history_example"}}],
+      "timeout": "standard"
     },
     "get_test_invocation_route": {
       "method": "GET",
@@ -5659,19 +5629,17 @@
     "get_transcript_by_id": {
       "method": "GET",
       "path": "/v1/speech-to-text/transcripts/{transcription_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "speech-to-text",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads a previously generated transcript without starting transcription work.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_transcript_by_id", "path_params": {"transcription_id": "transcript_example"}}],
+      "timeout": "standard"
     },
     "get_user_info": {
       "method": "GET", "path": "/v1/user", "status": "admitted", "milestone": 9, "family": "user",
@@ -6829,23 +6797,18 @@
     "patch_pronunciation_dictionary": {
       "method": "PATCH",
       "path": "/v1/pronunciation-dictionaries/{pronunciation_dictionary_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:archive_pronunciation_dictionary"
-        ],
-        "reason": "Only sends archived=true; does not support other dictionary edits or restoration.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"
-        ]
-      },
-      "replacements": []
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes dictionary metadata or archive state without changing its version.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:archive_pronunciation_dictionary"], "reason": "Only sends archived=true; does not support other dictionary edits or restoration.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/pronunciation.ts"]},
+      "replacements": [],
+      "follow_ups": ["get_pronunciation_dictionary_metadata"],
+      "examples": [{"operation_id": "patch_pronunciation_dictionary", "path_params": {"pronunciation_dictionary_id": "dictionary_example"}, "body": {"name": "Acme Lexicon", "archived": true}}],
+      "timeout": "standard",
+      "effect_note": "The metadata read verifies the name and archived_time_unix. Archiving does not create a new version."
     },
     "post_agent_avatar_route": {
       "method": "POST",
@@ -7542,19 +7505,18 @@
     "remove_rules": {
       "method": "POST",
       "path": "/v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/remove-rules",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes only the named rules and creates a new dictionary version. Removal does not refund work already billed.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_pronunciation_dictionary_metadata"],
+      "examples": [{"operation_id": "remove_rules", "path_params": {"pronunciation_dictionary_id": "dictionary_example"}, "body": {"rule_strings": ["Acme"]}}],
+      "timeout": "standard",
+      "effect_note": "Keep returned version identifiers exactly. Read current metadata and rules to verify the change; download a known version explicitly when needed."
     },
     "remove_voice_from_user_voice_collection": {
       "method": "DELETE", "path": "/v1/voices/collections/{collection_id}/voice/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -7914,19 +7876,18 @@
     "set_rules": {
       "method": "POST",
       "path": "/v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/set-rules",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "pronunciation-dictionaries",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Replaces the whole rule set and creates a new dictionary version.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_pronunciation_dictionary_metadata"],
+      "examples": [{"operation_id": "set_rules", "path_params": {"pronunciation_dictionary_id": "dictionary_example"}, "body": {"rules": []}}],
+      "timeout": "standard",
+      "effect_note": "Keep returned version identifiers exactly. Read current metadata and rules to verify the change; download a known version explicitly when needed."
     },
     "set_third_party_disabling_policy": {
       "method": "POST",
@@ -9511,19 +9472,20 @@
     "speech_to_speech_stream": {
       "method": "POST",
       "path": "/v1/voice-changer/{voice_id}/stream",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "voice-changer",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates a new voice-converted recording through the streaming route and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_speech_history"],
+      "examples": [{"operation_id": "speech_to_speech_stream", "path_params": {"voice_id": "voice_example"}, "files": [{"field": "audio", "file_path": "/workspace/recording.wav"}]}],
+      "timeout": "long",
+      "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Speech history may help locate logged work but cannot prove the bytes of an interrupted stream; zero retention disables history.",
+      "file_bindings": [{"field": "audio", "kind": "audio"}],
+      "response_format_binding": "output_format"
     },
     "speech_to_text": {
       "method": "POST",
@@ -9794,19 +9756,19 @@
     "text_to_dialogue_stream": {
       "method": "POST",
       "path": "/v1/text-to-dialogue/stream",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-dialogue",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates a new dialogue recording through the streaming route and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_speech_history"],
+      "examples": [{"operation_id": "text_to_dialogue_stream", "body": {"inputs": [{"text": "Welcome.", "voice_id": "voice_example"}]}}],
+      "timeout": "long",
+      "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Speech history may help locate logged work but cannot prove the bytes of an interrupted stream; zero retention disables history.",
+      "response_format_binding": "output_format"
     },
     "text_to_dialogue_stream_with_timestamps": {
       "method": "POST",
@@ -9935,19 +9897,19 @@
     "text_to_speech_stream": {
       "method": "POST",
       "path": "/v1/text-to-speech/{voice_id}/stream",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "text-to-speech",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates a new speech recording from text through the streaming route and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_speech_history"],
+      "examples": [{"operation_id": "text_to_speech_stream", "path_params": {"voice_id": "voice_example"}, "body": {"text": "Welcome."}}],
+      "timeout": "long",
+      "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Speech history may help locate logged work but cannot prove the bytes of an interrupted stream; zero retention disables history.",
+      "response_format_binding": "output_format"
     },
     "text_to_speech_stream_with_timestamps": {
       "method": "POST",
@@ -10940,19 +10902,18 @@
     "usage_characters": {
       "method": "GET",
       "path": "/v1/usage/character-stats",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 9,
       "family": "usage",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads usage metrics through the deprecated character-statistics route without generating audio.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:get_usage_stats"], "reason": "Legacy usage summary posts to workspace analytics with interval and grouping controls; it does not expose this deprecated millisecond character-statistics endpoint.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/account.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "usage_characters", "query_params": {"start_unix": 1735689600000, "end_unix": 1735775999000, "aggregation_interval": "hour", "aggregation_bucket_size": 3600, "metric": "credits"}}],
+      "timeout": "standard",
+      "effect_note": "Preserve millisecond start_unix/end_unix and the time axis unchanged. aggregation_bucket_size is in seconds and overrides aggregation_interval; do not convert dates."
     },
     "verify_pvc_voice_captcha": {
       "method": "POST",

@@ -4,7 +4,7 @@ import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
-import { base64AudioSchema, multipartResponseSchema, audioRepresentation, binaryExtensions } from './api-media.mjs';
+import { base64AudioSchema, multipartResponseSchema, audioRepresentation, binaryExtensions, isBinaryMedia } from './api-media.mjs';
 
 export type JsonSchema = boolean | Record<string, unknown>;
 export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
@@ -77,8 +77,8 @@ const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'doc
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
 export const binaryResponseMedia = Object.keys(binaryExtensions) as [string, ...string[]];
 export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', 'multipart/mixed', 'audio/*', ...binaryResponseMedia]);
-export function isBinaryResponseMedia(media: string | null): media is typeof binaryResponseMedia[number] {
-  return binaryResponseMedia.some(candidate => candidate === media);
+export function isBinaryResponseMedia(media: string | null, schema?: JsonSchema): boolean {
+  return isBinaryMedia(media, isRecord(schema) ? schema : undefined);
 }
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
   headers: z.array(z.string().regex(/^[!#$%&'*+.^_`|~a-z0-9-]+$/)).nonempty().optional(),
@@ -248,12 +248,13 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     const queries = Object.keys(op.parameters.query.properties);
     const properties = op.responses.flatMap(response => responseProperties(response.schema, catalog));
     const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
+    const history = queries.includes('start_after_history_item_id') && properties.includes('last_history_item_id') && properties.includes('has_more');
     const tokens = queries.includes('next_page_token') && properties.includes('next_page_token') && properties.includes('has_more');
     const pagingNames = [...queries, ...properties].filter(name => unsupportedPagination.has(name));
     if (op.manual_pagination !== undefined && (op.method !== 'GET' || op.profile !== 'read' || op.pagination !== null
-      || (!documents && !tokens && !['page', 'limit'].some(name => queries.includes(name)))
+      || (!documents && !tokens && !history && !['page', 'limit'].some(name => queries.includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
-      || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : [])].includes(name)))) invalid('Invalid manual pagination.');
+      || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : []), ...(history ? ['start_after_history_item_id'] : [])].includes(name)))) invalid('Invalid manual pagination.');
     if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
     if (typeof op.check_before_retry === 'string') {
       const retryOperation = byId.get(op.check_before_retry);
@@ -296,7 +297,7 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       if (response.base64_audio && (response.media_type !== 'application/json' || !sensitivePathExists(response.schema, response.base64_audio.array ? [response.base64_audio.array, '*', response.base64_audio.field] : [response.base64_audio.field], catalog))) invalid('Unbound base64 audio response.');
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
       if (response.media_type === 'text/csv' && (!isRecord(response.schema) || response.schema.type !== 'string' || response.schema.format !== 'binary')) invalid('CSV requires a binary success schema.');
-      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type) || response.media_type === 'audio/*' || Boolean(response.multipart));
+      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type, response.schema) || response.media_type === 'audio/*' || Boolean(response.multipart));
     });
     for (const [paths, schemas] of [
       [op.sensitive_request_fields, [op.request.schema]],

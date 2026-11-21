@@ -252,7 +252,7 @@ it.skipIf(!source)('refuses duplicate, unbound, invalid and overlapping credenti
   const catalog = structuredClone(validateApiCatalog(apiCatalog));
   catalog.operations.find(op => op.operation_id === 'create_realtime_session')!.credential_return_fields = [['session', 'tools', '*', 'authorization']];
   expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
-  for (const id of ['audio_isolation_stream', 'redirect_to_mintlify'] as const) {
+  for (const id of ['compose_detailed_stream', 'redirect_to_mintlify'] as const) {
     const unadmitted = structuredClone(policyInput);
     Object.assign(unadmitted.operations[id], { credential_return_fields: [['value']] });
     expect(() => validatePolicy(unadmitted, rosters)).toThrow('non-admitted transport metadata');

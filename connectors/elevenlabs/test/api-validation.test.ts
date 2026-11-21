@@ -209,7 +209,7 @@ describe('API request validation over the preserved provider graph', () => {
     expect((await errorFrom(validateRequest('read', create({}), createRedactor([])))).code).toBe('WRONG_TOOL');
     expect((await errorFrom(getOperation('missing_operation'))).code).toBe('UNKNOWN_OPERATION');
     expect((await errorFrom(getOperation('constructor'))).code).toBe('UNKNOWN_OPERATION');
-    for (const operation_id of ['missing_operation', 'audio_isolation_stream', 'add_documentation_to_knowledge_base']) {
+    for (const operation_id of ['missing_operation', 'compose_detailed_stream', 'add_documentation_to_knowledge_base']) {
       const error = await errorFrom(validateRequest('create', { operation_id, body: {} }, createRedactor([])));
       expect(error.toJSON()).toEqual({
         ok: false, code: 'UNKNOWN_OPERATION',
@@ -348,7 +348,7 @@ describe('response advisory validation, consumed projection, and receipt boundar
     '$operation_id names exactly the follow-up path operands and required query parameters', async op => {
       const response = op.responses[0];
       const receipt = await createSuccessReceipt(op.operation_id, response.status, response.media_type,
-        response.media_type === null ? null : { has_more: false, next_cursor: null }, createRedactor([]));
+        response.media_type === null ? null : response.media_type === 'audio/mpeg' ? { file_path: 'fixture-output/audio.mp3', size_bytes: 3, media_type: 'audio/mpeg' } : { has_more: false, next_cursor: null }, createRedactor([]));
       const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
       expect(receipt.follow_up_operations).toEqual(op.follow_ups);
       expect(successReceiptSchema(followUps, op).safeParse(receipt).success).toBe(true);

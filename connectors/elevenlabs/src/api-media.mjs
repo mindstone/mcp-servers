@@ -4,7 +4,7 @@ export const binaryExtensions = Object.freeze({
   'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
   'audio/pcm': 'pcm', 'audio/basic': 'ulaw', 'audio/ulaw': 'ulaw',
   'audio/alaw': 'alaw', 'audio/opus': 'opus', 'audio/ogg': 'ogg',
-  'application/zip': 'zip', 'text/csv': 'csv', 'video/mp4': 'mp4',
+  'text/plain': 'txt', 'application/zip': 'zip', 'text/csv': 'csv', 'video/mp4': 'mp4',
 });
 const boundAliases = Object.freeze({
   'audio/wav': ['audio/x-wav', 'audio/wave', 'audio/vnd.wave'],
@@ -12,6 +12,10 @@ const boundAliases = Object.freeze({
   'audio/basic': ['application/octet-stream'], 'audio/alaw': ['application/octet-stream'],
 });
 const codecs = Object.freeze({ mp3: 'audio/mpeg', wav: 'audio/wav', pcm: 'audio/pcm', ulaw: 'audio/basic', alaw: 'audio/alaw', opus: 'audio/opus' });
+// text/plain is a saved file only when its schema declares binary bytes; otherwise it stays ordinary text.
+export function isBinaryMedia(media, schema) {
+  return typeof media === 'string' && Object.hasOwn(binaryExtensions, media) && (media !== 'text/plain' || schema?.format === 'binary');
+}
 export const audioMedia = Object.keys(binaryExtensions).filter(media => media.startsWith('audio/'));
 export const canonicalAudio = value => Buffer.from(value, 'base64').toString('base64') === value;
 export const base64AudioSchema = z.object({ field: z.string().min(1), array: z.string().min(1).optional(), sequence: z.literal(true).optional(),
@@ -36,6 +40,7 @@ export function audioRepresentation(format) {
 }
 export function binaryRepresentation(descriptor, media, outputFormat) {
   if (descriptor.base64_audio) return undefined;
+  if (Object.hasOwn(binaryExtensions, media) && !isBinaryMedia(media, descriptor.schema)) return undefined;
   const binding = descriptor.output_formats;
   if (binding) {
     const selected = outputFormat ?? binding.default;

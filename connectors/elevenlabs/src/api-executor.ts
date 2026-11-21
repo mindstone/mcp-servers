@@ -185,7 +185,7 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
           media_type: representation.media_type, ...('format' in representation ? { format: representation.format } : {}) };
         if (op.profile === 'run_job') saved.push({ ...jsonArtifactSchema.omit({ source_path: true }).parse(data), state: 'complete' });
       }
-      else if (isBinaryResponseMedia(descriptor.media_type) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
+      else if (isBinaryResponseMedia(descriptor.media_type, descriptor.schema) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
       else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
       if (descriptor.base64_audio && !descriptor.base64_audio.sequence) {
         (await loadApiValidator()).validateResponse(op, response.status, descriptor.media_type, data, redactor);

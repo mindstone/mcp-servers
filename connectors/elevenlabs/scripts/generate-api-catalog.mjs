@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
 import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
-import { audioRepresentation, base64AudioSchema, multipartResponseSchema, binaryExtensions } from '../src/api-media.mjs';
+import { audioRepresentation, base64AudioSchema, multipartResponseSchema, isBinaryMedia } from '../src/api-media.mjs';
 
 export const PINNED_SOURCE = Object.freeze({
   url: 'https://api.elevenlabs.io/openapi.json',
@@ -94,6 +94,13 @@ const stage99Profiles = {
   change: 'add_language create_clip update_segment_language migrate_segments transcribe translate dub update_speaker create_speaker render',
   delete: 'delete_segment delete_dubbing', run_job: 'create_dubbing',
 };
+const stage910Profiles = {
+  "read": "get_speech_history get_speech_history_item_by_id get_audio_full_from_speech_history_item download_speech_history_items get_audio_isolation_history get_transcript_by_id get_pronunciation_dictionary_metadata get_pronunciation_dictionaries_metadata get_pronunciation_dictionary_version_pls usage_characters",
+  "create": "add_from_rules",
+  "change": "patch_pronunciation_dictionary set_rules add_rules remove_rules",
+  "delete": "delete_speech_history_item delete_audio_isolation_history_item delete_transcript_by_id",
+  "run_job": "audio_isolation_stream speech_to_speech_stream text_to_speech_stream text_to_dialogue_stream"
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -107,7 +114,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -161,6 +168,7 @@ const operationSchema = z.object({
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
   discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
+  response_media_alternatives: z.record(z.array(text).nonempty()).optional(),
   base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), response_format_binding: z.literal('output_format').optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
@@ -218,7 +226,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -282,7 +290,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
         if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
       } else if (!retryCheck) refuse('missing family retry metadata', id);
     } else {
-      if (row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.response_media_alternatives !== undefined || row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -300,7 +308,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 315, planned: 91, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 337, planned: 69, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -328,6 +336,8 @@ function validateProductionCensus(policy) {
     separate_song_stems: [{ field: 'file', kind: 'audio' }],
     create_finetune: [{ field: 'files', kind: 'audio' }],
     video_to_music: [{ field: 'videos', kind: 'audio', allowed_media_types: ['video/mp4', 'video/webm', 'video/quicktime'], max_total_bytes: 200_000_000 }],
+    audio_isolation_stream: [{ field: 'audio', kind: 'audio' }],
+    speech_to_speech_stream: [{ field: 'audio', kind: 'audio' }],
     audio_isolation: [{ field: 'audio', kind: 'audio' }],
     speech_to_speech_full: [{ field: 'audio', kind: 'audio' }],
     speech_to_text: [{ field: 'file', kind: 'audio', max_bytes: 4_999_999_999 }],
@@ -341,8 +351,9 @@ function validateProductionCensus(policy) {
     upload_file_route: [{ field: 'file', kind: ['image', 'document'], allowed_media_types: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'text/csv'] }],
   };
   for (const [id, row] of Object.entries(policy.operations)) {
+    requireEqual(row.response_media_alternatives, id === 'download_speech_history_items' ? { 'application/zip': ['audio/*'] } : undefined, `reviewed response alternatives ${id}`);
     requireEqual(row.file_bindings, fileBindings[id], `reviewed file binding ${id}`);
-    requireEqual(row.response_format_binding, [...stage91Profiles.run_job.split(' '), 'speech_to_speech_full', 'text_to_speech_full_with_timestamps', 'text_to_dialogue_full_with_timestamps', 'text_to_speech_stream_with_timestamps', 'text_to_dialogue_stream_with_timestamps'].includes(id) ? 'output_format' : undefined, `reviewed response format binding ${id}`);
+    requireEqual(row.response_format_binding, [...stage91Profiles.run_job.split(' '), 'text_to_speech_stream', 'text_to_dialogue_stream', 'speech_to_speech_stream', 'speech_to_speech_full', 'text_to_speech_full_with_timestamps', 'text_to_dialogue_full_with_timestamps', 'text_to_speech_stream_with_timestamps', 'text_to_dialogue_stream_with_timestamps'].includes(id) ? 'output_format' : undefined, `reviewed response format binding ${id}`);
   }
   requireEqual(policy.operations.create_file_document_route.timeout, 'long', 'create-file long timeout');
   requireEqual(policy.milestones, [{ number: 1, proposed_version: '0.6.0', version: null }, ...[7, 8, 9, 10].map(number => ({ number, version: null }))], 'unpublished milestones');
@@ -601,11 +612,11 @@ function successDescriptors(operation, transform, id, row) {
     if (response.$ref) refuse('response reference', id);
     const headers = Object.keys(response.headers ?? {}).map(name => name.toLowerCase()).sort();
     const declaredHeaders = headers.length ? { headers } : {};
-    const content = Object.entries(response.content ?? {});
+    const content = Object.entries(response.content ?? {}).flatMap(([media, data]) => [[media, data], ...(row.response_media_alternatives?.[media] ?? []).map(alternative => [alternative, data])]);
     if (content.length === 0) responses.push({ status: Number(status), media_type: null, ...declaredHeaders });
     for (const [media, data] of content.sort()) {
       if ((media === 'multipart/mixed') !== Boolean(row.multipart) || (row.multipart && row.base64_audio)) refuse('invalid multipart strategy', id);
-      const binary = media === 'audio/*' || Object.hasOwn(binaryExtensions, media);
+      const binary = media === 'audio/*' || isBinaryMedia(media, data.schema);
       if (!binary && !['application/json', 'text/plain', 'text/html', 'multipart/mixed'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
       if (binary && data.schema !== undefined && (data.schema.type !== 'string' || data.schema.format !== 'binary' || Object.keys(data.schema).some(key => !['type', 'format'].includes(key)))) refuse('unsupported binary success schema', id);
       if (media === 'text/csv' && (data.schema?.type !== 'string' || data.schema?.format !== 'binary')) refuse('CSV requires a binary success schema', id);
@@ -647,10 +658,11 @@ function paginationDescriptor(operation, parameters, responses, spec, id, row) {
     'after', 'before', 'starting_after', 'ending_before', 'continuation', 'continuation_token', 'continuationToken', 'pagination', 'paging']);
   if (row.manual_pagination !== undefined) {
     const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
+    const history = queries.includes('start_after_history_item_id') && properties.includes('last_history_item_id') && properties.includes('has_more');
     const tokens = queries.includes('next_page_token') && properties.includes('next_page_token') && properties.includes('has_more');
-    if (row.method !== 'GET' || row.profile !== 'read' || (!documents && !tokens && !queries.some(name => ['limit', 'page'].includes(name)))
+    if (row.method !== 'GET' || row.profile !== 'read' || (!documents && !tokens && !history && !queries.some(name => ['limit', 'page'].includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
-      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : [])].includes(name))) refuse('invalid manual pagination', id);
+      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : []), ...(history ? ['start_after_history_item_id'] : [])].includes(name))) refuse('invalid manual pagination', id);
     return null;
   }
   if ([...queries, ...properties].some(name => unsupported.has(name))) refuse('unsupported pagination', `${id}: only cursor -> next_cursor is supported`);
