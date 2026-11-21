@@ -44,6 +44,8 @@ are maintained manually as part of the PR review checklist.
 - Returned connection credentials stay usable only at their declared response paths. Submitted secrets and the API key remain redacted there too; echoed custom SIP header values are also protected.
 ### Fixed
 
+- API discovery search now matches a word and its plural, so "agent summary" finds the agent summaries operation instead of losing it among the other agent operations.
+
 - Selected audio formats accept their exact common response-header aliases and keep the requested file format. Output refusals keep their useful error codes, and a failed receipt removes its completed file.
 
 ## [0.7.0] - 2026-11-16
