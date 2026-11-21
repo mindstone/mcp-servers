@@ -938,7 +938,10 @@ it.each(['insert_text', 'insert_table', 'insert_image'])(
     const context = {
       document: { body: {
         insertParagraph: insert, insertTable: insert,
-        paragraphs: { load: vi.fn(), items: [{ getRange: () => ({ insertInlinePictureFromBase64: insert }) }] },
+        paragraphs: { load: vi.fn(), items: [{
+          insertParagraph: insert, insertTable: insert, insertInlinePictureFromBase64: insert,
+          getRange: () => ({ insertParagraph: insert, insertTable: insert, insertInlinePictureFromBase64: insert }),
+        }] },
       } },
       sync: vi.fn(),
     };
@@ -1005,7 +1008,7 @@ it.each(['accept', 'reject'])('rejects unmatched tracked-change IDs before any %
   expect(action === 'accept' ? accept : reject).toHaveBeenCalledOnce();
 });
 
-function makeWordInsertContext(originalStyle = 'Normal') {
+function makeWordInsertContext(originalStyle = 'Normal', baseline = ['Baseline', 'Following']) {
   const batches: string[][] = [];
   let pending: string[] = [];
   interface InsertRange {
@@ -1015,20 +1018,61 @@ function makeWordInsertContext(originalStyle = 'Normal') {
     paragraphs: { getFirst(): { style: string }; getLast(): { style: string } };
     insertText(value: string, location: string): InsertRange;
   }
-  const paragraphs: Array<{ style: string; runs: InsertRange[] }> = [];
+  interface Picture { base64: string; width?: number; height?: number }
+  interface Table { kind: 'table'; values: string[][]; style: string }
+  interface Paragraph {
+    kind: 'paragraph';
+    style: string;
+    runs: InsertRange[];
+    pictures: Picture[];
+    insertText(value: string, location: string): InsertRange;
+    getRange(location?: string): ReturnType<typeof makeRange>;
+    insertParagraph(text: string, location: string): Paragraph;
+    insertTable(rows: number, columns: number, location: string, values: string[][]): Table;
+    insertInlinePictureFromBase64(base64: string, location: string): Picture;
+  }
+  const bodyItems: Array<Paragraph | Table> = [];
   const write = (value: string) => { pending.push(value); };
-  const insertParagraph = (text: string, location: string, inheritedStyle = originalStyle) => {
-    write(`paragraph:${location}`);
+  const requireLocation = (location: string, allowed: string[]) => {
+    if (!allowed.includes(location)) throw new Error(`Unsupported mock insert location: ${location}`);
+  };
+  const rangeWrites = {
+    insertParagraph: vi.fn(), insertTable: vi.fn(), insertInlinePictureFromBase64: vi.fn(),
+  };
+  function makeRange(paragraph: Paragraph, location?: string) {
+    // Only the last-paragraph text miss is observed natively. Table/picture misses
+    // at that same point are inferred; Range pictures do permit Before/After.
+    const outsideBody = location === 'After' && bodyItems.at(-1) === paragraph;
+    const target = outsideBody ? makeParagraph('', paragraph.style) : paragraph;
+    return {
+      insertParagraph: (text: string, insertLocation: string) => {
+        rangeWrites.insertParagraph(text, insertLocation);
+        return target.insertParagraph(text, insertLocation);
+      },
+      insertTable: (rows: number, columns: number, insertLocation: string, values: string[][]) => {
+        rangeWrites.insertTable(rows, columns, insertLocation, values);
+        return target.insertTable(rows, columns, insertLocation, values);
+      },
+      insertInlinePictureFromBase64: (base64: string, insertLocation: string) => {
+        rangeWrites.insertInlinePictureFromBase64(base64, insertLocation);
+        requireLocation(insertLocation, ['Before', 'After', 'Start', 'End', 'Replace']);
+        return target.insertInlinePictureFromBase64(base64, 'End');
+      },
+    };
+  }
+  function makeParagraph(text: string, inheritedStyle = originalStyle): Paragraph {
     const runs: InsertRange[] = [];
     let paragraphStyle = inheritedStyle;
-    const paragraph = {
+    const paragraph: Paragraph = {
+      kind: 'paragraph',
       get style() { return paragraphStyle; },
       set style(value: string) { write(`style:${value}`); paragraphStyle = value; },
       runs,
+      pictures: [],
       insertText: (value: string, _location: string): InsertRange => {
         write(`text:${value}`);
         if (value === '\n') {
-          const next = insertParagraph('', 'After', paragraph.style);
+          const next = paragraph.insertParagraph('', 'After');
           let runStyle: string | undefined;
           // The break belongs to this paragraph; insertion at its end reaches the next.
           return {
@@ -1062,29 +1106,188 @@ function makeWordInsertContext(originalStyle = 'Normal') {
         runs.push(run);
         return run;
       },
-      search: () => ({ items: [{ font: {} }], load: vi.fn() }),
-      getRange: () => ({ insertParagraph }),
-      insertParagraph,
+      getRange: (location) => makeRange(paragraph, location),
+      insertParagraph: vi.fn((text: string, location: string) => {
+        requireLocation(location, ['Before', 'After']);
+        write(`paragraph:${location}`);
+        const next = makeParagraph(text, paragraph.style);
+        const index = bodyItems.indexOf(paragraph);
+        if (index >= 0) bodyItems.splice(index + (location === 'After' ? 1 : 0), 0, next);
+        return next;
+      }),
+      insertTable: vi.fn((_rows: number, _columns: number, location: string, values: string[][]) => {
+        requireLocation(location, ['Before', 'After']);
+        write(`table:${location}`);
+        const table: Table = { kind: 'table', values, style: '' };
+        const index = bodyItems.indexOf(paragraph);
+        if (index >= 0) bodyItems.splice(index + (location === 'After' ? 1 : 0), 0, table);
+        return table;
+      }),
+      insertInlinePictureFromBase64: vi.fn((base64: string, location: string) => {
+        requireLocation(location, ['Replace', 'Start', 'End']);
+        write(`picture:${location}`);
+        const picture: Picture = { base64 };
+        if (location === 'Replace') { paragraph.runs.length = 0; paragraph.pictures.length = 0; }
+        if (location === 'Start') paragraph.pictures.unshift(picture); else paragraph.pictures.push(picture);
+        return picture;
+      }),
     };
-    if (text) paragraph.insertText(text, 'End');
-    if (location === 'Start') paragraphs.unshift(paragraph); else paragraphs.push(paragraph);
+    if (text) runs.push({ text, font: {}, paragraphs: { getFirst: () => paragraph, getLast: () => paragraph }, insertText: paragraph.insertText });
     return paragraph;
-  };
+  }
+  const baselineParagraphs = baseline.map(text => makeParagraph(text));
+  bodyItems.push(...baselineParagraphs);
+  const bodyParagraphs = () => bodyItems.filter((item): item is Paragraph => item.kind === 'paragraph');
+  const insertParagraph = vi.fn((text: string, location: string) => {
+    requireLocation(location, ['Start', 'End']);
+    write(`paragraph:${location}`);
+    const paragraph = makeParagraph(text);
+    if (location === 'Start') bodyItems.unshift(paragraph); else bodyItems.push(paragraph);
+    return paragraph;
+  });
   const selectionRange = {
     insertText: () => {
-      const paragraph = insertParagraph('', 'Replace');
+      write('paragraph:Replace');
+      const paragraph = makeParagraph('');
+      bodyItems.splice(0, 1, paragraph);
       return { text: '', font: {}, paragraphs: { getFirst: () => paragraph, getLast: () => paragraph }, insertText: paragraph.insertText };
     },
   };
   const context = {
     document: {
-      body: { insertParagraph, paragraphs: { items: [{ insertParagraph, getRange: () => ({ insertParagraph }) }], load: vi.fn() } },
+      body: { insertParagraph, paragraphs: { get items() { return bodyParagraphs(); }, load: vi.fn() } },
       getSelection: () => selectionRange,
     },
     sync: vi.fn(async () => { batches.push(pending); pending = []; }),
   };
-  return { context, batches, paragraphs, selectionRange };
+  // Formatting-only tests use a view of the same body, excluding baseline items.
+  const insertedParagraphs = () => bodyParagraphs().filter(p => !baselineParagraphs.includes(p));
+  return { context, batches, bodyItems, bodyParagraphs, baselineParagraphs, insertedParagraphs, selectionRange, rangeWrites };
 }
+
+describe('Word paragraph-anchor body behavior', () => {
+  function install(context: unknown) {
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+  }
+
+  const textOf = (paragraph: ReturnType<typeof makeWordInsertContext>['baselineParagraphs'][number]) =>
+    paragraph.runs.map(run => run.text).join('');
+
+  it.each([
+    { label: 'observed last blank paragraph regression', baseline: [''], index: 0 },
+    { label: 'middle paragraph order preservation', baseline: ['p0', 'p1', 'p2'], index: 1 },
+  ])('inserts mixed-line-break text into the body: $label', async ({ baseline, index }) => {
+    const model = makeWordInsertContext('Normal', baseline);
+    install(model.context);
+    const result = await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
+      text: '# Head\r\nBody **bold**\r## Two', location: 'afterParagraph', paragraphIndex: index,
+    });
+    expect(result).toMatchObject({ success: true, data: { paragraphsInserted: 3, location: 'afterParagraph', paragraphIndex: index } });
+    expect(model.bodyParagraphs().map(textOf)).toEqual([
+      ...baseline.slice(0, index + 1), 'Head', 'Body bold', 'Two', ...baseline.slice(index + 1),
+    ]);
+    const inserted = model.bodyParagraphs().slice(index + 1, index + 4);
+    expect(inserted.map(p => p.style)).toEqual(['Heading 1', 'Normal', 'Heading 2']);
+    expect(inserted[1]!.runs.map(run => [run.text, run.font])).toEqual([
+      ['Body ', {}], ['bold', { bold: true }],
+    ]);
+    expect(model.batches).toHaveLength(2);
+    expect(model.batches[0]).toEqual([]);
+    expect(model.batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it.each([0, 1])('keeps one writing sync after the validation read at paragraph %i', async (index) => {
+    const model = makeWordInsertContext('Normal', ['p0', 'p1']);
+    install(model.context);
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
+      text: '# Head\r\nBody **bold**\r## Two', location: 'afterParagraph', paragraphIndex: index,
+    })).toMatchObject({ success: true, data: { paragraphsInserted: 3 } });
+    expect(model.batches).toHaveLength(2);
+    expect(model.batches[0]).toEqual([]);
+    expect(model.batches[1]!.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    { label: 'last paragraph (inferred point-range model)', baseline: [''], index: 0 },
+    { label: 'middle paragraph order preservation', baseline: ['p0', 'p1', 'p2'], index: 1 },
+  ])('places a table immediately after the target: $label', async ({ baseline, index }) => {
+    const model = makeWordInsertContext('Normal', baseline);
+    install(model.context);
+    expect(await mustGet(getWordCommandHandler('insert_table'), 'insert_table')({
+      headers: ['Name', 'Value'], rows: [['Acme Corp'], ['Total', '2', 'trimmed']],
+      style: 'Grid Table 1 Light', location: 'afterParagraph', paragraphIndex: index,
+    })).toMatchObject({ success: true, data: { rowCount: 2, columnCount: 2 } });
+    expect(model.bodyItems.map(item => item.kind === 'paragraph' ? textOf(item) : item.values)).toEqual([
+      ...baseline.slice(0, index + 1), [['Name', 'Value'], ['Acme Corp', ''], ['Total', '2']], ...baseline.slice(index + 1),
+    ]);
+    expect(model.bodyItems[index + 1]).toMatchObject({ kind: 'table', style: 'Grid Table 1 Light' });
+    expect(model.batches).toHaveLength(2);
+    expect(model.batches[0]).toEqual([]);
+    expect(model.batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it.each([
+    { label: 'last paragraph (inferred point-range model)', baseline: [''], index: 0 },
+    { label: 'middle paragraph intended own-paragraph structure', baseline: ['p0', 'p1', 'p2'], index: 1 },
+  ])('inserts an image in its own paragraph without changing following runs: $label', async ({ baseline, index }) => {
+    const model = makeWordInsertContext('Normal', baseline);
+    const following = model.baselineParagraphs[index + 1];
+    if (following) {
+      following.runs[0]!.font.bold = true;
+      following.runs.push({ ...following.runs[0]!, text: ' tail', font: { italic: true } });
+    }
+    const originalRuns = model.baselineParagraphs.map(p => p.runs.map(r => ({ text: r.text, font: { ...r.font } })));
+    install(model.context);
+    expect(await mustGet(getWordCommandHandler('insert_image'), 'insert_image')({
+      source: { type: 'base64', base64: 'aGVsbG8=' }, location: 'afterParagraph', paragraphIndex: index, width: 120, height: 60,
+    })).toMatchObject({ success: true, data: { location: 'afterParagraph', paragraphIndex: index } });
+    const expectedParagraphs = [...model.baselineParagraphs];
+    expectedParagraphs.splice(index + 1, 0, expect.objectContaining({ pictures: [{ base64: 'aGVsbG8=', width: 120, height: 60 }], runs: [] }));
+    expect(model.bodyParagraphs()).toEqual(expectedParagraphs);
+    expect(model.baselineParagraphs.map(p => p.runs.map(r => ({ text: r.text, font: { ...r.font } })))).toEqual(originalRuns);
+    expect(model.baselineParagraphs.every(p => p.pictures.length === 0)).toBe(true);
+    expect(model.batches).toHaveLength(2);
+    expect(model.batches[0]).toEqual([]);
+    expect(model.batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it('keeps an end image in the last paragraph with its dimensions', async () => {
+    const model = makeWordInsertContext('Normal', ['p0', 'p1', 'p2']);
+    install(model.context);
+    expect(await mustGet(getWordCommandHandler('insert_image'), 'insert_image')({
+      source: { type: 'base64', base64: 'aGVsbG8=' }, location: 'end', width: 80, height: 40,
+    })).toMatchObject({ success: true, data: { location: 'end' } });
+    expect(model.bodyParagraphs()).toEqual(model.baselineParagraphs);
+    expect(model.bodyParagraphs().map(p => ({ text: textOf(p), pictures: p.pictures }))).toEqual([
+      { text: 'p0', pictures: [] }, { text: 'p1', pictures: [] },
+      { text: 'p2', pictures: [{ base64: 'aGVsbG8=', width: 80, height: 40 }] },
+    ]);
+    expect(model.batches).toHaveLength(2);
+    expect(model.batches[0]).toEqual([]);
+    expect(model.batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it.each(['insert_text', 'insert_table', 'insert_image'])('rejects invalid indices without any writes in %s', async (action) => {
+    for (const paragraphIndex of [-1, 3, 0.5, NaN, Infinity]) {
+      const model = makeWordInsertContext('Normal', ['p0', 'p1', 'p2']);
+      install(model.context);
+      expect(await mustGet(getWordCommandHandler(action), action)({
+        text: 'Text', headers: ['Header'], rows: [], source: { type: 'base64', base64: 'aGVsbG8=' },
+        location: 'afterParagraph', paragraphIndex,
+      })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT', error: expect.stringContaining('Document has 3 paragraphs') });
+      expect(model.batches).toEqual([[]]);
+      expect(model.bodyParagraphs().map(textOf)).toEqual(['p0', 'p1', 'p2']);
+      expect(model.context.document.body.insertParagraph).not.toHaveBeenCalled();
+      for (const paragraph of model.baselineParagraphs) {
+        expect(paragraph.insertParagraph).not.toHaveBeenCalled();
+        expect(paragraph.insertTable).not.toHaveBeenCalled();
+        expect(paragraph.insertInlinePictureFromBase64).not.toHaveBeenCalled();
+      }
+      for (const insert of Object.values(model.rangeWrites)) expect(insert).not.toHaveBeenCalled();
+    }
+  });
+});
 
 describe('one Word insert undo step', () => {
   it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
@@ -1125,7 +1328,7 @@ describe('one Word insert undo step', () => {
 
   it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
     'queues bold and italic runs before one writing sync at %s', async (location) => {
-      const { context, batches, paragraphs } = makeWordInsertContext();
+      const { context, batches, insertedParagraphs } = makeWordInsertContext();
       mockOfficeApp('Word', context);
       Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
       const result = await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
@@ -1135,6 +1338,7 @@ describe('one Word insert undo step', () => {
       expect(batches.filter(batch => batch.length > 0)).toHaveLength(1);
       expect(batches.slice(0, -1).every(batch => batch.length === 0)).toBe(true);
       expect(context.sync).toHaveBeenCalledTimes(['afterParagraph', 'beforeParagraph'].includes(location) ? 2 : 1);
+      const paragraphs = insertedParagraphs();
       const first = paragraphs.find(p => p.runs.map(r => r.text).join('') === 'same same slant');
       expect(first).toBeDefined();
       expect(first!.style).toBe('Heading 1');
@@ -1147,34 +1351,34 @@ describe('one Word insert undo step', () => {
   );
 
   it.each(['# Head\r\nBody', '# Head\rBody', '# Head\r\n\r\nBody'])('splits Windows and Word line breaks in %j', async (text) => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text }))
       .toMatchObject({ success: true, data: { paragraphsInserted: 2 } });
-    expect(paragraphs.map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
+    expect(insertedParagraphs().map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
       .toEqual([{ text: 'Head', style: 'Heading 1' }, { text: 'Body', style: 'Normal' }]);
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
   });
 
   it.each(['Quote', 'Heading 4'])('leaves plain runs free of direct bold and italic with style %s', async (style) => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: 'Plain text', style }))
       .toMatchObject({ success: true });
-    expect(paragraphs[0]!.style).toBe(style);
-    expect(paragraphs[0]!.runs[0]!.font).toEqual({});
+    expect(insertedParagraphs()[0]!.style).toBe(style);
+    expect(insertedParagraphs()[0]!.runs[0]!.font).toEqual({});
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
   });
 
   it('inserts every part before applying direct formatting, without assigning false', async () => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '**Bold** plain *italic* plain ***both*** plain' }))
       .toMatchObject({ success: true });
-    expect(paragraphs[0]!.runs.map(run => run.font)).toEqual([
+    expect(insertedParagraphs()[0]!.runs.map(run => run.font)).toEqual([
       { bold: true }, {}, { italic: true }, {},
       { bold: true, italic: true }, {},
     ]);
@@ -1186,58 +1390,58 @@ describe('one Word insert undo step', () => {
 
   it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
     'puts the heading style on the paragraph and no run at %s', async (location) => {
-      const { context, paragraphs, batches } = makeWordInsertContext();
+      const { context, insertedParagraphs, batches } = makeWordInsertContext();
       mockOfficeApp('Word', context);
       Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
       expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '# Plan for **Q3**', location, paragraphIndex: 0 }))
         .toMatchObject({ success: true });
-      expect(paragraphs[0]!.style).toBe('Heading 1');
-      expect(paragraphs[0]!.runs.map(run => [run.text, run.style, run.font]))
+      expect(insertedParagraphs()[0]!.style).toBe('Heading 1');
+      expect(insertedParagraphs()[0]!.runs.map(run => [run.text, run.style, run.font]))
         .toEqual([['Plan for ', undefined, {}], ['Q3', undefined, { bold: true }]]);
       expect(batches.filter(batch => batch.length)).toHaveLength(1);
     },
   );
 
   it('keeps the Quote baseline after inline emphasis', async () => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '*Emphasis* remainder', style: 'Quote' }))
       .toMatchObject({ success: true });
-    expect(paragraphs[0]!.style).toBe('Quote');
-    expect(paragraphs[0]!.runs.map(run => [run.style, run.font]))
+    expect(insertedParagraphs()[0]!.style).toBe('Quote');
+    expect(insertedParagraphs()[0]!.runs.map(run => [run.style, run.font]))
       .toEqual([[undefined, { italic: true }], [undefined, {}]]);
     expect(batches.flat().some(event => event.endsWith('=false'))).toBe(false);
   });
 
   it('keeps adjacent bold and italic parts independent', async () => {
-    const { context, paragraphs } = makeWordInsertContext();
+    const { context, insertedParagraphs } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '**a***b*' }))
       .toMatchObject({ success: true });
-    expect(paragraphs[0]!.runs.map(run => [run.text, run.font]))
+    expect(insertedParagraphs()[0]!.runs.map(run => [run.text, run.font]))
       .toEqual([['a', { bold: true }], ['b', { italic: true }]]);
   });
 
   it('applies a replacement heading to the text after the paragraph break', async () => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After', replace: 'Replace' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: 'Intro\n# Heading', location: 'replaceSelection' }))
       .toMatchObject({ success: true });
-    expect(paragraphs.map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
+    expect(insertedParagraphs().map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
       .toEqual([{ text: 'Intro', style: 'Normal' }, { text: 'Heading', style: 'Heading 1' }]);
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
   });
 
   it.each(['Normal', 'Quote'])('keeps the original %s style after a replacement heading', async (originalStyle) => {
-    const { context, paragraphs, batches } = makeWordInsertContext(originalStyle);
+    const { context, insertedParagraphs, batches } = makeWordInsertContext(originalStyle);
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After', replace: 'Replace' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '# Title\nBody', location: 'replaceSelection' }))
       .toMatchObject({ success: true });
-    expect(paragraphs.map(p => p.style)).toEqual(['Heading 1', originalStyle]);
+    expect(insertedParagraphs().map(p => p.style)).toEqual(['Heading 1', originalStyle]);
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
     expect(context.sync).toHaveBeenCalledOnce();
   });
@@ -1246,12 +1450,12 @@ describe('one Word insert undo step', () => {
     ['5 * 3', '5 * 3'],
     ['a * b ** c', 'a  b * c'],
   ])('finishes inserting text containing an unmatched asterisk: %s', async (text, expected) => {
-    const { context, paragraphs, batches } = makeWordInsertContext();
+    const { context, insertedParagraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text }))
       .toMatchObject({ success: true });
-    expect(paragraphs[0]!.runs.map(run => run.text).join('')).toBe(expected);
+    expect(insertedParagraphs()[0]!.runs.map(run => run.text).join('')).toBe(expected);
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
   });
 });
@@ -1356,13 +1560,13 @@ it('reports a previous non-solid fill without promising a solid-color inverse', 
 
 it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
   'preserves an explicit style over markdown headings at %s without an extra write', async (location) => {
-    const { context, batches, paragraphs } = makeWordInsertContext();
+    const { context, batches, insertedParagraphs } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '# **Bold**\n*Italic*', style: 'Quote', location, paragraphIndex: 0 }))
       .toMatchObject({ success: true });
     expect(batches.filter(batch => batch.length > 0)).toHaveLength(1);
-    expect(paragraphs.map(p => p.style)).toEqual(['Quote', 'Quote']);
+    expect(insertedParagraphs().map(p => p.style)).toEqual(['Quote', 'Quote']);
   },
 );
 

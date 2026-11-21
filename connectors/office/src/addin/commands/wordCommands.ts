@@ -284,11 +284,10 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
           fail('INVALID_ARGUMENT', `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`);
         }
 
-        let insertAfter = paragraphs.items[idx]!.getRange('After');
+        let anchor = paragraphs.items[idx]!;
         for (const parsed of parsedLines) {
-          const newParagraph = insertAfter.insertParagraph('', Word.InsertLocation.after);
-          insertMarkdownParagraph(parsed, newParagraph, style, formatting);
-          insertAfter = newParagraph.getRange('After');
+          anchor = anchor.insertParagraph('', Word.InsertLocation.after);
+          insertMarkdownParagraph(parsed, anchor, style, formatting);
         }
         break;
       }
@@ -860,8 +859,7 @@ async function insertTable(params: Record<string, unknown>): Promise<CommandResu
           `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`,
         );
       }
-      const range = paragraphs.items[idx]!.getRange('After');
-      table = range.insertTable(rowCount, columnCount, Word.InsertLocation.after, values);
+      table = paragraphs.items[idx]!.insertTable(rowCount, columnCount, Word.InsertLocation.after, values);
     } else {
       table = context.document.body.insertTable(
         rowCount,
@@ -956,18 +954,17 @@ async function insertImage(params: Record<string, unknown>): Promise<CommandResu
           `Paragraph index ${idx} out of range. Document has ${paragraphs.items.length} paragraphs.`,
         );
       }
-      const range = paragraphs.items[idx]!.getRange('After');
-      image = range.insertInlinePictureFromBase64(base64Data, Word.InsertLocation.after);
+      image = paragraphs.items[idx]!.insertParagraph('', Word.InsertLocation.after)
+        .insertInlinePictureFromBase64(base64Data, Word.InsertLocation.end);
     } else {
       const body = context.document.body;
-      // Insert at end: append to the last paragraph's range
+      // Insert at end: append to the last paragraph
       const paragraphs = body.paragraphs;
       paragraphs.load('items');
       await context.sync();
 
       const lastParagraph = paragraphs.items[paragraphs.items.length - 1]!;
-      const range = lastParagraph.getRange('End');
-      image = range.insertInlinePictureFromBase64(base64Data, Word.InsertLocation.after);
+      image = lastParagraph.insertInlinePictureFromBase64(base64Data, Word.InsertLocation.end);
     }
 
     if (typeof params['width'] === 'number') image.width = params['width'];

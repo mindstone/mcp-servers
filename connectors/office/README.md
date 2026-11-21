@@ -88,6 +88,11 @@ Word text inserts add all text and paragraph breaks first, then give heading and
 named styles to the whole paragraph, then add only the requested inline bold or
 italic, preserving the style's formatting.
 
+Word `afterParagraph` inserts text or a table immediately after the target
+paragraph, including the last paragraph. An image at `afterParagraph` occupies
+its own new paragraph immediately after the target; following paragraphs keep
+their content and order. An image at `end` stays in the last paragraph.
+
 Relative placements require their target: `afterParagraph` needs
 `paragraphIndex`, and `afterSheet` needs `afterSheet`. A paragraph range needs
 `startParagraph`, and a specific tracked-change target needs `changeIds`.

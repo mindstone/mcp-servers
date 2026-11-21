@@ -17,6 +17,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Corrected Word `afterParagraph` inserts of text, tables and images to land in the document, including when the target is the last paragraph. The native failure was observed for text only. An image occupies its own new paragraph immediately after the target, leaving following paragraph content and order intact; an `end` image stays in the last paragraph.
 - Word inserts split Windows (CRLF) and Word (lone CR) line breaks into separate paragraphs, so a markdown heading on its own line is styled as a heading.
 - Excel `add_worksheet` returns the new sheet's final position when it is placed at the start or after another sheet.
 - An add-in that does not know a command, or a command that fails inside Office, now returns its own error code (`UNKNOWN_COMMAND` or `ADDIN_EXECUTION_ERROR`) with matching recovery guidance instead of `UNKNOWN_ERROR`.
