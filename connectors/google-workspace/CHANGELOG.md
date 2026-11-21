@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-21
+
+### Changed
+
+- Shared-calendar edits and deletes, safer recurring deletes, the MCP SDK 1.x move; manage_workspace_attachment retired (use download/upload/delete_workspace_attachment)
+
 ### Security
 
 - Chat space, contact, Meet conference record and transcript, and Slides presentation IDs must now be plain IDs (letters, digits, `-` and `_`). A malformed ID is refused before anything is sent to Google, so it can no longer point a request somewhere other than the named space, contact, transcript or presentation. The Slides read, list and get-slide tools now also accept a presentation URL, like the Slides update and thumbnail tools already did.
