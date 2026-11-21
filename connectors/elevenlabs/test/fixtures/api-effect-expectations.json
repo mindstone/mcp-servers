@@ -1,4 +1,8 @@
 {
+  "create_auth_connection": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "update_auth_connection": {"profile": "change", "method": "PATCH", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "delete_auth_connection": {"profile": "delete", "method": "DELETE", "tool": "elevenlabs_delete_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "list_auth_connections": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "create_public_template_run": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
   "get_public_template": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "get_public_template_run": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},

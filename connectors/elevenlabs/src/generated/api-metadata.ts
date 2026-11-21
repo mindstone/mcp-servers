@@ -56,9 +56,10 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts",
   "workspace/analytics": "workspace/analytics",
-  "workspace/audit-logs": "workspace/audit-logs"
+  "workspace/audit-logs": "workspace/audit-logs",
+  "workspace/auth-connections": "workspace/auth-connections"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts","workspace/analytics","workspace/audit-logs"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts","workspace/analytics","workspace/audit-logs","workspace/auth-connections"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -188,6 +189,7 @@ export const profileOperationIds = {
     "list_analysis_item_versions_route",
     "list_analysis_items_route",
     "list_assets",
+    "list_auth_connections",
     "list_available_llms",
     "list_chat_response_tests_route",
     "list_conversation_groups_route",
@@ -292,6 +294,7 @@ export const profileOperationIds = {
     "create_agent_conversation_ticket_route",
     "create_agent_deployment_route",
     "create_agent_draft_route",
+    "create_auth_connection",
     "create_clip",
     "create_mcp_server_route",
     "create_phone_number_route",
@@ -340,6 +343,7 @@ export const profileOperationIds = {
     "update_agent_test_folder_route",
     "update_analysis_item_attachments_route",
     "update_analysis_item_route",
+    "update_auth_connection",
     "update_branch_route",
     "update_conversation_group_route",
     "update_conversation_tag_route",
@@ -376,6 +380,7 @@ export const profileOperationIds = {
     "delete_analysis_item_route",
     "delete_asset_endpoint",
     "delete_audio_isolation_history_item",
+    "delete_auth_connection",
     "delete_batch_call",
     "delete_chapter_endpoint",
     "delete_chat_response_test_route",

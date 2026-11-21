@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Manage integration authentication connections: store or update credentials, inspect metadata and dependencies, and remove connections. Stored secrets are never shown back; saving them does not prove they work.
+
 - Published-template inspection and execution, tabular analytics and enterprise audit reads through the API tools. Template runs can use another workspace's workflow and deliver outputs to configured webhooks; audit records keep their personal data. A run's headline status is no substitute for checking its outputs.
 
 - Asynchronous Flows image, video and speech generation, with explicit state reads, continuation and configured webhook delivery.

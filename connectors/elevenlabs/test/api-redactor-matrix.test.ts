@@ -8,6 +8,7 @@ import * as validation from '../src/api-validation.js';
 import * as fileInput from '../src/tools/file-input.js';
 import { ElevenLabsError } from '../src/types.js';
 import { escapeUntrustedTags, unwrapUntrusted, wrapUntrusted } from '../src/untrusted-content.js';
+import authCases from './fixtures/api-auth-connections-wire-cases.json' with { type: 'json' };
 
 const marker = '[REDACTED]';
 const secrets = [
@@ -63,6 +64,39 @@ beforeEach(async () => {
   setApiKey('example-connector-credential');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   pair = await createInMemoryTestClient({ createServer });
+});
+
+const authMatrix = [
+  ...authCases.create.map(row => ({ ...row, operation_id: 'create_auth_connection' })),
+  ...authCases.update.map(row => ({ ...row, operation_id: 'update_auth_connection' })),
+].flatMap(row => row.secret_paths.flatMap(path => [200, 422].map(status => ({ row, path, status }))));
+it.each(authMatrix)('$row.schema / $path / HTTP $status uses the single redactor for arbitrary auth fields', async ({ row, path, status }) => {
+  const value = String(secrets[0].value);
+  const variants = spellings(value);
+  const [key, wildcard] = path;
+  const body = { ...row.body, [key]: wildcard ? { 'X-Anything': value, credential_id: value, variable_name: value } : value };
+  const response = authCases.responses.find(item => item.schema === row.response_schema)!;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(status === 200
+    ? { ...response.body, echo: variants, [variants.at(-1)!]: value }
+    : { detail: [{ loc: ['body', value], msg: variants.join(' | '), input: value }] }, { status }));
+  const result = await pair.callTool('elevenlabs_change_resource', {
+    operation_id: row.operation_id, body,
+    ...(row.operation_id === 'update_auth_connection' ? { path_params: { auth_connection_id: 'connection_example' } } : {}),
+  });
+  expect(Boolean(result.isError), result.text).toBe(status !== 200);
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(result.text).toContain(marker);
+  for (const candidate of variants) {
+    expect(result.text).not.toContain(candidate);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(candidate);
+  }
+  if (status === 200) {
+    const output = JSON.parse(unwrapUntrusted(JSON.parse(result.text).data));
+    expect(output.echo).toEqual(variants.map(() => marker));
+    expect(output[marker]).toBe(marker);
+    expect(output.id).toBe('connection_example');
+    expect(output.used_by).toEqual(response.body.used_by);
+  }
 });
 afterEach(async () => {
   await pair.close();

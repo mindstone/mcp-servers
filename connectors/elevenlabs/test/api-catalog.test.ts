@@ -254,7 +254,7 @@ describe('pinned operation policy and public artifacts', () => {
     expect(rows.filter(row => row.milestone === 8).every(row => row.status === 'admitted')).toBe(true);
     for (const id of ['compose_detailed_stream']) expect(policy.operations[id].status).toBe('planned');
     expect(rows).toHaveLength(515);
-    for (const [status, count] of [['admitted', 391], ['planned', 15], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
+    for (const [status, count] of [['admitted', 395], ['planned', 11], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
     for (const [milestone, count] of [[1, 40], [7, 134], [8, 35], [9, 131], [10, 66]] as const) expect(rows.filter(row => row.milestone === milestone)).toHaveLength(count);
     for (const [group, count] of [['account_and_keys', 9], ['identity_and_seats', 10], ['reception', 75], ['productions', 11], ['engineering', 4]] as const) {
       expect(rows.filter(row => row.exclusion_group === group)).toHaveLength(count);
@@ -267,9 +267,9 @@ describe('pinned operation policy and public artifacts', () => {
     expect(matchesPrefix('/v1/convai/conversations', '/v1/convai/conversation')).toBe(false);
   });
 
-  it('matches the independent 391-operation effects, methods and tools without adding registrations', () => {
-    expect(Object.keys(effectExpectations)).toHaveLength(391);
-    expect(apiCatalog.operations).toHaveLength(391);
+  it('matches the independent 395-operation effects, methods and tools without adding registrations', () => {
+    expect(Object.keys(effectExpectations)).toHaveLength(395);
+    expect(apiCatalog.operations).toHaveLength(395);
     expect(apiCatalog.operations.map(row => row.operation_id)).toEqual(Object.keys(effectExpectations).sort());
     const counts: Record<string, number> = {};
     for (const row of apiCatalog.operations) {
@@ -280,7 +280,7 @@ describe('pinned operation policy and public artifacts', () => {
       if (floors[row.method]) expect(row.profile).toBe(['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'].includes(row.operation_id) ? 'create' : row.operation_id === 'update_environment_variable' ? 'delete' : floors[row.method]);
       counts[row.profile] = (counts[row.profile] ?? 0) + 1;
     }
-    expect(counts).toEqual({ read: 164, create: 46, change: 88, delete: 48, tests: 3, query_knowledge: 1, place_call: 8, run_job: 33 });
+    expect(counts).toEqual({ read: 165, create: 46, change: 90, delete: 49, tests: 3, query_knowledge: 1, place_call: 8, run_job: 33 });
     expect(apiCatalog.operations.filter(row => row.profile === 'query_knowledge').map(row => row.operation_id)).toEqual(['query_agent_knowledge_base_rag_route']);
     expect(apiCatalog.operations.some(row => row.tool === 'elevenlabs_place_call')).toBe(true);
     expect(apiCatalog.operations.some(row => row.tool === 'elevenlabs_run_job')).toBe(true);
@@ -371,7 +371,7 @@ describe('pinned operation policy and public artifacts', () => {
   it('has deterministic committed outputs and an admitted-only reachable graph', async () => {
     expect(await readFile(resolve(root, 'src/generated/api-catalog.ts'), 'utf8')).toBe(renderCatalog(apiCatalog));
     expect(await readFile(resolve(root, 'API_COVERAGE.md'), 'utf8')).toBe(renderCoverage(policyInput, rosters));
-    expect(Object.keys(apiCatalog.$defs)).toHaveLength(1470);
+    expect(Object.keys(apiCatalog.$defs)).toHaveLength(1498);
     expect(apiCatalog.source).toEqual(policyInput.source);
     expect(apiCatalog.compatibility_overlay).toEqual(policyInput.compatibility_overlay);
     for (const descriptor of apiCatalog.operations) {
@@ -563,11 +563,11 @@ describe('provided pinned full source', () => {
     const fromJson = compileCatalog(bytes, policyInput, PINNED_SOURCE, rosters);
     const fromGzip = compileCatalog(gzipSync(bytes), policyInput, PINNED_SOURCE, rosters);
     expect(fromJson).toEqual(apiCatalog); expect(fromGzip).toEqual(fromJson);
-    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 391, components: 1470, checked: true });
+    expect(await generateArtifacts(root, sourcePath!, true)).toEqual({ operations: 395, components: 1498, checked: true });
     const directory = await mkdtemp(join(tmpdir(), 'elevenlabs-pin-'));
     try {
       const file = join(directory, 'pinned.json'); await writeFile(file, bytes);
-      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 391, components: 1470, checked: true });
+      expect(await generateArtifacts(root, file, true)).toEqual({ operations: 395, components: 1498, checked: true });
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 

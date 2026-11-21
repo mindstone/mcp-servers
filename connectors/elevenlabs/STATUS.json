@@ -12,6 +12,7 @@
   "tools": {
     "count": 41,
     "domains": [
+      "integration auth connections: credential storage and replacement, readable metadata and dependencies, and deletion; stored secrets never shown back",
       "published-template inspection and destructive execution across workspaces with configured webhook delivery; tabular analytics and enterprise audit reads preserving personal data",
       "Flows asynchronous image, video and speech generation; explicit state reads, continuation and configured webhook delivery without polling or media fetching",
       "account and usage",

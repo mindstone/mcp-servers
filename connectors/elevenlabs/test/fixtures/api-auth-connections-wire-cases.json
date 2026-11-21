@@ -1,0 +1,1262 @@
+{
+  "create": [
+    {
+      "schema": "CreateOAuth2ClientCredsRequest",
+      "body": {
+        "auth_type": "oauth2_client_credentials",
+        "name": "Acme connection",
+        "provider": "acme",
+        "client_id": "client_locator",
+        "token_url": "https://reader:canary-url-0001@auth.example.com/token?credential=canary-url-0002",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-param/+?0003",
+          "secret_id": "canary-map-reference/+?0003"
+        },
+        "custom_headers": {
+          "X-Anything": "canary-header/+?0004",
+          "credential_id": "canary-map-id/+?0004"
+        },
+        "client_secret": "canary-client-secret/+?0001"
+      },
+      "secret_paths": [
+        [
+          "client_secret"
+        ],
+        [
+          "token_url"
+        ],
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "custom_headers",
+          "*"
+        ]
+      ],
+      "response_schema": "OAuth2ClientCredsResponse"
+    },
+    {
+      "schema": "CreateCustomHeaderAuthRequest",
+      "body": {
+        "auth_type": "custom_header_auth",
+        "name": "Acme connection",
+        "provider": "acme",
+        "header_name": "X-Anything",
+        "token": "canary-custom-token/+?0001"
+      },
+      "secret_paths": [
+        [
+          "token"
+        ]
+      ],
+      "response_schema": "CustomHeaderAuthResponse"
+    },
+    {
+      "schema": "CreateBasicAuthRequest",
+      "body": {
+        "auth_type": "basic_auth",
+        "name": "Acme connection",
+        "provider": "acme",
+        "username": "reader_example",
+        "password": "canary-password/+?0001"
+      },
+      "secret_paths": [
+        [
+          "password"
+        ]
+      ],
+      "response_schema": "BasicAuthResponse"
+    },
+    {
+      "schema": "CreateBearerAuthRequest",
+      "body": {
+        "auth_type": "bearer_auth",
+        "name": "Acme connection",
+        "provider": "acme",
+        "token": "canary-bearer/+?0001"
+      },
+      "secret_paths": [
+        [
+          "token"
+        ]
+      ],
+      "response_schema": "BearerAuthResponse"
+    },
+    {
+      "schema": "CreateOAuth2JWTRequest",
+      "body": {
+        "auth_type": "oauth2_jwt",
+        "name": "Acme connection",
+        "provider": "acme",
+        "issuer": "issuer_example",
+        "audience": "audience_example",
+        "subject": "subject_example",
+        "algorithm": "HS256",
+        "key_id": "key_locator",
+        "expiration_seconds": 300,
+        "extra_params": {
+          "arbitrary": "canary-param/+?0001",
+          "credential_id": "canary-map-locator/+?0001"
+        },
+        "extra_headers": {
+          "X-Anything": "canary-header/+?0002",
+          "variable_name": "canary-map-variable/+?0002"
+        },
+        "token_url": "https://reader:canary-url-0003@auth.example.com/token?credential=canary-url-0004",
+        "scopes": [
+          "read:guide"
+        ],
+        "secret_key": "canary-jwt-key/+?0001"
+      },
+      "secret_paths": [
+        [
+          "secret_key"
+        ],
+        [
+          "token_url"
+        ],
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "extra_headers",
+          "*"
+        ]
+      ],
+      "response_schema": "OAuth2JWTResponse"
+    },
+    {
+      "schema": "CreatePrivateKeyJWTRequest",
+      "body": {
+        "auth_type": "private_key_jwt",
+        "name": "Acme connection",
+        "provider": "acme",
+        "issuer": "issuer_example",
+        "audience": "audience_example",
+        "subject": "subject_example",
+        "algorithm": "HS256",
+        "key_id": "key_locator",
+        "expiration_seconds": 300,
+        "extra_params": {
+          "arbitrary": "canary-param/+?0001",
+          "credential_id": "canary-map-locator/+?0001"
+        },
+        "extra_headers": {
+          "X-Anything": "canary-header/+?0002",
+          "variable_name": "canary-map-variable/+?0002"
+        },
+        "secret_key": "canary-private-key/+?0001"
+      },
+      "secret_paths": [
+        [
+          "secret_key"
+        ],
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "extra_headers",
+          "*"
+        ]
+      ],
+      "response_schema": "PrivateKeyJWTResponse"
+    },
+    {
+      "schema": "CreateMTLSAuthRequest",
+      "body": {
+        "auth_type": "mtls",
+        "name": "Acme connection",
+        "provider": "acme",
+        "client_certificate": "canary-client-certificate/+?0001",
+        "client_key": "canary-client-key/+?0001",
+        "ca_certificate": "canary-ca-certificate/+?0001",
+        "key_passphrase": "canary-key-passphrase/+?0001"
+      },
+      "secret_paths": [
+        [
+          "client_certificate"
+        ],
+        [
+          "client_key"
+        ],
+        [
+          "ca_certificate"
+        ],
+        [
+          "key_passphrase"
+        ]
+      ],
+      "response_schema": "MTLSAuthResponse"
+    }
+  ],
+  "update": [
+    {
+      "schema": "UpdateOAuth2ClientCredsRequest",
+      "body": {
+        "auth_type": "oauth2_client_credentials",
+        "provider": "acme",
+        "client_id": "client_locator",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-param/+?0003",
+          "secret_id": "canary-map-reference/+?0003"
+        },
+        "custom_headers": {
+          "X-Anything": "canary-header/+?0004",
+          "credential_id": "canary-map-id/+?0004"
+        },
+        "client_secret": "canary-update-client-secret/+?0001"
+      },
+      "secret_paths": [
+        [
+          "client_secret"
+        ],
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "custom_headers",
+          "*"
+        ]
+      ],
+      "response_schema": "OAuth2ClientCredsResponse"
+    },
+    {
+      "schema": "UpdateBasicAuthRequest",
+      "body": {
+        "auth_type": "basic_auth",
+        "provider": "acme",
+        "username": "reader_example",
+        "password": "canary-update-password/+?0001"
+      },
+      "secret_paths": [
+        [
+          "password"
+        ]
+      ],
+      "response_schema": "BasicAuthResponse"
+    },
+    {
+      "schema": "UpdateBearerAuthRequest",
+      "body": {
+        "auth_type": "bearer_auth",
+        "provider": "acme",
+        "token": "canary-update-token/+?0001"
+      },
+      "secret_paths": [
+        [
+          "token"
+        ]
+      ],
+      "response_schema": "BearerAuthResponse"
+    },
+    {
+      "schema": "UpdateOAuth2JWTRequest",
+      "body": {
+        "auth_type": "oauth2_jwt",
+        "provider": "acme",
+        "issuer": "issuer_example",
+        "audience": "audience_example",
+        "subject": "subject_example",
+        "algorithm": "HS256",
+        "key_id": "key_locator",
+        "expiration_seconds": 300,
+        "extra_params": {
+          "arbitrary": "canary-param/+?0001",
+          "credential_id": "canary-map-locator/+?0001"
+        },
+        "extra_headers": {
+          "X-Anything": "canary-header/+?0002",
+          "variable_name": "canary-map-variable/+?0002"
+        },
+        "scopes": [
+          "read:guide"
+        ],
+        "secret_key": "canary-update-jwt-key/+?0001"
+      },
+      "secret_paths": [
+        [
+          "secret_key"
+        ],
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "extra_headers",
+          "*"
+        ]
+      ],
+      "response_schema": "OAuth2JWTResponse"
+    }
+  ],
+  "responses": [
+    {
+      "schema": "OAuth2ClientCredsResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "oauth2_client_credentials",
+        "client_id": "client_locator",
+        "token_url": "https://auth.example.com/token",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-stored-param/+?0001"
+        },
+        "custom_headers": {
+          "X-Anything": "canary-stored-header/+?0001"
+        }
+      },
+      "secret_paths": [
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "custom_headers",
+          "*"
+        ]
+      ]
+    },
+    {
+      "schema": "RefreshTokenAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "refresh_token_auth",
+        "client_id": "client_locator",
+        "token_url": "https://auth.example.com/token",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-stored-refresh/+?0001"
+        }
+      },
+      "secret_paths": [
+        [
+          "extra_params",
+          "*"
+        ]
+      ]
+    },
+    {
+      "schema": "BasicAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "basic_auth",
+        "username": "reader_example"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "BearerAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "bearer_auth"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "OAuth2JWTResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "oauth2_jwt",
+        "issuer": "issuer_example",
+        "audience": "audience_example",
+        "subject": "subject_example",
+        "algorithm": "HS256",
+        "key_id": "key_locator",
+        "expiration_seconds": 300,
+        "extra_params": {
+          "arbitrary": "canary-param/+?0001",
+          "credential_id": "canary-map-locator/+?0001"
+        },
+        "extra_headers": {
+          "X-Anything": "canary-header/+?0002",
+          "variable_name": "canary-map-variable/+?0002"
+        },
+        "token_url": "https://auth.example.com/token",
+        "scopes": [
+          "read:guide"
+        ]
+      },
+      "secret_paths": [
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "extra_headers",
+          "*"
+        ]
+      ]
+    },
+    {
+      "schema": "PrivateKeyJWTResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "private_key_jwt",
+        "issuer": "issuer_example",
+        "audience": "audience_example",
+        "subject": "subject_example",
+        "algorithm": "HS256",
+        "key_id": "key_locator",
+        "expiration_seconds": 300,
+        "extra_params": {
+          "arbitrary": "canary-param/+?0001",
+          "credential_id": "canary-map-locator/+?0001"
+        },
+        "extra_headers": {
+          "X-Anything": "canary-header/+?0002",
+          "variable_name": "canary-map-variable/+?0002"
+        }
+      },
+      "secret_paths": [
+        [
+          "extra_params",
+          "*"
+        ],
+        [
+          "extra_headers",
+          "*"
+        ]
+      ]
+    },
+    {
+      "schema": "MTLSAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "mtls"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "CustomHeaderAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "custom_header_auth",
+        "header_name": "X-Anything"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "ApiIntegrationOAuth2AuthCodeResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "api_integration_oauth2_auth_code",
+        "token_url": "https://auth.example.com/token",
+        "expires_at": "2026-11-09T00:00:00Z",
+        "integration_id": "integration_locator",
+        "credential_id": "credential_locator",
+        "scopes": [
+          "read:guide"
+        ]
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "ApiIntegrationOAuth2CustomAppResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "api_integration_oauth2_custom_app",
+        "token_url": "https://auth.example.com/token",
+        "expires_at": "2026-11-09T00:00:00Z",
+        "integration_id": "integration_locator",
+        "credential_id": "credential_locator",
+        "client_id": "client_locator",
+        "scopes": [
+          "read:guide"
+        ]
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "WhatsAppAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "whatsapp",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "whatsapp_auth",
+        "phone_number_id": "phone_locator"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "SlackBotAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "Slack",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "slack_bot_auth"
+      },
+      "secret_paths": []
+    },
+    {
+      "schema": "UrlSecretAuthResponse",
+      "body": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "url_secret"
+      },
+      "secret_paths": []
+    }
+  ],
+  "operations": [
+    {
+      "id": "create_auth_connection",
+      "profile": "change",
+      "method": "POST",
+      "path": "/v1/workspace/auth-connections",
+      "args": {
+        "body": {
+          "auth_type": "oauth2_client_credentials",
+          "name": "Acme connection",
+          "provider": "acme",
+          "client_id": "client_locator",
+          "token_url": "https://reader:canary-url-0001@auth.example.com/token?credential=canary-url-0002",
+          "scopes": [
+            "read:guide"
+          ],
+          "extra_params": {
+            "arbitrary": "canary-param/+?0003",
+            "secret_id": "canary-map-reference/+?0003"
+          },
+          "custom_headers": {
+            "X-Anything": "canary-header/+?0004",
+            "credential_id": "canary-map-id/+?0004"
+          },
+          "client_secret": "canary-client-secret/+?0001"
+        }
+      },
+      "response": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "oauth2_client_credentials",
+        "client_id": "client_locator",
+        "token_url": "https://auth.example.com/token",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-stored-param/+?0001"
+        },
+        "custom_headers": {
+          "X-Anything": "canary-stored-header/+?0001"
+        }
+      },
+      "status": 200
+    },
+    {
+      "id": "update_auth_connection",
+      "profile": "change",
+      "method": "PATCH",
+      "path": "/v1/workspace/auth-connections/connection_example",
+      "args": {
+        "path_params": {
+          "auth_connection_id": "connection_example"
+        },
+        "body": {
+          "auth_type": "oauth2_client_credentials",
+          "provider": "acme",
+          "client_id": "client_locator",
+          "scopes": [
+            "read:guide"
+          ],
+          "extra_params": {
+            "arbitrary": "canary-param/+?0003",
+            "secret_id": "canary-map-reference/+?0003"
+          },
+          "custom_headers": {
+            "X-Anything": "canary-header/+?0004",
+            "credential_id": "canary-map-id/+?0004"
+          },
+          "client_secret": "canary-update-client-secret/+?0001"
+        }
+      },
+      "response": {
+        "name": "Acme connection",
+        "provider": "acme",
+        "id": "connection_example",
+        "used_by": {
+          "tools": [
+            {
+              "type": "available",
+              "id": "tool_example",
+              "name": "Acme lookup",
+              "created_at_unix_secs": 123,
+              "access_level": "viewer"
+            },
+            {
+              "type": "unknown",
+              "id": "tool_hidden"
+            }
+          ],
+          "mcp_servers": [
+            {
+              "type": "available",
+              "id": "mcp_example",
+              "name": "Acme server",
+              "created_at_unix_secs": 123,
+              "access_level": "admin"
+            },
+            {
+              "type": "unknown",
+              "id": "mcp_hidden"
+            }
+          ],
+          "integration_connections": [
+            {
+              "id": "integration_example",
+              "name": "Acme integration"
+            }
+          ]
+        },
+        "status": "credential_invalid",
+        "status_detail": "Stored credential rejected",
+        "status_updated_at": "2026-11-08T00:00:00Z",
+        "auth_type": "oauth2_client_credentials",
+        "client_id": "client_locator",
+        "token_url": "https://auth.example.com/token",
+        "scopes": [
+          "read:guide"
+        ],
+        "extra_params": {
+          "arbitrary": "canary-stored-param/+?0001"
+        },
+        "custom_headers": {
+          "X-Anything": "canary-stored-header/+?0001"
+        }
+      },
+      "status": 200
+    },
+    {
+      "id": "delete_auth_connection",
+      "profile": "delete",
+      "method": "DELETE",
+      "path": "/v1/workspace/auth-connections/connection_example",
+      "args": {
+        "path_params": {
+          "auth_connection_id": "connection_example"
+        }
+      },
+      "response": {},
+      "status": 200
+    },
+    {
+      "id": "list_auth_connections",
+      "profile": "read",
+      "method": "GET",
+      "path": "/v1/workspace/auth-connections",
+      "args": {},
+      "response": {
+        "auth_connections": [
+          {
+            "name": "Acme connection",
+            "provider": "acme",
+            "id": "connection_example",
+            "used_by": {
+              "tools": [
+                {
+                  "type": "available",
+                  "id": "tool_example",
+                  "name": "Acme lookup",
+                  "created_at_unix_secs": 123,
+                  "access_level": "viewer"
+                },
+                {
+                  "type": "unknown",
+                  "id": "tool_hidden"
+                }
+              ],
+              "mcp_servers": [
+                {
+                  "type": "available",
+                  "id": "mcp_example",
+                  "name": "Acme server",
+                  "created_at_unix_secs": 123,
+                  "access_level": "admin"
+                },
+                {
+                  "type": "unknown",
+                  "id": "mcp_hidden"
+                }
+              ],
+              "integration_connections": [
+                {
+                  "id": "integration_example",
+                  "name": "Acme integration"
+                }
+              ]
+            },
+            "status": "credential_invalid",
+            "status_detail": "Stored credential rejected",
+            "status_updated_at": "2026-11-08T00:00:00Z",
+            "auth_type": "oauth2_client_credentials",
+            "client_id": "client_locator",
+            "token_url": "https://auth.example.com/token",
+            "scopes": [
+              "read:guide"
+            ],
+            "extra_params": {
+              "arbitrary": "canary-stored-param/+?0001"
+            },
+            "custom_headers": {
+              "X-Anything": "canary-stored-header/+?0001"
+            }
+          }
+        ]
+      },
+      "status": 200
+    }
+  ]
+}

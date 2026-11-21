@@ -122,6 +122,9 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "workspace/auth-connections": {
+      "read": "list_auth_connections"
+    },
     "workspace/analytics": { "read": { "unavailable_reason": "No persisted-result lookup verifies this analytics query; repeat the same read with the same arguments if needed." } },
     "workspace/audit-logs": { "read": "get_workspace_audit_logs" },
     "flows": { "read": { "unavailable_reason": "No reliable lookup identifies a generation after losing its ID; list items do not expose submitted inputs. Do not repeat generation blindly." } },
@@ -1343,19 +1346,46 @@
     "create_auth_connection": {
       "method": "POST",
       "path": "/v1/workspace/auth-connections",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/auth-connections",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Stores credentials enabling provider integrations to authenticate to other systems and reach their data.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": ["list_auth_connections"],
+      "effect_note": "A successful write means only that the provider stored the credentials, not that they work. Stored secrets are never shown back. List readable identity and metadata separately; a lost create cannot always be uniquely recovered.",
+      "retry_check": {
+        "unavailable_reason": "list_auth_connections shows only identity and non-secret metadata. It cannot read back submitted secrets, verify credential correctness or uniquely recover every lost create. Do not repeat creation blindly."
+      },
+      "sensitive_request_fields": [
+        ["secret_key"],
+        ["client_key"],
+        ["key_passphrase"],
+        ["client_certificate"],
+        ["ca_certificate"],
+        ["custom_headers", "*"],
+        ["extra_headers", "*"],
+        ["extra_params", "*"],
+        ["token_url"]
+      ],
+      "sensitive_response_fields": [
+        ["custom_headers", "*"],
+        ["extra_headers", "*"],
+        ["extra_params", "*"]
+      ]
     },
     "create_batch_call": {
       "method": "POST",
@@ -2414,19 +2444,28 @@
     "delete_auth_connection": {
       "method": "DELETE",
       "path": "/v1/workspace/auth-connections/{auth_connection_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/auth-connections",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes the connection and may break tools, servers or integrations that depend on it.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": ["list_auth_connections"],
+      "effect_note": "Before deletion, list and keep the exact connection ID and its used_by dependencies for inspection. After deletion, check that the exact ID is absent from list_auth_connections. The delete response schema is unconstrained; a successful response alone does not describe affected dependents.",
+      "retry_check": "list_auth_connections"
     },
     "delete_batch_call": {
       "method": "DELETE",
@@ -6614,19 +6653,33 @@
     "list_auth_connections": {
       "method": "GET",
       "path": "/v1/workspace/auth-connections",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/auth-connections",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists existing connection identity, non-secret metadata, status and used_by dependencies; it is not a token or password getter.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "effect_note": "Repeat the same read if needed. This is not a token or password getter and cannot verify that stored credentials work. Keep used_by dependencies for inspection before deleting a connection.",
+      "retry_check": "list_auth_connections",
+      "sensitive_response_fields": [
+        ["auth_connections", "*", "custom_headers", "*"],
+        ["auth_connections", "*", "extra_headers", "*"],
+        ["auth_connections", "*", "extra_params", "*"]
+      ]
     },
     "list_available_llms": {
       "method": "GET",
@@ -10768,19 +10821,41 @@
     "update_auth_connection": {
       "method": "PATCH",
       "path": "/v1/workspace/auth-connections/{auth_connection_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/auth-connections",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Changes credential material or provider settings used to reach external data.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": ["list_auth_connections"],
+      "effect_note": "A successful write means only that the provider stored the credentials, not that they work. Stored secrets are never shown back. List confirms only readable metadata, never the written secret.",
+      "retry_check": {
+        "unavailable_reason": "list_auth_connections confirms only readable metadata, never the written secret; complete credential verification is unavailable. Do not repeat credential updates blindly."
+      },
+      "sensitive_request_fields": [
+        ["secret_key"],
+        ["custom_headers", "*"],
+        ["extra_headers", "*"],
+        ["extra_params", "*"]
+      ],
+      "sensitive_response_fields": [
+        ["custom_headers", "*"],
+        ["extra_headers", "*"],
+        ["extra_params", "*"]
+      ]
     },
     "update_branch_route": {
       "method": "PATCH",

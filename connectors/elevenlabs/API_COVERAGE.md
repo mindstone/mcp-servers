@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **391 admitted + 15 planned + 109 excluded = 515**.
+Partition: **395 admitted + 11 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 391 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 395 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -84,7 +84,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | create_agent_test_folder_route | POST | /v1/convai/agent-testing/folders | admitted | 7 | agent-testing | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_analysis_item_route | POST | /v1/convai/analysis-items | admitted | 7 | analysis-items | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_audio_native_project | POST | /v1/audio-native | admitted | 10 | audio-native | create | missing | — | No existing tool maps to this exact HTTP operation. |
-| create_auth_connection | POST | /v1/workspace/auth-connections | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| create_auth_connection | POST | /v1/workspace/auth-connections | admitted | 10 | workspace/auth-connections | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_batch_call | POST | /v1/convai/batch-calling/submit | admitted | 8 | batch-calling | place_call | partial | @mindstone/mcp-server-elevenlabs-agents:submit_batch_call | Supports selected batch name, agent, phone, recipient and scheduling fields; other current batch controls are absent. |
 | create_branch_route | POST | /v1/convai/agents/{agent_id}/branches | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_clip | POST | /v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/segment | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -127,7 +127,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | delete_analysis_item_route | DELETE | /v1/convai/analysis-items/{analysis_item_id} | admitted | 7 | analysis-items | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_asset_endpoint | DELETE | /v1/assets/{asset_id} | admitted | 10 | assets | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_audio_isolation_history_item | DELETE | /v1/audio-isolation/history/{history_item_id} | admitted | 9 | audio-isolation | delete | missing | — | No existing tool maps to this exact HTTP operation. |
-| delete_auth_connection | DELETE | /v1/workspace/auth-connections/{auth_connection_id} | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| delete_auth_connection | DELETE | /v1/workspace/auth-connections/{auth_connection_id} | admitted | 10 | workspace/auth-connections | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_batch_call | DELETE | /v1/convai/batch-calling/{batch_id} | admitted | 8 | batch-calling | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_chapter_endpoint | DELETE | /v1/studio/projects/{project_id}/chapters/{chapter_id} | admitted | 10 | studio | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_chat_response_test_route | DELETE | /v1/convai/agent-testing/{test_id} | admitted | 1 | agent-testing | delete | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -328,7 +328,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | list_analysis_item_versions_route | GET | /v1/convai/analysis-items/{analysis_item_id}/versions | admitted | 7 | analysis-items | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | list_analysis_items_route | GET | /v1/convai/analysis-items | admitted | 7 | analysis-items | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | list_assets | GET | /v1/assets | admitted | 10 | assets | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| list_auth_connections | GET | /v1/workspace/auth-connections | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| list_auth_connections | GET | /v1/workspace/auth-connections | admitted | 10 | workspace/auth-connections | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | list_available_llms | GET | /v1/convai/llm/list | admitted | 1 | llm | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | list_chat_response_tests_route | GET | /v1/convai/agent-testing | admitted | 1 | agent-testing | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | list_conversation_groups_route | GET | /v1/convai/realtime/conversation-groups | admitted | 8 | realtime | read | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -517,7 +517,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | update_agent_test_folder_route | PATCH | /v1/convai/agent-testing/folders/{folder_id} | admitted | 7 | agent-testing | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_analysis_item_attachments_route | PATCH | /v1/convai/analysis-items/{analysis_item_id}/attachments | admitted | 7 | analysis-items | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_analysis_item_route | PATCH | /v1/convai/analysis-items/{analysis_item_id} | admitted | 7 | analysis-items | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| update_auth_connection | PATCH | /v1/workspace/auth-connections/{auth_connection_id} | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| update_auth_connection | PATCH | /v1/workspace/auth-connections/{auth_connection_id} | admitted | 10 | workspace/auth-connections | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_branch_route | PATCH | /v1/convai/agents/{agent_id}/branches/{branch_id} | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_conversation_group_route | PATCH | /v1/convai/realtime/conversation-groups/{conversation_group_id} | admitted | 8 | realtime | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_conversation_tag_route | PATCH | /v1/convai/tags/{tag_id} | admitted | 7 | tags | change | missing | — | No existing tool maps to this exact HTTP operation. |
