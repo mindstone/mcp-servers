@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-21
+
+### Changed
+
+- Compose card declares its send so the host can mark a card sent when the assistant sends that same draft; request targets stay single path segments; send tools describe audience and reversibility
+
 ### Changed
 
 - The descriptions of the tools that send messages, create chats or set presence now say plainly that the message goes out straight away and who sees it. These externally visible actions are marked `destructiveHint: true`.
