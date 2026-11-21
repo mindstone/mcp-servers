@@ -41,7 +41,7 @@ export async function multipartUpload(op: ApiOperation, input: ApiExecutionInput
         let upload: Upload;
         try { upload = await openSandboxedUpload(filePath, context, location, binding.kind, binding); }
         catch (error) {
-          if (error instanceof ElevenLabsError) throw new ApiBoundaryError(error.code, wrapUntrusted('The local file operand [REDACTED] could not be read safely. File operands must be local paths.', `elevenlabs:api:${op.operation_id}`)!, 'Provide an authorized regular file matching the declared type and size.');
+          if (error instanceof ElevenLabsError) throw new ApiBoundaryError(error.code, wrapUntrusted('The local file operand [REDACTED] could not be read safely. File operands must be local paths.', `elevenlabs:api:${op.operation_id}`)!, error.code === 'INVALID_FILE_TYPE' ? error.resolution : 'Provide an authorized regular file matching the declared type and size.');
           throw new ApiBoundaryError('FILE_READ_ERROR', 'The local upload could not be opened.', 'Check the file and host authorization.');
         }
         uploads.push(upload);

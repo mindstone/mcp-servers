@@ -108,8 +108,10 @@ function resolveFileInput(rawFilePath: string, context: FileReadContext | undefi
   }
   const fileName = path.basename(verifiedPath);
   const media = fileMimeTypeForFileName(fileName, kind);
-  if ((kind === 'image' && media === 'application/octet-stream') || (limits.allowed_media_types && !limits.allowed_media_types.includes(media))) {
-    throw new ElevenLabsError('The file type is not supported by this upload.', 'INVALID_FILE_TYPE', 'Use a file type listed in the discovered file binding.');
+  const allowed = limits.allowed_media_types ?? (!legacyAudio && kind === 'audio' ? audioUploadMediaTypes() : undefined);
+  if ((kind === 'image' && media === 'application/octet-stream') || (allowed && !allowed.includes(media))) {
+    const formats = kind === 'audio' ? Object.keys(EXTENSION_TO_MIME).filter(ext => allowed?.includes(EXTENSION_TO_MIME[ext])).join(', ') : allowed?.join(', ');
+    throw new ElevenLabsError('The file type is not supported by this upload.', 'INVALID_FILE_TYPE', `Use ${kind === 'audio' ? 'an audio or video' : 'a supported'} file${formats ? ` (${formats})` : ' listed in the discovered file binding'}.`);
   }
   return { fileName, verifiedPath };
 }
@@ -213,7 +215,13 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   webm: 'video/webm',
   mp4: 'video/mp4',
   mov: 'video/quicktime',
+  pcm: 'audio/pcm',
 };
+
+// Raw PCM needs an explicit binding because only some request contracts declare it.
+export function audioUploadMediaTypes(): string[] {
+  return Object.values(EXTENSION_TO_MIME).filter(media => media !== 'audio/pcm');
+}
 
 /**
  * Resolve a MIME type from a file name extension for multipart uploads.

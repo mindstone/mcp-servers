@@ -55,6 +55,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Audio uploads through the API tools now refuse files that aren’t audio or video.
+
 - Document-upload errors now point to the current operation’s own URL field when it has one.
 
 - API discovery search now matches a word and its plural, so "agent summary" finds the agent summaries operation instead of losing it among the other agent operations.

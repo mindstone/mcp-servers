@@ -701,7 +701,8 @@
       "file_bindings": [
         {
           "field": "audio",
-          "kind": "audio"
+          "kind": "audio",
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]
         }
       ],
       "timeout": "long"
@@ -721,7 +722,8 @@
       "examples": [{"operation_id": "audio_isolation_stream", "files": [{"field": "audio", "file_path": "/workspace/recording.wav"}]}],
       "timeout": "long",
       "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Isolation history may show processing state but cannot prove the bytes of an interrupted stream.",
-      "file_bindings": [{"field": "audio", "kind": "audio"}]
+      "file_bindings": [{"field": "audio", "kind": "audio",
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]}]
     },
     "audio_native_project_update_content_endpoint": {
       "method": "POST",
@@ -9927,7 +9929,8 @@
       "file_bindings": [
         {
           "field": "audio",
-          "kind": "audio"
+          "kind": "audio",
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]
         }
       ],
       "timeout": "long",
@@ -9948,7 +9951,8 @@
       "examples": [{"operation_id": "speech_to_speech_stream", "path_params": {"voice_id": "voice_example"}, "files": [{"field": "audio", "file_path": "/workspace/recording.wav"}]}],
       "timeout": "long",
       "effect_note": "Collect raw audio directly into a workspace file with progress, without live playback or automatic retry. Speech history may help locate logged work but cannot prove the bytes of an interrupted stream; zero retention disables history.",
-      "file_bindings": [{"field": "audio", "kind": "audio"}],
+      "file_bindings": [{"field": "audio", "kind": "audio",
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"]}],
       "response_format_binding": "output_format"
     },
     "speech_to_text": {
@@ -10008,6 +10012,7 @@
         {
           "field": "file",
           "kind": "audio",
+          "allowed_media_types": ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"],
           "max_bytes": 4999999999
         }
       ],

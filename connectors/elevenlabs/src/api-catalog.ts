@@ -1,3 +1,4 @@
+import { audioUploadMediaTypes } from './tools/file-input.js';
 import { createRedactor } from './api-sensitive.js';
 import { z } from 'zod';
 import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
@@ -452,7 +453,8 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
   for (const example of examples) {
     try { await validateRequest(op.profile, example, createRedactor([])); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
-  const files = op.request.files;
+  const files = op.request.files?.map(file => file.kind === 'audio' && !file.allowed_media_types
+    ? { ...file, allowed_media_types: audioUploadMediaTypes() } : file);
   const effectNote = op.effect_note ? ` ${op.effect_note}` : '';
   const pagingNote = op.manual_pagination ? ` ${op.manual_pagination}` : '';
   const workspaceNote = ['update_settings_route', 'update_dashboard_settings_route'].includes(op.operation_id) ? ' This operation changes settings for the whole workspace.' : '';

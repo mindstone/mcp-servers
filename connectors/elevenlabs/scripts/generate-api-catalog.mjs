@@ -352,6 +352,7 @@ function validateProductionCensus(policy) {
     for (const row of rows.filter(row => row.milestone === Number(milestone))) actual[row.family] = (actual[row.family] ?? 0) + 1;
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
+  const pcmMediaTypes = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg", "audio/flac", "video/webm", "video/mp4", "video/quicktime", "audio/pcm"];
   const fileBindings = {
     upload_asset: [{ field: 'asset', kind: 'document' }],
     create_audio_native_project: [{ field: 'file', kind: 'document', allowed_media_types: ['text/plain', 'text/html'] }],
@@ -368,11 +369,11 @@ function validateProductionCensus(policy) {
     separate_song_stems: [{ field: 'file', kind: 'audio' }],
     create_finetune: [{ field: 'files', kind: 'audio' }],
     video_to_music: [{ field: 'videos', kind: 'audio', allowed_media_types: ['video/mp4', 'video/webm', 'video/quicktime'], max_total_bytes: 200_000_000 }],
-    audio_isolation_stream: [{ field: 'audio', kind: 'audio' }],
-    speech_to_speech_stream: [{ field: 'audio', kind: 'audio' }],
-    audio_isolation: [{ field: 'audio', kind: 'audio' }],
-    speech_to_speech_full: [{ field: 'audio', kind: 'audio' }],
-    speech_to_text: [{ field: 'file', kind: 'audio', max_bytes: 4_999_999_999 }],
+    audio_isolation_stream: [{ field: 'audio', kind: 'audio', allowed_media_types: pcmMediaTypes }],
+    speech_to_speech_stream: [{ field: 'audio', kind: 'audio', allowed_media_types: pcmMediaTypes }],
+    audio_isolation: [{ field: 'audio', kind: 'audio', allowed_media_types: pcmMediaTypes }],
+    speech_to_speech_full: [{ field: 'audio', kind: 'audio', allowed_media_types: pcmMediaTypes }],
+    speech_to_text: [{ field: 'file', kind: 'audio', allowed_media_types: pcmMediaTypes, max_bytes: 4_999_999_999 }],
     forced_alignment: [{ field: 'file', kind: 'audio', max_bytes: 999_999_999 }],
     get_similar_library_voices: [{ field: 'audio_file', kind: 'audio', allowed_media_types: ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/flac'] }],
     add_from_file: [{ field: 'file', kind: 'document', allowed_media_types: ['application/pls+xml'] }],
