@@ -83,10 +83,13 @@ export function isBinaryResponseMedia(media: string | null, schema?: JsonSchema)
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
   headers: z.array(z.string().regex(/^[!#$%&'*+.^_`|~a-z0-9-]+$/)).nonempty().optional(),
   base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
+const retryCheckSchema = z.union([text, z.object({ unavailable_reason: text }).strict()]);
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
-  milestone: z.union([z.literal(1), z.literal(7), z.literal(8), z.literal(9)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: z.union([text, z.object({ unavailable_reason: text }).strict()]), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
+  milestone: z.union([z.literal(1), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: retryCheckSchema, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
+  retry_check: z.union([text, z.object({ unavailable_reason: text.trim().min(1) }).strict()]).optional(),
+  optional_header_omissions: z.array(z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/).refine(name => !['xi-api-key', 'content-type', 'content-length'].includes(name.toLowerCase())), reason: text.trim().min(1) }).strict()).nonempty().optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),
@@ -256,8 +259,10 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
       || queries.includes('cursor') || properties.includes('next_cursor')
       || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : []), ...(history ? ['start_after_history_item_id'] : [])].includes(name)))) invalid('Invalid manual pagination.');
     if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
-    if (typeof op.check_before_retry === 'string') {
-      const retryOperation = byId.get(op.check_before_retry);
+    if (op.optional_header_omissions && new Set(op.optional_header_omissions.map(header => header.name.toLowerCase())).size !== op.optional_header_omissions.length) invalid('Duplicate optional header omission.');
+    for (const check of [op.check_before_retry, op.retry_check]) {
+      if (typeof check !== 'string') continue;
+      const retryOperation = byId.get(check);
       if (retryOperation?.profile !== 'read' || retryOperation.method !== 'GET') invalid('Retry check must be an admitted GET read.');
     }
     if (/[?#\u0000-\u0020\u007f]/.test(op.path) || op.path.startsWith('//') || op.path.split('/').some(part => part === '.' || part === '..')) invalid('Invalid operation path.');
@@ -447,6 +452,7 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
     contract: envelope({ summary: op.summary, description: op.description, deprecated: op.deprecated, method: op.method, path: op.path,
       request: { path_params: expandSchema(op.parameters.path, catalog), query_params: expandSchema(op.parameters.query, catalog), body: op.request.schema === undefined ? undefined : expandSchema(op.request.schema, catalog), ...(files?.length ? { files } : {}) },
       ...(definition === undefined ? {} : { definition: { name: definition, schema: expandSchema(catalog.$defs[definition], catalog) } }),
+      ...(op.optional_header_omissions ? { optional_header_omissions: op.optional_header_omissions } : {}),
       definitions: reachableDefinitions(op, catalog), responses: op.responses, examples,
       ...(examples.length ? { example_notes: [
         'Replace *_example IDs with IDs obtained from the corresponding resource list or create operations found through discovery. list_voices supplies voice IDs.',

@@ -56,6 +56,56 @@ afterEach(() => {
 });
 
 describe('isolated lazy catalogue loading', () => {
+  it('loads milestone 10, preserves omission reasons in discovery, and never sends omitted headers', async () => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    const op = raw.operations.find(op => op.operation_id === 'get_agents_route')!;
+    Object.assign(op, { milestone: 10, optional_header_omissions: [{ name: 'safety-identifier', reason: 'Optional moderation identity is deliberately omitted.' }] });
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const api = await import('../src/api-catalog.js');
+    expect((await api.loadApiCatalog()).operations.find(row => row.operation_id === op.operation_id)?.milestone).toBe(10);
+    expect((await api.describeOperation(op.operation_id)).contract).toContain(op.optional_header_omissions![0].reason);
+    const { setApiKey } = await import('../src/auth.js');
+    const { executeApiOperation } = await import('../src/api-executor.js');
+    setApiKey('synthetic-header-key');
+    const requests: Request[] = [];
+    mswServer.use(http.get('https://api.elevenlabs.io/v1/convai/agents', ({ request }) => {
+      requests.push(request);
+      return HttpResponse.json({ agents: [], has_more: false });
+    }));
+    try {
+      await executeApiOperation('read', { operation_id: op.operation_id });
+      expect(requests).toHaveLength(1);
+      expect(requests[0].headers.has('safety-identifier')).toBe(false);
+      expect(requests[0].headers.get('xi-api-key')).toBe('synthetic-header-key');
+      await expect(executeApiOperation('read', { operation_id: op.operation_id, headers: { 'safety-identifier': 'invented' } })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      expect(requests).toHaveLength(1);
+    } finally { setApiKey(''); }
+  });
+
+  it.each(['unknown_read', 'create_agent_route', 'non_get_read', { unavailable_reason: '' }, { unavailable_reason: '   ' }, { unavailable_reason: 'Reason', extra: true }])('rejects invalid retry override %j at load', async retry_check => {
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    if (retry_check === 'non_get_read') {
+      const read = structuredClone(raw.operations.find(op => op.operation_id === 'get_agents_route')!);
+      Object.assign(read, { operation_id: 'non_get_read', method: 'POST', reviewed_post_read: 'Synthetic read.' });
+      delete read.manual_pagination;
+      raw.operations.push(read);
+    }
+    Object.assign(raw.operations.find(op => op.operation_id === 'create_agent_route')!, { retry_check });
+    const { validateApiCatalog } = await import('../src/api-catalog.js');
+    expect(() => validateApiCatalog(raw)).toThrow('The local API catalogue is invalid.');
+  });
+
+  it('accepts an explicit unavailable retry reason at load', async () => {
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    Object.assign(raw.operations.find(op => op.operation_id === 'create_agent_route')!, { retry_check: { unavailable_reason: 'No correlated result lookup.' } });
+    const { validateApiCatalog } = await import('../src/api-catalog.js');
+    expect(validateApiCatalog(raw).operations.find(op => op.operation_id === 'create_agent_route')?.retry_check).toEqual({ unavailable_reason: 'No correlated result lookup.' });
+  });
+
   it('does not load the catalogue at import, integrated boot or listTools; a failed load stays local and cached', async () => {
     vi.resetModules();
     const load = vi.fn(() => { throw new Error('corrupt generated module'); });

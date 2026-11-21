@@ -157,6 +157,8 @@ const aliasSchema = z.object({
   operation_ids: z.array(text).nonempty(), prompt_path: z.array(text).nonempty(),
   own_properties: z.object({ llm_model: z.literal('llm'), knowledge_base_document_ids: z.literal('knowledge_base') }).strict(), reason: text,
 }).strict();
+const retryCheckSchema = z.union([text, z.object({ unavailable_reason: text.trim().min(1) }).strict()]);
+const omittedHeaderSchema = z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/), reason: text.trim().min(1) }).strict();
 const operationSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE']),
   path: z.string().startsWith('/'), status: z.enum(['admitted', 'planned', 'excluded']),
@@ -176,6 +178,7 @@ const operationSchema = z.object({
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   file_bindings: z.array(z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), max_total_bytes: z.number().int().positive().safe().optional() }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
+  retry_check: retryCheckSchema.optional(), optional_header_omissions: z.array(omittedHeaderSchema).nonempty().optional(),
   follow_ups: z.array(text).optional(), examples: z.array(z.record(z.unknown())).optional(),
 }).strict();
 export const policySchema = z.object({
@@ -270,7 +273,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (followUpPolicy.profile !== 'read') refuse('follow_up must be a read operation', `${id}: ${followUp}`);
     }
     if (row.status === 'admitted') {
-      if (![1, 7, 8, 9].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
+      if (![1, 7, 8, 9, 10].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
       const reviewedProfile = reviewedProfiles[id];
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
@@ -285,12 +288,14 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (credentialIssuers.includes(id) && !row.credential_return_fields) refuse('missing credential return fields', id);
       if (id === 'create_realtime_session' && ['sensitive_request_fields', 'sensitive_response_fields'].some(field => !row[field]?.some(path => isDeepStrictEqual(path, realtimeAuthorizationPath)))) refuse('missing realtime authorization protection', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
-      if (typeof retryCheck === 'string') {
-        const retryOperation = policy.operations[retryCheck];
-        if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
-      } else if (!retryCheck) refuse('missing family retry metadata', id);
+      if (!retryCheck) refuse('missing family retry metadata', id);
+      for (const [kind, check] of [['family retry check', retryCheck], ['retry override', row.retry_check]]) {
+        if (typeof check !== 'string') continue;
+        const read = policy.operations[check];
+        if (read?.status !== 'admitted' || read.profile !== 'read' || read.method !== 'GET') refuse(`${kind} must be an admitted GET read`, id);
+      }
     } else {
-      if (row.response_media_alternatives !== undefined || row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.retry_check !== undefined || row.optional_header_omissions !== undefined || row.response_media_alternatives !== undefined || row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -487,7 +492,13 @@ function schemaCompiler(spec) {
   return { defs, transform };
 }
 
-function parameterRecords(parameters, spec, transform, id) {
+function parameterRecords(parameters, spec, transform, id, omissions = []) {
+  const omitted = new Set();
+  for (const { name } of omissions) {
+    const headers = parameters.filter(parameter => parameter.in === 'header' && parameter.name === name);
+    if (['xi-api-key', 'content-type', 'content-length'].includes(name.toLowerCase()) || [...omitted].some(header => header.toLowerCase() === name.toLowerCase()) || headers.length !== 1 || (headers[0].required !== undefined && headers[0].required !== false)) refuse('invalid optional header omission', `${id}: ${name}`);
+    omitted.add(name);
+  }
   const records = { path: { type: 'object', properties: Object.create(null), required: [], additionalProperties: false }, query: { type: 'object', properties: Object.create(null), required: [], additionalProperties: false } };
   const serialization = Object.create(null);
   for (const parameter of parameters) {
@@ -495,6 +506,10 @@ function parameterRecords(parameters, spec, transform, id) {
     const { name, schema, required = false } = parameter;
     if (parameter.in === 'header' && name === 'xi-api-key') {
       transform(schema, `${id}/injected-header/${name}`);
+      continue;
+    }
+    if (parameter.in === 'header' && omitted.has(name)) {
+      transform(schema, `${id}/omitted-header/${name}`);
       continue;
     }
     if (parameter.in === 'header') refuse('unsupported header parameter', `${id}: ${name}`);
@@ -688,7 +703,7 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     if (row.status !== 'admitted') continue;
     const { operation, pathParameters } = operations.get(id);
     const parameters = [...pathParameters, ...(operation.parameters ?? [])];
-    const records = parameterRecords(parameters, spec, transform, id);
+    const records = parameterRecords(parameters, spec, transform, id, row.optional_header_omissions);
     const placeholders = [...row.path.matchAll(/\{([^}]+)\}/g)].map(match => match[1]).sort();
     requireEqual(Object.keys(records.path.properties).sort(), placeholders, `path operand bindings ${id}`);
     const request = requestDescriptor(operation, row, spec, transform, id);
@@ -708,6 +723,8 @@ export function compileCatalog(input, rawPolicy, expectedSource, rosters) {
     descriptors.push({
       operation_id: id, method: row.method, path: row.path, family: row.family, milestone: row.milestone,
       profile: row.profile, tool: PROFILE_TOOLS[row.profile], effects: row.effects, effect_reason: row.effect_reason,
+      ...(row.retry_check === undefined ? {} : { retry_check: row.retry_check }),
+      ...(row.optional_header_omissions ? { optional_header_omissions: row.optional_header_omissions } : {}),
       check_before_retry: policy.family_retry_checks[row.family][row.profile === 'tests' ? 'tests' : 'read'],
       ...(row.reviewed_post_read ? { reviewed_post_read: row.reviewed_post_read } : {}),
       ...(row.reviewed_get_create ? { reviewed_get_create: row.reviewed_get_create } : {}),

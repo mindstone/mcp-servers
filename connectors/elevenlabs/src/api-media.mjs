@@ -4,7 +4,7 @@ export const binaryExtensions = Object.freeze({
   'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
   'audio/pcm': 'pcm', 'audio/basic': 'ulaw', 'audio/ulaw': 'ulaw',
   'audio/alaw': 'alaw', 'audio/opus': 'opus', 'audio/ogg': 'ogg',
-  'text/plain': 'txt', 'application/zip': 'zip', 'text/csv': 'csv', 'video/mp4': 'mp4',
+  'text/plain': 'txt', 'application/zip': 'zip', 'application/x-zip': 'zip', 'text/csv': 'csv', 'video/mp4': 'mp4',
 });
 const boundAliases = Object.freeze({
   'audio/wav': ['audio/x-wav', 'audio/wave', 'audio/vnd.wave'],

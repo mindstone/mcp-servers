@@ -10,6 +10,63 @@ afterEach(() => {
 });
 
 describe('family fallback without a same-route read or usable follow-up', () => {
+  it.each([
+    { retry_check: 'list_available_llms', follow_ups: ['get_agent_route'], samePath: true, expected: 'list_available_llms' },
+    { retry_check: 'list_available_llms', follow_ups: [], samePath: true, expected: 'list_available_llms' },
+    { retry_check: 'list_available_llms', follow_ups: [], samePath: false, expected: 'list_available_llms' },
+    { retry_check: { unavailable_reason: 'The source cannot verify the new result.' }, follow_ups: ['get_agent_route'], samePath: true, expected: 'No verifiable lookup: The source cannot verify the new result.' },
+    { retry_check: undefined, follow_ups: ['get_agent_route'], samePath: true, expected: 'get_agent_route (path_params.agent_id)' },
+    { retry_check: undefined, follow_ups: [], samePath: true, expected: 'get_agent_route (path_params.agent_id)' },
+    { retry_check: undefined, follow_ups: [], samePath: false, expected: 'get_agents_route' },
+  ])('selects retry guidance $expected with one dispatch', async ({ retry_check, follow_ups, samePath, expected }) => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    const source = raw.operations.find(op => op.operation_id === 'get_agent_route')!;
+    const op = { ...source, operation_id: 'retry_case', method: 'POST' as const, profile: 'create' as const,
+      path: samePath ? source.path : '/v1/convai/retry-case/{agent_id}', tool: 'elevenlabs_create_resource',
+      effects: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      request: { media_type: null, required: false }, responses: [{ status: 200, media_type: null }],
+      check_before_retry: 'get_agents_route', retry_check, follow_ups, examples: [],
+    };
+    delete op.sensitive_response_fields;
+    raw.operations.push(op);
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const { setApiKey } = await import('../src/auth.js');
+    const { executeApiOperation } = await import('../src/api-executor.js');
+    setApiKey('synthetic-retry-key');
+    let requests = 0;
+    mswServer.use(http.all('https://api.elevenlabs.io/*', () => { requests++; return new HttpResponse(null, { status: 503 }); }));
+    try {
+      const failure = await executeApiOperation('create', { operation_id: op.operation_id, path_params: { agent_id: 'agent_example' } }).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ code: 'HTTP_503', resolution: expect.stringContaining(expected) });
+      if (retry_check !== undefined) expect(failure).toMatchObject({ resolution: expect.not.stringContaining('Check the result with get_agent_route') });
+      expect(requests).toBe(1);
+    } finally { setApiKey(''); }
+  });
+
+  it.each([
+    { retry_check: undefined, expected: 'No credential was confirmed.' },
+    { retry_check: { unavailable_reason: 'A repeat would issue a second secret.' }, expected: 'No verifiable lookup: A repeat would issue a second secret.' },
+  ])('an explicit override also replaces the credential issuer default ($expected)', async ({ retry_check, expected }) => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    const issuer = raw.operations.find(op => op.operation_id === 'get_livekit_token')!;
+    expect(issuer).toMatchObject({ profile: 'create', credential_return_fields: expect.any(Array) });
+    if (retry_check) Object.assign(issuer, { retry_check });
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const { setApiKey } = await import('../src/auth.js');
+    const { executeApiOperation } = await import('../src/api-executor.js');
+    setApiKey('synthetic-retry-key');
+    mswServer.use(http.all('https://api.elevenlabs.io/*', () => new HttpResponse(null, { status: 503 })));
+    try {
+      const failure = await executeApiOperation('create', { operation_id: issuer.operation_id, query_params: { agent_id: 'agent_example', participant_name: 'Example participant' } }).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ resolution: expect.stringContaining(expected) });
+      if (retry_check) expect(failure).toMatchObject({ resolution: expect.not.stringContaining('No credential was confirmed.') });
+    } finally { setApiKey(''); }
+  });
+
   it('lets only reviewed rows override an unavailable lookup reason with an admitted read', async () => {
     const { apiCatalog } = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
     const reads = apiCatalog.operations.filter(op => op.profile === 'read');

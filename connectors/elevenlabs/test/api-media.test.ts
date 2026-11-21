@@ -6,9 +6,10 @@ import { binaryRepresentation, audioRepresentation } from '../src/api-media.mjs'
 import { writeWorkspaceArtifactStream } from '../src/tools/path-safety.js';
 import { executeApiOperation } from '../src/api-executor.js';
 import { setApiKey } from '../src/auth.js';
+import type { ApiCatalog } from '../src/api-catalog.js';
 
 const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'binary-media-')));
-afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); setApiKey(''); });
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); setApiKey(''); vi.doUnmock('../src/generated/api-catalog.js'); vi.resetModules(); });
 import { afterAll } from 'vitest';
 afterAll(() => fs.rmSync(workspace, { recursive: true, force: true }));
 function stream(bytes: Uint8Array) {
@@ -16,15 +17,38 @@ function stream(bytes: Uint8Array) {
 }
 
 describe('checked binary representations', () => {
+  it.each(['application/zip', 'application/x-zip'])('retains declared %s and exact bytes through the executor', async media_type => {
+    vi.resetModules();
+    const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const raw = structuredClone(actual.apiCatalog);
+    const op = raw.operations.find(op => op.operation_id === 'get_conversation_audio_route')!;
+    op.responses = [{ status: 200, media_type, schema: { type: 'string', format: 'binary' } }];
+    vi.doMock('../src/generated/api-catalog.js', () => ({ apiCatalog: raw }));
+    const { executeApiOperation: execute } = await import('../src/api-executor.js');
+    const { setApiKey: setKey } = await import('../src/auth.js');
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    setKey('synthetic-archive-key');
+    const bytes = new Uint8Array([80, 75, 0, 255, 13, 10]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(bytes, { headers: { 'Content-Type': media_type } }));
+    try {
+      const receipt = await execute('read', { operation_id: op.operation_id, path_params: { conversation_id: 'conversation_example' } });
+      expect(receipt.content_type).toBe(media_type);
+      const artifact = receipt.artifact!;
+      expect(artifact.file_path).toMatch(/\.zip$/);
+      expect(artifact.media_type).toBe(media_type);
+      expect(fs.readFileSync(artifact.file_path)).toEqual(Buffer.from(bytes));
+    } finally { setKey(''); }
+  });
+
   it.each([
     ['audio/mpeg', 'mp3'], ['audio/wav', 'wav'], ['audio/pcm', 'pcm'], ['audio/basic', 'ulaw'],
-    ['audio/alaw', 'alaw'], ['audio/opus', 'opus'], ['application/zip', 'zip'], ['text/csv', 'csv'], ['video/mp4', 'mp4'],
+    ['audio/alaw', 'alaw'], ['audio/opus', 'opus'], ['application/zip', 'zip'], ['application/x-zip', 'zip'], ['audio/x-wav', 'wav'], ['audio/ulaw', 'ulaw'], ['audio/ogg', 'ogg'], ['text/plain', 'txt'], ['text/csv', 'csv'], ['video/mp4', 'mp4'],
   ])('writes byte-exact %s incrementally', async (media_type, extension) => {
     vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
-    const representation = binaryRepresentation({ media_type }, media_type, undefined);
+    const representation = binaryRepresentation({ media_type, schema: { type: 'string', format: 'binary' } }, media_type, undefined);
     expect(representation).toEqual({ media_type, extension });
     const bytes = new Uint8Array([0, 255, 82, 73, 70, 70]);
-    const artifact = await writeWorkspaceArtifactStream(`test.${extension}`, stream(bytes), new AbortController().signal);
+    const artifact = await writeWorkspaceArtifactStream(`test-${media_type.replaceAll('/', '-')}.${extension}`, stream(bytes), new AbortController().signal);
     expect(artifact.size_bytes).toBe(bytes.length);
     expect(fs.readFileSync(artifact.file_path)).toEqual(Buffer.from(bytes));
     expect(path.dirname(artifact.file_path)).toBe(workspace);
@@ -47,6 +71,15 @@ describe('checked binary representations', () => {
 });
 
 describe('incremental artifact ownership and cleanup', () => {
+  it('refuses unknown provider media before writing anything', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    setApiKey('synthetic-media-key');
+    const before = fs.readdirSync(workspace);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(new Uint8Array([0, 255]), { headers: { 'Content-Type': 'application/unknown' } }));
+    await expect(executeApiOperation('read', { operation_id: 'get_conversation_audio_route', path_params: { conversation_id: 'conversation_example' } })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+    expect(fs.readdirSync(workspace)).toEqual(before);
+  });
+
   it('honours host cancellation through the executor while collecting a body', async () => {
     vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
     setApiKey('synthetic-cancellation-key');

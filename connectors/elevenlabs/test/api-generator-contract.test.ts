@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -53,9 +54,8 @@ function addQueryParameter(spec: typeof miniInput, parameter: {
   const parameters: typeof parameter[] = spec.paths['/v1/convai/agents'].get.parameters;
   parameters.push(parameter);
 }
-async function compileFixture(directory: string, spec: unknown, sha256: string) {
+async function compileFixture(directory: string, spec: unknown, sha256: string, policy = miniPolicy()) {
   const bytes = Buffer.from(JSON.stringify(spec, null, 2) + '\n');
-  const policy = miniPolicy();
   policy.source = { ...miniSource, sha256, bytes: bytes.length };
   const specPath = join(directory, 'spec.json');
   const policyPath = join(directory, 'policy.json');
@@ -96,6 +96,60 @@ function expectRefusal(result: ReturnType<typeof runModule>, diagnostic: string)
 }
 
 describe('generator subprocess contracts', () => {
+  it.each(['get_agents_route', { unavailable_reason: 'No correlated result lookup.' }])('carries milestone 10 and retry override %j without changing admission status', async retry_check => {
+    await scratch(async directory => {
+      const policy = miniPolicy();
+      Object.assign(policy.operations.create_agent_route, { milestone: 10, retry_check });
+      await expectImportedCatalog(directory, await compileFixture(directory, miniInput, miniSource.sha256, policy), `
+        const op = apiCatalog.operations.find(op => op.operation_id === 'create_agent_route');
+        assert.equal(op.milestone, 10);
+        assert.deepEqual(op.retry_check, ${JSON.stringify(retry_check)});
+        assert.equal(apiCatalog.operations.length, 4);
+      `);
+    });
+  });
+
+  it.each(['missing', 'non-read', 'non-GET', 'planned', 'empty reason', 'blank reason'])('refuses a %s retry override', async kind => {
+    await scratch(async directory => {
+      const policy = miniPolicy();
+      Object.values(policy.family_retry_checks).forEach(family => Object.assign(family, { read: { unavailable_reason: 'No default lookup in this synthetic family.' } }));
+      let retry_check: unknown = 'get_agents_route';
+      if (kind === 'missing') retry_check = 'unknown_read';
+      if (kind === 'non-read') retry_check = 'create_agent_route';
+      if (kind === 'non-GET') Object.assign(policy.operations.get_agents_route, { method: 'POST', reviewed_post_read: 'Synthetic read.' });
+      if (kind === 'planned') Object.assign(policy.operations.get_agents_route, { status: 'planned', milestone: 10, profile: null, effects: null, effect_reason: null, manual_pagination: undefined });
+      if (kind.endsWith('reason')) retry_check = { unavailable_reason: kind === 'empty reason' ? '' : '   ' };
+      Object.assign(policy.operations.create_agent_route, { retry_check });
+      expectRefusal(await compileFixture(directory, miniInput, miniSource.sha256, policy), kind.endsWith('reason') ? 'too_small' : 'retry override must be an admitted GET read');
+    });
+  });
+
+  it.each(['optional', 'undeclared optional', 'required', 'undeclared required', 'absent', 'wrong case', 'injected key', 'content-type', 'content-length', 'duplicate', 'bad schema', 'empty reason'])('checks %s header omission against the spec', async kind => {
+    await scratch(async directory => {
+      const spec = structuredClone(miniInput);
+      const policy = miniPolicy();
+      const name = kind === 'injected key' ? 'xi-api-key' : kind.startsWith('content-') ? kind : 'safety-identifier';
+      if (kind !== 'absent' && kind !== 'injected key') addQueryParameter(spec, {
+        in: 'header', name, required: kind.includes('required'),
+        schema: kind === 'bad schema' ? { type: 'string', format: 'unknown' } : { type: 'string' },
+      });
+      const omission = { name: kind === 'wrong case' ? 'Safety-Identifier' : name, reason: kind === 'empty reason' ? '' : 'The connector deliberately omits this optional header.' };
+      if (!kind.startsWith('undeclared')) Object.assign(policy.operations.get_agents_route, { optional_header_omissions: kind === 'duplicate' ? [omission, omission] : [omission] });
+      const sha = createHash('sha256').update(JSON.stringify(spec, null, 2) + '\n').digest('hex');
+      const result = await compileFixture(directory, spec, sha, policy);
+      if (kind !== 'optional') {
+        expectRefusal(result, kind.startsWith('undeclared') ? 'unsupported header parameter' : kind === 'bad schema' ? 'unknown schema format' : kind === 'empty reason' ? 'too_small' : 'invalid optional header omission');
+        return;
+      }
+      await expectImportedCatalog(directory, result, `
+        const op = apiCatalog.operations.find(op => op.operation_id === 'get_agents_route');
+        assert.deepEqual(op.optional_header_omissions, [${JSON.stringify(omission)}]);
+        assert.equal(Object.hasOwn(op.parameters, 'header'), false);
+        assert.equal(Object.hasOwn(op.parameters.query.properties, 'safety-identifier'), false);
+      `);
+    });
+  });
+
   it.each([
     ['Missing', '22fab9f6377bf98bf28ab7d14c9be64b4e56de919eecde128a7d4d7d75f0ab2b'],
     ['__proto__', 'ddca55577ab360e18e79cc4234272cd8cf46ba232be6aec347ecf1ff2ba9fb3a'],

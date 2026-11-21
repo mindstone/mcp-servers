@@ -439,6 +439,17 @@ the constraint is never silently removed. The keyword is absent from the complet
 boundary loses no capability in that pin. The same spelling in property names,
 examples, defaults and enum data remains unchanged.
 
+Policy rows may declare `retry_check` as an admitted GET read ID or an object
+with a non-empty `unavailable_reason`. This overrides the credential-issuer
+default, success follow-ups and route/family retry lookups; omitting it
+preserves the existing selection.
+`optional_header_omissions` lists exact `name` and `reason` pairs. Generation
+checks each named header against the spec and rejects required or missing
+headers. Discovery retains these reasons; the connector sends no value for the
+omitted headers and accepts no caller-supplied headers.
+Declared `application/zip` and `application/x-zip` responses both save exact bytes
+as `.zip` files, retaining their declared MIME without extraction.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

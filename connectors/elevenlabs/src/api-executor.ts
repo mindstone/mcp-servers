@@ -33,6 +33,10 @@ function normalizedInput(input: unknown): unknown {
 }
 
 async function checkBeforeRetry(op: ApiOperation): Promise<string> {
+  if (op.retry_check !== undefined) {
+    if (typeof op.retry_check !== 'string') return `No verifiable lookup: ${op.retry_check.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
+    return `Check the result with ${operationReference(await getOperation(op.retry_check, 'read'), op)} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
+  }
   if (op.profile === 'create' && op.credential_return_fields) return 'No credential was confirmed. Request a new one if it is still needed.';
   const reads: string[] = [];
   let callable = false;
