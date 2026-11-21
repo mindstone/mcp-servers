@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-21
+
+### Changed
+
+- Compose card declares its send so the host can mark a card sent when the assistant sends that same draft; request ids and filters stay single path segments and literals
+
 ### Changed
 
 - The descriptions of the tools that send, delete or change what other people see now say plainly what happens: who gets the email, that it is sent straight away and this tool cannot recall it, and where a deleted email goes. `delete_email` with `permanent: true` now says it is deleted with Microsoft's delete request instead of being moved to Deleted Items; Microsoft may still keep it for a time (in Deleted Items or its recoverable items), so this is not a guaranteed permanent erase. `reply_to_email` says a reply goes to the Reply-To address when the email has one, and `set_automatic_replies` says settings left out keep their current values.
