@@ -122,6 +122,7 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "flows": { "read": { "unavailable_reason": "No reliable lookup identifies a generation after losing its ID; list items do not expose submitted inputs. Do not repeat generation blindly." } },
     "speech-engine": {
       "read": "get_speech_engine"
     },
@@ -1651,19 +1652,27 @@
     "create_image_generation": {
       "method": "POST",
       "path": "/v1/flows/image",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Starts new asynchronous image generation, may consume credits; failed generations are documented as uncharged, not a refund promise.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_image_generation"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No reliable lookup after losing the generation ID: list items cannot match submitted inputs. With a known ID use get_image_generation; do not repeat generation blindly."
+      },
+      "effect_note": "Starts new asynchronous image generation, may consume credits; failed generations are documented as uncharged, not a refund promise. Use the returned id with get_image_generation. Submission is pending, not completed media. Optional webhook selects all or specific IDs of configured workspace Flows webhooks; the provider then delivers completed or failed results there. Inline base64 stays caller-supplied JSON, with no local file read or automatic asset upload. No automatic retry, polling or URL fetching."
     },
     "create_manual_agent_ticket_route": {
       "method": "POST",
@@ -2099,19 +2108,27 @@
     "create_text_to_speech_generation": {
       "method": "POST",
       "path": "/v1/flows/text-to-speech",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Starts new asynchronous speech generation, charged per character via text-to-speech billing; failed generations are documented as uncharged, not a refund promise.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_text_to_speech_generation"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No reliable lookup after losing the generation ID: list items cannot match submitted inputs. With a known ID use get_text_to_speech_generation; do not repeat generation blindly."
+      },
+      "effect_note": "Starts new asynchronous speech generation, charged per character via text-to-speech billing; failed generations are documented as uncharged, not a refund promise. Use the returned id with get_text_to_speech_generation. Submission is pending, not completed media. Optional webhook selects all or specific IDs of configured workspace Flows webhooks; the provider then delivers completed or failed results there. Inline base64 stays caller-supplied JSON, with no local file read or automatic asset upload. No automatic retry, polling or URL fetching."
     },
     "create_url_document_route": {
       "method": "POST",
@@ -2148,19 +2165,27 @@
     "create_video_generation": {
       "method": "POST",
       "path": "/v1/flows/video",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Starts new asynchronous video generation, may consume credits; failed generations are documented as uncharged, not a refund promise.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_video_generation"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No reliable lookup after losing the generation ID: list items cannot match submitted inputs. With a known ID use get_video_generation; do not repeat generation blindly."
+      },
+      "effect_note": "Starts new asynchronous video generation, may consume credits; failed generations are documented as uncharged, not a refund promise. Use the returned id with get_video_generation. Submission is pending, not completed media. Optional webhook selects all or specific IDs of configured workspace Flows webhooks; the provider then delivers completed or failed results there. Inline base64 stays caller-supplied JSON, with no local file read or automatic asset upload. No automatic retry, polling or URL fetching."
     },
     "create_voice": {
       "method": "POST", "path": "/v1/text-to-voice", "status": "admitted", "milestone": 9, "family": "text-to-voice",
@@ -4812,19 +4837,23 @@
     "get_image_generation": {
       "method": "GET",
       "path": "/v1/flows/image/{generation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created image generation state and result references without generating or fetching media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_image_generation",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "get_knowledge_base_bulk_dependent_agents_route": {
       "method": "POST",
@@ -5904,19 +5933,23 @@
     "get_text_to_speech_generation": {
       "method": "GET",
       "path": "/v1/flows/text-to-speech/{generation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created speech generation state and result references without generating or fetching media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_text_to_speech_generation",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "get_tool_dependent_agents_route": {
       "method": "GET",
@@ -6115,19 +6148,23 @@
     "get_video_generation": {
       "method": "GET",
       "path": "/v1/flows/video/{generation_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created video generation state and result references without generating or fetching media; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_video_generation",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Repeat the same read if needed. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "get_voice_accents": {
       "method": "GET", "path": "/v1/voices/accents", "status": "admitted", "milestone": 9, "family": "voices",
@@ -6730,19 +6767,23 @@
     "list_image_generations": {
       "method": "GET",
       "path": "/v1/flows/image",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created image generation inventory with explicit continuation; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_image_generations",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Continue explicitly with next_cursor; lists cannot identify a lost create by submitted inputs. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "list_mcp_server_tools_route": {
       "method": "GET",
@@ -7003,36 +7044,44 @@
     "list_text_to_speech_generations": {
       "method": "GET",
       "path": "/v1/flows/text-to-speech",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created speech generation inventory with explicit continuation; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_text_to_speech_generations",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Continue explicitly with next_cursor; lists cannot identify a lost create by submitted inputs. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "list_video_generations": {
       "method": "GET",
       "path": "/v1/flows/video",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "flows",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing API-created video generation inventory with explicit continuation; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_video_generations",
+      "effect_note": "no endpoint fee is stated in the specification; this is not a claim of free service. Continue explicitly with next_cursor; lists cannot identify a lost create by submitted inputs. Completed signed media URLs expire about an hour after the read; re-read the resource for a fresh URL. URLs and MIME stay wrapped data, never fetched or used in filenames or logs. No automatic polling."
     },
     "list_whatsapp_accounts": {
       "method": "GET",

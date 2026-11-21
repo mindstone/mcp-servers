@@ -12,6 +12,7 @@
   "tools": {
     "count": 41,
     "domains": [
+      "Flows asynchronous image, video and speech generation; explicit state reads, continuation and configured webhook delivery without polling or media fetching",
       "account and usage",
       "voices and pronunciation",
       "voice inventory, collections, saved previews, account reads and single-use credentials",

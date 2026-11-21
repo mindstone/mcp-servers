@@ -16,6 +16,7 @@ export const apiFamilies = {
   "environment-variables": "environment-variables",
   "environments": "environments",
   "exotel": "exotel",
+  "flows": "flows",
   "forced-alignment": "forced-alignment",
   "history": "history",
   "knowledge-base": "knowledge",
@@ -55,7 +56,7 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -118,6 +119,7 @@ export const profileOperationIds = {
     "get_environment_variable",
     "get_finetune",
     "get_finetunes",
+    "get_image_generation",
     "get_knowledge_base_bulk_dependent_agents_route",
     "get_knowledge_base_content",
     "get_knowledge_base_dependent_agents",
@@ -156,6 +158,7 @@ export const profileOperationIds = {
     "get_speech_history",
     "get_speech_history_item_by_id",
     "get_test_invocation_route",
+    "get_text_to_speech_generation",
     "get_tool_dependent_agents_route",
     "get_tool_executions_route",
     "get_tool_route",
@@ -167,6 +170,7 @@ export const profileOperationIds = {
     "get_user_voice_collections",
     "get_user_voices_v2",
     "get_version_metadata_route",
+    "get_video_generation",
     "get_voice_accents",
     "get_voice_by_id",
     "get_voice_settings",
@@ -187,6 +191,7 @@ export const profileOperationIds = {
     "list_dubs",
     "list_environment_variables",
     "list_environments",
+    "list_image_generations",
     "list_mcp_server_tools_route",
     "list_mcp_servers_route",
     "list_merge_proposals_route",
@@ -196,6 +201,8 @@ export const profileOperationIds = {
     "list_sip_messages",
     "list_speech_engines",
     "list_test_invocations_route",
+    "list_text_to_speech_generations",
+    "list_video_generations",
     "list_whatsapp_accounts",
     "list_workspace_conversation_tickets_route",
     "merge_preview_route",
@@ -402,7 +409,10 @@ export const profileOperationIds = {
     "compose_detailed",
     "create_dubbing",
     "create_finetune",
+    "create_image_generation",
     "create_podcast",
+    "create_text_to_speech_generation",
+    "create_video_generation",
     "dubbing_language_create",
     "dubbing_project_create",
     "forced_alignment",

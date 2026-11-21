@@ -84,15 +84,16 @@ it.each(full)('$id declares exact stored-header paths and preserves structured a
 it.each(writes.filter(row => row.id !== 'duplicate_speech_engine'))('$id protects submitted headers and ws_url against raw and encoded diagnostic echoes', async row => {
   const secret = 'wss://reader:synthetic-password@transcripts.example.com/socket?credential=synthetic';
   const header = 'submitted-header-value/+?';
-  const config = { ws_url: secret, request_headers: { 'X-Upstream': header, 'X-Reference': { secret_id: 'secret_reference' }, 'X-Dynamic': { variable_name: 'customer_region' } } };
+  const literalVariableHeader = 'literal-variable-header/+?';
+  const config = { ws_url: secret, request_headers: { variable_name: literalVariableHeader, 'X-Upstream': header, 'X-Reference': { secret_id: 'secret_reference' }, 'X-Dynamic': { variable_name: 'customer_region' } } };
   const op = await getOperation(row.id);
   expect(op.sensitive_request_fields).toContainEqual(['speech_engine', 'ws_url']);
   expect(op.sensitive_request_fields).toContainEqual(['speech_engine', 'request_headers', '*']);
   const secrets = sensitiveValues({ speech_engine: config }, op.sensitive_request_fields!);
-  expect(secrets).toContain(secret); expect(secrets).toContain(header);
+  expect(secrets).toContain(secret); expect(secrets).toContain(header); expect(secrets).toContain(literalVariableHeader);
   expect(secrets).not.toContain('secret_reference'); expect(secrets).not.toContain('customer_region');
   const fetch = vi.spyOn(globalThis, 'fetch');
-  const spellings = [secret, header].flatMap(value => [value, encodeURIComponent(value), encodeURIComponent(value).replace(/%[0-9A-F]{2}/g, escape => escape.toLowerCase()), JSON.stringify(value).replace(/\//g, '\\/')]);
+  const spellings = [secret, header, literalVariableHeader].flatMap(value => [value, encodeURIComponent(value), encodeURIComponent(value).replace(/%[0-9A-F]{2}/g, escape => escape.toLowerCase()), JSON.stringify(value).replace(/\//g, '\\/')]);
   const echo = spellings.join(' ');
   for (const failed of [false, true]) {
     fetch.mockResolvedValueOnce(Response.json(failed ? { detail: { message: echo } } : { ...row.response, speech_engine: config, diagnostic: echo }, { status: failed ? 400 : row.status }));
@@ -100,7 +101,7 @@ it.each(writes.filter(row => row.id !== 'duplicate_speech_engine'))('$id protect
     expect(Boolean(result.isError)).toBe(failed);
     if (!failed) {
       expect(data(result.text).speech_engine).toEqual({ ws_url: '[REDACTED]', request_headers: {
-        'X-Upstream': '[REDACTED]', 'X-Reference': { secret_id: 'secret_reference' }, 'X-Dynamic': { variable_name: 'customer_region' },
+        variable_name: '[REDACTED]', 'X-Upstream': '[REDACTED]', 'X-Reference': { secret_id: 'secret_reference' }, 'X-Dynamic': { variable_name: 'customer_region' },
       } });
       expect(receipt(result.text).diagnostic).toBeUndefined();
       expect(result.text).toContain('[REDACTED]');

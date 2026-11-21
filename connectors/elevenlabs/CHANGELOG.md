@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Asynchronous Flows image, video and speech generation, with explicit state reads, continuation and configured webhook delivery.
+
 - Speech Engine configuration and asset management through the API tools. Stored header credentials stay hidden, copies get their own IDs, and signed asset links remain links. Configuration does not start a conversation; later usage can still run up a tab.
 
 - Podcast creation and Audio Native article uploads, content updates and player settings through the API tools. Auto-publication is explicit; a queued conversion still needs time to find its voice.

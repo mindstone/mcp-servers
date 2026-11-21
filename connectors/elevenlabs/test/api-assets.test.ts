@@ -14,7 +14,7 @@ import cases from './fixtures/api-assets-wire-cases.json' with { type: 'json' };
 
 vi.mock('fs', async importOriginal => {
   const actual = await importOriginal<typeof import('fs')>();
-  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+  return { ...actual, promises: { ...actual.promises, open: vi.fn(actual.promises.open) } };
 });
 let workspace: string, pair: McpTestClient;
 const upload = cases.find(row => row.id === 'upload_asset')!;
@@ -105,7 +105,7 @@ it('requires exact per-file authorization and streams the authorized descriptor 
     return HttpResponse.json(upload.response);
   }));
   const fetch = vi.spyOn(globalThis, 'fetch');
-  const read = vi.mocked(fs.readFileSync); read.mockClear();
+  const read = vi.mocked(fs.promises.open); read.mockClear();
   for (const reads of [[], [{ location: ['files', 1, 'file_path'], rawPath: source, canonicalPath: source }]]) {
     const result = await pair.client.callTool({ name: tool(upload.profile), arguments: fileArgs(), _meta: { 'files/readMode': { version: 1, mode: 'central', reads } } });
     expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('FILE_AUTHORIZATION_ERROR');
@@ -113,7 +113,7 @@ it('requires exact per-file authorization and streams the authorized descriptor 
   expect(fetch).not.toHaveBeenCalled(); expect(read).not.toHaveBeenCalled(); expect(observed).toEqual([]);
   const result = await pair.client.callTool({ name: tool(upload.profile), arguments: fileArgs(), _meta: { 'files/readMode': { version: 1, mode: 'central', reads: [{ location: ['files', 0, 'file_path'], rawPath: source, canonicalPath: source }] } } });
   expect(result.isError, JSON.stringify(result)).not.toBe(true); expect(fetch).toHaveBeenCalledOnce();
-  expect(observed).toEqual([Buffer.from([0, 255, 128, 13, 10, 65, 0, 66])]);
+  expect(observed).toEqual([Buffer.from([0, 255, 128, 13, 10, 65, 0, 66])]); expect(read).toHaveBeenCalledOnce();
 });
 
 it('refuses a directory, remote URL and unsafe size without dispatching', async () => {
@@ -155,7 +155,7 @@ it('continues assets explicitly, omits null filters and enforces both pinned pag
 
 it.each(cases)('$id refuses every wrong profile and files on reads/deletes before any request', async row => {
   const fetch = vi.spyOn(globalThis, 'fetch');
-  const read = vi.mocked(fs.readFileSync); read.mockClear();
+  const read = vi.mocked(fs.promises.open); read.mockClear();
   for (const profile of ['read_resource', 'create_resource', 'change_resource', 'delete_resource', 'run_job', 'run_agent_tests', 'query_knowledge', 'place_call'].filter(profile => `elevenlabs_${profile}` !== tool(row.profile))) {
     const result = await pair.callTool(`elevenlabs_${profile}`, args(row));
     expect(result.isError).toBe(true); expect(result.text).toContain('WRONG_TOOL');

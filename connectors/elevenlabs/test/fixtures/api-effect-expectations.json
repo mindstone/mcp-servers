@@ -1,4 +1,13 @@
 {
+  "create_image_generation": {"profile": "run_job", "method": "POST", "tool": "elevenlabs_run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "get_image_generation": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "list_image_generations": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "create_text_to_speech_generation": {"profile": "run_job", "method": "POST", "tool": "elevenlabs_run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "get_text_to_speech_generation": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "list_text_to_speech_generations": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "create_video_generation": {"profile": "run_job", "method": "POST", "tool": "elevenlabs_run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "get_video_generation": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
+  "list_video_generations": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "create_speech_engine": {"profile": "create", "method": "POST", "tool": "elevenlabs_create_resource", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
   "delete_speech_engine": {"profile": "delete", "method": "DELETE", "tool": "elevenlabs_delete_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
   "duplicate_speech_engine": {"profile": "create", "method": "POST", "tool": "elevenlabs_create_resource", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
