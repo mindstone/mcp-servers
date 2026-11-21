@@ -104,26 +104,70 @@ function assertComposeAppConfig(config) {
 // Mode adapter. The single shared template literal below carries the whole
 // skeleton (head/CSS, 3-view state machine, send lifecycle, theme, resize, host
 // protocol). Its mode-specific regions are descriptor holes filled by
-// resolveMode(config): the email descriptor is the historical verbatim text
-// (so mode:'email' reproduces the shipped bytes), and slack/teams supply their
-// chat equivalents. cc/bcc/gmail/blocked holes are still driven by the existing
+// resolveMode(config): email supplies the address/subject form and slack/teams
+// supply their chat equivalents. cc/bcc/gmail/blocked holes are still driven by the existing
 // field/deepLink flags — chat configs set those all off, collapsing them — so
 // this descriptor only carries what those flags cannot express.
+
+/**
+ * The send the form would make, including its existing address/target rules.
+ * Keep dependency-free: the same function is embedded in the iframe and emitted
+ * into each connector's runtime module. sendEmail:null means a display account
+ * was resolved without an explicit account choice; absent preserves old drafts.
+ * @param {import('./types.js').ComposeMode} mode
+ * @param {Record<string, unknown>} draft
+ * @param {import('./types.js').ComposeSendOptions} options
+ * @returns {import('./types.js').ComposeSend}
+ */
+export function buildSendArguments(mode, draft, options) {
+  // Match input/textarea value sanitization, including an unedited prefill.
+  const target = String(draft.target || '').replace(/[\r\n]/g, '').trim();
+  const text = String(draft.text || '').replace(/\r\n?/g, '\n');
+  if (mode === 'slack') return { tool: options.sendToolName, arguments: {
+    channel: target, text,
+  } };
+  if (mode === 'teams') return { tool: options.sendToolName, arguments: {
+    chatId: target, content: text,
+  } };
+  const addresses = [draft.to, draft.cc, draft.bcc].map(value => {
+    const input = Array.isArray(value) ? value.map(item => {
+      if (!item || typeof item !== 'object') return String(item || '').trim();
+      const email = String(item.email || item.address || item.value || '').trim();
+      const name = String(item.name || item.displayName || '').trim();
+      return email && name ? name + ' <' + email + '>' : email;
+    }).filter(Boolean).join(', ') : typeof value === 'string' ? value : '';
+    return input.replace(/[\r\n]/g, '').split(',').map(item => item.trim()).filter(Boolean);
+  });
+  const email = draft.sendEmail === undefined ? draft.email : draft.sendEmail;
+  return { tool: options.sendToolName, arguments: {
+    to: addresses[0],
+    ...(options.fields.cc ? { cc: addresses[1] } : {}),
+    ...(options.fields.bcc ? { bcc: addresses[2] } : {}),
+    subject: String(draft.subject || '').replace(/[\r\n]/g, ''),
+    body: String(draft.body || '').replace(/\r\n?/g, '\n'),
+    ...(options.includeAccount !== false && email ? { email } : {}),
+  } };
+}
+
+/** @param {import('./types.js').ComposeAppConfig} config */
+export function buildSendArgumentsModule(config) {
+  const signature = "(mode: 'email' | 'slack' | 'teams', draft: Record<string, unknown>, options: { sendToolName: string; fields: { cc: boolean; bcc: boolean }; includeAccount?: boolean }) => { tool: string; arguments: Record<string, unknown> }";
+  return `export const buildSendArguments: ${signature} = ${buildSendArguments.toString()};\n` +
+    `export function buildComposeSend(draft: Record<string, unknown>) {\n` +
+    `  return buildSendArguments(${JSON.stringify(config.mode || 'email')}, draft, ${JSON.stringify({ sendToolName: config.sendToolName, fields: config.fields, includeAccount: config.includeAccount })});\n}\n`;
+}
 
 /** @param {import('./types.js').ComposeFieldSpec} f */
 function buildEmailReadFormPayloadBody(f) {
   return (
-    '        var payload = {\n' +
-    '          to: normalizeAddressList(toInput.value),\n' +
-    (f.cc ? '          cc: normalizeAddressList(ccInput.value),\n' : '') +
-    (f.bcc ? '          bcc: normalizeAddressList(bccInput.value),\n' : '') +
+    "        return buildSendArguments('email', {\n" +
+    '          to: toInput.value,\n' +
+    (f.cc ? '          cc: ccInput.value,\n' : '') +
+    (f.bcc ? '          bcc: bccInput.value,\n' : '') +
     "          subject: String(subjectInput.value || ''),\n" +
-    "          body: String(bodyInput.value || '')\n" +
-    '        };\n' +
-    '        if (currentEmail) {\n' +
-    '          payload.email = currentEmail;\n' +
-    '        }\n' +
-    '        return payload;\n'
+    "          body: String(bodyInput.value || ''),\n" +
+    '          email: currentEmail, sendEmail: currentSendEmail\n' +
+    '        }, SEND_OPTIONS).arguments;\n'
   );
 }
 
@@ -137,6 +181,7 @@ function buildEmailApplyDraftDataBody(f) {
     "        subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';\n" +
     "        bodyInput.value = typeof draft.body === 'string' ? draft.body : '';\n" +
     "        currentEmail = typeof draft.email === 'string' ? draft.email : '';\n" +
+    '        currentSendEmail = draft.sendEmail === undefined ? currentEmail : draft.sendEmail;\n' +
     '        applyFromValue(currentEmail);\n' +
     (f.cc ? '        setCcVisible(normalizeAddressList(draft.cc).length > 0);\n' : '') +
     (f.bcc ? '        setBccVisible(normalizeAddressList(draft.bcc).length > 0);\n' : '') +
@@ -152,7 +197,7 @@ function buildEmailApplyDraftDataBody(f) {
  */
 function buildEmailRenderSentViewBody(f, gmail) {
   return (
-    "        sentFrom.textContent = trimString(payload.email) || 'Account not shown';\n" +
+    "        sentFrom.textContent = trimString(payload.email || currentEmail) || 'Account not shown';\n" +
     "        sentTo.textContent = normalizeAddressList(payload.to).join(', ');\n" +
     (f.cc
       ? '        var ccList = normalizeAddressList(payload.cc);\n' +
@@ -167,7 +212,7 @@ function buildEmailRenderSentViewBody(f, gmail) {
     "        sentSubject.textContent = String(payload.subject || '');\n" +
     "        sentBody.textContent = String(payload.body || '');\n" +
     (gmail
-      ? '        gmailUrl = buildGmailUrl(meta, payload.email);\n' +
+      ? '        gmailUrl = buildGmailUrl(meta, payload.email || currentEmail);\n' +
         "        openGmailButton.classList.toggle('hidden', !gmailUrl);\n"
       : '')
   );
@@ -179,19 +224,17 @@ function buildEmailRenderSentViewBody(f, gmail) {
 // connector resolves it afresh.
 const SLACK_READ_FORM_PAYLOAD_BODY =
   "        var typed = String(toInput.value || '').trim();\n" +
-  '        var payload = {\n' +
-  '          channel: isBoundRecipientShown() ? boundRecipientTarget : typed,\n' +
+  "        return buildSendArguments('slack', {\n" +
+  '          target: isBoundRecipientShown() ? boundRecipientTarget : typed,\n' +
   "          text: String(bodyInput.value || '')\n" +
-  '        };\n' +
-  '        return payload;\n';
+  '        }, SEND_OPTIONS).arguments;\n';
 
 const TEAMS_READ_FORM_PAYLOAD_BODY =
   "        var chatId = String(toInput.value || '').trim();\n" +
-  '        var payload = {\n' +
-  '          chatId: chatId,\n' +
-  "          content: String(bodyInput.value || '')\n" +
-  '        };\n' +
-  '        return payload;\n';
+  "        return buildSendArguments('teams', {\n" +
+  '          target: chatId,\n' +
+  "          text: String(bodyInput.value || '')\n" +
+  '        }, SEND_OPTIONS).arguments;\n';
 
 const SLACK_VALIDATE_BODY =
   '        if (!trimString(payload.channel)) {\n' +
@@ -855,12 +898,17 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       'use strict';
 
       var RESOURCE_URI = ${quoteJsString(config.resourceUri)};
+      var SEND_OPTIONS = ${JSON.stringify({ sendToolName: config.sendToolName, fields: f, includeAccount: config.includeAccount })};
+      ${buildSendArguments.toString()}
       var currentEmail = '';
+      var currentSendEmail = '';
       // The host prefills the draft exactly once via ui/notifications/tool-result
       // on ready. We apply only the FIRST prefill and ignore any later ones, so a
       // stray or hostile re-post can't silently rewrite a draft the user has
       // already reviewed before clicking Send.
       var draftApplied = false;
+      var baselineForm = null;
+      var deferredHostOutcome = null;
       var pendingRequestId = null;
       var pendingSendPayload = null;
       // Retain across the local timeout so even a late reply clears its payload.
@@ -1462,7 +1510,15 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         }
       }
 
+      function readFormState() {
+        return JSON.stringify(${m.inputListenerElements}.map(function (element) { return element.value; }));
+      }
+
       function applyCardOutcome(o) {
+        if (!draftApplied) {
+          deferredHostOutcome = o && o.by === 'agent' ? o : null;
+          if (deferredHostOutcome) return;
+        }
         if (sent) return;
         if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
             (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
@@ -1485,6 +1541,12 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
           return;
         }
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        if (o.by === 'agent' && readFormState() !== baselineForm) {
+          deferredHostOutcome = o;
+          showSuccess('Your assistant sent the original version');
+          setCollapsed(false);
+          return;
+        }
         sent = true;
         sendMayHaveGone = false;
         clearSendTimeout();
@@ -1492,7 +1554,9 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         clearSuccess();
         clearUnknown();
         var stamp = formatSentTime(o.at);
-        setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
+        var message = o.by === 'agent' ? 'Sent by your assistant' : ${quoteJsString(m.sentCollapseDefault)};
+        if (stamp) message = o.by === 'agent' ? message + ' · ' + stamp : ${quoteJsString(m.sentCollapseStamped)} + stamp;
+        setCollapsed(true, message);
         if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
         reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
@@ -1619,6 +1683,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           if (!sendBlocked || persistentBlockMessage) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
+          if (deferredHostOutcome && draftApplied) applyCardOutcome(deferredHostOutcome);
           postResize();
         });
       });
@@ -1656,6 +1721,8 @@ ${m.extraListeners}
           if (draft && !draftApplied) {
             draftApplied = true;
             applyDraftData(draft);
+            baselineForm = readFormState();
+            if (deferredHostOutcome) applyCardOutcome(deferredHostOutcome);
           }
           return;
         }

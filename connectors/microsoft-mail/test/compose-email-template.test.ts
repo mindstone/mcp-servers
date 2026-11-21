@@ -14,6 +14,7 @@ describe('compose-email template generation parity', () => {
     expect(OUTLOOK_COMPOSE_APP_CONFIG).toEqual({
       resourceUri: 'ui://microsoft-mail/compose-email',
       sendToolName: 'send_email',
+      includeAccount: false,
       draftToolName: 'create_draft',
       fromMissingHelperText:
         "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.",

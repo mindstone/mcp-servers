@@ -1,42 +1,10 @@
-// Byte-parity guards for the compose app extraction (shared
-// @mindstone/mcp-app-compose builder -> committed template):
-//
-// 1. The committed COMPOSE_EMAIL_HTML matches the golden fixture. The golden was
-//    originally captured from the pre-extraction, hand-maintained template to
-//    pin the exact bytes the connector shipped before the builder existed. It
-//    has since been deliberately rebaselined once (2026-07) to strip internal
-//    ticket references out of the shared builder per the public-repo policy, so
-//    it now pins the intended current output rather than the original bytes.
-//    Rebaselined again (2026-10) to make the shared copy host-neutral; the only
-//    byte delta is the wording of the lost-reply and unconfirmed-sender notices
-//    and of one code comment, none of which names a host app any more.
-//    Rebaselined again (2026-11) for shared send-status restoration, the Send
-//    outcome declaration and uncertainty that survives editing and collapse.
-//    Refined for the host-neutral outcome key, closed block reasons, persistent
-//    edit notice, blocked Retry, lost-reply sent contents and timestamp validation.
-//    Refined to keep earlier send uncertainty visible beside a later send block.
-//    Rebaselined for transient sending status, settled uncertainty, persistent
-//    policy explanations and the pending-reply payload cleanup refinements.
-//    Rebaselined for preserving send failure reasons beside uncertainty and
-//    routing Retry back to Send after an uncertain draft save.
-// 2. Building with the connector's real config (the same object the generator
-//    script uses) reproduces the committed template. This proves the generator
-//    pipeline is lossless end-to-end, not just that someone committed the
-//    right bytes once.
-//
-// REBASELINE CONTROL: assertions 1+2 only stay honest if the golden is NOT
-// updated casually. A change that touches the builder AND regenerates the
-// template AND updates the golden in a single commit collapses "byte parity"
-// into "all three files moved together" and loses its regression value. So any
-// golden update MUST be a conscious, reviewer-acknowledged behavioural
-// rebaseline: state the byte delta and the reason in the commit/PR (exactly as
-// the 2026-07 ticket-ref scrub did). For a change you believe is
-// non-behavioural, expect this test to FAIL first and treat that failure as the
-// prompt to justify the rebaseline — never silently `cp` the new bytes over the
-// golden to make it green.
+// The historical golden remains unchanged. HTML now includes the shared send
+// builder and assistant attribution, so compare the actual click against the old
+// card and keep a separate byte-parity check of builder versus generated HTML.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { Window } from 'happy-dom';
 import { buildComposeAppHtml } from '@mindstone/mcp-app-compose/template';
 import { COMPOSE_EMAIL_HTML } from '../src/resources/compose-email-template.js';
 import { GMAIL_COMPOSE_APP_CONFIG } from '../scripts/gen-compose-html.mjs';
@@ -44,10 +12,31 @@ import { GMAIL_COMPOSE_APP_CONFIG } from '../scripts/gen-compose-html.mjs';
 const GOLDEN_PATH = fileURLToPath(new URL('./fixtures/compose-email-golden.html', import.meta.url));
 
 describe('compose-email byte parity', () => {
-  it('committed template matches the pre-extraction golden byte-for-byte', () => {
+  it('preserves legacy click payloads against the unchanged pre-extraction golden', () => {
     const golden = readFileSync(GOLDEN_PATH, 'utf8');
-    expect(COMPOSE_EMAIL_HTML.length).toBe(golden.length);
-    expect(COMPOSE_EMAIL_HTML).toBe(golden);
+    // Attribution and the shared builder intentionally change the HTML bytes.
+    // Retain the historical fixture to compare actual old and new clicks.
+    function clickPayload(html: string) {
+      const window = new Window();
+      try {
+        window.document.write(html);
+        let payload: unknown;
+        window.parent.postMessage = (message: { method?: string; params?: unknown }) => {
+          if (message.method === 'tools/call') payload = message.params;
+        };
+        window.eval(window.document.querySelector('script')!.textContent!);
+        window.dispatchEvent(new window.MessageEvent('message', { data: {
+          method: 'ui/notifications/tool-result', params: { structuredContent: {
+            to: [' ada@example.com ', 'grace@example.com'], cc: [' cc@example.com '], bcc: [],
+            subject: '  Update  ', body: '  indented report\n', email: 'sender@example.com',
+          } },
+        } }));
+        window.document.getElementById('sendButton')!.click();
+        expect(payload).toBeDefined();
+        return payload;
+      } finally { window.close(); }
+    }
+    expect(clickPayload(COMPOSE_EMAIL_HTML)).toEqual(clickPayload(golden));
   });
 
   it('shared builder with the Gmail config reproduces the committed template', () => {

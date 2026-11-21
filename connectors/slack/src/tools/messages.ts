@@ -1,3 +1,4 @@
+import { buildComposeSend } from '../resources/compose-message-template.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
@@ -852,6 +853,7 @@ PARAMETERS: target, text. For a direct message, target is the person: their user
             presentation: 'primary',
             viewSummary,
             viewRoleLabel: 'Slack message',
+            send: buildComposeSend(structuredContent),
             structuredFallback: {
               kind: 'plain',
               payload: {

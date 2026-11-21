@@ -18,6 +18,7 @@ import {
   type SlackTestConfig,
 } from './fixtures/mcp-test-client.js';
 import { COMPOSE_MESSAGE_RESOURCE_URI } from '../src/tools/messages.js';
+import * as template from '../src/resources/compose-message-template.js';
 import { COMPOSE_MESSAGE_HTML } from '../src/resources/compose-message-template.js';
 
 const CLIENT_ENV = {
@@ -53,6 +54,15 @@ describe('compose_slack_message producer contract', () => {
     if (cfg) cfg.cleanup();
   });
 
+  it.each(['#general', 'C123', 'testuser@example.com'])('declares exactly the iframe send for %s', async target => {
+    const text = '  indented report\n';
+    const result = await client.client.callTool({ name: 'compose_slack_message', arguments: { target, text } });
+    const send = (result._meta as { ui: { send: unknown } }).ui.send;
+    const draft = result.structuredContent!;
+    expect(send).toEqual({ tool: 'post_slack_message', arguments: { channel: draft.target, text: text } });
+    expect(send).toEqual(template.buildComposeSend(draft));
+  });
+
   it('returns the shared _meta.ui contract field-by-field for a channel target', async () => {
     const target = '#general';
     const text = 'Standup in five.';
@@ -77,6 +87,7 @@ describe('compose_slack_message producer contract', () => {
         presentation: 'primary',
         viewSummary: 'Slack message draft to #general.',
         viewRoleLabel: 'Slack message',
+        send: template.buildComposeSend(structuredContent),
         structuredFallback: {
           kind: 'plain',
           payload: {

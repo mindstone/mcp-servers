@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildComposeAppHtml } from '@mindstone/mcp-app-compose/template';
+import { buildComposeAppHtml, buildSendArgumentsModule } from '@mindstone/mcp-app-compose/template';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const templatePath = path.join(root, 'src/resources/compose-message-template.ts');
@@ -41,7 +41,7 @@ function escapeForTemplateLiteral(html) {
 
 export function buildFileContents() {
   const html = buildComposeAppHtml(TEAMS_COMPOSE_APP_CONFIG);
-  const templateTs = `${HEADER}\nexport const COMPOSE_MESSAGE_HTML = \`${escapeForTemplateLiteral(html)}\`;\n`;
+  const templateTs = `${HEADER}\n${buildSendArgumentsModule(TEAMS_COMPOSE_APP_CONFIG)}\nexport const COMPOSE_MESSAGE_HTML = \`${escapeForTemplateLiteral(html)}\`;\n`;
   // The runtime string starts with "\n" so the template literal opens cleanly;
   // the standalone preview drops that leading newline.
   const previewHtml = html.slice(1);

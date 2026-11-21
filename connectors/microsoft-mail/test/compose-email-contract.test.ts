@@ -6,6 +6,7 @@ import {
   type MicrosoftTestConfig,
 } from './fixtures/mcp-test-client.js';
 import { COMPOSE_EMAIL_RESOURCE_URI } from '../src/compose.js';
+import * as template from '../src/resources/compose-email-template.js';
 import { COMPOSE_EMAIL_HTML } from '../src/resources/compose-email-template.js';
 
 // The `_meta.ui` producer contract is shared with Gmail's
@@ -36,6 +37,17 @@ describe('compose_email producer contract', () => {
     if (cfg) cfg.cleanup();
   });
 
+  it('declares exactly the iframe send without its display account', async () => {
+    const result = await client.client.callTool({ name: 'compose_email', arguments: {
+      to: [' ada@example.com '], cc: [' cc@example.com '], subject: '  Update  ', body: '  indented report\n',
+    } });
+    const send = (result._meta as { ui: { send: unknown } }).ui.send;
+    expect(send).toEqual({ tool: 'send_email', arguments: {
+      to: ['ada@example.com'], cc: ['cc@example.com'], bcc: [], subject: '  Update  ', body: '  indented report\n',
+    } });
+    expect(send).toEqual(template.buildComposeSend(result.structuredContent!));
+  });
+
   it('returns the shared _meta.ui contract field-by-field', async () => {
     const to = ['ada@example.com', 'grace@example.com'];
     const cc = ['nia@example.com'];
@@ -62,6 +74,7 @@ describe('compose_email producer contract', () => {
         presentation: 'primary',
         viewSummary: 'Email draft to ada@example.com, grace@example.com — subject "Quarterly sync".',
         viewRoleLabel: 'Editable email draft',
+        send: template.buildComposeSend(draftData),
         structuredFallback: {
           kind: 'email-draft',
           payload: { to, cc, bcc: [], subject, body },

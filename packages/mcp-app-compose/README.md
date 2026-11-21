@@ -18,11 +18,26 @@ their config and writes the generated template into `src/resources/`, which stay
 committed. The script's `--check` mode is wired into the connector's `pretest`, so
 `npm test` fails if the committed output drifts from the generator.
 
+`buildSendArguments(mode, draft, options)` returns `{tool, arguments}` using the
+same function embedded in the iframe. It preserves subject/body whitespace and
+models the browser's input value rules (line breaks in single-line fields and LF
+line endings in textareas). `buildSendArgumentsModule(config)` emits it
+and a configured `buildComposeSend(draft)` into each connector's generated module,
+so producers can declare `_meta.ui.send` without a runtime package dependency.
+For email, `draft.email` remains the displayed From account; `draft.sendEmail:null`
+omits an account choice, and a string selects that account. Older drafts without
+`sendEmail` keep their existing account behavior.
+
+Host outcomes with `by:'agent'` apply after prefill. The card compares the current
+form to its prefilled baseline: an unchanged draft shows "Sent by your assistant"; an
+edited draft stays editable with "Your assistant sent the original version".
+
 ## Config surface
 
 The config is deliberately tiny — only what genuinely differs between connectors:
 
 - `resourceUri` — the `ui://` URI the connector serves the HTML under.
+- `includeAccount` — optional: set `false` when the From account is display-only.
 - `sendToolName` — the tool the iframe calls (`tools/call`) when Send is clicked.
 - `draftToolName` — optional (email mode only): the tool the iframe calls when
   Save draft is clicked. When set, the form grows a secondary Save-draft action
@@ -45,11 +60,11 @@ consumer, and each connector's committed template diff shows exactly what change
 
 ## Byte-parity contract
 
-With the Gmail config, the builder's output is byte-identical to the previously
-hand-maintained Gmail template (`connectors/google-workspace/test/compose-email-parity.test.ts`
-pins this against a committed golden fixture). Treat that parity as the regression
-gate when editing the template: behavioural changes should be deliberate, visible in
-regenerated diffs, and covered by the Gmail behavioural suite.
+The generated HTML must match the builder byte-for-byte. Gmail also retains its
+historical golden HTML and compares actual legacy click payloads against it
+(`connectors/google-workspace/test/compose-email-parity.test.ts`). Behavioral changes
+should be deliberate, visible in regenerated diffs, and covered by the shared card
+and connector suites.
 
 ## Module layout
 

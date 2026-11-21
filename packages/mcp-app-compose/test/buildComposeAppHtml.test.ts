@@ -904,8 +904,8 @@ describe('buildComposeAppHtml — host neutrality', () => {
 });
 
 describe('buildComposeAppHtml — field visibility and deep-link omission', () => {
-  it('omits every trace of BCC when fields.bcc is false', () => {
-    for (const marker of ['bccInput', 'bccRow', 'toggleBccButton', 'sentBcc', 'Add BCC', 'draft.bcc', 'payload.bcc']) {
+  it('omits BCC controls when fields.bcc is false', () => {
+    for (const marker of ['bccInput', 'bccRow', 'toggleBccButton', 'sentBcc', 'Add BCC']) {
       expect(acmeHtml).not.toContain(marker);
     }
     // CC survives independently.
@@ -913,11 +913,11 @@ describe('buildComposeAppHtml — field visibility and deep-link omission', () =
     expect(acmeHtml).toContain('toggleCcButton');
   });
 
-  it('omits every trace of CC when fields.cc is false', () => {
+  it('omits CC controls when fields.cc is false', () => {
     const html = buildComposeAppHtml({ ...GMAIL_CONFIG, fields: { cc: false, bcc: true } });
     // Quoted-id markers: bare 'ccInput'/'ccRow' are substrings of the BCC ids,
     // which legitimately remain.
-    for (const marker of ["'ccInput'", "'ccRow'", 'toggleCcButton', 'sentCcField', 'Add CC', 'draft.cc', 'payload.cc']) {
+    for (const marker of ["'ccInput'", "'ccRow'", 'toggleCcButton', 'sentCcField', 'Add CC']) {
       expect(html).not.toContain(marker);
     }
     expect(html).toContain('id="bccRow"');

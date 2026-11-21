@@ -17,6 +17,7 @@ import {
   type MicrosoftTestConfig,
 } from './fixtures/mcp-test-client.js';
 import { COMPOSE_MESSAGE_RESOURCE_URI } from '../src/tools.js';
+import * as template from '../src/resources/compose-message-template.js';
 import { COMPOSE_MESSAGE_HTML } from '../src/resources/compose-message-template.js';
 
 describe('compose_chat_message producer contract', () => {
@@ -36,6 +37,15 @@ describe('compose_chat_message producer contract', () => {
   afterAll(async () => {
     if (client) await client.close();
     if (cfg) cfg.cleanup();
+  });
+
+  it.each(['chat-1', '19:meeting_abc@thread.v2'])('declares exactly the iframe send for %s', async target => {
+    const text = '  indented report\n';
+    const result = await client.client.callTool({ name: 'compose_chat_message', arguments: { target, text } });
+    const send = (result._meta as { ui: { send: unknown } }).ui.send;
+    const draft = result.structuredContent!;
+    expect(send).toEqual({ tool: 'send_chat_message', arguments: { chatId: draft.target, content: text } });
+    expect(send).toEqual(template.buildComposeSend(draft));
   });
 
   it('returns the shared _meta.ui contract field-by-field for a chat target', async () => {
@@ -62,6 +72,7 @@ describe('compose_chat_message producer contract', () => {
         presentation: 'primary',
         viewSummary: 'Teams message draft to chat-1.',
         viewRoleLabel: 'Teams message',
+        send: template.buildComposeSend(structuredContent),
         structuredFallback: {
           kind: 'plain',
           payload: {

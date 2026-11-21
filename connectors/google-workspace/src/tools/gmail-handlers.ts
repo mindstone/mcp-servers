@@ -1,3 +1,4 @@
+import { buildComposeSend } from '../resources/compose-email-template.js';
 import { centralReadPath, type FileReadContext } from '../file-read-context.js';
 import { getGmailService } from '../modules/gmail/index.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
@@ -440,6 +441,7 @@ interface ComposeWorkspaceEmailResult {
       presentation: 'primary';
       viewSummary: string;
       viewRoleLabel: string;
+      send: ReturnType<typeof buildComposeSend>;
       structuredFallback: {
         kind: 'email-draft';
         payload: {
@@ -459,6 +461,7 @@ interface ComposeWorkspaceEmailResult {
     subject: string;
     body: string;
     email: string;
+    sendEmail: string | null;
   };
 }
 
@@ -564,7 +567,7 @@ export async function handleComposeWorkspaceEmail(
     280,
   );
 
-  const draftData = { to, cc, bcc, subject, body, email };
+  const draftData = { to, cc, bcc, subject, body, email, sendEmail: params.email ?? null };
 
   return {
     text: `Drafting email to ${recipientSummary} with subject "${subject}"\n\n${JSON.stringify(draftData)}\n\n[View: ui://google-workspace/compose-email]`,
@@ -574,6 +577,7 @@ export async function handleComposeWorkspaceEmail(
         presentation: 'primary',
         viewSummary,
         viewRoleLabel: 'Editable email draft',
+        send: buildComposeSend(draftData),
         structuredFallback: {
           kind: 'email-draft',
           payload: { to, cc, bcc, subject: fallbackSubject, body: fallbackBody }

@@ -414,12 +414,45 @@
       'use strict';
 
       var RESOURCE_URI = 'ui://slack/compose-message';
+      var SEND_OPTIONS = {"sendToolName":"post_slack_message","fields":{"cc":false,"bcc":false}};
+      function buildSendArguments(mode, draft, options) {
+  // Match input/textarea value sanitization, including an unedited prefill.
+  const target = String(draft.target || '').replace(/[\r\n]/g, '').trim();
+  const text = String(draft.text || '').replace(/\r\n?/g, '\n');
+  if (mode === 'slack') return { tool: options.sendToolName, arguments: {
+    channel: target, text,
+  } };
+  if (mode === 'teams') return { tool: options.sendToolName, arguments: {
+    chatId: target, content: text,
+  } };
+  const addresses = [draft.to, draft.cc, draft.bcc].map(value => {
+    const input = Array.isArray(value) ? value.map(item => {
+      if (!item || typeof item !== 'object') return String(item || '').trim();
+      const email = String(item.email || item.address || item.value || '').trim();
+      const name = String(item.name || item.displayName || '').trim();
+      return email && name ? name + ' <' + email + '>' : email;
+    }).filter(Boolean).join(', ') : typeof value === 'string' ? value : '';
+    return input.replace(/[\r\n]/g, '').split(',').map(item => item.trim()).filter(Boolean);
+  });
+  const email = draft.sendEmail === undefined ? draft.email : draft.sendEmail;
+  return { tool: options.sendToolName, arguments: {
+    to: addresses[0],
+    ...(options.fields.cc ? { cc: addresses[1] } : {}),
+    ...(options.fields.bcc ? { bcc: addresses[2] } : {}),
+    subject: String(draft.subject || '').replace(/[\r\n]/g, ''),
+    body: String(draft.body || '').replace(/\r\n?/g, '\n'),
+    ...(options.includeAccount !== false && email ? { email } : {}),
+  } };
+}
       var currentEmail = '';
+      var currentSendEmail = '';
       // The host prefills the draft exactly once via ui/notifications/tool-result
       // on ready. We apply only the FIRST prefill and ignore any later ones, so a
       // stray or hostile re-post can't silently rewrite a draft the user has
       // already reviewed before clicking Send.
       var draftApplied = false;
+      var baselineForm = null;
+      var deferredHostOutcome = null;
       var pendingRequestId = null;
       var pendingSendPayload = null;
       // Retain across the local timeout so even a late reply clears its payload.
@@ -668,11 +701,10 @@
 
       function readFormPayload() {
         var typed = String(toInput.value || '').trim();
-        var payload = {
-          channel: isBoundRecipientShown() ? boundRecipientTarget : typed,
+        return buildSendArguments('slack', {
+          target: isBoundRecipientShown() ? boundRecipientTarget : typed,
           text: String(bodyInput.value || '')
-        };
-        return payload;
+        }, SEND_OPTIONS).arguments;
       }
 
       function validatePayload(payload) {
@@ -826,7 +858,15 @@
         }
       }
 
+      function readFormState() {
+        return JSON.stringify([toInput, bodyInput].map(function (element) { return element.value; }));
+      }
+
       function applyCardOutcome(o) {
+        if (!draftApplied) {
+          deferredHostOutcome = o && o.by === 'agent' ? o : null;
+          if (deferredHostOutcome) return;
+        }
         if (sent) return;
         if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
             (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
@@ -849,6 +889,12 @@
           return;
         }
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        if (o.by === 'agent' && readFormState() !== baselineForm) {
+          deferredHostOutcome = o;
+          showSuccess('Your assistant sent the original version');
+          setCollapsed(false);
+          return;
+        }
         sent = true;
         sendMayHaveGone = false;
         clearSendTimeout();
@@ -856,7 +902,9 @@
         clearSuccess();
         clearUnknown();
         var stamp = formatSentTime(o.at);
-        setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
+        var message = o.by === 'agent' ? 'Sent by your assistant' : 'Message sent.';
+        if (stamp) message = o.by === 'agent' ? message + ' · ' + stamp : 'Message sent · ' + stamp;
+        setCollapsed(true, message);
         if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
         reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
@@ -943,6 +991,7 @@
           if (!sendBlocked || persistentBlockMessage) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
+          if (deferredHostOutcome && draftApplied) applyCardOutcome(deferredHostOutcome);
           postResize();
         });
       });
@@ -1001,6 +1050,8 @@
           if (draft && !draftApplied) {
             draftApplied = true;
             applyDraftData(draft);
+            baselineForm = readFormState();
+            if (deferredHostOutcome) applyCardOutcome(deferredHostOutcome);
           }
           return;
         }

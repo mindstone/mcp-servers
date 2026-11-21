@@ -53,11 +53,25 @@ export type ComposeBlockedSendFallback = { kind: 'gmail-compose' } | { kind: 'no
  */
 export type ComposeMode = 'email' | 'slack' | 'teams';
 
+export interface ComposeSendOptions {
+  sendToolName: string;
+  fields: ComposeFieldSpec;
+  /** False when the sending account is display-only. Defaults to true. */
+  includeAccount?: boolean;
+}
+
+export interface ComposeSend {
+  tool: string;
+  arguments: Record<string, unknown>;
+}
+
 export interface ComposeAppConfig {
   /** `ui://` resource URI the connector serves this HTML under. */
   resourceUri: string;
   /** Tool the iframe invokes via `tools/call` when Send is clicked. */
   sendToolName: string;
+  /** False when the sending account is display-only. Defaults to true. */
+  includeAccount?: boolean;
   /**
    * Optional. Tool the iframe invokes via `tools/call` when "Save draft" is
    * clicked; when set, the form grows a Save-draft action (secondary button

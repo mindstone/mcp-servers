@@ -1,3 +1,4 @@
+import { buildComposeSend } from './resources/compose-message-template.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
@@ -208,6 +209,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
             presentation: 'primary',
             viewSummary,
             viewRoleLabel: 'Teams message',
+            send: buildComposeSend(structuredContent),
             structuredFallback: {
               kind: 'plain',
               payload: {

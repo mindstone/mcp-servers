@@ -1,3 +1,4 @@
+import { buildComposeSend } from './resources/compose-email-template.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 
@@ -30,6 +31,7 @@ interface ComposeEmailResult extends CallToolResult {
       presentation: 'primary';
       viewSummary: string;
       viewRoleLabel: string;
+      send: ReturnType<typeof buildComposeSend>;
       structuredFallback: {
         kind: 'email-draft';
         payload: {
@@ -114,6 +116,7 @@ export async function handleComposeEmail(params: ComposeEmailParams): Promise<Co
         presentation: 'primary',
         viewSummary,
         viewRoleLabel: 'Editable email draft',
+        send: buildComposeSend(draftData),
         structuredFallback: {
           kind: 'email-draft',
           payload: { to, cc, bcc, subject: fallbackSubject, body: fallbackBody },
