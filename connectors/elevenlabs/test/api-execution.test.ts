@@ -53,7 +53,7 @@ async function call(profile: WireProfile, args: Record<string, unknown>) {
 function respond(wire: WireCase): Response {
   if (wire.media === null) return new HttpResponse(null, { status: wire.status });
   return new HttpResponse(wire.media === 'application/json' && !wire.sequence ? JSON.stringify(wire.response) : String(wire.response), {
-    status: wire.status, headers: { 'Content-Type': `${wire.media}; charset=utf-8` },
+    status: wire.status, headers: { 'Content-Type': wire.response_content_type ?? `${wire.media}; charset=utf-8` },
   });
 }
 function handle(wire: WireCase, inspect?: (request: Request) => Promise<void>) {
@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 217 non-multipart cases', async () => {
-    expect(apiWireCases).toHaveLength(217);
+  it('has independent cases for every admission, with exactly 218 non-upload cases', async () => {
+    expect(apiWireCases).toHaveLength(218);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(228);
+    expect(new Set(expectedIds).size).toBe(229);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route']);
@@ -175,6 +175,13 @@ describe('literal provider wire contracts through the real SDK registration', ()
       expect(fs.readdirSync(workspace)).toEqual([path.basename(artifact.file_path)]);
       expect(fs.readFileSync(artifact.file_path).toString()).toBe(wire.response);
       expect(result.text).not.toContain(wire.response);
+    } else if (wire.media === 'multipart/mixed') {
+      const data = JSON.parse(unwrapUntrusted(String(result.json.data)));
+      expect(data.metadata).toEqual([wire.metadata]);
+      expect(data.artifacts).toHaveLength(1);
+      expect(data.artifacts[0]).toMatchObject({ media_type: 'audio/mpeg', size_bytes: 15 });
+      expect(fs.readFileSync(data.artifacts[0].file_path, 'utf8')).toBe(wire.audio);
+      expect(result.text).not.toContain(wire.audio);
     } else if (wire.sequence) {
       const data = JSON.parse(unwrapUntrusted(String(result.json.data)));
       expect(fs.readFileSync(data.artifact.file_path)).toEqual(Buffer.concat(wire.sequence.map(item => Buffer.from(String(item.audio_base64), 'base64'))));

@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Detailed music generation now keeps the composition plan and song metadata beside workspace audio references. Audio writes incrementally, partial files survive interruptions, and no extra take is ordered automatically.
 - Timestamped speech and dialogue streams now save one audio file with ordered timing metadata alongside it. Partial files survive interruptions; timestamps keep their original meaning. Collection, not live playback.
 - Timestamped speech and dialogue, voice-design and remix previews, and voice-sample audio through the API tools. Audio becomes workspace files; timing and preview identities stay with them. Completed files survive a later response failure. Previews are auditions, not permanent voices.
 - Generic speech isolation, voice conversion, transcription and alignment, plus file-based voice similarity and lexicon uploads. Local files stream from disk; large recordings no longer need a matching slab of memory.

@@ -17,6 +17,7 @@ export const canonicalAudio = value => Buffer.from(value, 'base64').toString('ba
 export const base64AudioSchema = z.object({ field: z.string().min(1), array: z.string().min(1).optional(), sequence: z.literal(true).optional(),
   media_type: z.enum(audioMedia).optional(), media_type_field: z.string().min(1).optional(),
 }).strict().refine(value => Boolean(value.media_type) !== Boolean(value.media_type_field)).refine(value => !value.sequence || (!value.array && Boolean(value.media_type)));
+export const multipartResponseSchema = z.object({ metadata: z.literal('application/json'), audio: z.literal('audio/*') }).strict();
 export function base64Representation(descriptor, item, outputFormat) {
   const binding = descriptor.base64_audio;
   const media = binding.media_type_field ? item[binding.media_type_field] : binding.media_type;

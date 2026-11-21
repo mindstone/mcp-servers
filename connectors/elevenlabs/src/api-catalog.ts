@@ -4,7 +4,7 @@ import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
-import { base64AudioSchema, audioRepresentation, binaryExtensions } from './api-media.mjs';
+import { base64AudioSchema, multipartResponseSchema, audioRepresentation, binaryExtensions } from './api-media.mjs';
 
 export type JsonSchema = boolean | Record<string, unknown>;
 export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
@@ -76,12 +76,12 @@ const parameterRecord = z.object({ type: z.literal('object'), properties: dictio
 const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), required: z.boolean(), schema: schemaValue }).strict();
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
 export const binaryResponseMedia = Object.keys(binaryExtensions) as [string, ...string[]];
-export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', 'audio/*', ...binaryResponseMedia]);
+export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', 'multipart/mixed', 'audio/*', ...binaryResponseMedia]);
 export function isBinaryResponseMedia(media: string | null): media is typeof binaryResponseMedia[number] {
   return binaryResponseMedia.some(candidate => candidate === media);
 }
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
-  base64_audio: base64AudioSchema.optional(), output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
+  base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
@@ -290,10 +290,11 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
           || JSON.stringify(query.enum) !== JSON.stringify(binding.values) || query.default !== binding.default
           || !binding.values.includes(binding.default) || binding.values.some(format => !audioRepresentation(format))) invalid('Invalid reviewed output-format binding.');
       }
+      if ((response.media_type === 'multipart/mixed') !== Boolean(response.multipart) || (response.multipart && response.base64_audio)) invalid('Invalid multipart response strategy.');
       if (response.base64_audio && (response.media_type !== 'application/json' || !sensitivePathExists(response.schema, response.base64_audio.array ? [response.base64_audio.array, '*', response.base64_audio.field] : [response.base64_audio.field], catalog))) invalid('Unbound base64 audio response.');
       if (response.media_type === null && response.schema !== undefined) invalid('Empty response declares a schema.');
       if (response.media_type === 'text/csv' && (!isRecord(response.schema) || response.schema.type !== 'string' || response.schema.format !== 'binary')) invalid('CSV requires a binary success schema.');
-      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type) || response.media_type === 'audio/*');
+      if (response.schema !== undefined) walk(response.schema, `${location}/responses/${index}/schema`, isBinaryResponseMedia(response.media_type) || response.media_type === 'audio/*' || Boolean(response.multipart));
     });
     for (const [paths, schemas] of [
       [op.sensitive_request_fields, [op.request.schema]],

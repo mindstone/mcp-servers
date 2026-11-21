@@ -6,6 +6,7 @@ import { base64Schema } from './api-schemas.js';
 import type { RetainedOutput } from './api-streaming.js';
 import { createSuccessReceipt, jsonArtifactSchema, loadApiValidator, validateRequest } from './api-validation.js';
 import { elevenLabsFetch } from './client.js';
+import { materializeMixed } from './api-mixed.js';
 import { materializeAudioSequence } from './api-json-sequence.js';
 import { base64Representation, binaryRepresentation, canonicalAudio } from './api-media.mjs';
 import { unlink } from 'node:fs/promises';
@@ -171,7 +172,10 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
   const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal);
   if (descriptor.media_type !== null) {
     try {
-      if (descriptor.base64_audio?.sequence) {
+      if (descriptor.multipart) {
+        fileData = await materializeMixed(response, descriptor, signal, saved, progressContext);
+      }
+      else if (descriptor.base64_audio?.sequence) {
         fileData = await materializeAudioSequence(response, op, descriptor, outputFormat, signal, redactor, saved, progressContext);
       }
       else if (representation) {

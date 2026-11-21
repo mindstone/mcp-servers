@@ -289,13 +289,13 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const op = await getOperation(operationId);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media, outputFormat);
-  if (descriptor.base64_audio && fileData === undefined) throw new ApiBoundaryError('INVALID_RESPONSE', 'Audio must be saved before creating its receipt.', responseRepair);
+  if ((descriptor.base64_audio || descriptor.multipart) && fileData === undefined) throw new ApiBoundaryError('INVALID_RESPONSE', 'Audio must be saved before creating its receipt.', responseRepair);
   const binary = isBinaryResponseMedia(media);
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
-  const response_contract = binary || descriptor.base64_audio?.sequence ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
+  const response_contract = binary || descriptor.base64_audio?.sequence || descriptor.multipart ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
   if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, op);
-  const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
+  const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' || descriptor.multipart ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: media,
     data, ...(artifact ? { artifact } : {}), response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');

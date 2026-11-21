@@ -21,6 +21,8 @@ Binary downloads are saved incrementally. Clients that request progress receive 
 
 The API tools also save timestamped speech and dialogue, voice-design and remix previews, and existing voice-sample and speaker audio from JSON responses as workspace files. Receipts keep alignment, voice segments and each preview's generated voice ID beside its file; inline audio is omitted. Preview generation may consume credits and does not save a permanent voice. Malformed audio or an unsupported audio media type is an error; completed files are kept and listed if a later preview or receipt fails. Timestamp streaming routes save one audio file and an ordered JSON-lines metadata file per call. Each metadata line contains a redacted, untrusted-content envelope in its `data` field; relative timestamps are preserved. Audio progress uses the same workspace references as binary downloads. A malformed stream or cancellation keeps non-empty partial files and names them in the error; completed files remain marked complete. The tool collects the stream before returning, without live playback or automatic retry.
 
+Detailed music generation (`compose_detailed`) saves each audio part as a workspace file and keeps its composition plan and song metadata in the redacted receipt. It may consume credits. Audio is streamed to disk with progress; malformed or interrupted responses keep any non-empty partial file and identify it as incomplete. Finished files remain complete if a later part fails. Provider filenames are ignored, unsupported audio types are refused, and calls are never retried automatically. Detailed music event streaming is not yet available.
+
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements
@@ -143,7 +145,7 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The nine API tools cover **228 admitted operations in source** from the
+The nine API tools cover **229 admitted operations in source** from the
 2026-11-08 API snapshot. Here, admitted means supported by these nine tools in
 this connector snapshot; consult the package changelog for release history and find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first

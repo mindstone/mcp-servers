@@ -122,6 +122,7 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "music": {"read": {"unavailable_reason": "No reliable result lookup for this synchronous music generation is admitted in the catalogue."}},
     "text-to-voice": { "read": { "unavailable_reason": "No reliable result lookup for this preview generation is admitted in the catalogue." } },
     "voices": { "read": { "unavailable_reason": "No reliable result lookup for this operation is admitted in the catalogue." } },
     "agent": {"read": "get_agents_route"},
@@ -887,21 +888,15 @@
       "reviewed_post_read": "The pinned description explicitly defines a dry-run that compiles drafts without persisting anything."
     },
     "compose_detailed": {
-      "method": "POST",
-      "path": "/v1/music/detailed",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/detailed", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates new music with composition and song metadata and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "compose_detailed", "query_params": {"output_format": "mp3_44100_128"}, "body": {"prompt": "A gentle instrumental song.", "music_length_ms": 3000, "force_instrumental": true}}],
+      "multipart": {"metadata": "application/json", "audio": "audio/*"},
+      "timeout": "long"
     },
     "compose_detailed_stream": {
       "method": "POST",

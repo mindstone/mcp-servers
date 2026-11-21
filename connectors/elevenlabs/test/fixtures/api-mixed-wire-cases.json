@@ -1,0 +1,51 @@
+[
+  {
+    "id": "compose_detailed",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "prompt": "A gentle instrumental song.",
+        "music_length_ms": 3000,
+        "model_id": "music_v1",
+        "force_instrumental": true,
+        "with_timestamps": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/detailed",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "body": {
+      "prompt": "A gentle instrumental song.",
+      "music_length_ms": 3000,
+      "model_id": "music_v1",
+      "force_instrumental": true,
+      "with_timestamps": true
+    },
+    "status": 200,
+    "media": "multipart/mixed",
+    "response_content_type": "multipart/mixed; boundary=music-boundary",
+    "response": "Preamble\r\n--music-boundary\r\nContent-Type: application/json\r\n\r\n{\"composition_plan\":{\"sections\":[]},\"song_metadata\":{\"title\":\"Quiet morning\"}}\r\n--music-boundary\r\nContent-Type: audio/mpeg\r\nContent-Disposition: attachment; filename=\"../../provider.mp3\"\r\n\r\nsynthetic-audio\r\n--music-boundary--\r\nEpilogue",
+    "metadata": {
+      "composition_plan": {
+        "sections": []
+      },
+      "song_metadata": {
+        "title": "Quiet morning"
+      }
+    },
+    "audio": "synthetic-audio"
+  }
+]

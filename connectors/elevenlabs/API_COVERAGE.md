@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **228 admitted + 178 planned + 109 excluded = 515**.
+Partition: **229 admitted + 177 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 228 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 229 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -70,7 +70,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | cancel_test_invocation_route | POST | /v1/convai/test-invocations/{test_invocation_id}/cancel | admitted | 1 | test-invocations | tests | missing | — | No existing tool maps to this exact HTTP operation. |
 | clear_conversation_group_route | DELETE | /v1/convai/realtime/conversations/{conversation_id}/conversation-group | admitted | 8 | realtime | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | compile_procedures_route | POST | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/compile | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| compose_detailed | POST | /v1/music/detailed | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| compose_detailed | POST | /v1/music/detailed | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_detailed_stream | POST | /v1/music/detailed/stream | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_plan | POST | /v1/music/plan | planned | 9 | music | — | partial | @mindstone/mcp-server-elevenlabs:create_music_plan | Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent. |
 | convert_chapter_endpoint | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/convert | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |

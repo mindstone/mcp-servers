@@ -18,6 +18,7 @@ export const apiFamilies = {
   "llm": "agents",
   "llm-usage": "llm-usage",
   "mcp-servers": "mcp-servers",
+  "music": "music",
   "phone-numbers": "phone-numbers",
   "pronunciation-dictionaries": "pronunciation-dictionaries",
   "realtime": "realtime",
@@ -42,7 +43,7 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","similar-voices","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","users","v2/phone-numbers","voice-changer","voices","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","similar-voices","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","users","v2/phone-numbers","voice-changer","voices","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -256,6 +257,7 @@ export const profileOperationIds = {
   ],
   "run_job": [
     "audio_isolation",
+    "compose_detailed",
     "forced_alignment",
     "sound_generation",
     "speech_to_speech_full",

@@ -1,4 +1,5 @@
 {
+  "compose_detailed": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
   "get_audio_effects_catalog": {
     "profile": "read",
     "effects": {

@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
 import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
-import { audioRepresentation, base64AudioSchema, binaryExtensions } from '../src/api-media.mjs';
+import { audioRepresentation, base64AudioSchema, multipartResponseSchema, binaryExtensions } from '../src/api-media.mjs';
 
 export const PINNED_SOURCE = Object.freeze({
   url: 'https://api.elevenlabs.io/openapi.json',
@@ -69,6 +69,7 @@ const stage7Profiles = {
 const stage92Profiles = { read: 'get_similar_library_voices', create: 'add_from_file', run_job: 'audio_isolation speech_to_speech_full speech_to_text forced_alignment' };
 const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_speech_full text_to_dialogue sound_generation' };
 const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix text_to_speech_stream_with_timestamps text_to_dialogue_stream_with_timestamps' };
+const stage94Profiles = { run_job: 'compose_detailed' };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -82,7 +83,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -136,7 +137,7 @@ const operationSchema = z.object({
   }).strict(),
   replacements: z.array(text), exclusion_group: text.optional(), reason: text.optional(),
   discovery_summary: text.optional(), effect_note: text.optional(), manual_pagination: text.optional(),
-  base64_audio: base64AudioSchema.optional(), response_format_binding: z.literal('output_format').optional(),
+  base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), response_format_binding: z.literal('output_format').optional(),
   timeout: z.enum(['standard', 'long']).optional(), reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
@@ -193,7 +194,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -257,7 +258,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
         if (!retryOperation || retryOperation.status !== 'admitted' || retryOperation.profile !== 'read' || retryOperation.method !== 'GET') refuse('family retry check must be an admitted GET read', id);
       } else if (!retryCheck) refuse('missing family retry metadata', id);
     } else {
-      if (row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
+      if (row.multipart !== undefined || row.base64_audio !== undefined || row.response_format_binding !== undefined || row.profile !== null || row.effects !== null || row.effect_reason !== null || row.reviewed_post_read !== undefined || row.manual_pagination !== undefined || row.effect_note !== undefined || row.discovery_summary !== undefined || row.reviewed_patch_delete !== undefined || row.sensitive_request_fields !== undefined || row.sensitive_response_fields !== undefined || row.reviewed_get_create !== undefined || row.credential_return_fields !== undefined) refuse('non-admitted transport metadata', id);
       if (row.status === 'planned' && (![7, 8, 9, 10].includes(row.milestone) || row.exclusion_group !== undefined)) refuse('planned milestone', id);
       if (row.status === 'excluded' && (row.milestone !== null || !row.reason || !Object.hasOwn(policy.exclusion_groups, row.exclusion_group ?? ''))) refuse('exclusion metadata', id);
     }
@@ -275,7 +276,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 228, planned: 178, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 229, planned: 177, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -567,8 +568,9 @@ function successDescriptors(operation, transform, id, row) {
     const content = Object.entries(response.content ?? {});
     if (content.length === 0) responses.push({ status: Number(status), media_type: null });
     for (const [media, data] of content.sort()) {
+      if ((media === 'multipart/mixed') !== Boolean(row.multipart) || (row.multipart && row.base64_audio)) refuse('invalid multipart strategy', id);
       const binary = media === 'audio/*' || Object.hasOwn(binaryExtensions, media);
-      if (!binary && !['application/json', 'text/plain', 'text/html'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
+      if (!binary && !['application/json', 'text/plain', 'text/html', 'multipart/mixed'].includes(media)) refuse('unsupported success media', `${id}: ${media}`);
       if (binary && data.schema !== undefined && (data.schema.type !== 'string' || data.schema.format !== 'binary' || Object.keys(data.schema).some(key => !['type', 'format'].includes(key)))) refuse('unsupported binary success schema', id);
       if (media === 'text/csv' && (data.schema?.type !== 'string' || data.schema?.format !== 'binary')) refuse('CSV requires a binary success schema', id);
       let output_formats;
@@ -577,7 +579,7 @@ function successDescriptors(operation, transform, id, row) {
         if ((media !== 'audio/mpeg' && !row.base64_audio) || !schema?.enum?.length || !schema.enum.includes(schema.default) || schema.enum.some(format => !audioRepresentation(format))) refuse('invalid output-format binding', id);
         output_formats = { default: schema.default, values: schema.enum };
       }
-      responses.push({ status: Number(status), media_type: media, ...(row.base64_audio ? { base64_audio: row.base64_audio } : {}), ...(output_formats ? { output_formats } : {}), ...(data.schema !== undefined ? { schema: transform(data.schema, `${id}/response/${status}/${media}`, binary) } : {}) });
+      responses.push({ status: Number(status), media_type: media, ...(row.multipart ? { multipart: row.multipart } : {}), ...(row.base64_audio ? { base64_audio: row.base64_audio } : {}), ...(output_formats ? { output_formats } : {}), ...(data.schema !== undefined ? { schema: transform(data.schema, `${id}/response/${status}/${media}`, binary || Boolean(row.multipart)) } : {}) });
     }
   }
   if (responses.length === 0) refuse('missing concrete success response', id);
