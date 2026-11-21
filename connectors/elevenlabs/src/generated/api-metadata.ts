@@ -47,6 +47,7 @@ export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
+    "compose_plan",
     "export_batch_call",
     "get_agent_conversation_ticket_route",
     "get_agent_knowledge_base_size",
@@ -82,6 +83,8 @@ export const profileOperationIds = {
     "get_documentation_chunks_from_knowledge_base",
     "get_documentation_from_knowledge_base",
     "get_environment_variable",
+    "get_finetune",
+    "get_finetunes",
     "get_knowledge_base_bulk_dependent_agents_route",
     "get_knowledge_base_content",
     "get_knowledge_base_dependent_agents",
@@ -211,6 +214,7 @@ export const profileOperationIds = {
     "update_dashboard_settings_route",
     "update_document_route",
     "update_file_document_route",
+    "update_finetune",
     "update_mcp_server_approval_policy_route",
     "update_mcp_server_config_route",
     "update_mcp_tool_config_override_route",
@@ -240,6 +244,7 @@ export const profileOperationIds = {
     "delete_conversation_tag_route",
     "delete_environment",
     "delete_environment_variable",
+    "delete_finetune",
     "delete_knowledge_base_document",
     "delete_mcp_server_route",
     "delete_phone_number_route",
@@ -258,10 +263,14 @@ export const profileOperationIds = {
   "run_job": [
     "audio_isolation",
     "compose_detailed",
+    "create_finetune",
     "forced_alignment",
+    "generate",
+    "separate_song_stems",
     "sound_generation",
     "speech_to_speech_full",
     "speech_to_text",
+    "stream_compose",
     "text_to_dialogue",
     "text_to_dialogue_full_with_timestamps",
     "text_to_dialogue_stream_with_timestamps",
@@ -270,7 +279,9 @@ export const profileOperationIds = {
     "text_to_speech_stream_with_timestamps",
     "text_to_voice",
     "text_to_voice_design",
-    "text_to_voice_remix"
+    "text_to_voice_remix",
+    "upload_song",
+    "video_to_music"
   ],
   "tests": [
     "cancel_test_invocation_route",

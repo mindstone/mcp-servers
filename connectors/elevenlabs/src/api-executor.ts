@@ -33,7 +33,6 @@ function normalizedInput(input: unknown): unknown {
 }
 
 async function checkBeforeRetry(op: ApiOperation): Promise<string> {
-  if (typeof op.check_before_retry !== 'string') return `No verifiable lookup: ${op.check_before_retry.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
   if (op.profile === 'create' && op.credential_return_fields) return 'No credential was confirmed. Request a new one if it is still needed.';
   const reads: string[] = [];
   let callable = false;
@@ -46,7 +45,9 @@ async function checkBeforeRetry(op: ApiOperation): Promise<string> {
   if (!callable) {
     reads.length = 0;
     const sameResource = (await loadApiCatalog()).operations.find(candidate => candidate.profile === 'read' && candidate.path === op.path);
-    reads.push(operationReference(await getOperation(sameResource?.operation_id ?? op.check_before_retry, 'read'), op));
+    const lookup = sameResource?.operation_id ?? (typeof op.check_before_retry === 'string' ? op.check_before_retry : undefined);
+    if (!lookup && typeof op.check_before_retry !== 'string') return `No verifiable lookup: ${op.check_before_retry.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
+    reads.push(operationReference(await getOperation(lookup!, 'read'), op));
   }
   return `Check the result with ${reads.join(' or ')} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
 }
@@ -169,7 +170,7 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
   let data: unknown = null, fileData: unknown;
   const saved: RetainedOutput[] = [];
   const representation = descriptor.media_type === null ? undefined : binaryRepresentation(descriptor, media, outputFormat);
-  const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal);
+  const progress = artifactProgress(representation?.media_type ?? media ?? 'application/octet-stream', progressContext, signal, op.profile === 'run_job');
   if (descriptor.media_type !== null) {
     try {
       if (descriptor.multipart) {
@@ -182,6 +183,7 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
         if (!response.body) throw new Error('Missing binary body.');
         data = { ...await writeWorkspaceArtifactStream(`elevenlabs_${randomUUID()}.${representation.extension}`, response.body, signal, progress),
           media_type: representation.media_type, ...('format' in representation ? { format: representation.format } : {}) };
+        if (op.profile === 'run_job') saved.push({ ...jsonArtifactSchema.omit({ source_path: true }).parse(data), state: 'complete' });
       }
       else if (isBinaryResponseMedia(descriptor.media_type) || descriptor.media_type === 'audio/*') throw new Error('Invalid binary representation.');
       else data = descriptor.media_type === 'application/json' ? await response.json() : await response.text();
@@ -201,15 +203,17 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
     }
   }
   try {
-    const receipt = await createSuccessReceipt(op.operation_id, response.status, representation?.media_type ?? descriptor.media_type, data, redactor, outputFormat, fileData);
+    const headers = Object.fromEntries((descriptor.headers ?? []).filter(name => name !== 'content-disposition' && response.headers.has(name)).map(name => [name, response.headers.get(name)!]));
+    const receipt = await createSuccessReceipt(op.operation_id, response.status, representation?.media_type ?? descriptor.media_type, data, redactor, outputFormat, fileData, headers);
     if (progressContext) signal.throwIfAborted();
     await progress.finish('complete');
     return receipt;
   } catch (error) {
     let kept = false;
     let deliveryFailed = false;
-    await progress.finish('incomplete').catch(() => { deliveryFailed = true; });
-    if (!progress.retained() && representation && isRecord(data) && typeof data.file_path === 'string') await unlink(data.file_path).catch(() => { kept = true; });
+    await progress.finish(saved.length && representation ? 'complete' : 'incomplete').catch(() => { deliveryFailed = true; });
+    const retained_output = saved.length ? undefined : progress.retained();
+    if (!saved.length && !retained_output && representation && isRecord(data) && typeof data.file_path === 'string') await unlink(data.file_path).catch(() => { kept = true; });
     let message = error instanceof ElevenLabsError && error.code === 'PROGRESS_DELIVERY_FAILED' ? error.message : 'The provider returned success, but the connector could not safely process its response.';
     try {
       if (error instanceof ApiBoundaryError && error.code === 'INVALID_RESPONSE') message = redactor.wrap(error.message, `elevenlabs:api:${op.operation_id}`);
@@ -217,8 +221,8 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
     if (kept) message += ' The saved output file could not be removed.';
     if (deliveryFailed) message += ' Output progress could not be delivered.';
     const failure = signal.aborted ? await timeoutFailure(op, signal.reason?.name !== 'TimeoutError') : await responseFailure(op, message);
-    if (progress.retained()) failure.message += ' The partial output file was kept.';
+    if (retained_output) failure.message += ' The partial output file was kept.';
     if (saved.length) failure.message += ' Saved output files were kept.';
-    throw Object.assign(failure, { retained_output: progress.retained(), ...(saved.length ? { retained_outputs: saved } : {}) });
+    throw Object.assign(failure, { retained_output, ...(saved.length ? { retained_outputs: saved } : {}) });
   }
 }

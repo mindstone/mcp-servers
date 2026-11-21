@@ -73,7 +73,7 @@ const text = z.string().min(1);
 const schemaValue = z.custom<JsonSchema>(value => typeof value === 'boolean' || isRecord(value));
 export const effectsSchema = z.object({ readOnlyHint: z.boolean(), destructiveHint: z.boolean(), idempotentHint: z.boolean(), openWorldHint: z.boolean() }).strict();
 const parameterRecord = z.object({ type: z.literal('object'), properties: dictionary(schemaValue), required: z.array(text), additionalProperties: z.literal(false) }).strict();
-const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), required: z.boolean(), schema: schemaValue }).strict();
+const fileBinding = z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), max_total_bytes: z.number().int().positive().safe().optional(), required: z.boolean(), schema: schemaValue }).strict();
 // Only the binary media declared by admitted contracts are enabled. Extend after spec review.
 export const binaryResponseMedia = Object.keys(binaryExtensions) as [string, ...string[]];
 export const responseMediaSchema = z.enum(['application/json', 'text/plain', 'text/html', 'multipart/mixed', 'audio/*', ...binaryResponseMedia]);
@@ -81,6 +81,7 @@ export function isBinaryResponseMedia(media: string | null): media is typeof bin
   return binaryResponseMedia.some(candidate => candidate === media);
 }
 const responseSchema = z.object({ status: z.number().int().min(200).max(299), media_type: responseMediaSchema.nullable(), schema: schemaValue.optional(),
+  headers: z.array(z.string().regex(/^[!#$%&'*+.^_`|~a-z0-9-]+$/)).nonempty().optional(),
   base64_audio: base64AudioSchema.optional(), multipart: multipartResponseSchema.optional(), output_formats: z.object({ default: text, values: z.array(text).nonempty() }).strict().optional() }).strict();
 const operationSchema = z.object({
   operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),

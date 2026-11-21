@@ -1,0 +1,684 @@
+[
+  {
+    "id": "compose_plan",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "enable_logging": false
+      },
+      "body": {
+        "prompt": "A gentle instrumental song.",
+        "music_length_ms": 3000,
+        "model_id": "music_v1",
+        "source_composition_plan": {
+          "positive_global_styles": [
+            "gentle piano"
+          ],
+          "negative_global_styles": [],
+          "sections": [
+            {
+              "section_name": "Opening",
+              "positive_local_styles": [
+                "piano"
+              ],
+              "negative_local_styles": [],
+              "duration_ms": 3000,
+              "lines": []
+            }
+          ]
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/plan",
+    "query": [
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "body": {
+      "prompt": "A gentle instrumental song.",
+      "music_length_ms": 3000,
+      "model_id": "music_v1",
+      "source_composition_plan": {
+        "positive_global_styles": [
+          "gentle piano"
+        ],
+        "negative_global_styles": [],
+        "sections": [
+          {
+            "section_name": "Opening",
+            "positive_local_styles": [
+              "piano"
+            ],
+            "negative_local_styles": [],
+            "duration_ms": 3000,
+            "lines": []
+          }
+        ]
+      }
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "positive_global_styles": [
+        "gentle piano"
+      ],
+      "negative_global_styles": [],
+      "sections": [
+        {
+          "section_name": "Opening",
+          "positive_local_styles": [
+            "piano"
+          ],
+          "negative_local_styles": [],
+          "duration_ms": 3000,
+          "lines": []
+        }
+      ]
+    }
+  },
+  {
+    "id": "generate",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "composition_plan": {
+          "positive_global_styles": [
+            "gentle piano"
+          ],
+          "negative_global_styles": [],
+          "sections": [
+            {
+              "section_name": "Opening",
+              "positive_local_styles": [
+                "piano"
+              ],
+              "negative_local_styles": [],
+              "duration_ms": 3000,
+              "lines": []
+            }
+          ]
+        },
+        "music_length_ms": 3000,
+        "model_id": "music_v1",
+        "seed": 123,
+        "force_instrumental": true,
+        "finetune_id": "finetune_example",
+        "finetune_strength": 0.8,
+        "store_for_inpainting": true,
+        "respect_sections_durations": true,
+        "sign_with_c2pa": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "body": {
+      "composition_plan": {
+        "positive_global_styles": [
+          "gentle piano"
+        ],
+        "negative_global_styles": [],
+        "sections": [
+          {
+            "section_name": "Opening",
+            "positive_local_styles": [
+              "piano"
+            ],
+            "negative_local_styles": [],
+            "duration_ms": 3000,
+            "lines": []
+          }
+        ]
+      },
+      "music_length_ms": 3000,
+      "model_id": "music_v1",
+      "seed": 123,
+      "force_instrumental": true,
+      "finetune_id": "finetune_example",
+      "finetune_strength": 0.8,
+      "store_for_inpainting": true,
+      "respect_sections_durations": true,
+      "sign_with_c2pa": true
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "synthetic-music"
+  },
+  {
+    "id": "stream_compose",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "composition_plan": {
+          "positive_global_styles": [
+            "gentle piano"
+          ],
+          "negative_global_styles": [],
+          "sections": [
+            {
+              "section_name": "Opening",
+              "positive_local_styles": [
+                "piano"
+              ],
+              "negative_local_styles": [],
+              "duration_ms": 3000,
+              "lines": []
+            }
+          ]
+        },
+        "music_length_ms": 3000,
+        "model_id": "music_v1",
+        "seed": 123,
+        "force_instrumental": true,
+        "finetune_id": "finetune_example",
+        "finetune_strength": 0.8,
+        "store_for_inpainting": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/stream",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "body": {
+      "composition_plan": {
+        "positive_global_styles": [
+          "gentle piano"
+        ],
+        "negative_global_styles": [],
+        "sections": [
+          {
+            "section_name": "Opening",
+            "positive_local_styles": [
+              "piano"
+            ],
+            "negative_local_styles": [],
+            "duration_ms": 3000,
+            "lines": []
+          }
+        ]
+      },
+      "music_length_ms": 3000,
+      "model_id": "music_v1",
+      "seed": 123,
+      "force_instrumental": true,
+      "finetune_id": "finetune_example",
+      "finetune_strength": 0.8,
+      "store_for_inpainting": true
+    },
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "synthetic-music"
+  },
+  {
+    "id": "upload_song",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "extract_composition_plan": "music_v2",
+        "with_timestamps": true,
+        "with_waveform_visual": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/upload",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "song_id": "uploaded_example",
+      "composition_plan": {
+        "positive_global_styles": [
+          "gentle piano"
+        ],
+        "negative_global_styles": [],
+        "sections": [
+          {
+            "section_name": "Opening",
+            "positive_local_styles": [
+              "piano"
+            ],
+            "negative_local_styles": [],
+            "duration_ms": 3000,
+            "lines": []
+          }
+        ]
+      },
+      "words_timestamps": [
+        {
+          "word": "Calm",
+          "start_ms": 0,
+          "end_ms": 3000
+        }
+      ],
+      "waveform_visual": [
+        1,
+        2
+      ]
+    },
+    "multipart": {
+      "scalars": [
+        [
+          "extract_composition_plan",
+          "music_v2"
+        ],
+        [
+          "with_timestamps",
+          "true"
+        ],
+        [
+          "with_waveform_visual",
+          "true"
+        ]
+      ],
+      "field": "file",
+      "fileName": "song.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ]
+    }
+  },
+  {
+    "id": "separate_song_stems",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "stem_variation_id": "two_stems_v1",
+        "sign_with_c2pa": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/stem-separation",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/zip",
+    "response": "PK\u0003\u0004synthetic-stems\u0000",
+    "multipart": {
+      "scalars": [
+        [
+          "stem_variation_id",
+          "two_stems_v1"
+        ],
+        [
+          "sign_with_c2pa",
+          "true"
+        ]
+      ],
+      "field": "file",
+      "fileName": "song.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ]
+    }
+  },
+  {
+    "id": "video_to_music",
+    "profile": "run_job",
+    "args": {
+      "query_params": {
+        "output_format": "mp3_44100_128",
+        "enable_logging": false
+      },
+      "body": {
+        "tags": [
+          "gentle",
+          "cinematic"
+        ],
+        "model_id": "music_v2",
+        "add_sfx": true,
+        "separate_tracks": false,
+        "use_audio_as_reference": true,
+        "sign_with_c2pa": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/video-to-music",
+    "query": [
+      [
+        "output_format",
+        "mp3_44100_128"
+      ],
+      [
+        "enable_logging",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "synthetic-video-music",
+    "multipart": {
+      "scalars": [
+        [
+          "tags",
+          "gentle"
+        ],
+        [
+          "tags",
+          "cinematic"
+        ],
+        [
+          "model_id",
+          "music_v2"
+        ],
+        [
+          "add_sfx",
+          "true"
+        ],
+        [
+          "separate_tracks",
+          "false"
+        ],
+        [
+          "use_audio_as_reference",
+          "true"
+        ],
+        [
+          "sign_with_c2pa",
+          "true"
+        ]
+      ],
+      "field": "videos",
+      "fileName": "first.mp4",
+      "mime": "video/mp4",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ],
+      "multiple": true
+    }
+  },
+  {
+    "id": "create_finetune",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "name": "Gentle piano",
+        "primary_genre": "ambient",
+        "tags": [
+          "piano",
+          "gentle"
+        ],
+        "visibility": "workspace",
+        "model_id": "music_v2"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/music/finetunes",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "id": "finetune_example",
+      "name": "Gentle piano",
+      "tags": [
+        "piano"
+      ],
+      "model_id": "music_v1",
+      "created_at": "2026-11-08T12:00:00Z",
+      "visibility": "private",
+      "created_by": "self",
+      "status": "pending",
+      "training_progress": 0
+    },
+    "multipart": {
+      "scalars": [
+        [
+          "name",
+          "Gentle piano"
+        ],
+        [
+          "primary_genre",
+          "ambient"
+        ],
+        [
+          "tags",
+          "piano"
+        ],
+        [
+          "tags",
+          "gentle"
+        ],
+        [
+          "visibility",
+          "workspace"
+        ],
+        [
+          "model_id",
+          "music_v2"
+        ]
+      ],
+      "field": "files",
+      "fileName": "song.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ],
+      "multiple": true
+    }
+  },
+  {
+    "id": "get_finetune",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "finetune_id": "finetune/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/music/finetunes/finetune%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "finetune_example",
+      "name": "Gentle piano",
+      "tags": [
+        "piano"
+      ],
+      "model_id": "music_v1",
+      "created_at": "2026-11-08T12:00:00Z",
+      "visibility": "private",
+      "created_by": "self",
+      "status": "pending",
+      "training_progress": 0
+    }
+  },
+  {
+    "id": "get_finetunes",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "cursor": "page & 2",
+        "page_size": 2,
+        "visibility": "workspace",
+        "created_by": "self",
+        "sort": "name",
+        "sort_direction": "asc"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/music/finetunes",
+    "query": [
+      [
+        "cursor",
+        "page & 2"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "visibility",
+        "workspace"
+      ],
+      [
+        "created_by",
+        "self"
+      ],
+      [
+        "sort",
+        "name"
+      ],
+      [
+        "sort_direction",
+        "asc"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "finetunes": [
+        {
+          "id": "finetune_example",
+          "name": "Gentle piano",
+          "tags": [
+            "piano"
+          ],
+          "model_id": "music_v1",
+          "created_at": "2026-11-08T12:00:00Z",
+          "visibility": "private",
+          "created_by": "self",
+          "status": "pending",
+          "training_progress": 0
+        }
+      ],
+      "has_more": true,
+      "next_cursor": "page & 3"
+    }
+  },
+  {
+    "id": "update_finetune",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "finetune_id": "finetune/a ?#"
+      },
+      "body": {
+        "name": "Gentle piano",
+        "tags": [
+          "gentle"
+        ],
+        "primary_genre": null,
+        "visibility": "workspace"
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/music/finetunes/finetune%2Fa%20%3F%23",
+    "query": [],
+    "body": {
+      "name": "Gentle piano",
+      "tags": [
+        "gentle"
+      ],
+      "primary_genre": null,
+      "visibility": "workspace"
+    },
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "finetune_example",
+      "name": "Gentle piano",
+      "tags": [
+        "gentle"
+      ],
+      "model_id": "music_v1",
+      "created_at": "2026-11-08T12:00:00Z",
+      "visibility": "workspace",
+      "created_by": "self",
+      "status": "pending",
+      "training_progress": 0
+    }
+  },
+  {
+    "id": "delete_finetune",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "finetune_id": "finetune/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/music/finetunes/finetune%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "finetune_example",
+      "name": "Gentle piano",
+      "tags": [
+        "piano"
+      ],
+      "model_id": "music_v1",
+      "created_at": "2026-11-08T12:00:00Z",
+      "visibility": "private",
+      "created_by": "self",
+      "status": "pending",
+      "training_progress": 0
+    }
+  }
+]

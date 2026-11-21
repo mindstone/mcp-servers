@@ -1,4 +1,15 @@
 {
+  "compose_plan": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"},
+  "generate": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "stream_compose": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "upload_song": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "separate_song_stems": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "video_to_music": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "create_finetune": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
+  "get_finetune": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_finetunes": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "update_finetune": {"profile": "change", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "PATCH", "tool": "elevenlabs_change_resource"},
+  "delete_finetune": {"profile": "delete", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "DELETE", "tool": "elevenlabs_delete_resource"},
   "compose_detailed": {"profile": "run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_run_job"},
   "get_audio_effects_catalog": {
     "profile": "read",

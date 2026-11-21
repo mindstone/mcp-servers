@@ -35,6 +35,7 @@ export async function multipartUpload(op: ApiOperation, input: ApiExecutionInput
       const binding = op.request.files!.find(file => file.field === operand.field)!;
       const paths = 'file_paths' in operand ? operand.file_paths : operand.file_path === null ? null : [operand.file_path];
       if (paths === null) continue;
+      let totalBytes = 0;
       for (const [item, filePath] of paths.entries()) {
         const location = 'file_paths' in operand ? ['files', index, 'file_paths', item] : ['files', index, 'file_path'];
         let upload: Upload;
@@ -43,7 +44,10 @@ export async function multipartUpload(op: ApiOperation, input: ApiExecutionInput
           if (error instanceof ElevenLabsError) throw new ApiBoundaryError(error.code, wrapUntrusted('The local file operand [REDACTED] could not be read safely. File operands must be local paths.', `elevenlabs:api:${op.operation_id}`)!, 'Provide an authorized regular file matching the declared type and size.');
           throw new ApiBoundaryError('FILE_READ_ERROR', 'The local upload could not be opened.', 'Check the file and host authorization.');
         }
-        uploads.push(upload); append(operand.field, upload, binding.kind);
+        uploads.push(upload);
+        totalBytes += upload.size;
+        if (binding.max_total_bytes !== undefined && totalBytes > binding.max_total_bytes) throw new ApiBoundaryError('FILE_TOO_LARGE', 'The combined upload exceeds the declared file size limit.', 'Reduce the combined size of files for this field.');
+        append(operand.field, upload, binding.kind);
       }
     }
     const ending = Buffer.from(`--${boundary}--\r\n`);

@@ -10,6 +10,17 @@ afterEach(() => {
 });
 
 describe('family fallback without a same-route read or usable follow-up', () => {
+  it('lets only reviewed rows override an unavailable lookup reason with an admitted read', async () => {
+    const { apiCatalog } = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    const reads = apiCatalog.operations.filter(op => op.profile === 'read');
+    const params = (path: string) => [...path.matchAll(/\{([^{}]+)\}/g)].map(([, name]) => name);
+    const overridden = apiCatalog.operations.filter(op => op.profile !== 'read' && typeof op.check_before_retry === 'object' && (
+      reads.some(read => read.path === op.path) ||
+      op.follow_ups.some(id => { const read = reads.find(r => r.operation_id === id); return read && params(read.path).every(name => op.path.includes(`{${name}}`)); })
+    )).map(op => op.operation_id).sort();
+    // A new read on the same route as a paid job must not silently replace its reviewed "no verifiable lookup" decision.
+    expect(overridden).toEqual(['create_finetune', 'delete_finetune', 'update_finetune']);
+  });
   it('reports unavailable verification honestly without issuing a read or retry', async () => {
     vi.resetModules();
     const actual = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');

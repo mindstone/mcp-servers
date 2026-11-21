@@ -23,6 +23,8 @@ The API tools also save timestamped speech and dialogue, voice-design and remix 
 
 Detailed music generation (`compose_detailed`) saves each audio part as a workspace file and keeps its composition plan and song metadata in the redacted receipt. It may consume credits. Audio is streamed to disk with progress; malformed or interrupted responses keep any non-empty partial file and identify it as incomplete. Finished files remain complete if a later part fails. Provider filenames are ignored, unsupported audio types are refused, and calls are never retried automatically. Detailed music event streaming is not yet available.
 
+The API tools also support free composition planning, music generation and audio streaming, song uploads, stem separation, ordered video inputs and music finetunes. Paid generation, processing, uploads and training use `elevenlabs_run_job`; finetune reads, edits and deletion use their corresponding resource tools. Training states are returned as reported, without polling. Training accepts up to 50 optional audio files; video requests accept 1–10 files totalling at most 200 MB, in caller order. Duration and account limits remain the provider's responsibility. Audio and ZIP responses stream into workspace files; ZIP bytes are preserved without extraction. Paid binary jobs keep partial files as incomplete on failure and finished files as complete if receipt processing fails. Declared response headers such as `song-id` appear in redacted, untrusted receipt metadata. Provider filenames and undeclared headers are ignored. There is no automatic retry, regeneration or playback; the three convenience music tools keep their existing behavior.
+
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements
@@ -238,12 +240,12 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 91 resource reads and calculations | Read only |
+| `elevenlabs_read_resource` | 96 resource reads and calculations | Read only |
 | `elevenlabs_create_resource` | 32 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 47 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 30 deletes | Destructive |
+| `elevenlabs_change_resource` | 48 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 31 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
-| `elevenlabs_run_job` | Speech, dialogue and sound generation | May consume credits and create provider records |
+| `elevenlabs_run_job` | Speech, dialogue, sound and music generation, processing and training | May consume credits and create provider records |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |
 | `elevenlabs_place_call` | 8 call, message, batch submit/retry and live registration operations | Destructive; provider services may incur charges |
 

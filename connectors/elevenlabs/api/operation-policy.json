@@ -916,25 +916,15 @@
       "replacements": []
     },
     "compose_plan": {
-      "method": "POST",
-      "path": "/v1/music/plan",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:create_music_plan"
-        ],
-        "reason": "Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/music.ts"
-        ]
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/plan", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Calculates a composition plan for free without generating audio or saving a song.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:create_music_plan"], "reason": "Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/music.ts"]},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "compose_plan", "body": {"prompt": "A gentle instrumental song.", "music_length_ms": 3000}}],
+      "reviewed_post_read": "Free composition planning returns a plan without generating audio or persisting a song, matching the existing free planning tool.",
+      "timeout": "long"
     },
     "convert_chapter_endpoint": {
       "method": "POST",
@@ -1506,21 +1496,16 @@
       "timeout": "long"
     },
     "create_finetune": {
-      "method": "POST",
-      "path": "/v1/music/finetunes",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/finetunes", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Uploads optional training audio and creates a music finetune; may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": ["get_finetune"],
+      "examples": [{"operation_id": "create_finetune", "body": {"name": "Gentle piano", "primary_genre": "ambient", "tags": ["piano"]}, "files": [{"field": "files", "file_paths": ["/workspace/song.wav"]}]}],
+      "file_bindings": [{"field": "files", "kind": "audio"}],
+      "effect_note": "Training status is returned as reported: pending, in_progress, completed, failed or blocked. No automatic polling or training retry.",
+      "timeout": "long"
     },
     "create_folder_route": {
       "method": "POST",
@@ -2439,21 +2424,14 @@
       "follow_ups": ["list_environment_variables"]
     },
     "delete_finetune": {
-      "method": "DELETE",
-      "path": "/v1/music/finetunes/{finetune_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/music/finetunes/{finetune_id}", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Permanently deletes the selected music finetune.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "delete_finetune", "path_params": {"finetune_id": "finetune_example"}}],
+      "timeout": "standard"
     },
     "delete_invite": {
       "method": "DELETE",
@@ -3523,26 +3501,14 @@
       "timeout": "long"
     },
     "generate": {
-      "method": "POST",
-      "path": "/v1/music",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:generate_music",
-          "@mindstone/mcp-server-elevenlabs:generate_music_from_plan"
-        ],
-        "reason": "Maps prompt and duration_seconds or composition_plan, plus seed and output_format; fixes model_id to music_v1 and omits current generation_mode, finetune and other music controls.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/music.ts"
-        ]
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates a new music recording and may consume credits.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:generate_music", "@mindstone/mcp-server-elevenlabs:generate_music_from_plan"], "reason": "Maps prompt and duration_seconds or composition_plan, plus seed and output_format; fixes model_id to music_v1 and omits current generation_mode, finetune and other music controls.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/music.ts"]},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "generate", "body": {"prompt": "A gentle instrumental song.", "music_length_ms": 3000, "force_instrumental": true}}],
+      "timeout": "long"
     },
     "get_agent_conversation_ticket_route": {
       "method": "GET",
@@ -4641,38 +4607,26 @@
       "discovery_summary": "Read one environment variable and its values by path_params.env_var_id."
     },
     "get_finetune": {
-      "method": "GET",
-      "path": "/v1/music/finetunes/{finetune_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/music/finetunes/{finetune_id}", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads music finetune status and metadata without starting or changing training.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "get_finetune", "path_params": {"finetune_id": "finetune_example"}}],
+      "effect_note": "Training status is returned as reported: pending, in_progress, completed, failed or blocked. No automatic polling or training retry.",
+      "timeout": "standard"
     },
     "get_finetunes": {
-      "method": "GET",
-      "path": "/v1/music/finetunes",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/music/finetunes", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists music finetunes without starting or changing training.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "get_finetunes", "query_params": {"page_size": 10}}],
+      "effect_note": "Training status is returned as reported: pending, in_progress, completed, failed or blocked. No automatic polling or training retry.",
+      "timeout": "standard"
     },
     "get_groups_endpoint": {
       "method": "GET",
@@ -8265,21 +8219,15 @@
       "follow_ups": []
     },
     "separate_song_stems": {
-      "method": "POST",
-      "path": "/v1/music/stem-separation",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/stem-separation", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Processes uploaded audio into a stems archive and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "separate_song_stems", "body": {"stem_variation_id": "two_stems_v1"}, "files": [{"field": "file", "file_path": "/workspace/song.wav"}]}],
+      "file_bindings": [{"field": "file", "kind": "audio"}],
+      "timeout": "long"
     },
     "set_conversation_group_route": {
       "method": "PUT",
@@ -10024,21 +9972,14 @@
       "replacements": []
     },
     "stream_compose": {
-      "method": "POST",
-      "path": "/v1/music/stream",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/stream", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Generates a new streamed music recording and may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "stream_compose", "body": {"prompt": "A gentle instrumental song.", "music_length_ms": 3000, "force_instrumental": true}}],
+      "timeout": "long"
     },
     "stream_project_snapshot_archive_endpoint": {
       "method": "POST",
@@ -10870,21 +10811,14 @@
       ]
     },
     "update_finetune": {
-      "method": "PATCH",
-      "path": "/v1/music/finetunes/{finetune_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "PATCH", "path": "/v1/music/finetunes/{finetune_id}", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes stored finetune metadata and may replace its tags or visibility.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": ["get_finetune"],
+      "examples": [{"operation_id": "update_finetune", "path_params": {"finetune_id": "finetune_example"}, "body": {"name": "Gentle piano", "tags": ["piano"]}}],
+      "timeout": "standard"
     },
     "update_mcp_server_approval_policy_route": {
       "method": "PATCH",
@@ -11350,21 +11284,15 @@
       ]
     },
     "upload_song": {
-      "method": "POST",
-      "path": "/v1/music/upload",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/upload", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Uploads audio as a provider song and may consume credits for processing.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "upload_song", "body": {"extract_composition_plan": true}, "files": [{"field": "file", "file_path": "/workspace/song.wav"}]}],
+      "file_bindings": [{"field": "file", "kind": "audio"}],
+      "timeout": "long"
     },
     "usage_by_product_over_time": {
       "method": "POST",
@@ -11422,21 +11350,15 @@
       "replacements": []
     },
     "video_to_music": {
-      "method": "POST",
-      "path": "/v1/music/video-to-music",
-      "status": "planned",
-      "milestone": 9,
-      "family": "music",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/music/video-to-music", "status": "admitted", "milestone": 9, "family": "music",
+      "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Uploads ordered videos and generates new music or a tracks archive; may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [], "follow_ups": [],
+      "examples": [{"operation_id": "video_to_music", "body": {"tags": ["gentle"], "separate_tracks": true}, "files": [{"field": "videos", "file_paths": ["/workspace/first.mp4", "/workspace/second.mp4"]}]}],
+      "file_bindings": [{"field": "videos", "kind": "audio", "allowed_media_types": ["video/mp4", "video/webm", "video/quicktime"], "max_total_bytes": 200000000}],
+      "timeout": "long"
     },
     "whatsapp_outbound_call": {
       "method": "POST",

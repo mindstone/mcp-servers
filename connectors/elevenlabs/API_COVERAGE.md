@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **229 admitted + 177 planned + 109 excluded = 515**.
+Partition: **240 admitted + 166 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 229 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 240 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -72,7 +72,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | compile_procedures_route | POST | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/compile | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_detailed | POST | /v1/music/detailed | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_detailed_stream | POST | /v1/music/detailed/stream | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| compose_plan | POST | /v1/music/plan | planned | 9 | music | — | partial | @mindstone/mcp-server-elevenlabs:create_music_plan | Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent. |
+| compose_plan | POST | /v1/music/plan | admitted | 9 | music | read | partial | @mindstone/mcp-server-elevenlabs:create_music_plan | Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent. |
 | convert_chapter_endpoint | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/convert | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | convert_project_endpoint | POST | /v1/studio/projects/{project_id}/convert | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | copy_analysis_item_route | POST | /v1/convai/analysis-items/{analysis_item_id}/copy | admitted | 7 | analysis-items | create | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -95,7 +95,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | create_environment | POST | /v1/convai/environments | admitted | 7 | environments | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_environment_variable | POST | /v1/convai/environment-variables | admitted | 7 | environment-variables | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_file_document_route | POST | /v1/convai/knowledge-base/file | admitted | 1 | knowledge-base | create | partial | @mindstone/mcp-server-elevenlabs-agents:add_knowledge_base_document | Supports multipart file, optional name and parent_folder_id, the complete current upload input. Agent attachment is separate; the existing authoring tool has known structured-locator mapping limitations. |
-| create_finetune | POST | /v1/music/finetunes | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| create_finetune | POST | /v1/music/finetunes | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_folder_route | POST | /v1/convai/knowledge-base/folder | admitted | 1 | knowledge-base | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_image_generation | POST | /v1/flows/image | planned | 10 | flows | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_manual_agent_ticket_route | POST | /v1/convai/agents/{agent_id}/triage-tickets | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -137,7 +137,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | delete_dubbing | DELETE | /v1/dubbing/{dubbing_id} | planned | 9 | dubbing | — | covered | @mindstone/mcp-server-elevenlabs:delete_dubbing | Deletes by dubbing_id on the exact endpoint. |
 | delete_environment | DELETE | /v1/convai/environments/{environment} | admitted | 7 | environments | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_environment_variable | DELETE | /v1/convai/environment-variables/{env_var_id} | admitted | 7 | environment-variables | delete | missing | — | No existing tool maps to this exact HTTP operation. |
-| delete_finetune | DELETE | /v1/music/finetunes/{finetune_id} | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| delete_finetune | DELETE | /v1/music/finetunes/{finetune_id} | admitted | 9 | music | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_invite | DELETE | /v1/workspace/invites | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | delete_knowledge_base_document | DELETE | /v1/convai/knowledge-base/{documentation_id} | admitted | 1 | knowledge-base | delete | covered | @mindstone/mcp-server-elevenlabs-agents:delete_knowledge_base_document | Supports documentation_id and force; unwraps and sanitizes document responses. |
 | delete_mcp_server_route | DELETE | /v1/convai/mcp-servers/{mcp_server_id} | admitted | 7 | mcp-servers | delete | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -192,7 +192,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | edit_workspace_webhook_route | PATCH | /v1/workspace/webhooks/{webhook_id} | planned | 10 | workspace/webhooks | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | export_batch_call | GET | /v1/convai/batch-calling/{batch_id}/export | admitted | 8 | batch-calling | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | forced_alignment | POST | /v1/forced-alignment | admitted | 9 | forced-alignment | run_job | covered | @mindstone/mcp-server-elevenlabs:forced_alignment | Uploads multipart file and text to the exact endpoint; no other operation-specific parameters. |
-| generate | POST | /v1/music | planned | 9 | music | — | partial | @mindstone/mcp-server-elevenlabs:generate_music, @mindstone/mcp-server-elevenlabs:generate_music_from_plan | Maps prompt and duration_seconds or composition_plan, plus seed and output_format; fixes model_id to music_v1 and omits current generation_mode, finetune and other music controls. |
+| generate | POST | /v1/music | admitted | 9 | music | run_job | partial | @mindstone/mcp-server-elevenlabs:generate_music, @mindstone/mcp-server-elevenlabs:generate_music_from_plan | Maps prompt and duration_seconds or composition_plan, plus seed and output_format; fixes model_id to music_v1 and omits current generation_mode, finetune and other music controls. |
 | get_agent_conversation_ticket_route | GET | /v1/convai/triage-tickets/{agentqa_ticket_id} | admitted | 7 | triage-tickets | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_knowledge_base_size | GET | /v1/convai/agent/{agent_id}/knowledge-base/size | admitted | 7 | agent | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_agent_knowledge_base_summaries_route | GET | /v1/convai/knowledge-base/summaries | admitted | 7 | knowledge-base | read | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -242,8 +242,8 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_dubbing_resource | GET | /v1/dubbing/resource/{dubbing_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_dubbing_transcripts | GET | /v1/dubbing/{dubbing_id}/transcripts/{language_code}/format/{format_type} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_environment_variable | GET | /v1/convai/environment-variables/{env_var_id} | admitted | 7 | environment-variables | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_finetune | GET | /v1/music/finetunes/{finetune_id} | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_finetunes | GET | /v1/music/finetunes | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_finetune | GET | /v1/music/finetunes/{finetune_id} | admitted | 9 | music | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_finetunes | GET | /v1/music/finetunes | admitted | 9 | music | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_groups_endpoint | GET | /v1/workspace/groups | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | get_image_generation | GET | /v1/flows/image/{generation_id} | planned | 10 | flows | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_knowledge_base_bulk_dependent_agents_route | POST | /v1/convai/knowledge-base/dependent-agents | admitted | 7 | knowledge-base | read | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -404,7 +404,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | run_pvc_voice_training | POST | /v1/voices/pvc/{voice_id}/train | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | search_groups | GET | /v1/workspace/groups/search | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | search_knowledge_base_content_route | GET | /v1/convai/knowledge-base/search | admitted | 1 | knowledge-base | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| separate_song_stems | POST | /v1/music/stem-separation | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| separate_song_stems | POST | /v1/music/stem-separation | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | set_conversation_group_route | PUT | /v1/convai/realtime/conversations/{conversation_id}/conversation-group | admitted | 8 | realtime | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | set_rules | POST | /v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/set-rules | planned | 9 | pronunciation-dictionaries | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | set_third_party_disabling_policy | POST | /v1/workspaces/api-keys/third-party-disabling | excluded | — | account_and_keys | — | not-worth-exposing | — | Credential administration belongs in the provider dashboard. |
@@ -491,7 +491,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | speech_to_text | POST | /v1/speech-to-text | admitted | 9 | speech-to-text | run_job | partial | @mindstone/mcp-server-elevenlabs:transcribe_audio | Supports a local multipart file, model_id, language, diarization and timestamp controls; omits current URL, webhook and other transcription options. |
 | start_speaker_separation | POST | /v1/voices/pvc/{voice_id}/samples/{sample_id}/separate-speakers | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | stream_chapter_snapshot_audio | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}/stream | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| stream_compose | POST | /v1/music/stream | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| stream_compose | POST | /v1/music/stream | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | stream_project_snapshot_archive_endpoint | POST | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/archive | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | stream_project_snapshot_audio_endpoint | POST | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/stream | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | submit_merge_proposal_review_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/reviews | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -525,7 +525,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | update_document_route | PATCH | /v1/convai/knowledge-base/{documentation_id} | admitted | 1 | knowledge-base | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_environment_variable | PATCH | /v1/convai/environment-variables/{env_var_id} | admitted | 7 | environment-variables | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_file_document_route | PATCH | /v1/convai/knowledge-base/{documentation_id}/update-file | admitted | 1 | knowledge-base | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| update_finetune | PATCH | /v1/music/finetunes/{finetune_id} | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| update_finetune | PATCH | /v1/music/finetunes/{finetune_id} | admitted | 9 | music | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_mcp_server_approval_policy_route | PATCH | /v1/convai/mcp-servers/{mcp_server_id}/approval-policy | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_mcp_server_config_route | PATCH | /v1/convai/mcp-servers/{mcp_server_id} | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_mcp_tool_config_override_route | PATCH | /v1/convai/mcp-servers/{mcp_server_id}/tool-configs/{tool_name} | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -546,11 +546,11 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | update_workspace_member_usage_limit | PUT | /v1/workspace/members/{user_id}/usage-limit | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | upload_asset | POST | /v1/assets | planned | 10 | assets | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | upload_file_route | POST | /v1/convai/conversations/{conversation_id}/files | admitted | 7 | conversations | create | missing | — | No existing tool maps to this exact HTTP operation. |
-| upload_song | POST | /v1/music/upload | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| upload_song | POST | /v1/music/upload | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | usage_by_product_over_time | POST | /v1/workspace/analytics/query/usage-by-product-over-time | planned | 10 | workspace/analytics | — | partial | @mindstone/mcp-server-elevenlabs:get_usage_stats | Maps days_back, interval and group_by to start_time, end_time, interval_seconds and group_by; provider filters and time_zone are absent. Returns summarized credit usage rather than the entire provider response. |
 | usage_characters | GET | /v1/usage/character-stats | planned | 9 | usage | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | verify_pvc_voice_captcha | POST | /v1/voices/pvc/{voice_id}/captcha | planned | 9 | voices | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| video_to_music | POST | /v1/music/video-to-music | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| video_to_music | POST | /v1/music/video-to-music | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | whatsapp_outbound_call | POST | /v1/convai/whatsapp/outbound-call | admitted | 8 | whatsapp | place_call | missing | — | No existing tool maps to this exact HTTP operation. |
 | whatsapp_outbound_message | POST | /v1/convai/whatsapp/outbound-message | admitted | 8 | whatsapp | place_call | missing | — | No existing tool maps to this exact HTTP operation. |
 | workspace_usage | POST | /v1/workspace/analytics/usage | planned | 10 | workspace/analytics | — | missing | — | No existing tool maps to this exact HTTP operation. |

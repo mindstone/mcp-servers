@@ -16,7 +16,7 @@
       "voices and pronunciation",
       "speech and dialogue",
       "timestamped audio, timestamp streams and voice previews",
-      "music, detailed music metadata and sound effects",
+      "music planning, generation, uploads, stems, video inputs, finetunes, declared song IDs and sound effects",
       "transcription and audio processing",
       "dubbing and history",
       "API discovery and voice-agent lifecycle",

@@ -1,4 +1,5 @@
 import mixedCases from './api-mixed-wire-cases.json' with { type: 'json' };
+import musicCases from './api-music-wire-cases.json' with { type: 'json' };
 import timestampStreamCases from './api-timestamp-stream-wire-cases.json' with { type: 'json' };
 import base64Cases from './api-base64-wire-cases.json' with { type: 'json' };
 import processingCases from './api-processing-wire-cases.json' with { type: 'json' };
@@ -25,7 +26,7 @@ export interface WireCase {
   query: [string, string][];
   body?: unknown;
   status: number;
-  media: 'application/json' | 'text/html' | 'audio/mpeg' | 'text/csv' | 'multipart/mixed' | null;
+  media: 'application/json' | 'text/html' | 'audio/mpeg' | 'text/csv' | 'application/zip' | 'multipart/mixed' | null;
   response: unknown;
   response_content_type?: string;
   metadata?: unknown;
@@ -42,6 +43,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...musicCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...mixedCases as WireCase[],
   ...base64Cases as WireCase[],
   ...timestampStreamCases as WireCase[],
@@ -235,9 +237,10 @@ export const apiWireCases: WireCase[] = [
 ];
 
 export interface MultipartWireCase extends WireCase {
-  multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[] };
+  multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[]; multiple?: boolean };
 }
 export const multipartCases: MultipartWireCase[] = [
+  ...musicCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...processingCases as MultipartWireCase[],
   {
     id: 'post_agent_avatar_route', profile: 'change', args: { path_params: { agent_id: 'agent/a ?#' } },

@@ -95,7 +95,7 @@ it.each(['AbortError', 'TimeoutError'])('closes a partially consumed upload on %
   expect(handles.every(handle => handle.fd === -1)).toBe(true); expect(fetch).toHaveBeenCalledOnce(); expect(fs.readdirSync(workspace)).toEqual(['source.wav']);
 });
 
-it.each(['AbortError', 'TimeoutError'])('cleans a partially written response and closes the uploaded descriptor on %s', async name => {
+it.each(['AbortError', 'TimeoutError'])('keeps a partially written paid response and closes the uploaded descriptor on %s', async name => {
   await setup(); const source = path.join(workspace, 'source.wav'); fs.writeFileSync(source, 'sample');
   const handles: import('node:fs/promises').FileHandle[] = [];
   const controller = new AbortController();
@@ -109,8 +109,10 @@ it.each(['AbortError', 'TimeoutError'])('cleans a partially written response and
   });
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(new Uint8Array([0, 255, 128]), { headers: { 'Content-Type': 'audio/mpeg' } }));
   const { executeApiOperation } = await import('../src/api-executor.js');
-  await expect(executeApiOperation('run_job', { operation_id: 'audio_isolation', files: [{ field: 'audio', file_path: source }] })).rejects.toMatchObject({ code: name === 'AbortError' ? 'CANCELLED' : 'TIMEOUT' });
-  expect(handles.every(handle => handle.fd === -1)).toBe(true); expect(fetch).toHaveBeenCalledOnce(); expect(fs.readdirSync(workspace)).toEqual(['source.wav']);
+  await expect(executeApiOperation('run_job', { operation_id: 'audio_isolation', files: [{ field: 'audio', file_path: source }] })).rejects.toMatchObject({ code: name === 'AbortError' ? 'CANCELLED' : 'TIMEOUT', retained_output: { state: 'incomplete', size_bytes: 3 } });
+  expect(handles.every(handle => handle.fd === -1)).toBe(true); expect(fetch).toHaveBeenCalledOnce();
+  const output = fs.readdirSync(workspace).filter(name => name !== 'source.wav'); expect(output).toHaveLength(1);
+  expect(fs.readFileSync(path.join(workspace, output[0]))).toEqual(Buffer.from([0, 255, 128]));
 });
 
 

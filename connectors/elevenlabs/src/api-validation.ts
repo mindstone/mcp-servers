@@ -265,14 +265,14 @@ const artifactSchema = z.object({ file_path: z.string().min(1), size_bytes: z.nu
 export const jsonArtifactSchema = artifactSchema.extend({ source_path: z.array(z.union([z.string().min(1), z.number().int().nonnegative().safe()])).nonempty() });
 const receiptEnvelopeSchema = z.object({
   ok: z.literal(true), operation_id: z.string().regex(/^[a-zA-Z0-9_]+$/), status: z.number().int().min(200).max(299),
-  content_type: responseMediaSchema.nullable(), data: envelopeText.nullable(), artifact: artifactSchema.optional(),
+  content_type: responseMediaSchema.nullable(), data: envelopeText.nullable(), artifact: artifactSchema.optional(), metadata: envelopeText.optional(),
   response_contract: responseContractSchema, has_more: z.boolean().optional(), next: z.literal(NEXT_PAGE_INSTRUCTION).optional(),
   follow_up_operations: z.array(z.string().regex(/^[a-zA-Z0-9_]+$/)).optional(), next_step: z.string().min(1).optional(), effects: effectsSchema, message: z.literal('The provider returned a success response.'),
 }).strict();
 export function successReceiptSchema(followUpOperations: readonly ApiOperation[], sourceOperation?: ApiOperation) {
   return receiptEnvelopeSchema.superRefine((value, ctx) => {
     const source = `elevenlabs:api:${value.operation_id}`;
-    for (const [path, text] of [['data', value.data], ['response_contract', typeof value.response_contract === 'object' ? value.response_contract.mismatch : null]] as const) {
+    for (const [path, text] of [['data', value.data], ['metadata', value.metadata ?? null], ['response_contract', typeof value.response_contract === 'object' ? value.response_contract.mismatch : null]] as const) {
       if (text !== null && wrapUntrusted(text, source) !== text) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message: 'Expected one intact operation envelope.' });
     }
     const binary = isBinaryResponseMedia(value.content_type);
@@ -285,7 +285,7 @@ export function successReceiptSchema(followUpOperations: readonly ApiOperation[]
     if (followUps.length === 0 && value.next_step !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['next_step'], message: 'The next-step instruction requires nonempty follow-up operations.' });
   });
 }
-export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor, outputFormat?: unknown, fileData?: unknown) {
+export async function createSuccessReceipt(operationId: string, status: number, media: string | null, parsedData: unknown, redactor: Redactor, outputFormat?: unknown, fileData?: unknown, headers: Record<string, string> = {}) {
   const op = await getOperation(operationId);
   const validator = await loadApiValidator();
   const descriptor = validator.responseDescriptor(op, status, media, outputFormat);
@@ -297,8 +297,9 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, op);
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' || descriptor.multipart ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
+  const metadata = Object.keys(headers).length ? wrapUntrusted(JSON.stringify(redactor.redact({ response_headers: headers }, op)), `elevenlabs:api:${op.operation_id}`) : undefined;
   return parseApiResponse(successReceiptSchema(followUps, op), { ok: true, operation_id: op.operation_id, status, content_type: media,
-    data, ...(artifact ? { artifact } : {}), response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
+    data, ...(metadata ? { metadata } : {}), ...(artifact ? { artifact } : {}), response_contract, ...pagination, follow_up_operations: op.follow_ups, ...(followUps.length > 0 ? { next_step: nextStepFor(followUps, op) } : {}), effects: op.effects, message: 'The provider returned a success response.' }, 'API receipt');
 }
 
 /** Connector-authored examples, checked against the same request refinement before discovery. */

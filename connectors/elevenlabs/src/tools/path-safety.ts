@@ -254,7 +254,11 @@ export async function writeWorkspaceArtifactStream(fileName: string, body: Reada
     const retained = progress?.retained();
     if (!retained) await fs.promises.unlink(dest);
     if (failure instanceof ElevenLabsError && failure.code === 'PROGRESS_DELIVERY_FAILED') throw Object.assign(failure, { retained_output: retained });
-    if (retained) throw new ElevenLabsError('The output is incomplete; the saved file was kept.', 'STREAM_FAILED', 'No automatic retry was made.', retained);
+    if (retained) {
+      const incomplete = new ElevenLabsError('The output is incomplete; the saved file was kept.', 'STREAM_FAILED', 'No automatic retry was made.', retained);
+      if (failure instanceof Error && ['AbortError', 'TimeoutError'].includes(failure.name)) incomplete.name = failure.name;
+      throw incomplete;
+    }
     throw failure;
   } finally {
     signal.removeEventListener('abort', cancel);

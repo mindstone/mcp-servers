@@ -29,7 +29,17 @@ const formats = [
 ];
 const bytes = new Uint8Array([0, 255, 17, 99, 128]);
 describe('generic generation receipts', () => {
-  it.each(['Error', 'AbortError', 'TimeoutError'])('cleans a partial generation after a body %s, without retrying', async name => {
+  it('carries the declared character-cost header into enveloped receipt metadata', async () => {
+    const client = await setup();
+    const { unwrapUntrusted } = await import('../src/untrusted-content.js');
+    mswServer.use(http.post('https://api.elevenlabs.io/v1/sound-generation', () => new HttpResponse(bytes, { headers: {
+      'Content-Type': 'audio/mpeg', 'character-cost': '42', 'x-undeclared': 'not-declared' } })));
+    const result = await client.callTool('elevenlabs_run_job', { operation_id: 'sound_generation', body: { text: 'A bell.' } });
+    expect(result.isError, result.text).not.toBe(true); const receipt = JSON.parse(result.text);
+    expect(receipt.metadata).toMatch(/^<untrusted-content source="elevenlabs:api:sound_generation">/);
+    expect(JSON.parse(unwrapUntrusted(receipt.metadata))).toEqual({ response_headers: { 'character-cost': '42' } });
+  });
+  it.each(['Error', 'AbortError', 'TimeoutError'])('keeps a partial paid generation after a body %s, without retrying', async name => {
     const client = await setup();
     let chunks = 0;
     const body = new ReadableStream<Uint8Array>({ pull(controller) {
@@ -39,9 +49,10 @@ describe('generic generation receipts', () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(body, { headers: { 'Content-Type': 'audio/mpeg' } }));
     fs.writeFileSync(path.join(workspace, 'preserved'), 'keep');
     const result = await client.callTool('elevenlabs_run_job', { operation_id: 'sound_generation', body: { text: 'A bell.' } });
-    expect(result.json).toMatchObject({ code: name === 'Error' ? 'INVALID_RESPONSE' : 'TIMEOUT', resolution: expect.stringContaining('No verifiable lookup:') });
+    expect(result.json).toMatchObject({ code: name === 'Error' ? 'INVALID_RESPONSE' : 'TIMEOUT', resolution: expect.stringContaining('No verifiable lookup:'), retained_output: { state: 'incomplete', size_bytes: bytes.length } });
     expect(fetch).toHaveBeenCalledOnce();
-    expect(fs.readdirSync(workspace)).toEqual(['preserved']);
+    const output = fs.readdirSync(workspace).filter(name => name !== 'preserved'); expect(output).toHaveLength(1);
+    expect(fs.readFileSync(path.join(workspace, output[0]))).toEqual(Buffer.from(bytes));
     expect(fs.readFileSync(path.join(workspace, 'preserved'), 'utf8')).toBe('keep');
   });
   it.each(formats)('preserves raw %s bytes despite the pinned MPEG response declaration', async format => {
@@ -96,14 +107,15 @@ describe('generic generation receipts', () => {
     const result = await client.callTool('elevenlabs_run_job', { operation_id: 'sound_generation', body: { text: 'A bell.' } });
     expect(result.json).toMatchObject({ code, error: 'Synthetic output refusal.' });
   });
-  it('removes the completed artifact if receipt creation fails', async () => {
+  it('keeps the completed paid artifact if receipt creation fails', async () => {
     const client = await setup();
     const validation = await import('../src/api-validation.js');
     vi.spyOn(validation, 'createSuccessReceipt').mockRejectedValueOnce(new Error('Synthetic receipt failure.'));
     mswServer.use(http.post('https://api.elevenlabs.io/v1/sound-generation', () => new HttpResponse(bytes, { headers: { 'Content-Type': 'audio/mpeg' } })));
     const result = await client.callTool('elevenlabs_run_job', { operation_id: 'sound_generation', body: { text: 'A bell.' } });
-    expect(result.json).toMatchObject({ code: 'INVALID_RESPONSE' });
-    expect(fs.readdirSync(workspace)).toEqual([]);
+    expect(result.json).toMatchObject({ code: 'INVALID_RESPONSE', retained_outputs: [{ state: 'complete', size_bytes: bytes.length }] });
+    const outputs = fs.readdirSync(workspace); expect(outputs).toHaveLength(1);
+    expect(fs.readFileSync(path.join(workspace, outputs[0]))).toEqual(Buffer.from(bytes));
   });
 
   it.each(['application/octet-stream', 'audio/unknown', 'audio/mpeg, video/mp4', 'video/mp4'])('refuses undeclared or malformed %s without writing', async media => {

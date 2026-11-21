@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Music planning, generation, uploads, stem separation, video inputs and finetune lifecycle operations through the API tools. ZIPs stay zipped, training states stay honest, and declared response headers, such as song IDs and sound-effect character costs, stay in receipt metadata. No automatic extra take.
 - Detailed music generation now keeps the composition plan and song metadata beside workspace audio references. Audio writes incrementally, partial files survive interruptions, and no extra take is ordered automatically.
 - Timestamped speech and dialogue streams now save one audio file with ordered timing metadata alongside it. Partial files survive interruptions; timestamps keep their original meaning. Collection, not live playback.
 - Timestamped speech and dialogue, voice-design and remix previews, and voice-sample audio through the API tools. Audio becomes workspace files; timing and preview identities stay with them. Completed files survive a later response failure. Previews are auditions, not permanent voices.

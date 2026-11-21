@@ -70,6 +70,7 @@ const stage92Profiles = { read: 'get_similar_library_voices', create: 'add_from_
 const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_speech_full text_to_dialogue sound_generation' };
 const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix text_to_speech_stream_with_timestamps text_to_dialogue_stream_with_timestamps' };
 const stage94Profiles = { run_job: 'compose_detailed' };
+const stage95Profiles = { read: 'compose_plan get_finetune get_finetunes', change: 'update_finetune', delete: 'delete_finetune', run_job: 'generate stream_compose upload_song separate_song_stems video_to_music create_finetune' };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -83,7 +84,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -142,7 +143,7 @@ const operationSchema = z.object({
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
-  file_bindings: z.array(z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional() }).strict()).optional(),
+  file_bindings: z.array(z.object({ field: text, kind: z.union([z.enum(['audio', 'document', 'image']), z.array(z.enum(['audio', 'document', 'image'])).nonempty()]), allowed_media_types: z.array(text).nonempty().optional(), max_bytes: z.number().int().positive().optional(), max_total_bytes: z.number().int().positive().safe().optional() }).strict()).optional(),
   search_aliases: z.array(text).optional(), rank: z.number().int().optional(),
   follow_ups: z.array(text).optional(), examples: z.array(z.record(z.unknown())).optional(),
 }).strict();
@@ -194,7 +195,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -276,7 +277,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 229, planned: 177, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 240, planned: 166, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -294,6 +295,10 @@ function validateProductionCensus(policy) {
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
   const fileBindings = {
+    upload_song: [{ field: 'file', kind: 'audio' }],
+    separate_song_stems: [{ field: 'file', kind: 'audio' }],
+    create_finetune: [{ field: 'files', kind: 'audio' }],
+    video_to_music: [{ field: 'videos', kind: 'audio', allowed_media_types: ['video/mp4', 'video/webm', 'video/quicktime'], max_total_bytes: 200_000_000 }],
     audio_isolation: [{ field: 'audio', kind: 'audio' }],
     speech_to_speech_full: [{ field: 'audio', kind: 'audio' }],
     speech_to_text: [{ field: 'file', kind: 'audio', max_bytes: 4_999_999_999 }],
@@ -380,7 +385,7 @@ function resolveSchema(schema, spec, visited = new Set()) {
   visited.add(name);
   const target = componentSchema(spec, name);
   const { $ref, ...siblings } = schema;
-  if (Object.keys(siblings).some(key => !['description', 'title', 'examples', ...SCHEMA_METADATA_KEYWORDS].includes(key))) refuse('constrained root reference', name);
+  if (Object.keys(siblings).some(key => !['description', 'title', 'examples', 'default', ...SCHEMA_METADATA_KEYWORDS].includes(key))) refuse('constrained root reference', name);
   return { ...resolveSchema(target, spec, visited), ...siblings };
 }
 function scalarShape(schema, spec, allowArray, visited = new Set()) {
@@ -565,8 +570,10 @@ function successDescriptors(operation, transform, id, row) {
   for (const [status, response] of Object.entries(operation.responses ?? {}).sort()) {
     if (!/^2[0-9][0-9]$/.test(status)) continue;
     if (response.$ref) refuse('response reference', id);
+    const headers = Object.keys(response.headers ?? {}).map(name => name.toLowerCase()).sort();
+    const declaredHeaders = headers.length ? { headers } : {};
     const content = Object.entries(response.content ?? {});
-    if (content.length === 0) responses.push({ status: Number(status), media_type: null });
+    if (content.length === 0) responses.push({ status: Number(status), media_type: null, ...declaredHeaders });
     for (const [media, data] of content.sort()) {
       if ((media === 'multipart/mixed') !== Boolean(row.multipart) || (row.multipart && row.base64_audio)) refuse('invalid multipart strategy', id);
       const binary = media === 'audio/*' || Object.hasOwn(binaryExtensions, media);
@@ -579,7 +586,7 @@ function successDescriptors(operation, transform, id, row) {
         if ((media !== 'audio/mpeg' && !row.base64_audio) || !schema?.enum?.length || !schema.enum.includes(schema.default) || schema.enum.some(format => !audioRepresentation(format))) refuse('invalid output-format binding', id);
         output_formats = { default: schema.default, values: schema.enum };
       }
-      responses.push({ status: Number(status), media_type: media, ...(row.multipart ? { multipart: row.multipart } : {}), ...(row.base64_audio ? { base64_audio: row.base64_audio } : {}), ...(output_formats ? { output_formats } : {}), ...(data.schema !== undefined ? { schema: transform(data.schema, `${id}/response/${status}/${media}`, binary || Boolean(row.multipart)) } : {}) });
+      responses.push({ status: Number(status), media_type: media, ...declaredHeaders, ...(row.multipart ? { multipart: row.multipart } : {}), ...(row.base64_audio ? { base64_audio: row.base64_audio } : {}), ...(output_formats ? { output_formats } : {}), ...(data.schema !== undefined ? { schema: transform(data.schema, `${id}/response/${status}/${media}`, binary || Boolean(row.multipart)) } : {}) });
     }
   }
   if (responses.length === 0) refuse('missing concrete success response', id);
