@@ -236,6 +236,18 @@ describe('opus_download_clip', () => {
     }
   });
 
+  it('overwrites a file whose name is close to the 255-byte limit (FOX-11742)', async () => {
+    serveClip();
+    const client = await freshClient();
+    const name = `${'n'.repeat(231)}.mp4`;
+    const out = path.join(workspace, name);
+    fs.writeFileSync(out, 'pre-existing');
+    const result = await client.callTool('opus_download_clip', { url: CLIP_URL, output_path: out, overwrite: true });
+    expect(result.isError).toBeFalsy();
+    expect(fs.readFileSync(out)).toEqual(Buffer.from(CLIP_BYTES));
+    expect(fs.readdirSync(workspace)).toEqual([name]);
+  });
+
   it('successful overwrite leaves no temp staging files behind', async () => {
     serveClip();
     const client = await freshClient();

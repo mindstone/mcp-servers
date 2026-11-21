@@ -157,7 +157,8 @@ export function registerDownloadTools(server: McpServer): void {
         }
         writePath = path.join(
           path.dirname(resolved),
-          `.${path.basename(resolved)}.opus-download-${randomUUID()}.tmp`,
+          // Not derived from the file name, so a name near the 255-byte limit still downloads.
+          `.opus-download-${randomUUID()}.tmp`,
         );
       }
 
