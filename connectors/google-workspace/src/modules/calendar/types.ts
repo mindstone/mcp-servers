@@ -124,6 +124,10 @@ export interface ManageEventParams {
   }[];
   /** Event color ID (1-11). See Google Calendar color palette. Only applies to 'update_time' action. */
   colorId?: string;
+  /** New event title. Only applies to 'update_time' action. */
+  summary?: string;
+  /** Calendar holding the event (defaults to 'primary'). */
+  calendarId?: string;
 }
 
 export interface ManageEventResponse {

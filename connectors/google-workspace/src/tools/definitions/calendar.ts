@@ -243,7 +243,7 @@ Usage examples:
   {
     name: 'manage_workspace_calendar_event',
     category: 'Calendar/Events',
-    description: `Manage calendar event responses and updates including accept/decline, propose new times, update event times, and set event color.
+    description: `Manage calendar event responses and updates including accept/decline, propose new times, update event times, rename events, and set event color.
     
     IMPORTANT: Before managing events:
     1. Verify account access with list_workspace_accounts
@@ -253,8 +253,9 @@ Usage examples:
     Common Actions:
     - Accept/Decline invitations
     - Propose alternative times
-    - Update existing events (time, color)
+    - Update existing events (time, title, color) with 'update_time': pass new_times, summary, or both
     - Add comments to responses
+    - Events on a shared calendar: pass calendar_id (defaults to 'primary'); get IDs from list_workspace_calendars
     
     Color Support:
     - Use color_id (1-11) with 'update_time' action to set event color
@@ -330,6 +331,14 @@ Usage examples:
           type: 'string',
           enum: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'],
           description: 'Event color ID (1-11). Only works with update_time action on events you organize. Colors: 1=Lavender, 2=Sage, 3=Grape, 4=Flamingo, 5=Banana, 6=Tangerine, 7=Peacock, 8=Graphite, 9=Blueberry, 10=Basil, 11=Tomato'
+        },
+        summary: {
+          type: 'string',
+          description: 'New event title (rename). Only works with update_time action; new_times may be omitted when only renaming.'
+        },
+        calendar_id: {
+          type: 'string',
+          description: "Calendar ID holding the event. Defaults to 'primary' (your calendar). Get shared calendar IDs from list_workspace_calendars."
         }
       },
       required: ['event_id', 'action']
@@ -583,6 +592,10 @@ Usage examples:
           type: 'string',
           enum: ['entire_series', 'this_and_following'],
           description: 'For recurring events, specifies which instances to delete'
+        },
+        calendar_id: {
+          type: 'string',
+          description: "Calendar ID holding the event. Defaults to 'primary' (your calendar). Get shared calendar IDs from list_workspace_calendars."
         }
       },
       required: ['event_id']

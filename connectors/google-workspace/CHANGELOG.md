@@ -20,6 +20,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- `manage_workspace_calendar_event` can now rename an event: pass `summary` with the `update_time` action, with or without new times. It and `delete_workspace_calendar_event` take an optional `calendar_id`, so events on shared calendars can be moved, renamed and deleted; without it they act on your primary calendar as before.
 - `list_workspace_drafts` names each draft it could not read and why, in a new `unreadableDrafts` result field, instead of silently leaving it out of the list.
 - Corrected the `batch_update_workspace_document` examples to use Google Docs' native nested request keys.
 - Calendar event attachments are now returned and attached as Drive files, with new content uploaded to Drive; Sheets anchor continuation tokens from spreadsheet and batch reads can be passed back as given.

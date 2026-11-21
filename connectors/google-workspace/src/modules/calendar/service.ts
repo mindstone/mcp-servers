@@ -593,12 +593,13 @@ export class CalendarService {
   /**
    * Manage calendar event responses and updates
    */
-  async manageEvent({ email, eventId, action, comment, newTimes, colorId }: ManageEventParams): Promise<ManageEventResponse> {
+  async manageEvent({ email, eventId, action, comment, newTimes, colorId, summary, calendarId }: ManageEventParams): Promise<ManageEventResponse> {
     const calendar = await this.getCalendarClient(email);
+    const targetCalendarId = calendarId || 'primary';
 
     return this.handleCalendarOperation(email, async () => {
       const event = await calendar.events.get({
-        calendarId: 'primary',
+        calendarId: targetCalendarId,
         eventId
       });
 
@@ -634,7 +635,7 @@ export class CalendarService {
           }
 
           const { data: updatedEvent } = await calendar.events.patch({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId,
             sendUpdates: 'all',
             requestBody: {
@@ -685,7 +686,8 @@ export class CalendarService {
         }
 
         case 'update_time': {
-          if (!newTimes || newTimes.length === 0) {
+          const hasNewTime = !!newTimes && newTimes.length > 0;
+          if (!hasNewTime && summary === undefined) {
             throw new CalendarError(
               'No new time provided',
               'INVALID_REQUEST',
@@ -694,11 +696,11 @@ export class CalendarService {
           }
 
           const { data: updatedEvent } = await calendar.events.patch({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId,
             requestBody: {
-              start: newTimes[0].start,
-              end: newTimes[0].end,
+              ...(hasNewTime ? { start: newTimes[0].start, end: newTimes[0].end } : {}),
+              ...(summary !== undefined ? { summary } : {}),
               colorId
             },
             sendUpdates: 'all'
@@ -730,21 +732,24 @@ export class CalendarService {
    * @param eventId ID of the event to delete
    * @param sendUpdates Whether to send update notifications
    * @param deletionScope For recurring events, specifies which instances to delete
+   * @param calendarId Optional calendar ID (defaults to 'primary')
    */
   async deleteEvent(
     email: string, 
     eventId: string, 
     sendUpdates: 'all' | 'externalOnly' | 'none' = 'all',
-    deletionScope?: 'entire_series' | 'this_and_following'
+    deletionScope?: 'entire_series' | 'this_and_following',
+    calendarId?: string
   ): Promise<void> {
     const calendar = await this.getCalendarClient(email);
+    const targetCalendarId = calendarId || 'primary';
 
     return this.handleCalendarOperation(email, async () => {
       // If no deletion scope is specified or it's set to delete entire series,
       // use the default behavior
       if (!deletionScope || deletionScope === 'entire_series') {
         await calendar.events.delete({
-          calendarId: 'primary',
+          calendarId: targetCalendarId,
           eventId,
           sendUpdates
         });
@@ -753,7 +758,7 @@ export class CalendarService {
 
       // For 'this_and_following', we need to check if this is a recurring event
       const { data: event } = await calendar.events.get({
-        calendarId: 'primary',
+        calendarId: targetCalendarId,
         eventId
       });
         
@@ -774,7 +779,7 @@ export class CalendarService {
           // This is an instance of a recurring event
           // We need to get the master event to update its recurrence rules
           const { data: masterEvent } = await calendar.events.get({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId: event.recurringEventId
           });
           
@@ -810,7 +815,7 @@ export class CalendarService {
           
           // Update the master event with the new recurrence rules
           await calendar.events.patch({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId: event.recurringEventId,
             sendUpdates,
             requestBody: {
@@ -820,7 +825,7 @@ export class CalendarService {
           
           // Now delete this specific instance
           await calendar.events.delete({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId,
             sendUpdates
           });
@@ -851,7 +856,7 @@ export class CalendarService {
           
           // Update the master event with the new recurrence rules
           await calendar.events.patch({
-            calendarId: 'primary',
+            calendarId: targetCalendarId,
             eventId,
             sendUpdates,
             requestBody: {

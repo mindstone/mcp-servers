@@ -741,6 +741,8 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
   const eventId = readAliasedString(params, 'event_id', 'eventId');
   const newTimes = (params.new_times ?? params.newTimes) as Array<{ start: EventTime; end: EventTime }> | undefined;
   const colorId = readAliasedString(params, 'color_id', 'colorId');
+  const calendarId = readAliasedString(params, 'calendar_id', 'calendarId');
+  const summary = typeof params.summary === 'string' ? params.summary : undefined;
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
@@ -759,6 +761,13 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
     );
   }
 
+  if (summary !== undefined && summary.trim() === '') {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'summary cannot be empty; omit it to keep the current title'
+    );
+  }
+
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const managedEvent = await calendarService.manageEvent({
@@ -767,7 +776,9 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
         action,
         comment,
         newTimes,
-        colorId
+        colorId,
+        summary,
+        calendarId
       });
       return wrapUntrustedJsonControls(managedEvent, `google-workspace:calendar:event/${eventId}`, ['attachments.*.fileId'], ['eventId']);
     } catch (error) {
@@ -781,6 +792,7 @@ export async function handleDeleteWorkspaceCalendarEvent(params: any) {
   const eventId = readAliasedString(params, 'event_id', 'eventId');
   const sendUpdates = readAliasedString(params, 'send_updates', 'sendUpdates') as 'all' | 'externalOnly' | 'none' | undefined;
   const deletionScope = readAliasedString(params, 'deletion_scope', 'deletionScope') as 'entire_series' | 'this_and_following' | undefined;
+  const calendarId = readAliasedString(params, 'calendar_id', 'calendarId');
   
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
@@ -802,7 +814,7 @@ export async function handleDeleteWorkspaceCalendarEvent(params: any) {
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      await calendarService.deleteEvent(email, eventId, sendUpdates, deletionScope);
+      await calendarService.deleteEvent(email, eventId, sendUpdates, deletionScope, calendarId);
       // Return a success response object instead of void
       return {
         status: 'success',
