@@ -1,0 +1,365 @@
+[
+  {
+    "id": "create_podcast",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "model_id": "eleven_multilingual_v2",
+        "mode": {
+          "type": "conversation",
+          "conversation": {
+            "host_voice_id": "voice_host",
+            "guest_voice_id": "voice_guest"
+          }
+        },
+        "source": {
+          "type": "text",
+          "text": "Acme article"
+        },
+        "callback_url": "https://callbacks.example.com/podcast",
+        "duration_scale": "short",
+        "quality_preset": "standard",
+        "language": "en",
+        "intro": "Welcome.",
+        "outro": null,
+        "instructions_prompt": "Stay factual.",
+        "highlights": [
+          "Acme overview"
+        ],
+        "apply_text_normalization": "on"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/studio/podcasts",
+    "response": {
+      "project": {
+        "project_id": "project_example",
+        "name": "Acme Guide",
+        "create_date_unix": 1735689600,
+        "created_by_user_id": null,
+        "default_title_voice_ref_id": "title_ref",
+        "default_paragraph_voice_ref_id": "paragraph_ref",
+        "default_model_id": "eleven_multilingual_v2",
+        "can_be_downloaded": true,
+        "volume_normalization": true,
+        "state": "default",
+        "access_level": "admin",
+        "quality_check_on": false,
+        "quality_check_on_when_bulk_convert": false,
+        "default_title_voice_id": "voice_title",
+        "default_paragraph_voice_id": "voice_paragraph",
+        "public_share_id": "share_example"
+      }
+    },
+    "follow_ups": [
+      "get_project_by_id",
+      "get_project_snapshots"
+    ],
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "body": {
+      "model_id": "eleven_multilingual_v2",
+      "mode": {
+        "type": "conversation",
+        "conversation": {
+          "host_voice_id": "voice_host",
+          "guest_voice_id": "voice_guest"
+        }
+      },
+      "source": {
+        "type": "text",
+        "text": "Acme article"
+      },
+      "callback_url": "https://callbacks.example.com/podcast",
+      "duration_scale": "short",
+      "quality_preset": "standard",
+      "language": "en",
+      "intro": "Welcome.",
+      "outro": null,
+      "instructions_prompt": "Stay factual.",
+      "highlights": [
+        "Acme overview"
+      ],
+      "apply_text_normalization": "on"
+    }
+  },
+  {
+    "id": "create_audio_native_project",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "Acme article",
+        "image": "https://images.example.com/cover.png",
+        "small": true,
+        "sessionization": 12,
+        "author": "Acme Editorial",
+        "title": "Overview",
+        "text_color": "#101010",
+        "background_color": "#ffffff",
+        "voice_id": "voice_host",
+        "model_id": "eleven_multilingual_v2",
+        "auto_convert": true,
+        "apply_text_normalization": "off",
+        "pronunciation_dictionary_locators": [
+          "{ \"pronunciation_dictionary_id\": \"dict_example\", \"version_id\": \"v1\" }",
+          "{\"pronunciation_dictionary_id\":\"dict_second\",\"version_id\":null}"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/audio-native",
+    "response": {
+      "project_id": "project_example",
+      "converting": false,
+      "html_snippet": "<div id='audio-native-player'></div>"
+    },
+    "follow_ups": [
+      "get_audio_native_project_settings_endpoint",
+      "get_project_by_id"
+    ],
+    "multipart": {
+      "field": "file",
+      "fileName": "article.txt",
+      "mime": "text/plain",
+      "bytes": [
+        65,
+        99,
+        109,
+        101,
+        10,
+        0,
+        128,
+        255
+      ],
+      "scalars": [
+        [
+          "name",
+          "Acme article"
+        ],
+        [
+          "image",
+          "https://images.example.com/cover.png"
+        ],
+        [
+          "small",
+          "true"
+        ],
+        [
+          "sessionization",
+          "12"
+        ],
+        [
+          "author",
+          "Acme Editorial"
+        ],
+        [
+          "title",
+          "Overview"
+        ],
+        [
+          "text_color",
+          "#101010"
+        ],
+        [
+          "background_color",
+          "#ffffff"
+        ],
+        [
+          "voice_id",
+          "voice_host"
+        ],
+        [
+          "model_id",
+          "eleven_multilingual_v2"
+        ],
+        [
+          "auto_convert",
+          "true"
+        ],
+        [
+          "apply_text_normalization",
+          "off"
+        ],
+        [
+          "pronunciation_dictionary_locators",
+          "{ \"pronunciation_dictionary_id\": \"dict_example\", \"version_id\": \"v1\" }"
+        ],
+        [
+          "pronunciation_dictionary_locators",
+          "{\"pronunciation_dictionary_id\":\"dict_second\",\"version_id\":null}"
+        ]
+      ]
+    },
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "body": {
+      "name": "Acme article",
+      "image": "https://images.example.com/cover.png",
+      "small": true,
+      "sessionization": 12,
+      "author": "Acme Editorial",
+      "title": "Overview",
+      "text_color": "#101010",
+      "background_color": "#ffffff",
+      "voice_id": "voice_host",
+      "model_id": "eleven_multilingual_v2",
+      "auto_convert": true,
+      "apply_text_normalization": "off",
+      "pronunciation_dictionary_locators": [
+        "{ \"pronunciation_dictionary_id\": \"dict_example\", \"version_id\": \"v1\" }",
+        "{\"pronunciation_dictionary_id\":\"dict_second\",\"version_id\":null}"
+      ]
+    }
+  },
+  {
+    "id": "audio_native_project_update_content_endpoint",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project_example"
+      },
+      "body": {
+        "auto_convert": false,
+        "auto_publish": true
+      }
+    },
+    "method": "POST",
+    "path": "/v1/audio-native/project_example/content",
+    "response": {
+      "project_id": "project_example",
+      "converting": true,
+      "publishing": false,
+      "html_snippet": "<div id='audio-native-player'></div>"
+    },
+    "follow_ups": [
+      "get_audio_native_project_settings_endpoint",
+      "get_project_by_id"
+    ],
+    "multipart": {
+      "field": "file",
+      "fileName": "article.html",
+      "mime": "text/html",
+      "bytes": [
+        60,
+        104,
+        116,
+        109,
+        108,
+        62,
+        60,
+        98,
+        111,
+        100,
+        121,
+        62,
+        60,
+        112,
+        62,
+        65,
+        99,
+        109,
+        101,
+        60,
+        47,
+        112,
+        62,
+        60,
+        47,
+        98,
+        111,
+        100,
+        121,
+        62,
+        60,
+        47,
+        104,
+        116,
+        109,
+        108,
+        62,
+        10
+      ],
+      "scalars": [
+        [
+          "auto_convert",
+          "false"
+        ],
+        [
+          "auto_publish",
+          "true"
+        ]
+      ]
+    },
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "body": {
+      "auto_convert": false,
+      "auto_publish": true
+    }
+  },
+  {
+    "id": "audio_native_update_content_from_url",
+    "profile": "change",
+    "args": {
+      "body": {
+        "url": "https://docs.example.com/article",
+        "author": null,
+        "title": "Acme update"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/audio-native/content",
+    "response": {
+      "project_id": "project_example",
+      "converting": false,
+      "publishing": true,
+      "html_snippet": "<div id='audio-native-player'></div>"
+    },
+    "follow_ups": [
+      "get_audio_native_project_settings_endpoint",
+      "get_project_by_id"
+    ],
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "body": {
+      "url": "https://docs.example.com/article",
+      "author": null,
+      "title": "Acme update"
+    }
+  },
+  {
+    "id": "get_audio_native_project_settings_endpoint",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project_example"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/audio-native/project_example/settings",
+    "response": {
+      "enabled": true,
+      "snapshot_id": "snapshot_example",
+      "settings": {
+        "title": "Acme article",
+        "image": "https://images.example.com/cover.png",
+        "author": "Acme Editorial",
+        "small": false,
+        "text_color": "#101010",
+        "background_color": "#ffffff",
+        "sessionization": 12,
+        "audio_path": "audio/article.mp3",
+        "audio_url": "https://media.example.com/article.mp3",
+        "status": "ready"
+      }
+    },
+    "follow_ups": [],
+    "query": [],
+    "status": 200,
+    "media": "application/json"
+  }
+]

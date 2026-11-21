@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 333 non-upload cases', async () => {
-    expect(apiWireCases).toHaveLength(333);
-    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'add_project', 'add_pvc_voice_samples', 'add_voice', 'audio_isolation', 'audio_isolation_stream', 'create_dubbing', 'create_file_document_route', 'create_finetune', 'dubbing_project_create', 'edit_project_content', 'edit_voice', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'request_pvc_manual_verification', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_speech_stream', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
+  it('has independent cases for every admission, with exactly 336 non-upload cases', async () => {
+    expect(apiWireCases).toHaveLength(336);
+    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'add_project', 'add_pvc_voice_samples', 'add_voice', 'audio_isolation', 'audio_isolation_stream', 'audio_native_project_update_content_endpoint', 'create_audio_native_project', 'create_dubbing', 'create_file_document_route', 'create_finetune', 'dubbing_project_create', 'edit_project_content', 'edit_voice', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'request_pvc_manual_verification', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_speech_stream', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(358);
+    expect(new Set(expectedIds).size).toBe(363);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(multipartCases.map(wire => wire.id).sort());
@@ -280,6 +280,10 @@ describe('literal provider wire contracts through the real SDK registration', ()
     else if (wire.id === 'create_dubbing') expect(result.json.next_step).toContain('get_dubbed_metadata');
     else if (wire.id === 'add_project') expect(result.json.next_step).toContain('get_project_by_id');
     else if (wire.id === 'edit_project_content') expect(result.json.next_step).toContain('get_chapter_by_id_endpoint');
+    else if (['create_audio_native_project', 'audio_native_project_update_content_endpoint'].includes(wire.id)) {
+      expect(result.json.follow_up_operations).toEqual(['get_audio_native_project_settings_endpoint', 'get_project_by_id']);
+      expect(result.json.next_step).toContain('get_audio_native_project_settings_endpoint (path_params.project_id)');
+    }
     else expect(result.json.next_step).toBeUndefined();
   });
 });

@@ -122,6 +122,11 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "audio-native": {
+      "read": {
+        "unavailable_reason": "Player configuration does not verify article content, original upload bytes or every conversion/publication effect; repeat reads explicitly and do not blindly repeat writes."
+      }
+    },
     "studio": {
       "read": {
         "unavailable_reason": "No separate lookup confirms whether an interrupted Studio request finished or what local download bytes it kept; read the project or chapter again before repeating anything that changes it or uses credits."
@@ -714,36 +719,79 @@
     "audio_native_project_update_content_endpoint": {
       "method": "POST",
       "path": "/v1/audio-native/{project_id}/content",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "audio-native",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Replaces Audio Native article content; auto_convert consumes credits and auto_publish can publish a new snapshot after conversion.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_audio_native_project_settings_endpoint",
+        "get_project_by_id"
+      ],
+      "retry_check": {
+        "unavailable_reason": "Player settings expose enabled/snapshot/settings, not article content, upload bytes or every conversion/publication effect. No verifiable lookup checks the complete mutation. Do not repeat replacement, conversion or publication blindly."
+      },
+      "effect_note": "auto_publish can publish a new snapshot after conversion. Returned converting and publishing flags describe submission state and are not proof of a published result. Player settings and project metadata offer limited inspection only.",
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": "document",
+          "allowed_media_types": [
+            "text/plain",
+            "text/html"
+          ]
+        }
+      ]
     },
     "audio_native_update_content_from_url": {
       "method": "POST",
       "path": "/v1/audio-native/content",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "audio-native",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "The provider fetches the submitted URL, replaces matching Audio Native content and always queues conversion and auto-publication. Conversion consumes credits; no tariff is stated.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_audio_native_project_settings_endpoint",
+        "get_project_by_id"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No URL-to-project content/status lookup verifies the complete operation after losing its response. A returned project ID permits limited player/project inspection only. Do not repeat replacement, conversion or publication blindly."
+      },
+      "effect_note": "This update always queues conversion and auto-publication. Returned converting and publishing flags describe submission state and are not proof of a published result. The provider fetches the URL; the connector does not.",
+      "sensitive_request_fields": [
+        [
+          "url"
+        ]
+      ]
     },
     "cancel_batch_call": {
       "method": "POST",
@@ -1238,19 +1286,48 @@
     "create_audio_native_project": {
       "method": "POST",
       "path": "/v1/audio-native",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "audio-native",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates an Audio Native project; optional auto-conversion consumes credits. Creation does not prove audio is published.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_audio_native_project_settings_endpoint",
+        "get_project_by_id"
+      ],
+      "retry_check": {
+        "unavailable_reason": "Player settings and project metadata inspect known configuration identity, not uploaded article bytes or the full generation outcome. No verifiable lookup identifies this creation after losing its project ID. Do not repeat creation blindly."
+      },
+      "effect_note": "Use the returned project ID for get_audio_native_project_settings_endpoint or get_project_by_id. The returned converting flag describes submission state and is not proof of a published result.",
+      "sensitive_request_fields": [
+        [
+          "image"
+        ]
+      ],
+      "file_bindings": [
+        {
+          "field": "file",
+          "kind": "document",
+          "allowed_media_types": [
+            "text/plain",
+            "text/html"
+          ]
+        }
+      ]
     },
     "create_auth_connection": {
       "method": "POST",
@@ -1696,19 +1773,53 @@
     "create_podcast": {
       "method": "POST",
       "path": "/v1/studio/podcasts",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "run_job",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates and auto-converts new podcast media; audio generation is charged. The provider currently covers the LLM cost but may charge both in future. A callback can send conversion status to the submitted URL.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_project_by_id",
+        "get_project_snapshots"
+      ],
+      "retry_check": {
+        "unavailable_reason": "After losing the returned project ID, no verifiable lookup correlates generated project metadata with the submitted podcast source. Do not repeat generation blindly."
+      },
+      "effect_note": "Use the returned project ID for get_project_by_id, then get_project_snapshots. Acceptance is not finished audio. The provider fetches source URLs and delivers callbacks; the connector does neither.",
+      "sensitive_request_fields": [
+        [
+          "source",
+          "url"
+        ],
+        [
+          "source",
+          "*",
+          "url"
+        ],
+        [
+          "callback_url"
+        ]
+      ],
+      "optional_header_omissions": [
+        {
+          "name": "safety-identifier",
+          "reason": "Optional workspace-allowlisted moderation header is intentionally omitted; no caller-controlled header or invented identity is sent."
+        }
+      ]
     },
     "create_procedure_route": {
       "method": "POST",
@@ -3957,19 +4068,27 @@
     "get_audio_native_project_settings_endpoint": {
       "method": "GET",
       "path": "/v1/audio-native/{project_id}/settings",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "audio-native",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads existing Audio Native player configuration, not article content, without changing it.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "effect_note": "Repeat the same read if needed. Enabled, snapshot and processing/ready settings do not verify article bytes or every conversion/publication effect."
     },
     "get_batch_call": {
       "method": "GET",

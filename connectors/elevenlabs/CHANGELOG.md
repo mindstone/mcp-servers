@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Podcast creation and Audio Native article uploads, content updates and player settings through the API tools. Auto-publication is explicit; a queued conversion still needs time to find its voice.
+
 - Studio can now create, edit, convert and delete projects and chapters, with document uploads, dictionary replacement and explicit snapshot checks. Acceptance still isn’t an audiobook.
 
 - Studio project, chapter, muted-track and snapshot reads, plus existing chapter MPEG and project ZIP downloads. ZIPs stay zipped; no conversion, URL fetching or automatic retry.
@@ -45,6 +47,8 @@ are maintained manually as part of the PR review checklist.
 
 - Returned connection credentials stay usable only at their declared response paths. Submitted secrets and the API key remain redacted there too; echoed custom SIP header values are also protected.
 ### Fixed
+
+- Document-upload errors now point to the current operation’s own URL field when it has one.
 
 - API discovery search now matches a word and its plural, so "agent summary" finds the agent summaries operation instead of losing it among the other agent operations.
 

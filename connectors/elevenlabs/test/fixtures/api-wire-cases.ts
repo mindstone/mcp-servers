@@ -1,3 +1,4 @@
+import audioNativeCases from './api-audio-native-wire-cases.json' with { type: 'json' };
 import studioCases from './api-studio-wire-cases.json' with { type: 'json' };
 import supportingCases from './api-supporting-wire-cases.json' with { type: 'json' };
 import legacyDubbingCases from './api-legacy-dubbing-wire-cases.json' with { type: 'json' };
@@ -49,6 +50,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...audioNativeCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...studioCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...supportingCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...legacyDubbingCases.filter(wire => !('multipart' in wire)) as WireCase[],
@@ -252,6 +254,7 @@ export interface MultipartWireCase extends WireCase {
   multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[]; multiple?: boolean };
 }
 export const multipartCases: MultipartWireCase[] = [
+  ...audioNativeCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...studioCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...supportingCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...legacyDubbingCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],

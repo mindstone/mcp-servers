@@ -51,6 +51,10 @@ Single-use tokens use the create tool. The pinned token types are `realtime_scri
 
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
+Podcast creation uses the job tool and automatically converts new media; audio generation is charged. Source URLs are fetched by the provider, and optional callbacks are delivered by the provider. The optional moderation header is intentionally omitted. A lost project ID cannot be reliably recovered by matching source content.
+
+Audio Native supports TXT/HTML article uploads, project creation, content replacement, URL-based replacement and player-settings reads. File updates can auto-publish when requested; URL updates always queue conversion and auto-publication. Returned converting/publishing flags describe submission state, not proof of published audio. Player settings do not expose article content or certify uploaded bytes. Deprecated player fields remain available. No URL is fetched or HTML executed by the connector.
+
 ## Requirements
 
 - Node.js 20+

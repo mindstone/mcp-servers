@@ -107,6 +107,11 @@ const stage103Profiles = {
   change: 'convert_chapter_endpoint convert_project_endpoint edit_chapter edit_project edit_project_content update_pronunciation_dictionaries',
   delete: 'delete_chapter_endpoint delete_project',
 };
+const stage104Profiles = {
+  run_job: 'create_podcast', create: 'create_audio_native_project',
+  change: 'audio_native_project_update_content_endpoint audio_native_update_content_from_url',
+  read: 'get_audio_native_project_settings_endpoint',
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -120,7 +125,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles, stage102Profiles, stage103Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles, stage102Profiles, stage103Profiles, stage104Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -235,7 +240,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage102Profiles, stage103Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage102Profiles, stage103Profiles, stage104Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -319,7 +324,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 358, planned: 48, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 363, planned: 43, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -337,6 +342,8 @@ function validateProductionCensus(policy) {
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
   const fileBindings = {
+    create_audio_native_project: [{ field: 'file', kind: 'document', allowed_media_types: ['text/plain', 'text/html'] }],
+    audio_native_project_update_content_endpoint: [{ field: 'file', kind: 'document', allowed_media_types: ['text/plain', 'text/html'] }],
     add_project: [{ field: 'from_document', kind: 'document' }],
     edit_project_content: [{ field: 'from_document', kind: 'document' }],
     create_dubbing: [{"field": "background_audio_file", "kind": "audio"}, {"field": "csv_file", "kind": "document", "allowed_media_types": ["text/csv"]}, {"field": "file", "kind": "audio"}, {"field": "foreground_audio_file", "kind": "audio"}],

@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **358 admitted + 48 planned + 109 excluded = 515**.
+Partition: **363 admitted + 43 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 358 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 363 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -62,8 +62,8 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | assign_conversation_tags_route | POST | /v1/convai/conversations/{conversation_id}/tags | admitted | 7 | conversations | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | audio_isolation | POST | /v1/audio-isolation | admitted | 9 | audio-isolation | run_job | partial | @mindstone/mcp-server-elevenlabs:isolate_audio | Supports multipart audio; does not expose all current provider request controls or history/stream variants. |
 | audio_isolation_stream | POST | /v1/audio-isolation/stream | admitted | 9 | audio-isolation | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
-| audio_native_project_update_content_endpoint | POST | /v1/audio-native/{project_id}/content | planned | 10 | audio-native | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| audio_native_update_content_from_url | POST | /v1/audio-native/content | planned | 10 | audio-native | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| audio_native_project_update_content_endpoint | POST | /v1/audio-native/{project_id}/content | admitted | 10 | audio-native | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| audio_native_update_content_from_url | POST | /v1/audio-native/content | admitted | 10 | audio-native | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | cancel_batch_call | POST | /v1/convai/batch-calling/{batch_id}/cancel | admitted | 8 | batch-calling | change | partial | @mindstone/mcp-server-elevenlabs-agents:cancel_batch_call | Cancels by batch_id on the exact endpoint. |
 | cancel_crawl_job_route | POST | /v1/convai/knowledge-base/crawl/{crawl_job_id}/cancel | admitted | 7 | knowledge-base | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | cancel_file_upload_route | DELETE | /v1/convai/conversations/{conversation_id}/files/{file_id} | admitted | 7 | conversations | delete | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -83,7 +83,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | create_agent_route | POST | /v1/convai/agents/create | admitted | 1 | agents | create | partial | @mindstone/mcp-server-elevenlabs-agents:create_agent | Existing first-class model and knowledge-base fields map to llm_model and knowledge_base_document_ids instead of provider llm and structured knowledge_base locators. Advanced config is partial reach, not verified working equivalence; version and branch controls are absent. |
 | create_agent_test_folder_route | POST | /v1/convai/agent-testing/folders | admitted | 7 | agent-testing | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_analysis_item_route | POST | /v1/convai/analysis-items | admitted | 7 | analysis-items | create | missing | — | No existing tool maps to this exact HTTP operation. |
-| create_audio_native_project | POST | /v1/audio-native | planned | 10 | audio-native | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| create_audio_native_project | POST | /v1/audio-native | admitted | 10 | audio-native | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_auth_connection | POST | /v1/workspace/auth-connections | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_batch_call | POST | /v1/convai/batch-calling/submit | admitted | 8 | batch-calling | place_call | partial | @mindstone/mcp-server-elevenlabs-agents:submit_batch_call | Supports selected batch name, agent, phone, recipient and scheduling fields; other current batch controls are absent. |
 | create_branch_route | POST | /v1/convai/agents/{agent_id}/branches | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -103,7 +103,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | create_merge_proposal_route | POST | /v1/convai/agents/{agent_id}/merge-proposals | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_or_update_user_voice_collection | POST | /v1/voices/collections | admitted | 9 | voices | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_phone_number_route | POST | /v1/convai/phone-numbers | admitted | 8 | phone-numbers | change | partial | @mindstone/mcp-server-elevenlabs-agents:import_phone_number | Imports selected provider phone-number fields; not every current provider variant is exposed. |
-| create_podcast | POST | /v1/studio/podcasts | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| create_podcast | POST | /v1/studio/podcasts | admitted | 10 | studio | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_procedure_route | POST | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_public_template_run | POST | /v1/flows/templates/{template_id}/runs | planned | 10 | flows | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_pvc_voice | POST | /v1/voices/pvc | admitted | 9 | voices | create | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -214,7 +214,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_audio_from_sample | GET | /v1/voices/{voice_id}/samples/{sample_id}/audio | admitted | 9 | voices | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_audio_full_from_speech_history_item | GET | /v1/history/{history_item_id}/audio | admitted | 9 | history | read | covered | @mindstone/mcp-server-elevenlabs:get_history_item_audio | Downloads by history_item_id on the exact endpoint; there are no operation-specific query options. |
 | get_audio_isolation_history | GET | /v1/audio-isolation/history | admitted | 9 | audio-isolation | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_audio_native_project_settings_endpoint | GET | /v1/audio-native/{project_id}/settings | planned | 10 | audio-native | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_audio_native_project_settings_endpoint | GET | /v1/audio-native/{project_id}/settings | admitted | 10 | audio-native | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_batch_call | GET | /v1/convai/batch-calling/{batch_id} | admitted | 8 | batch-calling | read | partial | @mindstone/mcp-server-elevenlabs-agents:get_batch_call | Reads batch_id on the exact endpoint. |
 | get_branch_route | GET | /v1/convai/agents/{agent_id}/branches/{branch_id} | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_branches_route | GET | /v1/convai/agents/{agent_id}/branches | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |

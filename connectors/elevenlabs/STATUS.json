@@ -21,6 +21,7 @@
       "music planning, generation, uploads, stems, video inputs, finetunes, declared song IDs and sound effects",
       "transcription and audio processing",
       "dubbing and history",
+      "podcast generation and Audio Native TXT/HTML uploads, content replacement and player settings; explicit auto-publication and limited outcome verification",
       "Studio project, chapter, muted-track and snapshot reads; exact MPEG and ZIP downloads without extraction or automatic conversion",
       "Studio project and chapter writes, document uploads, dictionary replacement and credit-spending conversions with explicit snapshot verification",
       "speech and isolation history, stored transcripts, dictionary rules and exact-version PLS downloads, millisecond usage, and plain audio streams; manual pagination and no live playback",

@@ -7,6 +7,7 @@ export const apiFamilies = {
   "analytics": "analytics",
   "audio-effects": "audio-effects",
   "audio-isolation": "audio-isolation",
+  "audio-native": "audio-native",
   "batch-calling": "batch-calling",
   "conversation": "conversation",
   "conversations": "conversations",
@@ -52,7 +53,7 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -85,6 +86,7 @@ export const profileOperationIds = {
     "get_audio_from_sample",
     "get_audio_full_from_speech_history_item",
     "get_audio_isolation_history",
+    "get_audio_native_project_settings_endpoint",
     "get_batch_call",
     "get_branch_route",
     "get_branches_route",
@@ -218,6 +220,7 @@ export const profileOperationIds = {
     "create_agent_route",
     "create_agent_test_folder_route",
     "create_analysis_item_route",
+    "create_audio_native_project",
     "create_branch_route",
     "create_conversation_group_route",
     "create_conversation_tag_route",
@@ -256,6 +259,8 @@ export const profileOperationIds = {
     "add_voice_to_user_voice_collection",
     "agent_testing_bulk_move_route",
     "assign_conversation_tags_route",
+    "audio_native_project_update_content_endpoint",
+    "audio_native_update_content_from_url",
     "cancel_batch_call",
     "convert_chapter_endpoint",
     "convert_project_endpoint",
@@ -386,6 +391,7 @@ export const profileOperationIds = {
     "compose_detailed",
     "create_dubbing",
     "create_finetune",
+    "create_podcast",
     "dubbing_language_create",
     "dubbing_project_create",
     "forced_alignment",

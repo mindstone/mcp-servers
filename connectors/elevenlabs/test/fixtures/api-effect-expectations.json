@@ -1,4 +1,9 @@
 {
+  "create_podcast": {"profile": "run_job", "method": "POST", "tool": "elevenlabs_run_job", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "create_audio_native_project": {"profile": "create", "method": "POST", "tool": "elevenlabs_create_resource", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "audio_native_project_update_content_endpoint": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "audio_native_update_content_from_url": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "get_audio_native_project_settings_endpoint": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "get_speech_history": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "get_speech_history_item_by_id": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
   "get_audio_full_from_speech_history_item": {"profile": "read", "method": "GET", "tool": "elevenlabs_read_resource", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}},
