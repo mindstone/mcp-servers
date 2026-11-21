@@ -50,7 +50,7 @@ export function readSandboxedFile(rawFilePath: string, context?: FileReadContext
   }
 }
 
-const DOCUMENT_RESOLUTION = 'Provide an existing readable regular document file. With negotiated file reads, the host must authorize this exact files[index].file_path operand; standalone files must be inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). For a provider-fetched URL, use the operation\'s own URL field if it has one.';
+const DOCUMENT_RESOLUTION = 'Provide an existing readable regular document file. With negotiated file reads, the host must authorize this exact files[index].file_path operand; standalone files must be inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset). For a provider-fetched URL, use the operation\'s own URL field if it has one (for a knowledge-base document, create_url_document_route).';
 
 function resolveFileInput(rawFilePath: string, context: FileReadContext | undefined, location: (string | number)[], kind: FileInputKind | FileInputKind[], limits: FileInputLimits): Omit<SandboxedFileInput, 'buffer'> {
   // Only the curated audio tools keep their earlier URL and error behaviour; every generic-executor binding passes limits.

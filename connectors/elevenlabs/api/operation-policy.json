@@ -122,6 +122,12 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "speech-engine": {
+      "read": "get_speech_engine"
+    },
+    "assets": {
+      "read": "get_asset"
+    },
     "audio-native": {
       "read": {
         "unavailable_reason": "Player configuration does not verify article content, original upload bytes or every conversion/publication effect; repeat reads explicitly and do not blindly repeat writes."
@@ -2013,19 +2019,50 @@
     "create_speech_engine": {
       "method": "POST",
       "path": "/v1/speech-engine",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Saves a new upstream transcript/WebSocket configuration, privacy and caller-auth policy; starts no conversation or connection and generates no media.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_speech_engine"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No verifiable lookup identifies this creation after losing its new ID. List summaries locate candidates but cannot verify full configuration or unique request correlation. Do not repeat creation blindly."
+      },
+      "effect_note": "Use the returned new speech_engine_id with get_speech_engine. auth.enable_auth defaults to false: an ID alone may then start conversations. Later configured usage can incur charges: bursting may double call rates above concurrency limits; speculative generation may increase LLM cost; retranscription disables the silence discount; conversation uploads are billed per file. A create or update reply hides the submitted ws_url; get_speech_engine shows the stored URL.",
+      "sensitive_request_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ],
+        [
+          "speech_engine",
+          "ws_url"
+        ]
+      ],
+      "sensitive_response_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ]
+      ]
     },
     "create_text_document_route": {
       "method": "POST",
@@ -2291,19 +2328,30 @@
     "delete_asset_endpoint": {
       "method": "DELETE",
       "path": "/v1/assets/{asset_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "assets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes the asset; does not refund previously billed work.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_asset"
+      ],
+      "retry_check": "get_asset",
+      "effect_note": "Inspect absence with get_asset using the same asset_id; distinguish permission failure from absence. No previously billed work is refunded."
     },
     "delete_audio_isolation_history_item": {
       "method": "DELETE",
@@ -2819,19 +2867,30 @@
     "delete_speech_engine": {
       "method": "DELETE",
       "path": "/v1/speech-engine/{speech_engine_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Removes the speech engine configuration; does not refund previously billed work.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_speech_engine"
+      ],
+      "retry_check": "get_speech_engine",
+      "effect_note": "Inspect absence with get_speech_engine using the same ID; distinguish permission failure from absence. No previously billed work is refunded."
     },
     "delete_speech_history_item": {
       "method": "DELETE",
@@ -3328,19 +3387,39 @@
     "duplicate_speech_engine": {
       "method": "POST",
       "path": "/v1/speech-engine/{speech_engine_id}/duplicate",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates a distinct copy of upstream, auth and privacy configuration; starts no conversation or connection and generates no media.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_speech_engine"
+      ],
+      "retry_check": {
+        "unavailable_reason": "The request speech_engine_id identifies the source, not the new copy. Reading the source does not verify the copy after losing the response and its new ID. Do not repeat duplication blindly."
+      },
+      "effect_note": "Use the returned NEW speech_engine_id with get_speech_engine, never the request source ID. auth.enable_auth defaults to false: an ID alone may then start conversations. Later configured usage can incur charges: bursting may double call rates above concurrency limits; speculative generation may increase LLM cost; retranscription disables the silence discount; conversation uploads are billed per file.",
+      "sensitive_response_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ]
+      ]
     },
     "edit_chapter": {
       "method": "POST",
@@ -3957,19 +4036,28 @@
     "get_asset": {
       "method": "GET",
       "path": "/v1/assets/{asset_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "assets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads existing asset metadata and its nullable signed content reference without fetching it.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_asset",
+      "effect_note": "Repeat the same read if needed. content_url may be null while processing; the signed URL should not be assumed valid beyond one hour. Re-read for a fresh URL; it stays wrapped data, never fetched or used in filenames or logs."
     },
     "get_assignable_users_route": {
       "method": "GET",
@@ -5724,19 +5812,35 @@
     "get_speech_engine": {
       "method": "GET",
       "path": "/v1/speech-engine/{speech_engine_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Reads existing full speech engine configuration with stored literal header values withheld.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_speech_engine",
+      "effect_note": "Repeat the same read if needed. Literal headers are withheld; secret and dynamic-variable locators remain inspectable. auth.enable_auth defaults to false: an ID alone may then start conversations. Later configured usage can incur charges: bursting may double call rates above concurrency limits; speculative generation may increase LLM cost; retranscription disables the silence discount; conversation uploads are billed per file.",
+      "sensitive_response_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ]
+      ]
     },
     "get_speech_history": {
       "method": "GET",
@@ -6403,19 +6507,28 @@
     "list_assets": {
       "method": "GET",
       "path": "/v1/assets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "assets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists existing workspace assets, newest first; names are not unique content hashes.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_assets",
+      "effect_note": "Continue explicitly with next_cursor and page_size; names do not verify original bytes. Signed content URLs stay wrapped data and are never fetched."
     },
     "list_auth_connections": {
       "method": "GET",
@@ -6837,19 +6950,28 @@
     "list_speech_engines": {
       "method": "GET",
       "path": "/v1/speech-engine",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "effect_reason": "Lists existing speech engine summaries and continuation; summaries are not full configuration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "list_speech_engines",
+      "effect_note": "Repeat or continue explicitly using next_cursor; inspect candidate IDs with get_speech_engine. auth.enable_auth defaults to false: an ID alone may then start conversations. Later configured usage can incur charges: bursting may double call rates above concurrency limits; speculative generation may increase LLM cost; retranscription disables the silence discount; conversation uploads are billed per file."
     },
     "list_test_invocations_route": {
       "method": "GET",
@@ -10983,19 +11105,50 @@
     "update_speech_engine": {
       "method": "PATCH",
       "path": "/v1/speech-engine/{speech_engine_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "speech-engine",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Changes upstream, privacy, auth and operating settings; starts no conversation or connection and generates no media.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_speech_engine"
+      ],
+      "retry_check": {
+        "unavailable_reason": "get_speech_engine verifies readable configuration, but literal header-secret values are withheld and cannot be verified after response loss. Do not repeat secret updates blindly."
+      },
+      "effect_note": "Use get_speech_engine to compare readable requested fields, including privacy and auth; literal header secrets cannot be read back. auth.enable_auth defaults to false: an ID alone may then start conversations. Later configured usage can incur charges: bursting may double call rates above concurrency limits; speculative generation may increase LLM cost; retranscription disables the silence discount; conversation uploads are billed per file. A create or update reply hides the submitted ws_url; get_speech_engine shows the stored URL.",
+      "sensitive_request_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ],
+        [
+          "speech_engine",
+          "ws_url"
+        ]
+      ],
+      "sensitive_response_fields": [
+        [
+          "speech_engine",
+          "request_headers",
+          "*"
+        ]
+      ]
     },
     "update_test_invocation_route": {
       "method": "PATCH",
@@ -11118,19 +11271,38 @@
     "upload_asset": {
       "method": "POST",
       "path": "/v1/assets",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "assets",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Stores a new asset without executing a generation; no endpoint fee is stated in the specification.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_asset"
+      ],
+      "retry_check": {
+        "unavailable_reason": "No verifiable lookup identifies this upload after losing its asset ID: lists expose no upload digest or request correlation. get_asset verifies known record metadata, not original file-byte equality. Do not repeat upload blindly."
+      },
+      "effect_note": "Use returned asset_id with get_asset to inspect record metadata, not original file-byte equality. Both asset and name are required. No MIME allowlist or byte ceiling is stated in the specification; existing file authorization, regular-file, safe-size, descriptor and deadline checks apply.",
+      "file_bindings": [
+        {
+          "field": "asset",
+          "kind": "document"
+        }
+      ]
     },
     "upload_file_route": {
       "method": "POST",

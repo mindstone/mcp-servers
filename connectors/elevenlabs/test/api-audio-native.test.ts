@@ -119,6 +119,7 @@ it.each(writes)('$id gives honest unavailable retry guidance and only explicit f
   const result = await pair.callTool(tool(row.profile), args(row));
   expect(result.isError).toBe(true); expect(fetch).toHaveBeenCalledOnce();
   expect(result.text).toContain('No verifiable lookup'); expect(result.text).toContain('No automatic retry');
+  expect(result.text).toContain((op.retry_check as { unavailable_reason: string }).unavailable_reason);
 });
 
 it('discloses unconditional URL auto-publication and retains returned flags without inventing completion', async () => {
@@ -193,7 +194,7 @@ it.each(uploads)('$id requires the exact file authorization and refuses non-TXT/
     fs.writeFileSync(path.join(workspace, 'article.pdf'), '%PDF synthetic');
     const refused = await pair.callTool(tool(row.profile), { ...args(row), files: [{ field: 'file', file_path: filePath }] });
     expect(refused.isError).toBe(true);
-
+    expect(refused.text).toContain(filePath.startsWith('https:') ? 'FILE_NOT_FOUND' : 'INVALID_FILE_TYPE');
   }
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -203,5 +204,5 @@ it('gives general provider-URL guidance for local document refusals', () => {
   try { readSandboxedFile('https://docs.example.com/article', undefined, ['files', 0, 'file_path'], 'document'); }
   catch (error) { resolution = (error as { resolution: string }).resolution; }
   expect(resolution).toContain("use the operation's own URL field if it has one");
-  expect(resolution).not.toContain('create_url_document_route');
+  expect(resolution).toContain('for a knowledge-base document, create_url_document_route');
 });

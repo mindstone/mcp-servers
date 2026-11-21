@@ -1,0 +1,126 @@
+[
+  {
+    "id": "delete_asset_endpoint",
+    "profile": "delete",
+    "method": "DELETE",
+    "path": "/v1/assets/asset_example",
+    "status": 204,
+    "args": {
+      "path_params": {
+        "asset_id": "asset_example"
+      }
+    },
+    "query": [],
+    "response": null,
+    "follow_ups": [
+      "get_asset"
+    ]
+  },
+  {
+    "id": "get_asset",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/assets/asset_example",
+    "status": 200,
+    "args": {
+      "path_params": {
+        "asset_id": "asset_example"
+      }
+    },
+    "query": [],
+    "response": {
+      "asset_id": "asset_example",
+      "name": "Acme binary",
+      "mime_type": "application/octet-stream",
+      "created_at_unix": 1721520000,
+      "content_url": null
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "list_assets",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/assets",
+    "status": 200,
+    "args": {
+      "query_params": {
+        "page_size": 2,
+        "cursor": "asset cursor/+?",
+        "search": "Acme"
+      }
+    },
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "cursor",
+        "asset cursor/+?"
+      ],
+      [
+        "search",
+        "Acme"
+      ]
+    ],
+    "response": {
+      "assets": [
+        {
+          "asset_id": "asset_new",
+          "name": "Acme binary",
+          "mime_type": "application/octet-stream",
+          "created_at_unix": 1721520000,
+          "content_url": null
+        }
+      ],
+      "next_cursor": "next asset/+?",
+      "has_more": true
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "upload_asset",
+    "profile": "create",
+    "method": "POST",
+    "path": "/v1/assets",
+    "status": 200,
+    "args": {
+      "body": {
+        "name": "Acme binary"
+      }
+    },
+    "query": [],
+    "response": {
+      "asset_id": "asset_new",
+      "name": "Acme binary",
+      "mime_type": "application/octet-stream",
+      "created_at_unix": 1721520000,
+      "content_url": null
+    },
+    "follow_ups": [
+      "get_asset"
+    ],
+    "multipart": {
+      "field": "asset",
+      "fileName": "sample.custom",
+      "mime": "application/octet-stream",
+      "bytes": [
+        0,
+        255,
+        128,
+        13,
+        10,
+        65,
+        0,
+        66
+      ],
+      "scalars": [
+        [
+          "name",
+          "Acme binary"
+        ]
+      ]
+    }
+  }
+]

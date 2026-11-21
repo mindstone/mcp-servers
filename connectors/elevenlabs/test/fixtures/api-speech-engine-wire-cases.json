@@ -1,0 +1,367 @@
+[
+  {
+    "id": "create_speech_engine",
+    "profile": "create",
+    "method": "POST",
+    "path": "/v1/speech-engine",
+    "status": 201,
+    "args": {
+      "body": {
+        "name": "Acme speech",
+        "speech_engine": {
+          "ws_url": "wss://transcripts.example.com/socket",
+          "request_headers": {
+            "X-Upstream": "submitted-literal-header-credential",
+            "X-Reference": {
+              "secret_id": "secret_reference"
+            },
+            "X-Dynamic": {
+              "variable_name": "customer_region"
+            }
+          }
+        }
+      }
+    },
+    "query": [],
+    "response": {
+      "speech_engine_id": "seng_new",
+      "name": "Acme speech",
+      "speech_engine": {
+        "ws_url": "wss://transcripts.example.com/socket",
+        "request_headers": {
+          "X-Upstream": "stored-literal-header-credential",
+          "X-Reference": {
+            "secret_id": "secret_reference"
+          },
+          "X-Dynamic": {
+            "variable_name": "customer_region"
+          }
+        }
+      },
+      "asr": {},
+      "tts": {
+        "voice_id": "voice_example"
+      },
+      "turn": {},
+      "vad": {},
+      "conversation": {},
+      "privacy": {
+        "record_voice": false,
+        "retention_days": 7,
+        "delete_transcript_and_pii": true,
+        "delete_audio": true,
+        "apply_to_existing_conversations": true,
+        "zero_retention_mode": false
+      },
+      "call_limits": {
+        "bursting_enabled": false
+      },
+      "auth": {
+        "enable_auth": true
+      },
+      "language": "en",
+      "cascade_timeout_seconds": 4,
+      "tags": [
+        "acme"
+      ],
+      "overrides": {
+        "first_message": false
+      },
+      "metadata": {
+        "created_at_unix_secs": 1721520000,
+        "updated_at_unix_secs": 1721520100
+      }
+    },
+    "follow_ups": [
+      "get_speech_engine"
+    ]
+  },
+  {
+    "id": "delete_speech_engine",
+    "profile": "delete",
+    "method": "DELETE",
+    "path": "/v1/speech-engine/seng_source",
+    "status": 204,
+    "args": {
+      "path_params": {
+        "speech_engine_id": "seng_source"
+      }
+    },
+    "query": [],
+    "response": null,
+    "follow_ups": [
+      "get_speech_engine"
+    ]
+  },
+  {
+    "id": "duplicate_speech_engine",
+    "profile": "create",
+    "method": "POST",
+    "path": "/v1/speech-engine/seng_source/duplicate",
+    "status": 201,
+    "args": {
+      "path_params": {
+        "speech_engine_id": "seng_source"
+      },
+      "body": {
+        "name": "Acme copy"
+      }
+    },
+    "query": [],
+    "response": {
+      "speech_engine_id": "seng_new",
+      "name": "Acme copy",
+      "speech_engine": {
+        "ws_url": "wss://transcripts.example.com/socket",
+        "request_headers": {
+          "X-Upstream": "stored-literal-header-credential",
+          "X-Reference": {
+            "secret_id": "secret_reference"
+          },
+          "X-Dynamic": {
+            "variable_name": "customer_region"
+          }
+        }
+      },
+      "asr": {},
+      "tts": {
+        "voice_id": "voice_example"
+      },
+      "turn": {},
+      "vad": {},
+      "conversation": {},
+      "privacy": {
+        "record_voice": false,
+        "retention_days": 7,
+        "delete_transcript_and_pii": true,
+        "delete_audio": true,
+        "apply_to_existing_conversations": true,
+        "zero_retention_mode": false
+      },
+      "call_limits": {
+        "bursting_enabled": false
+      },
+      "auth": {
+        "enable_auth": true
+      },
+      "language": "en",
+      "cascade_timeout_seconds": 4,
+      "tags": [
+        "acme"
+      ],
+      "overrides": {
+        "first_message": false
+      },
+      "metadata": {
+        "created_at_unix_secs": 1721520000,
+        "updated_at_unix_secs": 1721520100
+      }
+    },
+    "follow_ups": [
+      "get_speech_engine"
+    ]
+  },
+  {
+    "id": "get_speech_engine",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/speech-engine/seng_source",
+    "status": 200,
+    "args": {
+      "path_params": {
+        "speech_engine_id": "seng_source"
+      }
+    },
+    "query": [],
+    "response": {
+      "speech_engine_id": "seng_source",
+      "name": "Acme speech",
+      "speech_engine": {
+        "ws_url": "wss://transcripts.example.com/socket",
+        "request_headers": {
+          "X-Upstream": "stored-literal-header-credential",
+          "X-Reference": {
+            "secret_id": "secret_reference"
+          },
+          "X-Dynamic": {
+            "variable_name": "customer_region"
+          }
+        }
+      },
+      "asr": {},
+      "tts": {
+        "voice_id": "voice_example"
+      },
+      "turn": {},
+      "vad": {},
+      "conversation": {},
+      "privacy": {
+        "record_voice": false,
+        "retention_days": 7,
+        "delete_transcript_and_pii": true,
+        "delete_audio": true,
+        "apply_to_existing_conversations": true,
+        "zero_retention_mode": false
+      },
+      "call_limits": {
+        "bursting_enabled": false
+      },
+      "auth": {
+        "enable_auth": true
+      },
+      "language": "en",
+      "cascade_timeout_seconds": 4,
+      "tags": [
+        "acme"
+      ],
+      "overrides": {
+        "first_message": false
+      },
+      "metadata": {
+        "created_at_unix_secs": 1721520000,
+        "updated_at_unix_secs": 1721520100
+      }
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "list_speech_engines",
+    "profile": "read",
+    "method": "GET",
+    "path": "/v1/speech-engine",
+    "status": 200,
+    "args": {
+      "query_params": {
+        "page_size": 2,
+        "search": "Acme",
+        "sort_direction": "asc",
+        "sort_by": "name",
+        "cursor": "engine cursor/+?"
+      }
+    },
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "search",
+        "Acme"
+      ],
+      [
+        "sort_direction",
+        "asc"
+      ],
+      [
+        "sort_by",
+        "name"
+      ],
+      [
+        "cursor",
+        "engine cursor/+?"
+      ]
+    ],
+    "response": {
+      "speech_engines": [
+        {
+          "speech_engine_id": "seng_source",
+          "name": "Acme source",
+          "voice_id": "voice_example",
+          "created_at_unix_secs": 1721520000,
+          "updated_at_unix_secs": 1721520100,
+          "tags": [],
+          "access_info": {
+            "is_creator": true,
+            "creator_name": "Acme editor",
+            "creator_email": "editor@example.com",
+            "role": "admin"
+          }
+        }
+      ],
+      "has_more": true,
+      "next_cursor": "next engine/+?"
+    },
+    "follow_ups": []
+  },
+  {
+    "id": "update_speech_engine",
+    "profile": "change",
+    "method": "PATCH",
+    "path": "/v1/speech-engine/seng_source",
+    "status": 200,
+    "args": {
+      "path_params": {
+        "speech_engine_id": "seng_source"
+      },
+      "body": {
+        "privacy": {
+          "record_voice": false,
+          "retention_days": 7,
+          "delete_transcript_and_pii": true,
+          "delete_audio": true,
+          "apply_to_existing_conversations": true,
+          "zero_retention_mode": false
+        },
+        "auth": {
+          "enable_auth": true
+        },
+        "call_limits": {
+          "bursting_enabled": false
+        }
+      }
+    },
+    "query": [],
+    "response": {
+      "speech_engine_id": "seng_source",
+      "name": "Acme speech",
+      "speech_engine": {
+        "ws_url": "wss://transcripts.example.com/socket",
+        "request_headers": {
+          "X-Upstream": "stored-literal-header-credential",
+          "X-Reference": {
+            "secret_id": "secret_reference"
+          },
+          "X-Dynamic": {
+            "variable_name": "customer_region"
+          }
+        }
+      },
+      "asr": {},
+      "tts": {
+        "voice_id": "voice_example"
+      },
+      "turn": {},
+      "vad": {},
+      "conversation": {},
+      "privacy": {
+        "record_voice": false,
+        "retention_days": 7,
+        "delete_transcript_and_pii": true,
+        "delete_audio": true,
+        "apply_to_existing_conversations": true,
+        "zero_retention_mode": false
+      },
+      "call_limits": {
+        "bursting_enabled": false
+      },
+      "auth": {
+        "enable_auth": true
+      },
+      "language": "en",
+      "cascade_timeout_seconds": 4,
+      "tags": [
+        "acme"
+      ],
+      "overrides": {
+        "first_message": false
+      },
+      "metadata": {
+        "created_at_unix_secs": 1721520000,
+        "updated_at_unix_secs": 1721520100
+      }
+    },
+    "follow_ups": [
+      "get_speech_engine"
+    ]
+  }
+]

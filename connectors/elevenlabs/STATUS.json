@@ -21,6 +21,7 @@
       "music planning, generation, uploads, stems, video inputs, finetunes, declared song IDs and sound effects",
       "transcription and audio processing",
       "dubbing and history",
+      "Speech Engine configuration, auth and privacy with stored literal headers withheld; generic asset uploads and signed references without fetching",
       "podcast generation and Audio Native TXT/HTML uploads, content replacement and player settings; explicit auto-publication and limited outcome verification",
       "Studio project, chapter, muted-track and snapshot reads; exact MPEG and ZIP downloads without extraction or automatic conversion",
       "Studio project and chapter writes, document uploads, dictionary replacement and credit-spending conversions with explicit snapshot verification",

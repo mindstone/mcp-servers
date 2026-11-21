@@ -5,6 +5,7 @@ export const apiFamilies = {
   "agents": "agents",
   "analysis-items": "analysis-items",
   "analytics": "analytics",
+  "assets": "assets",
   "audio-effects": "audio-effects",
   "audio-isolation": "audio-isolation",
   "audio-native": "audio-native",
@@ -33,6 +34,7 @@ export const apiFamilies = {
   "single-use-token": "single-use-token",
   "sip-trunk": "sip-trunk",
   "sound-generation": "sound-generation",
+  "speech-engine": "speech-engine",
   "speech-to-text": "speech-to-text",
   "studio": "studio",
   "tags": "tags",
@@ -53,7 +55,7 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -81,6 +83,7 @@ export const profileOperationIds = {
     "get_agents_route",
     "get_analysis_item_dependent_agents_route",
     "get_analysis_item_route",
+    "get_asset",
     "get_assignable_users_route",
     "get_audio_effects_catalog",
     "get_audio_from_sample",
@@ -149,6 +152,7 @@ export const profileOperationIds = {
     "get_settings_route",
     "get_similar_voices_for_speaker",
     "get_speaker_audio",
+    "get_speech_engine",
     "get_speech_history",
     "get_speech_history_item_by_id",
     "get_test_invocation_route",
@@ -174,6 +178,7 @@ export const profileOperationIds = {
     "list_agent_deployments_route",
     "list_analysis_item_versions_route",
     "list_analysis_items_route",
+    "list_assets",
     "list_available_llms",
     "list_chat_response_tests_route",
     "list_conversation_groups_route",
@@ -189,6 +194,7 @@ export const profileOperationIds = {
     "list_phone_numbers_route",
     "list_procedures_route",
     "list_sip_messages",
+    "list_speech_engines",
     "list_test_invocations_route",
     "list_whatsapp_accounts",
     "list_workspace_conversation_tickets_route",
@@ -235,10 +241,12 @@ export const profileOperationIds = {
     "create_pvc_voice",
     "create_realtime_session",
     "create_secret_route",
+    "create_speech_engine",
     "create_text_document_route",
     "create_url_document_route",
     "create_voice",
     "duplicate_agent_route",
+    "duplicate_speech_engine",
     "get_conversation_signed_link",
     "get_livekit_token",
     "get_or_create_rag_indexes",
@@ -246,6 +254,7 @@ export const profileOperationIds = {
     "get_single_use_token",
     "rag_index_status",
     "replicate_voice_to_isolated_environment",
+    "upload_asset",
     "upload_file_route"
   ],
   "change": [
@@ -331,6 +340,7 @@ export const profileOperationIds = {
     "update_segment_language",
     "update_settings_route",
     "update_speaker",
+    "update_speech_engine",
     "update_test_invocation_route",
     "update_tool_route",
     "update_user_voice_collection",
@@ -346,6 +356,7 @@ export const profileOperationIds = {
     "delete_agent_route",
     "delete_agent_test_folder_route",
     "delete_analysis_item_route",
+    "delete_asset_endpoint",
     "delete_audio_isolation_history_item",
     "delete_batch_call",
     "delete_chapter_endpoint",
@@ -367,6 +378,7 @@ export const profileOperationIds = {
     "delete_sample",
     "delete_secret_route",
     "delete_segment",
+    "delete_speech_engine",
     "delete_speech_history_item",
     "delete_tool_route",
     "delete_transcript_by_id",
