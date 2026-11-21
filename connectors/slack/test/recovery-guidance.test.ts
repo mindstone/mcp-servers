@@ -22,6 +22,20 @@ const CLIENT_ENV = {
   SLACK_TEAM_ID: 'T123',
 };
 
+it('keeps needed and provided scopes in a missing_scope response', async () => {
+  const { withErrorHandling } = await import('../src/utils.js');
+  const handler = withErrorHandling(async () => {
+    throw { code: 'slack_webapi_platform_error', data: {
+      error: 'missing_scope', needed: 'files:write', provided: 'chat:write,files:read',
+    } };
+  });
+  const result = await handler({}, {});
+  expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({
+    ok: false, code: 'missing_scope', next_step: 'authenticate_slack_workspace',
+    needed: 'files:write', provided: 'chat:write,files:read',
+  });
+});
+
 describe('ConnectorError → next_step contract', () => {
   let client: McpTestClient;
   let cfg: SlackTestConfig;

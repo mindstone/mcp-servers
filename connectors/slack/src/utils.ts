@@ -191,6 +191,8 @@ export function withErrorHandling<T>(
                 resolution,
                 action_required: resolution,
                 next_step: slackError.next_step,
+                needed: slackError.needed,
+                provided: slackError.provided,
                 ...role,
               }),
             },
@@ -409,6 +411,8 @@ interface SlackErrorInfo {
   code: string;
   resolution: string;
   next_step: string;
+  needed?: string;
+  provided?: string;
 }
 
 function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
@@ -451,6 +455,8 @@ function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
         resolution:
           'The connected Slack tokens lack required scopes. Reconnect Slack to grant the missing permissions.',
         next_step: 'authenticate_slack_workspace',
+        needed: typeof data?.needed === 'string' ? data.needed : undefined,
+        provided: typeof data?.provided === 'string' ? data.provided : undefined,
       };
     case 'invalid_auth':
     case 'token_expired':

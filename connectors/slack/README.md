@@ -7,6 +7,8 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 *Multi-workspace Slack MCP. Host-driven OAuth, per-workspace credentials files on disk, and a security review on every release.*
 
+Permission errors include Slack's `needed` and `provided` scope names so the host can explain which permissions need a fresh sign-in.
+
 ## Status
 
 - **Version:** [0.3.8](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
