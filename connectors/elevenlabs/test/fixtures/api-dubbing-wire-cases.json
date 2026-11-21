@@ -1,0 +1,670 @@
+[
+  {
+    "id": "dubbing_project_create",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "reference": "Acme guide",
+        "source_language": "en",
+        "model_id": "dubbing_v2",
+        "keyterms": [
+          "second term",
+          "first term",
+          "second term"
+        ],
+        "webhook_ids": [
+          "webhook_second",
+          "webhook_first"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/project",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "project_id": "project_example",
+      "status": "queued",
+      "reference": "Acme guide",
+      "source_language": "en",
+      "model_id": "dubbing_v2",
+      "media": null,
+      "language_ids": [],
+      "webhook_ids": [
+        "webhook_second",
+        "webhook_first"
+      ],
+      "revision": 0,
+      "warnings": [],
+      "created_at": "2026-11-08T12:00:00Z",
+      "updated_at": "2026-11-08T12:00:00Z"
+    },
+    "multipart": {
+      "scalars": [
+        [
+          "reference",
+          "Acme guide"
+        ],
+        [
+          "source_language",
+          "en"
+        ],
+        [
+          "model_id",
+          "dubbing_v2"
+        ],
+        [
+          "keyterms",
+          "second term"
+        ],
+        [
+          "keyterms",
+          "first term"
+        ],
+        [
+          "keyterms",
+          "second term"
+        ],
+        [
+          "webhook_ids",
+          "webhook_second"
+        ],
+        [
+          "webhook_ids",
+          "webhook_first"
+        ]
+      ],
+      "field": "file",
+      "fileName": "source.mp4",
+      "mime": "video/mp4",
+      "bytes": [
+        0,
+        128,
+        255,
+        10,
+        42
+      ]
+    }
+  },
+  {
+    "id": "dubbing_project_list",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "cursor": "cursor & previous",
+        "page_size": 101,
+        "status": "ready",
+        "sort_direction": "ASCENDING"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project",
+    "query": [
+      [
+        "cursor",
+        "cursor & previous"
+      ],
+      [
+        "page_size",
+        "101"
+      ],
+      [
+        "status",
+        "ready"
+      ],
+      [
+        "sort_direction",
+        "ASCENDING"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "projects": [
+        {
+          "project_id": "project_example",
+          "status": "ready",
+          "reference": "Acme guide",
+          "source_language": "en",
+          "model_id": "dubbing_v2",
+          "media": null,
+          "language_ids": [],
+          "webhook_ids": [
+            "webhook_second",
+            "webhook_first"
+          ],
+          "revision": 3,
+          "warnings": [],
+          "created_at": "2026-11-08T12:00:00Z",
+          "updated_at": "2026-11-08T12:00:00Z"
+        }
+      ],
+      "next_cursor": "cursor & next"
+    }
+  },
+  {
+    "id": "dubbing_project_get",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "project_id": "project_example",
+      "status": "preparing",
+      "reference": "Acme guide",
+      "source_language": "en",
+      "model_id": "dubbing_v2",
+      "media": {
+        "filename": "source.mp4",
+        "duration_s": 4,
+        "has_video": true,
+        "mime_type": "video/mp4"
+      },
+      "language_ids": [],
+      "webhook_ids": [
+        "webhook_second",
+        "webhook_first"
+      ],
+      "revision": 0,
+      "warnings": [],
+      "created_at": "2026-11-08T12:00:00Z",
+      "updated_at": "2026-11-08T12:00:00Z"
+    }
+  },
+  {
+    "id": "dubbing_project_delete",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "dubbing_language_create",
+    "profile": "run_job",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      },
+      "body": {
+        "target_language": "es",
+        "voice_settings": {
+          "cloning_strength": 4
+        },
+        "translations": {
+          "line_1": "Bienvenido.",
+          "line_2": "Empecemos."
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "language_id": "language_example",
+      "project_id": "project_example",
+      "target_language": "es",
+      "status": "queued",
+      "model_id": "dubbing_v2",
+      "voice_settings": {
+        "cloning_strength": 4
+      },
+      "outputs": null,
+      "revision": 0,
+      "output_revision": null,
+      "warnings": [],
+      "created_at": "2026-11-08T12:01:00Z",
+      "updated_at": "2026-11-08T12:01:00Z"
+    },
+    "body": {
+      "target_language": "es",
+      "voice_settings": {
+        "cloning_strength": 4
+      },
+      "translations": {
+        "line_1": "Bienvenido.",
+        "line_2": "Empecemos."
+      }
+    }
+  },
+  {
+    "id": "dubbing_language_list",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      },
+      "query_params": {
+        "cursor": "cursor & previous",
+        "page_size": 100,
+        "status": "completed"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language",
+    "query": [
+      [
+        "cursor",
+        "cursor & previous"
+      ],
+      [
+        "page_size",
+        "100"
+      ],
+      [
+        "status",
+        "completed"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "languages": [
+        {
+          "language_id": "language_example",
+          "project_id": "project_example",
+          "target_language": "es",
+          "status": "completed",
+          "model_id": "dubbing_v2",
+          "voice_settings": {
+            "cloning_strength": 4
+          },
+          "outputs": {
+            "lossless_audio": "https://example.com/output.flac?token=example-token",
+            "subtitles": "https://example.com/output.vtt?token=example-token"
+          },
+          "revision": 3,
+          "output_revision": 3,
+          "warnings": [],
+          "created_at": "2026-11-08T12:01:00Z",
+          "updated_at": "2026-11-08T12:01:00Z"
+        }
+      ],
+      "next_cursor": "cursor & next"
+    }
+  },
+  {
+    "id": "dubbing_language_get",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "language_id": "language_example",
+      "project_id": "project_example",
+      "target_language": "es",
+      "status": "stale",
+      "model_id": "dubbing_v2",
+      "voice_settings": {
+        "cloning_strength": 4
+      },
+      "outputs": {
+        "lossless_audio": "https://example.com/output.flac?token=example-token",
+        "subtitles": "https://example.com/output.vtt?token=example-token"
+      },
+      "revision": 5,
+      "output_revision": 3,
+      "warnings": [],
+      "created_at": "2026-11-08T12:01:00Z",
+      "updated_at": "2026-11-08T12:01:00Z"
+    }
+  },
+  {
+    "id": "dubbing_language_delete",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23",
+    "query": [],
+    "status": 204,
+    "media": null,
+    "response": null
+  },
+  {
+    "id": "dubbing_transcript_get",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/transcript",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "language": "en",
+      "segments": [
+        {
+          "id": "segment_example",
+          "text": "Welcome.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2.5,
+          "external_id": "line_1"
+        }
+      ],
+      "revision": 3
+    }
+  },
+  {
+    "id": "dubbing_transcript_segment_update",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "segment_id": "segment/c ?#"
+      },
+      "body": {
+        "text": "Welcome back.",
+        "end_s": 3
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/transcript/segment/segment%2Fc%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "segment": {
+        "id": "segment_example",
+        "text": "Welcome back.",
+        "speaker_id": "speaker_example",
+        "start_s": 0,
+        "end_s": 3,
+        "external_id": "line_1"
+      },
+      "revision": 4
+    },
+    "body": {
+      "text": "Welcome back.",
+      "end_s": 3
+    }
+  },
+  {
+    "id": "dubbing_transcript_segment_delete",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "segment_id": "segment/c ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/transcript/segment/segment%2Fc%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "revision": 5
+    }
+  },
+  {
+    "id": "dubbing_transcript_segments_update",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      },
+      "body": {
+        "segments": {
+          "segment_example": {
+            "text": "Hello."
+          },
+          "segment_other": {
+            "start_s": 2.5,
+            "end_s": 4
+          }
+        }
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/transcript/segments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "segments": [
+        {
+          "id": "segment_example",
+          "text": "Hello.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2.5,
+          "external_id": "line_1"
+        },
+        {
+          "id": "segment_other",
+          "text": "Welcome.",
+          "speaker_id": "speaker_example",
+          "start_s": 2.5,
+          "end_s": 4,
+          "external_id": "line_1"
+        }
+      ],
+      "revision": 6
+    },
+    "body": {
+      "segments": {
+        "segment_example": {
+          "text": "Hello."
+        },
+        "segment_other": {
+          "start_s": 2.5,
+          "end_s": 4
+        }
+      }
+    }
+  },
+  {
+    "id": "dubbing_transcript_segment_add",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#"
+      },
+      "body": {
+        "text": "Welcome.",
+        "speaker_id": "speaker_example",
+        "start_s": 0,
+        "end_s": 2.5
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/transcript/segment",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "segment": {
+        "id": "segment_example",
+        "text": "Welcome.",
+        "speaker_id": "speaker_example",
+        "start_s": 0,
+        "end_s": 2.5,
+        "external_id": "line_1"
+      },
+      "revision": 7
+    },
+    "body": {
+      "text": "Welcome.",
+      "speaker_id": "speaker_example",
+      "start_s": 0,
+      "end_s": 2.5
+    }
+  },
+  {
+    "id": "dubbing_target_transcript_get",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23/transcript",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "source_language": "en",
+      "target_language": "es",
+      "segments": [
+        {
+          "id": "segment_example",
+          "source_text": "Welcome.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2.5,
+          "translation": "Bienvenido."
+        }
+      ],
+      "revision": 5
+    }
+  },
+  {
+    "id": "dubbing_target_transcript_segment_update",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#",
+        "segment_id": "segment/c ?#"
+      },
+      "body": {
+        "translation": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23/transcript/segment/segment%2Fc%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "segment": {
+        "id": "segment_example",
+        "source_text": "Welcome.",
+        "speaker_id": "speaker_example",
+        "start_s": 0,
+        "end_s": 2.5,
+        "translation": null
+      },
+      "revision": 6
+    },
+    "body": {
+      "translation": null
+    }
+  },
+  {
+    "id": "dubbing_target_transcript_segments_update",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#"
+      },
+      "body": {
+        "segments": {
+          "segment_example": {
+            "translation": null
+          },
+          "segment_other": {
+            "translation": "Empecemos."
+          }
+        }
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23/transcript/segments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "segments": [
+        {
+          "id": "segment_example",
+          "source_text": "Welcome.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2.5,
+          "translation": null
+        },
+        {
+          "id": "segment_other",
+          "source_text": "Welcome.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2.5,
+          "translation": "Empecemos."
+        }
+      ],
+      "revision": 7
+    },
+    "body": {
+      "segments": {
+        "segment_example": {
+          "translation": null
+        },
+        "segment_other": {
+          "translation": "Empecemos."
+        }
+      }
+    }
+  },
+  {
+    "id": "dubbing_target_transcript_regenerate",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "project_id": "project/a ?#",
+        "language_id": "target/b ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/project/project%2Fa%20%3F%23/language/target%2Fb%20%3F%23/transcript/regenerate",
+    "query": [],
+    "status": 202,
+    "media": "application/json",
+    "response": {
+      "regenerated_segment_ids": [
+        "segment_example",
+        "segment_other"
+      ],
+      "regenerated_seconds": 4,
+      "charged_seconds": 1,
+      "free_regeneration_seconds_remaining": 0
+    }
+  }
+]

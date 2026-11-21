@@ -10,6 +10,7 @@ export const apiFamilies = {
   "batch-calling": "batch-calling",
   "conversation": "conversation",
   "conversations": "conversations",
+  "dubbing": "dubbing",
   "environment-variables": "environment-variables",
   "environments": "environments",
   "exotel": "exotel",
@@ -48,11 +49,17 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
     "compose_plan",
+    "dubbing_language_get",
+    "dubbing_language_list",
+    "dubbing_project_get",
+    "dubbing_project_list",
+    "dubbing_target_transcript_get",
+    "dubbing_transcript_get",
     "export_batch_call",
     "get_agent_conversation_ticket_route",
     "get_agent_knowledge_base_size",
@@ -219,6 +226,12 @@ export const profileOperationIds = {
     "create_agent_draft_route",
     "create_mcp_server_route",
     "create_phone_number_route",
+    "dubbing_target_transcript_regenerate",
+    "dubbing_target_transcript_segment_update",
+    "dubbing_target_transcript_segments_update",
+    "dubbing_transcript_segment_add",
+    "dubbing_transcript_segment_update",
+    "dubbing_transcript_segments_update",
     "edit_pvc_voice",
     "edit_pvc_voice_sample",
     "edit_voice",
@@ -295,6 +308,9 @@ export const profileOperationIds = {
     "delete_user_voice_collection",
     "delete_voice",
     "delete_whatsapp_account",
+    "dubbing_language_delete",
+    "dubbing_project_delete",
+    "dubbing_transcript_segment_delete",
     "post_knowledge_base_bulk_delete_route",
     "remove_mcp_server_tool_approval_route",
     "remove_mcp_tool_config_override_route",
@@ -307,6 +323,8 @@ export const profileOperationIds = {
     "audio_isolation",
     "compose_detailed",
     "create_finetune",
+    "dubbing_language_create",
+    "dubbing_project_create",
     "forced_alignment",
     "generate",
     "separate_song_stems",

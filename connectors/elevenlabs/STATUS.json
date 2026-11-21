@@ -21,6 +21,7 @@
       "music planning, generation, uploads, stems, video inputs, finetunes, declared song IDs and sound effects",
       "transcription and audio processing",
       "dubbing and history",
+      "dubbing projects, language targets, atomic transcript edits and explicit replacement regeneration; no automatic polling or output-URL fetching",
       "API discovery and voice-agent lifecycle",
       "agent tools, knowledge bases and tests",
       "conversations and review",

@@ -28,7 +28,7 @@ afterEach(async () => { await pair.close(); setApiKey(''); vi.restoreAllMocks();
 describe('live session credential boundaries', () => {
   it('declares the five session effects and the single-use issuer without assumed follow-up reads', async () => {
     const catalog = await loadApiCatalog();
-    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token'].sort());
+    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token', 'dubbing_language_create', 'dubbing_language_get', 'dubbing_language_list'].sort());
     for (const wire of cases) {
       const op = catalog.operations.find(op => op.operation_id === wire.id)!;
       expect(op.profile).toBe(wire.profile);
@@ -252,7 +252,7 @@ it.skipIf(!source)('refuses duplicate, unbound, invalid and overlapping credenti
   const catalog = structuredClone(validateApiCatalog(apiCatalog));
   catalog.operations.find(op => op.operation_id === 'create_realtime_session')!.credential_return_fields = [['session', 'tools', '*', 'authorization']];
   expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
-  for (const id of ['dubbing_language_get', 'redirect_to_mintlify'] as const) {
+  for (const id of ['get_dubbing_resource', 'redirect_to_mintlify'] as const) {
     const unadmitted = structuredClone(policyInput);
     Object.assign(unadmitted.operations[id], { credential_return_fields: [['value']] });
     expect(() => validatePolicy(unadmitted, rosters)).toThrow('non-admitted transport metadata');

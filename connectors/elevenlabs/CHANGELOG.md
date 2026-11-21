@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Dubbing projects, language targets and source or translated transcript editing through the API tools. Project creation prepays the first language; queued is not completed. Bulk edits stay atomic, regeneration replaces existing output, and deletion does not undo billing. Signed output URLs are returned without fetching them.
+
 - Instant cloning and professional voice management through the API tools: samples, trims, speaker selection, explicit separation and training, and manual verification documents. Submission is not approval; no automatic next step. Captcha retrieval and submission await a reliable response contract.
 - Voice inventory, paginated discovery, collections, model and account reads, and single-use credentials through the API tools. Saving a preview now has a read-back step; streaming an existing preview saves its MP3. Deleting a collection keeps its voices. Tokens open no connection.
 - Music planning, generation, uploads, stem separation, video inputs and finetune lifecycle operations through the API tools. ZIPs stay zipped, training states stay honest, and declared response headers, such as song IDs and sound-effect character costs, stay in receipt metadata. No automatic extra take.

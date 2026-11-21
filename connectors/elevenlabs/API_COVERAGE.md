@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **278 admitted + 128 planned + 109 excluded = 515**.
+Partition: **295 admitted + 111 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 278 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 295 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -162,23 +162,23 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | disable_service_account_api_key | POST | /v1/service-accounts/{service_account_user_id}/api-keys/{api_key_id}/disable | excluded | — | account_and_keys | — | not-worth-exposing | — | Credential administration belongs in the provider dashboard. |
 | download_speech_history_items | POST | /v1/history/download | planned | 9 | history | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | dub | POST | /v1/dubbing/resource/{dubbing_id}/dub | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_language_create | POST | /v1/dubbing/project/{project_id}/language | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_language_delete | DELETE | /v1/dubbing/project/{project_id}/language/{language_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_language_get | GET | /v1/dubbing/project/{project_id}/language/{language_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_language_list | GET | /v1/dubbing/project/{project_id}/language | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_project_create | POST | /v1/dubbing/project | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_project_delete | DELETE | /v1/dubbing/project/{project_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_project_get | GET | /v1/dubbing/project/{project_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_project_list | GET | /v1/dubbing/project | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_target_transcript_get | GET | /v1/dubbing/project/{project_id}/language/{language_id}/transcript | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_target_transcript_regenerate | POST | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/regenerate | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_target_transcript_segment_update | PATCH | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/segment/{segment_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_target_transcript_segments_update | PATCH | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/segments | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_transcript_get | GET | /v1/dubbing/project/{project_id}/transcript | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_transcript_segment_add | POST | /v1/dubbing/project/{project_id}/transcript/segment | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_transcript_segment_delete | DELETE | /v1/dubbing/project/{project_id}/transcript/segment/{segment_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_transcript_segment_update | PATCH | /v1/dubbing/project/{project_id}/transcript/segment/{segment_id} | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| dubbing_transcript_segments_update | PATCH | /v1/dubbing/project/{project_id}/transcript/segments | planned | 9 | dubbing | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_language_create | POST | /v1/dubbing/project/{project_id}/language | admitted | 9 | dubbing | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_language_delete | DELETE | /v1/dubbing/project/{project_id}/language/{language_id} | admitted | 9 | dubbing | delete | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_language_get | GET | /v1/dubbing/project/{project_id}/language/{language_id} | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_language_list | GET | /v1/dubbing/project/{project_id}/language | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_project_create | POST | /v1/dubbing/project | admitted | 9 | dubbing | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_project_delete | DELETE | /v1/dubbing/project/{project_id} | admitted | 9 | dubbing | delete | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_project_get | GET | /v1/dubbing/project/{project_id} | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_project_list | GET | /v1/dubbing/project | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_target_transcript_get | GET | /v1/dubbing/project/{project_id}/language/{language_id}/transcript | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_target_transcript_regenerate | POST | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/regenerate | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_target_transcript_segment_update | PATCH | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/segment/{segment_id} | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_target_transcript_segments_update | PATCH | /v1/dubbing/project/{project_id}/language/{language_id}/transcript/segments | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_transcript_get | GET | /v1/dubbing/project/{project_id}/transcript | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_transcript_segment_add | POST | /v1/dubbing/project/{project_id}/transcript/segment | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_transcript_segment_delete | DELETE | /v1/dubbing/project/{project_id}/transcript/segment/{segment_id} | admitted | 9 | dubbing | delete | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_transcript_segment_update | PATCH | /v1/dubbing/project/{project_id}/transcript/segment/{segment_id} | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| dubbing_transcript_segments_update | PATCH | /v1/dubbing/project/{project_id}/transcript/segments | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | duplicate_agent_route | POST | /v1/convai/agents/{agent_id}/duplicate | admitted | 1 | agents | create | covered | @mindstone/mcp-server-elevenlabs-agents:duplicate_agent | Supports agent_id and optional name, the complete current operation input; may perform a follow-up read to resolve the agent response. |
 | duplicate_speech_engine | POST | /v1/speech-engine/{speech_engine_id}/duplicate | planned | 10 | speech-engine | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | edit_chapter | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |

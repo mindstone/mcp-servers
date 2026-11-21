@@ -2556,5 +2556,192 @@
     },
     "method": "POST",
     "tool": "elevenlabs_run_job"
+  },
+  "dubbing_language_create": {
+    "method": "POST",
+    "profile": "run_job",
+    "tool": "elevenlabs_run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_language_delete": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_language_get": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_language_list": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_project_create": {
+    "method": "POST",
+    "profile": "run_job",
+    "tool": "elevenlabs_run_job",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_project_delete": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_project_get": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_project_list": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_target_transcript_get": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_target_transcript_regenerate": {
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_target_transcript_segment_update": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_target_transcript_segments_update": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_transcript_get": {
+    "method": "GET",
+    "profile": "read",
+    "tool": "elevenlabs_read_resource",
+    "effects": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_transcript_segment_add": {
+    "method": "POST",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_transcript_segment_delete": {
+    "method": "DELETE",
+    "profile": "delete",
+    "tool": "elevenlabs_delete_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_transcript_segment_update": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  "dubbing_transcript_segments_update": {
+    "method": "PATCH",
+    "profile": "change",
+    "tool": "elevenlabs_change_resource",
+    "effects": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
   }
 }
