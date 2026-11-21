@@ -190,7 +190,7 @@ they do not run tests or generate audio. Deletion stays in the delete profile.
 
 Generic media coverage includes the audio-effects catalogue and speech, dialogue and sound generation. Discover the contract for advanced inputs such as audio effects, continuity settings and sound duration. Binary responses are collected incrementally into workspace files; provider filenames are ignored. Requested output formats determine file extensions and format metadata, including raw PCM without a WAV container. These calls use the existing 120-second deadline. Failed or cancelled paid jobs keep non-empty partial files as incomplete. Completed recordings need no follow-up read; errors name unavailable retry verification rather than suggesting an unrelated status check. No retry or polling is automatic.
 
-Generic file processing includes speech isolation, voice conversion, transcription and forced alignment through the media job tool. File-based shared-voice similarity is a read; lexicon upload creates a pronunciation dictionary. Transcription preserves synchronous, multichannel and queued responses. A queued response is an acceptance receipt, not a completed transcript; webhooks, polling and retries remain caller choices.
+Generic file processing includes speech isolation, voice conversion, transcription and forced alignment through the media job tool. File-based shared-voice similarity also uses the media job tool and accepts only the audio types listed in its discovered contract; lexicon upload creates a pronunciation dictionary. Transcription preserves synchronous, multichannel and queued responses. A queued response is an acceptance receipt, not a completed transcript; webhooks, polling and retries remain caller choices.
 
 Local uploads stream from verified file descriptors in bounded chunks. Singular operands use `{field, file_path}`; array contracts use `{field, file_paths: [...]}`, preserving order and declared cardinality. A required empty array must be supplied explicitly. Each concrete path needs its own negotiated authorization; standalone reads stay inside the workspace. Only nullable bindings accept `file_path: null`. Multipart has no null, so an omitted field and an explicit null both send no part. Structured fields such as transcription `additional_formats` and object metadata are JSON-encoded once; caller strings stay strings. Scalar arrays such as keyterms repeat the field name. These shapes are described in each operation's contract.
 
@@ -243,9 +243,9 @@ a write even when the provider uses GET. Read and query grants acquire no creden
 minting or call permission. Returned credentials stay usable in enveloped `data`;
 the assistant receives them and the host may retain them in the conversation.
 Provider failure diagnostics omit raw detail for these operations. Echoed upstream
-realtime tool authorization remains write-only and is redacted. Only declared issued-credential
-paths bypass credential-name masking; the API key and submitted secrets are always redacted,
-even if an issued credential has the same value.
+realtime tool authorization remains write-only and is redacted. Issued credentials are masked by field name outside their declared response paths, but copies inside unrelated string fields are not caught.
+The API key and submitted secrets are always redacted, even if an issued credential has the same value.
+Raw SIP messages are withheld from phone-number and conversation logs because they may contain stored header credentials.
 
 Outbound Twilio, Exotel and SIP calls, WhatsApp calls and template messages, batch
 submission and batch retry use the destructive `elevenlabs_place_call` tool. These

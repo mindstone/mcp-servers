@@ -107,7 +107,7 @@ describe('actual SDK definitions and independent admission census', () => {
         await expect(validateRequest(profile, example, createRedactor([]))).resolves.toMatchObject({ operation_id: example.operation_id });
       }
       }
-      const files = name === tools.read || name === tools.create || name === tools.change || name === tools.run_job;
+      const files = name === tools.create || name === tools.change || name === tools.run_job;
       expect(Object.hasOwn(definition.inputSchema.properties ?? {}, 'files')).toBe(files);
       if (files) expect(definition._meta?.['files/readInputs']).toMatchObject({ version: 1, inputs: [{ selector: ['files', '*', 'file_path'], base: 'connectorCwd', expandTilde: true }, { selector: ['files', '*', 'file_paths', '*'], base: 'connectorCwd', expandTilde: true }] });
       else expect(definition._meta ?? {}).not.toHaveProperty('files/readInputs');
@@ -211,7 +211,10 @@ describe('literal provider wire contracts through the real SDK registration', ()
     }
     expect(result.json.data).toEqual(expect.stringMatching(new RegExp(`^<untrusted-content source="elevenlabs:api:${wire.id}">`)));
       const data = unwrapUntrusted(String(result.json.data));
-      expect(wire.media === 'application/json' ? JSON.parse(data) : data).toEqual(wire.response);
+      const expected = wire.id === 'list_sip_messages' ? { ...wire.response as object,
+        sip_messages: (wire.response as { sip_messages: Record<string, unknown>[] }).sip_messages.map(message => ({ ...message, raw_message: '[REDACTED]' })),
+      } : wire.response;
+      expect(wire.media === 'application/json' ? JSON.parse(data) : data).toEqual(expected);
     }
   });
 

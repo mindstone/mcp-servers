@@ -31,7 +31,7 @@ are maintained manually as part of the PR review checklist.
 - Detailed music generation now keeps the composition plan and song metadata beside workspace audio references. Audio writes incrementally, partial files survive interruptions, and no extra take is ordered automatically.
 - Timestamped speech and dialogue streams now save one audio file with ordered timing metadata alongside it. Partial files survive interruptions; timestamps keep their original meaning. Collection, not live playback.
 - Timestamped speech and dialogue, voice-design and remix previews, and voice-sample audio through the API tools. Audio becomes workspace files; timing and preview identities stay with them. Completed files survive a later response failure. Previews are auditions, not permanent voices.
-- Generic speech isolation, voice conversion, transcription and alignment, plus file-based voice similarity and lexicon uploads. Local files stream from disk; large recordings no longer need a matching slab of memory.
+- Generic speech isolation, voice conversion, transcription and alignment, plus voice similarity from an audio sample (through the media job tool, audio files only) and lexicon uploads. Local files stream from disk; large recordings no longer need a matching slab of memory.
 - A media job tool for speech, dialogue and sound generation, plus an audio-effects catalogue lookup. Advanced controls included; surprise extra recordings are not.
 - Compact operation contracts and incremental binary output, with the requested audio format preserved. Partial files already reported through progress are kept on failure.
 
@@ -45,7 +45,10 @@ are maintained manually as part of the PR review checklist.
 
 - Stored custom SIP header values are hidden from phone-number reads and other responses containing phone-number configurations.
 
-- Returned connection credentials stay usable only at their declared response paths. Submitted secrets and the API key remain redacted there too; echoed custom SIP header values are also protected.
+- Stored SIP messages hide their raw text, which can carry stored header values.
+
+- Issued credentials are masked by field name outside their declared response paths, but copies inside unrelated string fields are not caught.
+
 ### Fixed
 
 - Document-upload errors now point to the current operation’s own URL field when it has one.

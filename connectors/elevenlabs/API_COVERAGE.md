@@ -286,7 +286,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_service_account_api_keys_route | GET | /v1/service-accounts/{service_account_user_id}/api-keys | excluded | — | account_and_keys | — | not-worth-exposing | — | Credential administration belongs in the provider dashboard. |
 | get_settings_route | GET | /v1/convai/settings | admitted | 7 | settings | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_signed_url_deprecated | GET | /v1/convai/conversation/get_signed_url | admitted | 8 | conversation | create | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_similar_library_voices | POST | /v1/similar-voices | admitted | 9 | similar-voices | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_similar_library_voices | POST | /v1/similar-voices | admitted | 9 | similar-voices | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_similar_voices_for_speaker | GET | /v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices | admitted | 9 | dubbing | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_single_use_token | POST | /v1/single-use-token/{token_type} | admitted | 9 | single-use-token | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_speaker_audio | GET | /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers/{speaker_id}/audio | admitted | 9 | voices | read | missing | — | No existing tool maps to this exact HTTP operation. |

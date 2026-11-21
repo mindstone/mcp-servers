@@ -4392,7 +4392,8 @@
       "follow_ups": [],
       "search_aliases": ["conversation"],
       "rank": 50,
-      "discovery_summary": "Read SIP messages for a conversation phone call using path_params.conversation_id, with cursor pagination."
+      "discovery_summary": "Read SIP messages for a conversation phone call using path_params.conversation_id, with cursor pagination.",
+      "sensitive_response_fields": [["sip_messages", "*", "raw_message"]]
     },
     "get_conversation_summary_route": {
       "method": "GET",
@@ -5623,11 +5624,11 @@
       "status": "admitted",
       "milestone": 9,
       "family": "similar-voices",
-      "profile": "read",
+      "profile": "run_job",
       "effects": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "destructiveHint": false,
-        "idempotentHint": true,
+        "idempotentHint": false,
         "openWorldHint": true
       },
       "effect_reason": "Searches shared-library voices using a supplied audio sample without saving a new voice.",
@@ -5657,11 +5658,17 @@
       "file_bindings": [
         {
           "field": "audio_file",
-          "kind": "audio"
+          "kind": "audio",
+          "allowed_media_types": [
+            "audio/mpeg",
+            "audio/wav",
+            "audio/mp4",
+            "audio/ogg",
+            "audio/flac"
+          ]
         }
       ],
-      "timeout": "long",
-      "reviewed_post_read": "Searches existing shared-library voices from an audio sample; no voice is created or changed."
+      "timeout": "long"
     },
     "get_similar_voices_for_speaker": {
       "method": "GET", "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
@@ -6824,7 +6831,8 @@
         "evidence": []
       },
       "replacements": [],
-      "follow_ups": []
+      "follow_ups": [],
+      "sensitive_response_fields": [["sip_messages", "*", "raw_message"]]
     },
     "list_speech_engines": {
       "method": "GET",

@@ -277,7 +277,7 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if ((op.request.media_type === null) !== (op.request.schema === undefined) || (op.request.media_type === null && op.request.required)) invalid('Request media/schema mismatch.');
     if (op.request.schema !== undefined) walk(op.request.schema, `${location}/request/schema`);
     const files = op.request.files ?? [];
-    if (files.length && (!['read', 'create', 'change', 'run_job'].includes(op.profile) || op.request.media_type !== 'multipart/form-data')) invalid('File operand/profile mismatch.');
+    if (files.length && (!['create', 'change', 'run_job'].includes(op.profile) || op.request.media_type !== 'multipart/form-data')) invalid('File operand/profile mismatch.');
     if (new Set(files.map(file => file.field)).size !== files.length) invalid('Duplicate file binding.');
     const resolveMultipart = (schema: unknown): unknown => isRecord(schema) && typeof schema.$ref === 'string' ? resolveMultipart(catalog.$defs[definitionName(schema.$ref)]) : schema;
     if (op.request.media_type === 'multipart/form-data') {

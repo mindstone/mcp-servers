@@ -180,7 +180,7 @@ export class ApiValidator {
           if (Object.hasOwn(anchor, alias)) issue([...rule.prompt_path, alias], `Use ${[...rule.prompt_path, correction].join('.')}${alias === 'knowledge_base_document_ids' ? ' with structured knowledge locators' : ''}.`, 'forbidden_alias');
         }
       }
-      if (input.files !== undefined && !['read', 'create', 'change', 'run_job'].includes(op.profile)) issue(['files'], 'This profile does not accept file operands.');
+      if (input.files !== undefined && !['create', 'change', 'run_job'].includes(op.profile)) issue(['files'], 'This profile does not accept file operands.');
       if (input.files !== undefined && op.request.media_type !== 'multipart/form-data') issue(['files'], 'This operation declares no multipart file operands.');
       const bindings = op.request.files ?? [];
       for (const binding of bindings) if (isRecord(input.body) && Object.hasOwn(input.body, binding.field)) {

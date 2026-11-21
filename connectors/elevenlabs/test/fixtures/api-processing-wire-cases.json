@@ -256,7 +256,7 @@
   },
   {
     "id": "get_similar_library_voices",
-    "profile": "read",
+    "profile": "run_job",
     "args": {
       "body": {
         "similarity_threshold": 0.5,

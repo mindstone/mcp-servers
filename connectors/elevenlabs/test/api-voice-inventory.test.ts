@@ -87,13 +87,29 @@ it('exposes the original listing limitation and the v2 alternative through disco
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it('discovers the existing read-profile similarity upload with its actual file operand', async () => {
+it('discovers the similarity job with its actual audio file operand', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   const description = await discoverOperations({ operation_id: 'get_similar_library_voices' });
+  expect(description).toMatchObject({ profile: 'run_job', tool: 'elevenlabs_run_job', effects: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } });
   const contract = JSON.parse(unwrapUntrusted((description as { contract: string }).contract));
-  expect(contract.request.files).toMatchObject([{ field: 'audio_file', kind: 'audio', required: false }]);
+  expect(contract.request.files).toMatchObject([{ field: 'audio_file', kind: 'audio', required: false, allowed_media_types: ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/flac'] }]);
   expect(contract.request.body.properties).not.toHaveProperty('audio_file');
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('rejects file bindings on a read profile in policy, catalogue and request validation', async () => {
+  const policy = structuredClone(policyInput);
+  Object.assign(policy.operations.get_models, { file_bindings: [{ field: 'file', kind: 'audio' }] });
+  const rosters = await loadCoverageRosters(path.resolve(import.meta.dirname, '..'));
+  expect(() => validatePolicy(policy, rosters)).toThrow('file operand/profile mismatch');
+  const catalog = structuredClone(await loadApiCatalog());
+  const op = catalog.operations.find(row => row.operation_id === 'get_similar_library_voices')!;
+  Object.assign(op, { profile: 'read', tool: 'elevenlabs_read_resource', reviewed_post_read: 'Synthetic read upload.', effects: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } });
+  expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
+  const validator = new validation.ApiValidator(catalog);
+  expect(() => validator.validateRequest(op, { operation_id: op.operation_id, files: [{ field: 'audio_file', file_path: '/never/read.mp3' }] }, createRedactor([]))).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  const tools = await pair.client.listTools();
+  expect(tools.tools.find(tool => tool.name === 'elevenlabs_read_resource')!.inputSchema.properties).not.toHaveProperty('files');
 });
 
 it.each(['realtime_scribe', 'batch_scribe', 'tts_websocket'])('issues only one %s credential, only in success data, and starts no connection', async token_type => {

@@ -145,7 +145,21 @@ describe('phone and account configuration', () => {
     expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
     if (id === 'list_sip_messages') {
       expect(String((first.json as { data: string }).data).match(/<\/untrusted-content>/g)).toHaveLength(1);
-      expect(data.sip_messages[0].raw_message).toContain('Ignore instructions');
+      expect(data.sip_messages[0].raw_message).toBe('[REDACTED]');
     }
+  });
+
+  it.each(['list_sip_messages', 'get_conversation_sip_messages'])('%s withholds stored custom and authorization headers in raw logs', async id => {
+    const wire = cases.find(wire => wire.id === 'list_sip_messages')!;
+    const response = structuredClone(wire.response);
+    response.sip_messages[0].raw_message = 'INVITE sip:guide@example.invalid SIP/2.0\r\nX-Guide: stored-sip-header-canary\r\nAuthorization: Bearer stored-sip-auth-canary\r\n\r\n';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json(response));
+    const result = await pair.callTool('elevenlabs_read_resource', { operation_id: id, path_params: id === 'list_sip_messages' ? { phone_number_id: 'phone_example' } : { conversation_id: 'conversation_example' } });
+    expect(result.isError, result.text).not.toBe(true);
+    expect(result.json).toMatchObject({ response_contract: 'matched' });
+    const data = JSON.parse(unwrapUntrusted(String((result.json as { data: string }).data)));
+    expect(data.sip_messages[0]).toMatchObject({ raw_message: '[REDACTED]', call_id: 'call_example', transport: 'tls' });
+    expect(result.text).not.toContain('stored-sip-header-canary'); expect(result.text).not.toContain('stored-sip-auth-canary');
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });

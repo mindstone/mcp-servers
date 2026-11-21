@@ -65,15 +65,32 @@ it('refuses undeclared, duplicate and wrong-cardinality operands before any auth
   expect(key).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
 });
 
-it('supports negotiated outside-root files on the reviewed POST read and fails closed without that operand', async () => {
+it('refuses read-tool file operands before file access or dispatch', async () => {
+  const client = await setup();
+  const file = path.join(workspace, 'sample.mp3'); fs.writeFileSync(file, 'sample');
+  const open = vi.spyOn(fs.promises, 'open'); const read = vi.spyOn(fs, 'readFileSync'); const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ voices: [], has_more: false }));
+  const result = await client.callTool('elevenlabs_read_resource', { operation_id: 'get_similar_library_voices', files: [{ field: 'audio_file', file_path: file }] });
+  expect(result.isError).toBe(true);
+  expect(open).not.toHaveBeenCalled(); expect(read).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each(['txt', 'unknown', 'mp4'])('refuses non-audio similarity upload .%s before opening or dispatching', async extension => {
+  const client = await setup(); const file = path.join(workspace, `sample.${extension}`); fs.writeFileSync(file, 'sample');
+  const open = vi.spyOn(fs.promises, 'open'); const fetch = vi.spyOn(globalThis, 'fetch');
+  const result = await client.callTool('elevenlabs_run_job', { operation_id: 'get_similar_library_voices', files: [{ field: 'audio_file', file_path: file }] });
+  expect(result.json).toMatchObject({ code: 'INVALID_FILE_TYPE' });
+  expect(open).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+});
+
+it('supports negotiated outside-root audio on the similarity job and fails closed without that operand', async () => {
   const client = await setup(true); const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'similar-'));
   try {
     const file = path.join(outside, 'sample.mp3'); fs.writeFileSync(file, 'sample'); let requests = 0;
     mswServer.use(http.post('https://api.elevenlabs.io/v1/similar-voices', async ({ request }) => { requests++; expect(await ((await request.formData()).get('audio_file') as File).text()).toBe('sample'); return HttpResponse.json({ voices: [], has_more: false }); }));
     const args = { operation_id: 'get_similar_library_voices', files: [{ field: 'audio_file', file_path: file }] };
-    const result = await client.client.callTool({ name: 'elevenlabs_read_resource', arguments: args, _meta: { 'files/readMode': { version: 1, mode: 'central', reads: [{ location: ['files', 0, 'file_path'], rawPath: file, canonicalPath: fs.realpathSync(file) }] } } });
+    const result = await client.client.callTool({ name: 'elevenlabs_run_job', arguments: args, _meta: { 'files/readMode': { version: 1, mode: 'central', reads: [{ location: ['files', 0, 'file_path'], rawPath: file, canonicalPath: fs.realpathSync(file) }] } } });
     expect(result.isError, JSON.stringify(result)).not.toBe(true);
-    const denied = await client.callTool('elevenlabs_read_resource', args);
+    const denied = await client.callTool('elevenlabs_run_job', args);
     expect(denied.json).toMatchObject({ code: 'FILE_AUTHORIZATION_ERROR' }); expect(requests).toBe(1);
   } finally { fs.rmSync(outside, { recursive: true, force: true }); }
 });

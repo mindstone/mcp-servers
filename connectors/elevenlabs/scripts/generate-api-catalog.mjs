@@ -66,7 +66,7 @@ const stage7Profiles = {
   change: 'agent_testing_bulk_move_route update_agent_test_folder_route update_analysis_item_attachments_route update_analysis_item_route update_conversation_tag_route update_dashboard_settings_route update_settings_route update_test_invocation_route update_branch_route create_agent_draft_route merge_branch_into_target rebase_branch_onto_main create_agent_deployment_route update_merge_proposal_route accept_merge_proposal_route submit_merge_proposal_review_route update_procedure_draft_route post_knowledge_base_move_route post_knowledge_base_bulk_move_route assign_conversation_tags_route post_conversation_feedback_route run_conversation_analysis run_conversation_evaluations create_agent_conversation_ticket_route merge_agent_conversation_tickets_route update_agent_conversation_ticket_route',
   delete: 'delete_agent_test_folder_route delete_analysis_item_route delete_conversation_tag_route delete_environment delete_agent_draft_route remove_procedure_route delete_procedure_draft_route delete_rag_index post_knowledge_base_bulk_delete_route cancel_crawl_job_route cancel_file_upload_route delete_conversation_route unassign_conversation_tag_route delete_agent_conversation_ticket_route delete_agent_hold_audio_route',
 };
-const stage92Profiles = { read: 'get_similar_library_voices', create: 'add_from_file', run_job: 'audio_isolation speech_to_speech_full speech_to_text forced_alignment' };
+const stage92Profiles = { create: 'add_from_file', run_job: 'get_similar_library_voices audio_isolation speech_to_speech_full speech_to_text forced_alignment' };
 const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_speech_full text_to_dialogue sound_generation' };
 const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix text_to_speech_stream_with_timestamps text_to_dialogue_stream_with_timestamps' };
 const stage94Profiles = { run_job: 'compose_detailed' };
@@ -285,6 +285,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
     }
     if (row.status === 'admitted') {
       if (![1, 7, 8, 9, 10].includes(row.milestone) || row.profile === null || row.effects === null || row.effect_reason === null || row.exclusion_group !== undefined) refuse('admission metadata', id);
+      if (row.file_bindings?.length && !['create', 'change', 'run_job'].includes(row.profile)) refuse('file operand/profile mismatch', id);
       const reviewedProfile = reviewedProfiles[id];
       if (!reviewedProfile || row.profile !== reviewedProfile) refuse('unreviewed effect assignment', id);
       requireEqual(row.effects, PROFILE_EFFECTS[reviewedProfile], `effect annotations ${id}`);
@@ -362,7 +363,7 @@ function validateProductionCensus(policy) {
     speech_to_speech_full: [{ field: 'audio', kind: 'audio' }],
     speech_to_text: [{ field: 'file', kind: 'audio', max_bytes: 4_999_999_999 }],
     forced_alignment: [{ field: 'file', kind: 'audio', max_bytes: 999_999_999 }],
-    get_similar_library_voices: [{ field: 'audio_file', kind: 'audio' }],
+    get_similar_library_voices: [{ field: 'audio_file', kind: 'audio', allowed_media_types: ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/flac'] }],
     add_from_file: [{ field: 'file', kind: 'document', allowed_media_types: ['application/pls+xml'] }],
     create_file_document_route: [{ field: 'file', kind: 'document' }],
     update_file_document_route: [{ field: 'file', kind: 'document' }],

@@ -2099,15 +2099,15 @@
     "tool": "elevenlabs_run_job"
   },
   "get_similar_library_voices": {
-    "profile": "read",
+    "profile": "run_job",
     "effects": {
-      "readOnlyHint": true,
+      "readOnlyHint": false,
       "destructiveHint": false,
-      "idempotentHint": true,
+      "idempotentHint": false,
       "openWorldHint": true
     },
     "method": "POST",
-    "tool": "elevenlabs_read_resource"
+    "tool": "elevenlabs_run_job"
   },
   "add_from_file": {
     "profile": "create",

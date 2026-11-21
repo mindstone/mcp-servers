@@ -64,7 +64,7 @@ async function apiResult(action: () => Promise<unknown>): Promise<CallToolResult
 }
 
 function executionConfig(profile: ApiProfile) {
-  const files = profile === 'read' || profile === 'create' || profile === 'change' || profile === 'run_job';
+  const files = profile === 'create' || profile === 'change' || profile === 'run_job';
   return {
     description: operationContractGuidance + '\n' + descriptions[profile], inputSchema: privateInputSchema(files ? executionSchema : withoutFiles, path => path[0] === 'files' ? ['field', 'file_path', 'file_paths'] : Object.keys(executionSchema.shape)),
     annotations: { readOnlyHint: profile === 'read' || profile === 'query_knowledge', destructiveHint: ['change', 'delete', 'tests', 'place_call'].includes(profile), idempotentHint: profile === 'read', openWorldHint: true },

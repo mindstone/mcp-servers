@@ -92,7 +92,7 @@ describe('agent media contracts', () => {
   ])('refuses unreviewed file binding for %s', (id, file_bindings) => {
     const policy = structuredClone(policyInput);
     Object.assign(policy.operations[id as keyof typeof policy.operations], { file_bindings });
-    expect(() => validatePolicy(policy, rosters)).toThrow('reviewed file binding');
+    expect(() => validatePolicy(policy, rosters)).toThrow(id === 'get_agent_summaries_route' ? 'file operand/profile mismatch' : 'reviewed file binding');
   });
   it.each([{ kind: 'video' }, { kind: [] }, { max_bytes: 0 }, { allowed_media_types: [] }])('refuses malformed binding metadata at both boundaries: %j', patch => {
     const policy = structuredClone(policyInput);

@@ -280,7 +280,7 @@ describe('pinned operation policy and public artifacts', () => {
       if (floors[row.method]) expect(row.profile).toBe(['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'].includes(row.operation_id) ? 'create' : row.operation_id === 'update_environment_variable' ? 'delete' : floors[row.method]);
       counts[row.profile] = (counts[row.profile] ?? 0) + 1;
     }
-    expect(counts).toEqual({ read: 147, create: 43, change: 86, delete: 46, tests: 3, query_knowledge: 1, place_call: 8, run_job: 29 });
+    expect(counts).toEqual({ read: 146, create: 43, change: 86, delete: 46, tests: 3, query_knowledge: 1, place_call: 8, run_job: 30 });
     expect(apiCatalog.operations.filter(row => row.profile === 'query_knowledge').map(row => row.operation_id)).toEqual(['query_agent_knowledge_base_rag_route']);
     expect(apiCatalog.operations.some(row => row.tool === 'elevenlabs_place_call')).toBe(true);
     expect(apiCatalog.operations.some(row => row.tool === 'elevenlabs_run_job')).toBe(true);
