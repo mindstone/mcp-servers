@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **337 admitted + 69 planned + 109 excluded = 515**.
+Partition: **348 admitted + 58 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 337 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 348 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -218,10 +218,10 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_batch_call | GET | /v1/convai/batch-calling/{batch_id} | admitted | 8 | batch-calling | read | partial | @mindstone/mcp-server-elevenlabs-agents:get_batch_call | Reads batch_id on the exact endpoint. |
 | get_branch_route | GET | /v1/convai/agents/{agent_id}/branches/{branch_id} | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_branches_route | GET | /v1/convai/agents/{agent_id}/branches | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_chapter_by_id_endpoint | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_chapter_snapshot_endpoint | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_chapter_snapshots | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_chapters | GET | /v1/studio/projects/{project_id}/chapters | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_chapter_by_id_endpoint | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id} | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_chapter_snapshot_endpoint | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id} | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_chapter_snapshots | GET | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_chapters | GET | /v1/studio/projects/{project_id}/chapters | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_conversation_audio_route | GET | /v1/convai/conversations/{conversation_id}/audio | admitted | 7 | conversations | read | covered | @mindstone/mcp-server-elevenlabs-agents:get_conversation_audio | Downloads by conversation_id on the exact endpoint. |
 | get_conversation_group_route | GET | /v1/convai/realtime/conversation-groups/{conversation_group_id} | admitted | 8 | realtime | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_conversation_histories_route | GET | /v1/convai/conversations | admitted | 7 | conversations | read | partial | @mindstone/mcp-server-elevenlabs-agents:list_conversations | Supports cursor, page_size and agent_id. Legacy start_date/end_date query names and boolean call_successful do not match the pinned time-filter and success-enum shapes; other current filters are absent. |
@@ -262,11 +262,11 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | get_phone_number_route | GET | /v1/convai/phone-numbers/{phone_number_id} | admitted | 8 | phone-numbers | read | covered | @mindstone/mcp-server-elevenlabs-agents:get_phone_number | Reads phone_number_id on the exact endpoint; there are no other current request controls. |
 | get_procedure_draft_route | GET | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_procedure_route | GET | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id} | admitted | 7 | agents | read | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_project_by_id | GET | /v1/studio/projects/{project_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_project_muted_tracks_endpoint | GET | /v1/studio/projects/{project_id}/muted-tracks | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_project_snapshot_endpoint | GET | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_project_snapshots | GET | /v1/studio/projects/{project_id}/snapshots | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| get_projects | GET | /v1/studio/projects | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_project_by_id | GET | /v1/studio/projects/{project_id} | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_project_muted_tracks_endpoint | GET | /v1/studio/projects/{project_id}/muted-tracks | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_project_snapshot_endpoint | GET | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id} | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_project_snapshots | GET | /v1/studio/projects/{project_id}/snapshots | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
+| get_projects | GET | /v1/studio/projects | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | get_pronunciation_dictionaries_metadata | GET | /v1/pronunciation-dictionaries | admitted | 9 | pronunciation-dictionaries | read | partial | @mindstone/mcp-server-elevenlabs:list_pronunciation_dictionaries | Supports page_size, cursor and include_archived; sort and sort_direction are absent. |
 | get_pronunciation_dictionary_metadata | GET | /v1/pronunciation-dictionaries/{pronunciation_dictionary_id} | admitted | 9 | pronunciation-dictionaries | read | covered | @mindstone/mcp-server-elevenlabs:get_pronunciation_dictionary | Reads pronunciation_dictionary_id on the exact metadata endpoint. |
 | get_pronunciation_dictionary_version_pls | GET | /v1/pronunciation-dictionaries/{dictionary_id}/{version_id}/download | admitted | 9 | pronunciation-dictionaries | read | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -490,9 +490,9 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | speech_to_speech_stream | POST | /v1/voice-changer/{voice_id}/stream | admitted | 9 | voice-changer | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | speech_to_text | POST | /v1/speech-to-text | admitted | 9 | speech-to-text | run_job | partial | @mindstone/mcp-server-elevenlabs:transcribe_audio | Supports a local multipart file, model_id, language, diarization and timestamp controls; omits current URL, webhook and other transcription options. |
 | start_speaker_separation | POST | /v1/voices/pvc/{voice_id}/samples/{sample_id}/separate-speakers | admitted | 9 | voices | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| stream_chapter_snapshot_audio | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}/stream | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| stream_chapter_snapshot_audio | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}/stream | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | stream_compose | POST | /v1/music/stream | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
-| stream_project_snapshot_archive_endpoint | POST | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/archive | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| stream_project_snapshot_archive_endpoint | POST | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/archive | admitted | 10 | studio | read | missing | — | No existing tool maps to this exact HTTP operation. |
 | stream_project_snapshot_audio_endpoint | POST | /v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/stream | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | submit_merge_proposal_review_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/reviews | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | text_search_conversation_messages_route | GET | /v1/convai/conversations/messages/text-search | admitted | 7 | conversations | read | missing | — | No existing tool maps to this exact HTTP operation. |

@@ -1,3 +1,4 @@
+import studioCases from './api-studio-wire-cases.json' with { type: 'json' };
 import supportingCases from './api-supporting-wire-cases.json' with { type: 'json' };
 import legacyDubbingCases from './api-legacy-dubbing-wire-cases.json' with { type: 'json' };
 import dubbingCases from './api-dubbing-wire-cases.json' with { type: 'json' };
@@ -31,7 +32,7 @@ export interface WireCase {
   query: [string, string][];
   body?: unknown;
   status: number;
-  media: 'application/json' | 'text/html' | 'text/plain' | 'audio/mpeg' | 'text/csv' | 'application/zip' | 'multipart/mixed' | null;
+  media: 'application/json' | 'text/html' | 'text/plain' | 'audio/mpeg' | 'text/csv' | 'application/zip' | 'application/x-zip' | 'multipart/mixed' | null;
   response: unknown;
   response_content_type?: string;
   metadata?: unknown;
@@ -48,6 +49,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...studioCases as WireCase[],
   ...supportingCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...legacyDubbingCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...dubbingCases.filter(wire => !('multipart' in wire)) as WireCase[],

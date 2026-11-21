@@ -5,6 +5,7 @@ import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
 import { base64AudioSchema, multipartResponseSchema, audioRepresentation, binaryExtensions, isBinaryMedia } from './api-media.mjs';
+import { connectorHeaders } from './api-credential-keys.mjs';
 
 export type JsonSchema = boolean | Record<string, unknown>;
 export const profileSchema = z.enum(['read', 'create', 'change', 'delete', 'tests', 'query_knowledge', 'run_job', 'place_call']);
@@ -89,7 +90,7 @@ const operationSchema = z.object({
   path: z.string().startsWith('/'), family: text.refine(value => Object.hasOwn(apiFamilies, value)),
   milestone: z.union([z.literal(1), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]), profile: profileSchema, tool: text, effects: effectsSchema, effect_reason: text, check_before_retry: retryCheckSchema, reviewed_post_read: text.optional(), reviewed_patch_delete: text.optional(), reviewed_get_create: text.optional(),
   retry_check: z.union([text, z.object({ unavailable_reason: text.trim().min(1) }).strict()]).optional(),
-  optional_header_omissions: z.array(z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/).refine(name => !['xi-api-key', 'content-type', 'content-length'].includes(name.toLowerCase())), reason: text.trim().min(1) }).strict()).nonempty().optional(),
+  optional_header_omissions: z.array(z.object({ name: z.string().regex(/^[!#$%&'*+.^_`|~a-zA-Z0-9-]+$/).refine(name => !connectorHeaders.includes(name.toLowerCase())), reason: text.trim().min(1) }).strict()).nonempty().optional(),
   sensitive_request_fields: z.array(z.array(text).nonempty()).nonempty().optional(),
   credential_return_fields: z.array(z.array(text)).nonempty().optional(),
   sensitive_response_fields: z.array(z.array(text).nonempty()).nonempty().optional(), effect_note: text.optional(), manual_pagination: text.optional(),

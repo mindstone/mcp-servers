@@ -2785,5 +2785,16 @@
       "idempotentHint": false,
       "openWorldHint": true
     }
-  }
+  },
+  "get_chapter_by_id_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_chapter_snapshot_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_chapter_snapshots": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_chapters": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_project_by_id": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_project_muted_tracks_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_project_snapshot_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_project_snapshots": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "get_projects": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "stream_chapter_snapshot_audio": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"},
+  "stream_project_snapshot_archive_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"}
 }

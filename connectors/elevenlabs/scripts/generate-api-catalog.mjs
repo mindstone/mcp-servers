@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
+import { connectorHeaders, credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
 import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
 import { audioRepresentation, base64AudioSchema, multipartResponseSchema, isBinaryMedia } from '../src/api-media.mjs';
 
@@ -101,6 +101,7 @@ const stage910Profiles = {
   "delete": "delete_speech_history_item delete_audio_isolation_history_item delete_transcript_by_id",
   "run_job": "audio_isolation_stream speech_to_speech_stream text_to_speech_stream text_to_dialogue_stream"
 };
+const stage102Profiles = { read: 'get_chapter_by_id_endpoint get_chapter_snapshot_endpoint get_chapter_snapshots get_chapters get_project_by_id get_project_muted_tracks_endpoint get_project_snapshot_endpoint get_project_snapshots get_projects stream_chapter_snapshot_audio stream_project_snapshot_archive_endpoint' };
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -114,7 +115,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles, stage102Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -229,7 +230,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: Object.values(stage102Profiles).some(ids => ids.split(' ').includes(id)) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -313,7 +314,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 337, planned: 69, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 348, planned: 58, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -496,7 +497,7 @@ function parameterRecords(parameters, spec, transform, id, omissions = []) {
   const omitted = new Set();
   for (const { name } of omissions) {
     const headers = parameters.filter(parameter => parameter.in === 'header' && parameter.name === name);
-    if (['xi-api-key', 'content-type', 'content-length'].includes(name.toLowerCase()) || [...omitted].some(header => header.toLowerCase() === name.toLowerCase()) || headers.length !== 1 || (headers[0].required !== undefined && headers[0].required !== false)) refuse('invalid optional header omission', `${id}: ${name}`);
+    if (connectorHeaders.includes(name.toLowerCase()) || [...omitted].some(header => header.toLowerCase() === name.toLowerCase()) || headers.length !== 1 || (headers[0].required !== undefined && headers[0].required !== false)) refuse('invalid optional header omission', `${id}: ${name}`);
     omitted.add(name);
   }
   const records = { path: { type: 'object', properties: Object.create(null), required: [], additionalProperties: false }, query: { type: 'object', properties: Object.create(null), required: [], additionalProperties: false } };

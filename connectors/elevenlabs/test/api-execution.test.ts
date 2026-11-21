@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 314 non-upload cases', async () => {
-    expect(apiWireCases).toHaveLength(314);
+  it('has independent cases for every admission, with exactly 325 non-upload cases', async () => {
+    expect(apiWireCases).toHaveLength(325);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'add_pvc_voice_samples', 'add_voice', 'audio_isolation', 'audio_isolation_stream', 'create_dubbing', 'create_file_document_route', 'create_finetune', 'dubbing_project_create', 'edit_voice', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'request_pvc_manual_verification', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_speech_stream', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(337);
+    expect(new Set(expectedIds).size).toBe(348);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(multipartCases.map(wire => wire.id).sort());
@@ -167,7 +167,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
     expect(result.json).toMatchObject({ ok: true, operation_id: wire.id, status: wire.status, content_type: wire.media, response_contract: 'matched', effects: {
       readOnlyHint: wire.profile === 'read' || wire.profile === 'query_knowledge', destructiveHint: ['change', 'delete', 'tests', 'place_call'].includes(wire.profile), idempotentHint: wire.profile === 'read', openWorldHint: true,
     }, message: 'The provider returned a success response.' });
-    if (['audio/mpeg', 'text/csv'].includes(String(wire.media))) {
+    if (['audio/mpeg', 'text/csv', 'application/x-zip'].includes(String(wire.media))) {
       expect(result.json.data).toBeNull();
       const artifact = result.json.artifact as { file_path: string; size_bytes: number; media_type: string };
       expect(artifact).toEqual({ file_path: expect.any(String), size_bytes: Buffer.byteLength(String(wire.response)), media_type: wire.media, ...(wire.profile === 'run_job' && !['generate', 'stream_compose'].includes(wire.id) ? { format: 'mp3_44100_128' } : {}) });

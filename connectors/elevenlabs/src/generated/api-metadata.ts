@@ -33,6 +33,7 @@ export const apiFamilies = {
   "sip-trunk": "sip-trunk",
   "sound-generation": "sound-generation",
   "speech-to-text": "speech-to-text",
+  "studio": "studio",
   "tags": "tags",
   "test-invocations": "tests",
   "text-to-dialogue": "text-to-dialogue",
@@ -51,7 +52,7 @@ export const apiFamilies = {
   "whatsapp": "whatsapp",
   "whatsapp-accounts": "whatsapp-accounts"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","audio-effects","audio-isolation","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -87,6 +88,10 @@ export const profileOperationIds = {
     "get_batch_call",
     "get_branch_route",
     "get_branches_route",
+    "get_chapter_by_id_endpoint",
+    "get_chapter_snapshot_endpoint",
+    "get_chapter_snapshots",
+    "get_chapters",
     "get_conversation_audio_route",
     "get_conversation_group_route",
     "get_conversation_histories_route",
@@ -122,6 +127,11 @@ export const profileOperationIds = {
     "get_phone_number_route",
     "get_procedure_draft_route",
     "get_procedure_route",
+    "get_project_by_id",
+    "get_project_muted_tracks_endpoint",
+    "get_project_snapshot_endpoint",
+    "get_project_snapshots",
+    "get_projects",
     "get_pronunciation_dictionaries_metadata",
     "get_pronunciation_dictionary_metadata",
     "get_pronunciation_dictionary_version_pls",
@@ -186,6 +196,8 @@ export const profileOperationIds = {
     "resolve_conversation_reference_route",
     "search_knowledge_base_content_route",
     "smart_search_conversation_messages_route",
+    "stream_chapter_snapshot_audio",
+    "stream_project_snapshot_archive_endpoint",
     "text_search_conversation_messages_route",
     "text_to_voice_preview_stream",
     "usage_characters"

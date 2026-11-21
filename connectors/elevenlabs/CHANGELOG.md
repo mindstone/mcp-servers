@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Studio project, chapter, muted-track and snapshot reads, plus existing chapter MPEG and project ZIP downloads. ZIPs stay zipped; no conversion, URL fetching or automatic retry.
+
 - Speech and isolation history, stored transcripts, dictionary rules and version downloads, and millisecond usage metrics through the API tools. History downloads preserve audio or ZIP bytes; PLS downloads preserve binary text. Plain speech, dialogue, voice-conversion and isolation streams save audio with the shared progress and partial-file behavior. Rule edits return new versions; metadata/archive edits keep the version. No live playback, automatic retry or billing refund is implied.
 
 - Deprecated legacy editable dubbing operations through the API tools, with explicit transcription, translation, dubbing and asynchronous rendering. Optional CSV and foreground/background uploads keep their operands; downloads return the original automatic dub, not an edited render. Current project routes stay preferred in discovery.

@@ -122,6 +122,11 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "studio": {
+      "read": {
+        "unavailable_reason": "No separate lookup confirms whether an interrupted Studio request finished or what local download bytes it kept; read the project or chapter again before repeating anything that changes it or uses credits."
+      }
+    },
     "history": {"read": "get_speech_history"},
     "usage": {"read": "usage_characters"},
     "dubbing": {"read": "dubbing_project_list"},
@@ -3909,70 +3914,82 @@
     "get_chapter_by_id_endpoint": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing chapter content and conversion state.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; inspect content directly."
     },
     "get_chapter_snapshot_endpoint": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing chapter snapshot metadata and character alignments.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; this does not download or generate audio."
     },
     "get_chapter_snapshots": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing chapter snapshots without starting conversion.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; use returned snapshot IDs for explicit reads or downloads."
     },
     "get_chapters": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/chapters",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing chapter summaries without changing content.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; use get_chapter_by_id_endpoint to inspect full content."
     },
     "get_conversation_audio_route": {
       "method": "GET",
@@ -4867,87 +4884,102 @@
     "get_project_by_id": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing project settings and chapter metadata.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed, preserving share_id when supplied. The returned public_share_id is intended result data."
     },
     "get_project_muted_tracks_endpoint": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/muted-tracks",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads chapter IDs with muted tracks without unmuting or rendering.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; no audio is generated."
     },
     "get_project_snapshot_endpoint": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing project snapshot metadata, alignments and duration.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; upload maps are metadata, not authorization to fetch their URLs."
     },
     "get_project_snapshots": {
       "method": "GET",
       "path": "/v1/studio/projects/{project_id}/snapshots",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing project snapshots without starting conversion.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; use returned snapshot IDs for explicit reads or downloads."
     },
     "get_projects": {
       "method": "GET",
       "path": "/v1/studio/projects",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists existing project metadata without creating projects.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "standard",
+      "effect_note": "Repeat the same read if needed; candidate names do not establish content equality or unique request correlation."
     },
     "get_pronunciation_dictionaries_metadata": {
       "method": "GET",
@@ -9571,19 +9603,23 @@
     "stream_chapter_snapshot_audio": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}/stream",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads existing chapter snapshot audio without generating speech.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "long",
+      "effect_note": "Repeat the same stream explicitly if needed. Snapshot detail verifies identity, not saved bytes. Only declared audio/mpeg is supported, regardless of convert_to_mpeg; partial output follows the shared writer.",
+      "reviewed_post_read": "Downloads an existing snapshot without starting generation or conversion."
     },
     "stream_compose": {
       "method": "POST", "path": "/v1/music/stream", "status": "admitted", "milestone": 9, "family": "music",
@@ -9598,19 +9634,23 @@
     "stream_project_snapshot_archive_endpoint": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/archive",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads an existing project snapshot archive without generating audio.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "follow_ups": [],
+      "timeout": "long",
+      "effect_note": "Repeat the same read explicitly if needed; snapshot metadata cannot certify the local archive. Preserve application/x-zip bytes without extraction; provider filenames are ignored.",
+      "reviewed_post_read": "Downloads an existing snapshot without starting generation or conversion."
     },
     "stream_project_snapshot_audio_endpoint": {
       "method": "POST",
