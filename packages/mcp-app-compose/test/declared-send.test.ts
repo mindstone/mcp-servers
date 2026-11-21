@@ -119,6 +119,23 @@ describe.each(cases.filter((value, index) => [0, 2, 5].includes(index)))('assist
     expect(call?.params.arguments[mode === 'email' ? 'body' : mode === 'teams' ? 'content' : 'text']).toBe('My edited version\n');
   });
 
+  it('keeps the assistant-sent notice through Cancel and Reopen of an edited version', () => {
+    const window = mount(config);
+    notify(window, 'ui/notifications/tool-result', { structuredContent: draft });
+    const body = window.document.getElementById('bodyInput')! as unknown as HTMLTextAreaElement;
+    body.value = 'My edited version\n';
+    body.dispatchEvent(new window.Event('input'));
+    notify(window, 'mcp-app:card-outcome', outcome);
+    window.document.getElementById('cancelButton')!.click();
+    const collapsed = window.document.getElementById('collapsedMessage')!.textContent;
+    expect(collapsed).toBe('Your assistant sent the original version. Your edits were not sent.');
+    expect(collapsed).not.toContain('Nothing sent');
+    window.document.getElementById('reopenButton')!.click();
+    expect(window.document.getElementById('successBox')!.textContent).toBe('Your assistant sent the original version');
+    expect(window.document.getElementById('successBox')!.classList.contains('hidden')).toBe(false);
+    expect(body.value).toBe('My edited version\n');
+  });
+
   it('preserves the person-sent treatment when attribution is absent', () => {
     const window = mount(config);
     notify(window, 'ui/notifications/tool-result', { structuredContent: draft });

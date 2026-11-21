@@ -889,6 +889,10 @@ export const COMPOSE_MESSAGE_HTML = `
         return JSON.stringify([toInput, bodyInput].map(function (element) { return element.value; }));
       }
 
+      function assistantSentOriginal() {
+        return !sent && draftApplied && !!deferredHostOutcome && deferredHostOutcome.by === 'agent';
+      }
+
       function applyCardOutcome(o) {
         if (!draftApplied) {
           deferredHostOutcome = o && o.by === 'agent' ? o : null;
@@ -994,9 +998,12 @@ export const COMPOSE_MESSAGE_HTML = `
       cancelButton.addEventListener('click', function () {
         if (sending) return;
         // Hiding the notice does not resolve whether an earlier send went out.
+        // After the assistant sent the original, "Nothing sent" would be untrue.
         var collapseMessage = sendMayHaveGone
           ? 'Collapsed. Check whether it sent if you are not sure.'
-          : 'Draft collapsed. Nothing sent.';
+          : assistantSentOriginal()
+            ? 'Your assistant sent the original version. Your edits were not sent.'
+            : 'Draft collapsed. Nothing sent.';
         if (!sendMayHaveGone) clearError();
         clearSuccess();
         clearUnknown();
@@ -1006,6 +1013,7 @@ export const COMPOSE_MESSAGE_HTML = `
       reopenButton.addEventListener('click', function () {
         setCollapsed(false);
         if (!sent && sendMayHaveGone) showSendUnknown();
+        else if (assistantSentOriginal()) showSuccess('Your assistant sent the original version');
       });
 
       sentCollapseButton.addEventListener('click', function () {
