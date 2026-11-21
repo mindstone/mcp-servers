@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-21
+
+### Changed
+
+- Compose card declares its send so the host can mark a card sent when the assistant sends that same draft
+
 ## [0.5.6] - 2026-11-21
 
 ### Changed
