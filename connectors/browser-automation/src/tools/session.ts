@@ -14,10 +14,10 @@ export function registerSessionTools(server: McpServer): void {
   server.registerTool(
     'browser_tabs',
     {
-      description: 'List open tabs or switch to a tab by number.',
+      description: 'List open tabs, open a new tab, close the current tab, or switch to a tab by number.',
       inputSchema: {
         action: z.enum(['list', 'new', 'close']).optional().describe('Tab action. Omit to list tabs.'),
-        tab_number: z.number().optional().describe('Tab number to switch to (from tab list)'),
+        tab_number: z.number().optional().describe('Tab number to switch to (from the tab list). When given, action is ignored.'),
       },
       annotations: {
         readOnlyHint: false,

@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ConnectorError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * URL scheme deny-list for browser_navigate / browser_authenticate.
@@ -40,7 +41,7 @@ export function validateUrlScheme(url: string): void {
     parsed = new URL(url);
   } catch {
     throw new ConnectorError(
-      `URL scheme not allowed: invalid URL ${JSON.stringify(url)}`,
+      `URL scheme not allowed: invalid URL ${wrapUntrusted(url, 'browser-automation:url')}`,
       'URL_SCHEME_REJECTED',
       'Pass a valid http: or https: URL (or about:blank). Only http and https schemes are permitted.',
     );
@@ -54,7 +55,7 @@ export function validateUrlScheme(url: string): void {
     // We already returned above for about:blank — anything else here is
     // about:config / about:cache / about:debugging etc.
     throw new ConnectorError(
-      `URL scheme not allowed: ${proto} (only about:blank is permitted, got ${url})`,
+      `URL scheme not allowed: ${proto} (only about:blank is permitted, got ${wrapUntrusted(url, 'browser-automation:url')})`,
       'URL_SCHEME_REJECTED',
       'Only http://, https://, and about:blank URLs are accepted by the browser-automation connector.',
     );
@@ -75,13 +76,25 @@ export function validateUrlScheme(url: string): void {
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
 /**
+ * The tool result for a thrown error. A ConnectorError carries text this
+ * connector wrote, with any outside text in it (CLI output, a URL or path the
+ * model passed) enveloped where the error is built, so it is returned with its
+ * code and resolution. Any other error's message can carry
+ * text from outside the connector (a path, a page, the CLI), so it reaches the
+ * model only inside an untrusted-content envelope.
+ */
+function errorResult(error: unknown): CallToolResult {
+  const body = error instanceof ConnectorError
+    ? { ok: false, error: error.message, code: error.code, resolution: error.resolution }
+    : { ok: false, error: wrapUntrusted(error instanceof Error ? error.message : String(error), 'browser-automation:error') };
+  return { content: [{ type: 'text', text: JSON.stringify(body) }], isError: true };
+}
+
+/**
  * Wraps a tool handler with standard error handling.
  *
  * - On success: returns the string result as a text content block.
- * - On ConnectorError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
- *
- * Secrets are never exposed in error messages.
+ * - On error: returns a structured JSON error (see errorResult).
  */
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
@@ -91,27 +104,7 @@ export function withErrorHandling<T>(
       const result = await fn(args, extra);
       return { content: [{ type: 'text', text: result }] };
     } catch (error) {
-      if (error instanceof ConnectorError) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                ok: false,
-                error: error.message,
-                code: error.code,
-                resolution: error.resolution,
-              }),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
-        isError: true,
-      };
+      return errorResult(error);
     }
   };
 }
@@ -126,27 +119,7 @@ export function withErrorHandlingRaw<T>(
     try {
       return await fn(args, extra);
     } catch (error) {
-      if (error instanceof ConnectorError) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                ok: false,
-                error: error.message,
-                code: error.code,
-                resolution: error.resolution,
-              }),
-            },
-          ],
-          isError: true,
-        };
-      }
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
-        isError: true,
-      };
+      return errorResult(error);
     }
   };
 }

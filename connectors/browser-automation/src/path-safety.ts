@@ -3,6 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { ConnectorError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** A path the model passed (it may come from a page), as it may appear in an error the model reads. */
+function untrustedPath(p: string): string {
+  return wrapUntrusted(p, 'browser-automation:path') as string;
+}
 
 export type ResolveResult =
   | { ok: true; path: string }
@@ -102,7 +108,7 @@ export function resolveWorkspaceReadPath(inputPath: string): ResolveResult {
 
   const canonicalCandidate = canonicalisePrefix(lexical);
   if (!isInsideRoot(canonicalCandidate, root)) {
-    return { ok: false, error: `file_path is outside the workspace sandbox root (${root}). Got: ${inputPath}` };
+    return { ok: false, error: `file_path is outside the workspace sandbox root (${root}). Got: ${untrustedPath(inputPath)}` };
   }
 
   let canonical: string;
@@ -110,7 +116,7 @@ export function resolveWorkspaceReadPath(inputPath: string): ResolveResult {
     canonical = fs.realpathSync(lexical);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { ok: false, error: `File not found: ${inputPath}` };
+      return { ok: false, error: `File not found: ${untrustedPath(inputPath)}` };
     }
     throw err;
   }
@@ -120,7 +126,7 @@ export function resolveWorkspaceReadPath(inputPath: string): ResolveResult {
       ok: false,
       error:
         `file_path resolves outside the workspace sandbox root (${root}); ` +
-        `symlinks may not escape the workspace. Got: ${inputPath}`,
+        `symlinks may not escape the workspace. Got: ${untrustedPath(inputPath)}`,
     };
   }
 
@@ -141,7 +147,7 @@ export function resolveWorkspaceWritePath(inputPath: string): ResolveResult {
   // outside the root — all without requiring the leaf file to exist.
   const canonicalCandidate = canonicalisePrefix(lexical);
   if (!isInsideRoot(canonicalCandidate, root)) {
-    return { ok: false, error: `file_path is outside the workspace sandbox root (${root}). Got: ${inputPath}` };
+    return { ok: false, error: `file_path is outside the workspace sandbox root (${root}). Got: ${untrustedPath(inputPath)}` };
   }
 
   // If the leaf itself exists as a symlink, resolve it too so a planted
@@ -153,7 +159,7 @@ export function resolveWorkspaceWritePath(inputPath: string): ResolveResult {
         ok: false,
         error:
           `file_path resolves outside the workspace sandbox root (${root}); ` +
-          `symlinks may not escape the workspace. Got: ${inputPath}`,
+          `symlinks may not escape the workspace. Got: ${untrustedPath(inputPath)}`,
       };
     }
   } catch (err) {
@@ -203,7 +209,7 @@ function sanitiseBasename(p: string, fallback: string): string {
  */
 function uploadSourceChangedError(inputPath: string, central = false): ConnectorError {
   return new ConnectorError(
-    `file_path changed while it was being validated: ${inputPath}`,
+    `file_path changed while it was being validated: ${untrustedPath(inputPath)}`,
     'UPLOAD_SOURCE_CHANGED',
     central
       ? 'The file changed after it was approved. Try again. If this keeps happening, check whether another program is moving or replacing it.'
@@ -273,7 +279,7 @@ export function stageUploadSource(
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
       throw new ConnectorError(
-        `File not found: ${inputPath}`,
+        `File not found: ${untrustedPath(inputPath)}`,
         'PATH_OUTSIDE_WORKSPACE',
         'Pass file paths inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
       );
@@ -294,7 +300,7 @@ export function stageUploadSource(
     const stat = fs.fstatSync(inFd);
     if (!stat.isFile()) {
       throw new ConnectorError(
-        `file_path is not a regular file: ${inputPath}`,
+        `file_path is not a regular file: ${untrustedPath(inputPath)}`,
         'NOT_A_REGULAR_FILE',
         'Pass a path to a regular file inside the workspace directory.',
       );
@@ -373,7 +379,7 @@ export function createPdfStagingTarget(filePath: string, overwrite: boolean): Pd
 
   if (!overwrite && fs.existsSync(resolved.path)) {
     throw new ConnectorError(
-      `file_path already exists: ${filePath}`,
+      `file_path already exists: ${untrustedPath(filePath)}`,
       'FILE_EXISTS',
       'Pass overwrite: true to replace the existing file, or choose a different file_path.',
     );
@@ -388,7 +394,7 @@ export function createPdfStagingTarget(filePath: string, overwrite: boolean): Pd
   const canonicalParentDir = fs.realpathSync(parentDir);
   if (canonicalParentDir !== parentDir) {
     throw new ConnectorError(
-      `file_path parent directory changed while it was being prepared: ${filePath}`,
+      `file_path parent directory changed while it was being prepared: ${untrustedPath(filePath)}`,
       'PATH_OUTSIDE_WORKSPACE',
       'Retry the call, or choose a different file_path inside the workspace directory.',
     );
@@ -450,14 +456,14 @@ export function installStagedFile(target: PdfStagingTarget, overwrite: boolean):
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new ConnectorError(
-      `Destination directory cannot be resolved (${reason}): ${destPath}`,
+      `Destination directory cannot be resolved: ${untrustedPath(`${destPath} (${reason})`)}`,
       'PATH_OUTSIDE_WORKSPACE',
       'Retry the call, or choose a different file_path inside the workspace directory.',
     );
   }
   if (currentParentDir !== canonicalParentDir) {
     throw new ConnectorError(
-      `Destination directory changed while the PDF was being generated: ${destPath}`,
+      `Destination directory changed while the PDF was being generated: ${untrustedPath(destPath)}`,
       'PATH_OUTSIDE_WORKSPACE',
       'Retry the call, or choose a different file_path inside the workspace directory.',
     );
@@ -476,7 +482,7 @@ export function installStagedFile(target: PdfStagingTarget, overwrite: boolean):
       if (code === 'EISDIR' || code === 'EPERM') {
         // EISDIR on Linux, EPERM on macOS: the destination is a directory.
         throw new ConnectorError(
-          `Destination is a directory, not a file: ${destPath}`,
+          `Destination is a directory, not a file: ${untrustedPath(destPath)}`,
           'DESTINATION_IS_DIRECTORY',
           'Choose a file_path that does not collide with an existing directory.',
         );
@@ -493,7 +499,7 @@ export function installStagedFile(target: PdfStagingTarget, overwrite: boolean):
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
       throw new ConnectorError(
-        `Destination already exists: ${destPath}`,
+        `Destination already exists: ${untrustedPath(destPath)}`,
         'FILE_EXISTS',
         'Pass overwrite: true to replace the existing file, or choose a different file_path.',
       );

@@ -10,7 +10,9 @@ export function registerInteractionTools(server: McpServer): void {
     {
       description: `Click an element. Use @ref from browser_snapshot (preferred) or a CSS selector.
 
-WORKFLOW: browser_snapshot → find @ref → browser_click @ref`,
+WORKFLOW: browser_snapshot → find @ref → browser_click @ref
+
+A click can submit a form, send a message, delete something or confirm a payment. Before a click that does any of those, check that the user asked for it.`,
       inputSchema: {
         ref: z.string().describe('Element ref from snapshot (e.g., "@e2") or CSS selector'),
       },

@@ -17,6 +17,12 @@ are maintained manually as part of the PR review checklist.
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 
+- An unexpected error's message, and a rejected URL or file path repeated in an error, now reach the assistant inside an untrusted-content envelope, like the CLI's own error output, since they can carry text from a page.
+
+### Changed
+
+- `browser_tabs` now says it can also open and close tabs, and `browser_click` reminds the assistant to check with the user before a click that sends, deletes or pays.
+
 ## [0.2.6] - 2026-11-06
 
 ### Changed
