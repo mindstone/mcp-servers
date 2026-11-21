@@ -11,7 +11,7 @@ Permission errors include Slack's `needed` and `provided` scope names so the hos
 
 ## Status
 
-- **Version:** [0.3.8](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.3.9](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [39](./src/tools/) (messages, channels, threads, users, files, pins)
 - **Surface:** cloud-api

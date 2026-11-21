@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-21
+
+### Changed
+
+- Token file reads refuse links and special files; compose card declares its send so the host can mark a card sent when the assistant sends that same draft
+
 ### Fixed
 
 - When your user token can't be refreshed for a temporary reason, tools that act as you (sending, searching, opening a DM) now say to try again instead of asking you to reconnect Slack.
