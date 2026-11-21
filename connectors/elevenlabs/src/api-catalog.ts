@@ -18,7 +18,7 @@ export const API_TOOLS = {
 } as const;
 
 const reviewedGetCreates = ['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'];
-const credentialIssuers = [...reviewedGetCreates, 'create_realtime_session', 'register_twilio_call'];
+const credentialIssuers = [...reviewedGetCreates, 'create_realtime_session', 'register_twilio_call', 'get_single_use_token'];
 const realtimeAuthorizationPath = ['session', 'tools', '*', 'authorization'];
 
 export interface ValidationIssue { path: string[]; keyword: string; message: string }
@@ -248,11 +248,12 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     const queries = Object.keys(op.parameters.query.properties);
     const properties = op.responses.flatMap(response => responseProperties(response.schema, catalog));
     const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
+    const tokens = queries.includes('next_page_token') && properties.includes('next_page_token') && properties.includes('has_more');
     const pagingNames = [...queries, ...properties].filter(name => unsupportedPagination.has(name));
     if (op.manual_pagination !== undefined && (op.method !== 'GET' || op.profile !== 'read' || op.pagination !== null
-      || (!documents && !['page', 'limit'].some(name => queries.includes(name)))
+      || (!documents && !tokens && !['page', 'limit'].some(name => queries.includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
-      || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : [])].includes(name)))) invalid('Invalid manual pagination.');
+      || pagingNames.some(name => !['page', 'limit', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : [])].includes(name)))) invalid('Invalid manual pagination.');
     if (op.manual_pagination === undefined && pagingNames.length) invalid('Undeclared manual pagination.');
     if (typeof op.check_before_retry === 'string') {
       const retryOperation = byId.get(op.check_before_retry);
@@ -437,7 +438,7 @@ async function buildDescription(op: ApiOperation, catalog: ApiCatalog, definitio
   for (const example of examples) {
     try { await validateRequest(op.profile, example, createRedactor([])); } catch { invalid('A discovery example does not satisfy the operation contract.'); }
   }
-  const files = ['create', 'change', 'run_job'].includes(op.profile) ? op.request.files : undefined;
+  const files = op.request.files;
   const effectNote = op.effect_note ? ` ${op.effect_note}` : '';
   const pagingNote = op.manual_pagination ? ` ${op.manual_pagination}` : '';
   const workspaceNote = ['update_settings_route', 'update_dashboard_settings_route'].includes(op.operation_id) ? ' This operation changes settings for the whole workspace.' : '';

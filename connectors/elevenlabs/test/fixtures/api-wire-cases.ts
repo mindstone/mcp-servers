@@ -1,3 +1,4 @@
+import voiceInventoryCases from './api-voice-inventory-wire-cases.json' with { type: 'json' };
 import mixedCases from './api-mixed-wire-cases.json' with { type: 'json' };
 import musicCases from './api-music-wire-cases.json' with { type: 'json' };
 import timestampStreamCases from './api-timestamp-stream-wire-cases.json' with { type: 'json' };
@@ -43,6 +44,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...voiceInventoryCases as WireCase[],
   ...musicCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...mixedCases as WireCase[],
   ...base64Cases as WireCase[],

@@ -39,7 +39,7 @@ const idsByProfile = {
   query_knowledge: 'query_agent_knowledge_base_rag_route',
 };
 const reviewedGetCreate = ['get_conversation_signed_link', 'get_signed_url_deprecated', 'get_livekit_token'];
-const credentialIssuers = [...reviewedGetCreate, 'create_realtime_session', 'register_twilio_call'];
+const credentialIssuers = [...reviewedGetCreate, 'create_realtime_session', 'register_twilio_call', 'get_single_use_token'];
 const realtimeAuthorizationPath = ['session', 'tools', '*', 'authorization'];
 const stage81Profiles = { create: [...reviewedGetCreate, 'create_realtime_session'].join(' '), place_call: 'register_twilio_call' };
 const stage82Profiles = {
@@ -71,6 +71,12 @@ const stage91Profiles = { read: 'get_audio_effects_catalog', run_job: 'text_to_s
 const stage93Profiles = { read: 'get_pvc_sample_audio get_speaker_audio', run_job: 'text_to_speech_full_with_timestamps text_to_dialogue_full_with_timestamps text_to_voice text_to_voice_design text_to_voice_remix text_to_speech_stream_with_timestamps text_to_dialogue_stream_with_timestamps' };
 const stage94Profiles = { run_job: 'compose_detailed' };
 const stage95Profiles = { read: 'compose_plan get_finetune get_finetunes', change: 'update_finetune', delete: 'delete_finetune', run_job: 'generate stream_compose upload_song separate_song_stems video_to_music create_finetune' };
+const stage96Profiles = {
+  read: 'get_models get_user_info get_user_subscription_info get_voices get_user_voices_v2 get_library_voices get_voice_by_id get_voice_accents get_voice_settings get_voice_settings_default get_user_voice_collections get_user_voice_collection text_to_voice_preview_stream',
+  create: 'get_single_use_token create_or_update_user_voice_collection add_sharing_voice replicate_voice_to_isolated_environment create_voice',
+  change: 'update_user_voice_collection add_voice_to_user_voice_collection edit_voice_settings',
+  delete: 'delete_user_voice_collection remove_voice_from_user_voice_collection',
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -84,7 +90,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -195,7 +201,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -277,7 +283,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 240, planned: 166, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 263, planned: 143, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -618,9 +624,10 @@ function paginationDescriptor(operation, parameters, responses, spec, id, row) {
     'after', 'before', 'starting_after', 'ending_before', 'continuation', 'continuation_token', 'continuationToken', 'pagination', 'paging']);
   if (row.manual_pagination !== undefined) {
     const documents = queries.includes('last_doc') && properties.includes('next_doc') && properties.includes('has_more');
-    if (row.method !== 'GET' || row.profile !== 'read' || (!documents && !queries.some(name => ['limit', 'page'].includes(name)))
+    const tokens = queries.includes('next_page_token') && properties.includes('next_page_token') && properties.includes('has_more');
+    if (row.method !== 'GET' || row.profile !== 'read' || (!documents && !tokens && !queries.some(name => ['limit', 'page'].includes(name)))
       || queries.includes('cursor') || properties.includes('next_cursor')
-      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page', ...(documents ? ['last_doc', 'next_doc'] : [])].includes(name))) refuse('invalid manual pagination', id);
+      || [...queries, ...properties].some(name => unsupported.has(name) && !['limit', 'page', ...(documents ? ['last_doc', 'next_doc'] : []), ...(tokens ? ['next_page_token'] : [])].includes(name))) refuse('invalid manual pagination', id);
     return null;
   }
   if ([...queries, ...properties].some(name => unsupported.has(name))) refuse('unsupported pagination', `${id}: only cursor -> next_cursor is supported`);

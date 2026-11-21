@@ -1,0 +1,826 @@
+[
+  {
+    "id": "get_models",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/models",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": []
+  },
+  {
+    "id": "get_user_info",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/user",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "user_id": "user_example",
+      "workspace_id": "workspace_example",
+      "subscription": {
+        "tier": "starter",
+        "character_count": 10,
+        "character_limit": 10000,
+        "max_character_limit_extension": null,
+        "max_credit_limit_extension": "unlimited",
+        "can_extend_character_limit": true,
+        "allowed_to_extend_character_limit": true,
+        "voice_slots_used": 1,
+        "professional_voice_slots_used": 0,
+        "professional_voice_slots_used_in_workspace": 0,
+        "voice_limit": 10,
+        "voice_add_edit_counter": 0,
+        "professional_voice_limit": 1,
+        "can_extend_voice_limit": false,
+        "can_use_instant_voice_cloning": true,
+        "can_use_professional_voice_cloning": true,
+        "current_overage": {
+          "amount": "0",
+          "currency": "usd"
+        },
+        "status": "active"
+      },
+      "is_new_user": false,
+      "can_use_delayed_payment_methods": false,
+      "is_onboarding_completed": true,
+      "is_onboarding_checklist_completed": true,
+      "created_at": 1,
+      "seat_type": "workspace_member",
+      "xi_api_key_preview": null
+    }
+  },
+  {
+    "id": "get_user_subscription_info",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/user/subscription",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "tier": "starter",
+      "character_count": 10,
+      "character_limit": 10000,
+      "max_character_limit_extension": null,
+      "max_credit_limit_extension": "unlimited",
+      "can_extend_character_limit": true,
+      "allowed_to_extend_character_limit": true,
+      "voice_slots_used": 1,
+      "professional_voice_slots_used": 0,
+      "professional_voice_slots_used_in_workspace": 0,
+      "voice_limit": 10,
+      "voice_add_edit_counter": 0,
+      "professional_voice_limit": 1,
+      "can_extend_voice_limit": false,
+      "can_use_instant_voice_cloning": true,
+      "can_use_professional_voice_cloning": true,
+      "current_overage": {
+        "amount": "0",
+        "currency": "usd"
+      },
+      "status": "active",
+      "open_invoices": [],
+      "has_open_invoices": false
+    }
+  },
+  {
+    "id": "get_single_use_token",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "token_type": "tts_websocket"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/single-use-token/tts_websocket",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "token": "test-key-1"
+    }
+  },
+  {
+    "id": "get_voices",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "show_legacy": true
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices",
+    "query": [
+      [
+        "show_legacy",
+        "true"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voices": [
+        {
+          "voice_id": "voice_example",
+          "name": "Acme guide",
+          "category": "generated",
+          "labels": {
+            "language": "en"
+          },
+          "available_for_tiers": [],
+          "high_quality_base_model_ids": [],
+          "collection_ids": [
+            "collection_example"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "get_user_voices_v2",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "next_page_token": "opaque /+?&=% token",
+        "page_size": 2,
+        "search": "Acme & guide",
+        "sort": "name",
+        "sort_direction": "asc",
+        "voice_type": "saved",
+        "category": "generated",
+        "fine_tuning_state": "fine_tuned",
+        "collection_id": "collection_example",
+        "gender": "female",
+        "age": "young",
+        "language": [
+          "en",
+          "es"
+        ],
+        "accent": "american",
+        "use_cases": [
+          "narrative_story",
+          "conversational"
+        ],
+        "min_notice_period_days": 30,
+        "include_custom_rates": false,
+        "include_live_moderated": true,
+        "high_quality": false,
+        "include_total_count": false,
+        "voice_ids": [
+          "voice_example",
+          "voice_second"
+        ]
+      }
+    },
+    "method": "GET",
+    "path": "/v2/voices",
+    "query": [
+      [
+        "next_page_token",
+        "opaque /+?&=% token"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "search",
+        "Acme & guide"
+      ],
+      [
+        "sort",
+        "name"
+      ],
+      [
+        "sort_direction",
+        "asc"
+      ],
+      [
+        "voice_type",
+        "saved"
+      ],
+      [
+        "category",
+        "generated"
+      ],
+      [
+        "fine_tuning_state",
+        "fine_tuned"
+      ],
+      [
+        "collection_id",
+        "collection_example"
+      ],
+      [
+        "gender",
+        "female"
+      ],
+      [
+        "age",
+        "young"
+      ],
+      [
+        "language",
+        "en"
+      ],
+      [
+        "language",
+        "es"
+      ],
+      [
+        "accent",
+        "american"
+      ],
+      [
+        "use_cases",
+        "narrative_story"
+      ],
+      [
+        "use_cases",
+        "conversational"
+      ],
+      [
+        "min_notice_period_days",
+        "30"
+      ],
+      [
+        "include_custom_rates",
+        "false"
+      ],
+      [
+        "include_live_moderated",
+        "true"
+      ],
+      [
+        "high_quality",
+        "false"
+      ],
+      [
+        "include_total_count",
+        "false"
+      ],
+      [
+        "voice_ids",
+        "voice_example"
+      ],
+      [
+        "voice_ids",
+        "voice_second"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voices": [
+        {
+          "voice_id": "voice_example",
+          "name": "Acme guide",
+          "category": "generated",
+          "labels": {
+            "language": "en"
+          },
+          "available_for_tiers": [],
+          "high_quality_base_model_ids": [],
+          "collection_ids": [
+            "collection_example"
+          ]
+        }
+      ],
+      "has_more": true,
+      "total_count": 2,
+      "next_page_token": "next /+?&=% token"
+    }
+  },
+  {
+    "id": "get_library_voices",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "page_size": 2,
+        "category": "professional",
+        "gender": "female",
+        "age": "young",
+        "accent": "american",
+        "language": "en",
+        "locale": "en-US",
+        "search": "calm & warm",
+        "use_cases": [
+          "audiobook",
+          "conversational"
+        ],
+        "descriptives": [
+          "calm",
+          "warm"
+        ],
+        "featured": false,
+        "min_notice_period_days": 30,
+        "include_custom_rates": false,
+        "include_live_moderated": true,
+        "reader_app_enabled": false,
+        "owner_id": "owner_example",
+        "sort": "trending",
+        "page": 3
+      }
+    },
+    "method": "GET",
+    "path": "/v1/shared-voices",
+    "query": [
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "category",
+        "professional"
+      ],
+      [
+        "gender",
+        "female"
+      ],
+      [
+        "age",
+        "young"
+      ],
+      [
+        "accent",
+        "american"
+      ],
+      [
+        "language",
+        "en"
+      ],
+      [
+        "locale",
+        "en-US"
+      ],
+      [
+        "search",
+        "calm & warm"
+      ],
+      [
+        "use_cases",
+        "audiobook"
+      ],
+      [
+        "use_cases",
+        "conversational"
+      ],
+      [
+        "descriptives",
+        "calm"
+      ],
+      [
+        "descriptives",
+        "warm"
+      ],
+      [
+        "featured",
+        "false"
+      ],
+      [
+        "min_notice_period_days",
+        "30"
+      ],
+      [
+        "include_custom_rates",
+        "false"
+      ],
+      [
+        "include_live_moderated",
+        "true"
+      ],
+      [
+        "reader_app_enabled",
+        "false"
+      ],
+      [
+        "owner_id",
+        "owner_example"
+      ],
+      [
+        "sort",
+        "trending"
+      ],
+      [
+        "page",
+        "3"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voices": [],
+      "has_more": true,
+      "total_count": 8,
+      "last_sort_id": "sort /+?&=% token"
+    }
+  },
+  {
+    "id": "get_voice_by_id",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "query_params": {
+        "with_settings": false
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/voice%2Fa%20%3F%23",
+    "query": [
+      [
+        "with_settings",
+        "false"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice_example",
+      "name": "Acme guide",
+      "category": "generated",
+      "labels": {
+        "language": "en"
+      },
+      "available_for_tiers": [],
+      "high_quality_base_model_ids": [],
+      "collection_ids": [
+        "collection_example"
+      ]
+    }
+  },
+  {
+    "id": "get_voice_accents",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "language": "en",
+        "model_id": "eleven_v3"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/accents",
+    "query": [
+      [
+        "language",
+        "en"
+      ],
+      [
+        "model_id",
+        "eleven_v3"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "accents": [
+        {
+          "accent": "american",
+          "language": "en",
+          "code": "en-american",
+          "name": "American"
+        }
+      ]
+    }
+  },
+  {
+    "id": "get_voice_settings",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/settings",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "stability": 0.4,
+      "similarity_boost": 0.8,
+      "style": 0.1,
+      "speed": 1.1,
+      "use_speaker_boost": false,
+      "clone_strength": 0.7
+    }
+  },
+  {
+    "id": "get_voice_settings_default",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/voices/settings/default",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "stability": 0.4,
+      "similarity_boost": 0.8,
+      "style": 0.1,
+      "speed": 1.1,
+      "use_speaker_boost": false,
+      "clone_strength": 0.7
+    }
+  },
+  {
+    "id": "get_user_voice_collections",
+    "profile": "read",
+    "args": {},
+    "method": "GET",
+    "path": "/v1/voices/collections",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collections": [
+        {
+          "collection_id": "collection_example",
+          "title": "Guides",
+          "icon": "book",
+          "permission_on_resource": "admin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "get_user_voice_collection",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "collection_id": "collection/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/collections/collection%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection_example",
+      "title": "Guides",
+      "icon": "book",
+      "permission_on_resource": "admin"
+    }
+  },
+  {
+    "id": "create_or_update_user_voice_collection",
+    "profile": "create",
+    "args": {
+      "body": {
+        "title": "Guides",
+        "icon": "book"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/collections",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection_example",
+      "title": "Guides",
+      "icon": "book",
+      "permission_on_resource": "admin"
+    },
+    "body": {
+      "title": "Guides",
+      "icon": "book"
+    }
+  },
+  {
+    "id": "update_user_voice_collection",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "collection_id": "collection/a ?#"
+      },
+      "body": {
+        "title": "Guides",
+        "icon": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/voices/collections/collection%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection_example",
+      "title": "Guides",
+      "icon": "book",
+      "permission_on_resource": "admin"
+    },
+    "body": {
+      "title": "Guides",
+      "icon": null
+    }
+  },
+  {
+    "id": "delete_user_voice_collection",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "collection_id": "collection/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/voices/collections/collection%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection/a ?#"
+    }
+  },
+  {
+    "id": "add_voice_to_user_voice_collection",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "collection_id": "collection/a ?#",
+        "voice_id": "voice/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/collections/collection%2Fa%20%3F%23/voice/voice%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection/a ?#",
+      "voice_id": "voice/a ?#"
+    }
+  },
+  {
+    "id": "remove_voice_from_user_voice_collection",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "collection_id": "collection/a ?#",
+        "voice_id": "voice/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/voices/collections/collection%2Fa%20%3F%23/voice/voice%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "collection_id": "collection/a ?#",
+      "voice_id": "voice/a ?#"
+    }
+  },
+  {
+    "id": "add_sharing_voice",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "public_user_id": "owner/a ?#",
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "new_name": "Acme guide",
+        "bookmarked": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/add/owner%2Fa%20%3F%23/voice%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice_example"
+    },
+    "body": {
+      "new_name": "Acme guide",
+      "bookmarked": false
+    }
+  },
+  {
+    "id": "edit_voice_settings",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "stability": 0.4,
+        "similarity_boost": 0.8,
+        "style": 0.1,
+        "speed": 1.1,
+        "use_speaker_boost": false,
+        "clone_strength": 0.7
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/settings/edit",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    },
+    "body": {
+      "stability": 0.4,
+      "similarity_boost": 0.8,
+      "style": 0.1,
+      "speed": 1.1,
+      "use_speaker_boost": false,
+      "clone_strength": 0.7
+    }
+  },
+  {
+    "id": "replicate_voice_to_isolated_environment",
+    "profile": "create",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "target_workspace_id": " target /+?&=% workspace ",
+        "preserve_voice_id": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/replicate-to-isolated-environment",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "replicated_example"
+    },
+    "body": {
+      "target_workspace_id": " target /+?&=% workspace ",
+      "preserve_voice_id": false
+    }
+  },
+  {
+    "id": "create_voice",
+    "profile": "create",
+    "args": {
+      "body": {
+        "voice_name": "Acme guide",
+        "voice_description": "A calm, warm and clear guide voice.",
+        "generated_voice_id": "generated_first",
+        "labels": {
+          "language": "en"
+        },
+        "played_not_selected_voice_ids": [
+          "generated_second"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/text-to-voice",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice_example",
+      "name": "Acme guide",
+      "category": "generated",
+      "labels": {
+        "language": "en"
+      },
+      "available_for_tiers": [],
+      "high_quality_base_model_ids": [],
+      "collection_ids": [
+        "collection_example"
+      ]
+    },
+    "body": {
+      "voice_name": "Acme guide",
+      "voice_description": "A calm, warm and clear guide voice.",
+      "generated_voice_id": "generated_first",
+      "labels": {
+        "language": "en"
+      },
+      "played_not_selected_voice_ids": [
+        "generated_second"
+      ]
+    }
+  },
+  {
+    "id": "text_to_voice_preview_stream",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "generated_voice_id": "generated/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/text-to-voice/generated%2Fa%20%3F%23/stream",
+    "query": [],
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "preview stream bytes"
+  }
+]

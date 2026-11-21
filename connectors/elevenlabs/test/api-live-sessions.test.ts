@@ -26,9 +26,9 @@ beforeEach(async () => {
 afterEach(async () => { await pair.close(); setApiKey(''); vi.restoreAllMocks(); });
 
 describe('live session credential boundaries', () => {
-  it('declares exactly the five reviewed effects without assumed follow-up reads', async () => {
+  it('declares the five session effects and the single-use issuer without assumed follow-up reads', async () => {
     const catalog = await loadApiCatalog();
-    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual(cases.map(wire => wire.id).sort());
+    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token'].sort());
     for (const wire of cases) {
       const op = catalog.operations.find(op => op.operation_id === wire.id)!;
       expect(op.profile).toBe(wire.profile);

@@ -25,6 +25,12 @@ Detailed music generation (`compose_detailed`) saves each audio part as a worksp
 
 The API tools also support free composition planning, music generation and audio streaming, song uploads, stem separation, ordered video inputs and music finetunes. Paid generation, processing, uploads and training use `elevenlabs_run_job`; finetune reads, edits and deletion use their corresponding resource tools. Training states are returned as reported, without polling. Training accepts up to 50 optional audio files; video requests accept 1–10 files totalling at most 200 MB, in caller order. Duration and account limits remain the provider's responsibility. Audio and ZIP responses stream into workspace files; ZIP bytes are preserved without extraction. Paid binary jobs keep partial files as incomplete on failure and finished files as complete if receipt processing fails. Declared response headers such as `song-id` appear in redacted, untrusted receipt metadata. Provider filenames and undeclared headers are ignored. There is no automatic retry, regeneration or playback; the three convenience music tools keep their existing behavior.
 
+The API tools also read models, account and subscription information, browse voice inventories and manage voice collections. The original `get_voices` route stops working above 500 workspace voices; discover `get_user_voices_v2` instead. Its continuation stays in `data.next_page_token`: while `data.has_more` is true, pass that token unchanged as `query_params.next_page_token`. Shared-library search uses zero-based `query_params.page` and `page_size`; its `last_sort_id` is metadata, not a cursor. There is no automatic paging.
+
+Creating a collection does not add a voice. Adding an existing voice to a collection uses the change tool; removing membership or deleting a collection uses delete and keeps the voices themselves. Shared voices can be saved, voice settings edited, and a voice replicated into the caller-supplied target workspace. Replication keeps the target workspace unchanged and does not switch the connector's API origin. Save a generated preview with `create_voice`, then read its returned voice ID with `get_voice_by_id`. Existing preview audio can also be streamed into a workspace MP3 through `text_to_voice_preview_stream`; a failed read follows the same partial-file rules as other audio reads and can simply be repeated. These reads do not generate another preview or play it.
+
+Single-use tokens use the create tool. The pinned token types are `realtime_scribe`, `batch_scribe` and `tts_websocket`; tokens expire after 15 minutes and are consumed on use. Minting a token starts no connection. Only the declared token in success `data` is returned as a usable credential; diagnostics and provider errors omit it. The assistant receives it and the host may retain it in conversation history. Stored account key previews are redacted.
+
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
 
 ## Requirements
@@ -240,10 +246,10 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 96 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 32 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 48 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 31 deletes | Destructive |
+| `elevenlabs_read_resource` | 109 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 37 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 51 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 33 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_run_job` | Speech, dialogue, sound and music generation, processing and training | May consume credits and create provider records |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |

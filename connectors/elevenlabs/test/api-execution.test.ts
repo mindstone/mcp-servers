@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 225 non-upload cases', async () => {
-    expect(apiWireCases).toHaveLength(225);
+  it('has independent cases for every admission, with exactly 248 non-upload cases', async () => {
+    expect(apiWireCases).toHaveLength(248);
     expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'create_finetune', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(240);
+    expect(new Set(expectedIds).size).toBe(263);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(multipartCases.map(wire => wire.id).sort());

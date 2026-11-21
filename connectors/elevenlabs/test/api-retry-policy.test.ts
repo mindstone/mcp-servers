@@ -19,7 +19,7 @@ describe('family fallback without a same-route read or usable follow-up', () => 
       op.follow_ups.some(id => { const read = reads.find(r => r.operation_id === id); return read && params(read.path).every(name => op.path.includes(`{${name}}`)); })
     )).map(op => op.operation_id).sort();
     // A new read on the same route as a paid job must not silently replace its reviewed "no verifiable lookup" decision.
-    expect(overridden).toEqual(['create_finetune', 'delete_finetune', 'update_finetune']);
+    expect(overridden).toEqual(['add_sharing_voice', 'add_voice_to_user_voice_collection', 'create_finetune', 'create_or_update_user_voice_collection', 'delete_finetune', 'delete_user_voice_collection', 'edit_voice_settings', 'remove_voice_from_user_voice_collection', 'update_finetune', 'update_user_voice_collection']);
   });
   it('reports unavailable verification honestly without issuing a read or retry', async () => {
     vi.resetModules();
