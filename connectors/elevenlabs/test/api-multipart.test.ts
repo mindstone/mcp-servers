@@ -36,6 +36,25 @@ function synthetic(min = 0, nullable = false) {
 function file(name: string, value = name) { const result = path.join(base, name); fs.writeFileSync(result, value); return result; }
 const redactor = createRedactor([]);
 
+it.each(['add_project', 'edit_project_content'])('%s preserves nullable document inputs and omits null file parts', async operation_id => {
+  const op = original.operations.find(item => item.operation_id === operation_id)!;
+  const validator = new ApiValidator(original);
+  expect(binaryFileShape(op.request.files![0].schema)).toEqual({ multiple: false, nullable: true });
+  expect(op.request.files![0]).toMatchObject({ field: 'from_document', kind: 'document', required: false });
+  expect(op.request.files![0].allowed_media_types).toBeUndefined();
+  const body = operation_id === 'add_project' ? { name: 'Acme Guide' } : {};
+  for (const files of [undefined, [{ field: 'from_document', file_path: null }]]) {
+    const input = validator.validateRequest(op, { operation_id, ...(operation_id === 'edit_project_content' ? { path_params: { project_id: 'project_example' } } : {}), body, ...(files ? { files } : {}) }, redactor);
+    expect(input.files).toEqual(files);
+    const upload = await multipartUpload(op, input, undefined, new AbortController().signal);
+    try {
+      const form = await new Request('https://example.invalid/upload', { method: 'POST', body: upload.body, headers: upload.headers, duplex: 'half' } as RequestInit).formData();
+      expect(form.has('from_document')).toBe(false);
+      expect([...form.keys()]).toEqual(Object.keys(body));
+    } finally { await upload.close(); }
+  }
+});
+
 it('compiles nullable and repeated binary shapes without losing cardinality or structured field encoding', async () => {
   const spec = structuredClone(miniInput);
   const fileBody = spec.components.schemas.FileBody as unknown as { properties: Record<string, unknown>; required: string[] };

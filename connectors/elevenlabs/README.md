@@ -21,6 +21,8 @@ The API tools also read speech and isolation history, stored transcripts, pronun
 
 The API tools also read Studio projects, chapters, muted-track IDs and snapshot metadata. Existing chapter snapshots download as MPEG audio; project snapshot archives keep their declared ZIP bytes and stay zipped. Share IDs remain available, filenames come from the connector, and metadata URLs are returned without fetching them. Reads can be repeated explicitly; snapshot metadata does not verify a saved file. Project snapshot audio streaming remains unavailable pending a declared response format.
 
+Studio writes create projects and chapters, edit metadata or exact chapter content, replace project content and pronunciation dictionaries, convert output, and delete projects or chapters. Document uploads use the existing document file binding; source and callback URLs go only to the provider. Conversion spends credits: acceptance is not a finished snapshot. Read the named snapshot list and compare new output before repeating a conversion. Lost creation responses require inspecting candidates, not trusting a project name. Content replacement needs chapter detail reads; project metadata cannot verify uploaded bytes. Deletion does not refund billed work.
+
 Binary downloads are saved incrementally. Clients that request progress receive byte counts and, when a workspace is configured, a relative file reference. If a call fails after reporting saved bytes, the non-empty file is kept and the error identifies it as incomplete. A stalled progress receiver cannot extend the call deadline. This does not promise that an incomplete audio file is playable.
 
 The API tools also save timestamped speech and dialogue, voice-design and remix previews, and existing voice-sample and speaker audio from JSON responses as workspace files. Receipts keep alignment, voice segments and each preview's generated voice ID beside its file; inline audio is omitted. Preview generation may consume credits and does not save a permanent voice. Malformed audio or an unsupported audio media type is an error; completed files are kept and listed if a later preview or receipt fails. Timestamp streaming routes save one audio file and an ordered JSON-lines metadata file per call. Each metadata line contains a redacted, untrusted-content envelope in its `data` field; relative timestamps are preserved. Audio progress uses the same workspace references as binary downloads. A malformed stream or cancellation keeps non-empty partial files and names them in the error; completed files remain marked complete. The tool collects the stream before returning, without live playback or automatic retry.
@@ -262,10 +264,10 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 112 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 39 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 58 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 36 deletes | Destructive |
+| `elevenlabs_read_resource` | 146 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 42 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 84 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 46 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_run_job` | Speech, dialogue, sound and music generation, processing and training | May consume credits and create provider records |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |

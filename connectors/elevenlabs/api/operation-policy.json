@@ -208,19 +208,36 @@
     "add_chapter": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/chapters",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates a Studio chapter, optionally from content fetched by the provider.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_chapter_by_id_endpoint",
+        "get_chapters"
+      ],
+      "retry_check": "get_chapters",
+      "effect_note": "Use the returned chapter ID for get_chapter_by_id_endpoint. If it is lost, inspect get_chapters candidates and their exact content; names are not unique request correlation. Do not repeat creation until these reads show it did not happen.",
+      "sensitive_request_fields": [
+        [
+          "from_url"
+        ]
+      ]
     },
     "add_documentation_to_knowledge_base": {
       "method": "POST",
@@ -421,19 +438,45 @@
     "add_project": {
       "method": "POST",
       "path": "/v1/studio/projects",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "create",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Creates a Studio project; optional auto-conversion consumes credits and a callback can send conversion status to the submitted URL.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_project_by_id",
+        "get_projects"
+      ],
+      "retry_check": "get_projects",
+      "effect_note": "Use the returned project ID for get_project_by_id. If it is lost, inspect get_projects candidates; a name alone is not unique proof. Do not repeat creation until these reads show it did not happen. The provider fetches submitted URLs; the connector does not.",
+      "sensitive_request_fields": [
+        [
+          "from_url"
+        ],
+        [
+          "callback_url"
+        ]
+      ],
+      "file_bindings": [
+        {
+          "field": "from_document",
+          "kind": "document"
+        }
+      ]
     },
     "add_pvc_voice_samples": {
       "method": "POST", "path": "/v1/voices/pvc/{voice_id}/samples", "status": "admitted", "milestone": 9, "family": "voices",
@@ -904,36 +947,58 @@
     "convert_chapter_endpoint": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}/convert",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Starts chapter conversion, spends credits and replaces generated output. Acceptance is not a finished snapshot; check get_chapter_snapshots.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_chapter_snapshots"
+      ],
+      "retry_check": "get_chapter_snapshots",
+      "effect_note": "Check get_chapter_by_id_endpoint for conversion state, error and date, then get_chapter_snapshots for a new snapshot relative to prior state. Acceptance is not a finished snapshot or request-specific deduplication. Do not repeat conversion until these reads show it did not happen."
     },
     "convert_project_endpoint": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/convert",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Starts project conversion, spends credits and replaces generated output. Acceptance is not a finished snapshot; check get_project_snapshots.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_project_snapshots"
+      ],
+      "retry_check": "get_project_snapshots",
+      "effect_note": "Check get_project_by_id for conversion state and date, then get_project_snapshots for a new snapshot relative to prior state. Acceptance is not a finished snapshot or request-specific deduplication. Do not repeat conversion until these reads show it did not happen."
     },
     "copy_analysis_item_route": {
       "method": "POST",
@@ -2189,19 +2254,30 @@
     "delete_chapter_endpoint": {
       "method": "DELETE",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Deletes the chapter; this does not refund previously billed work.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_chapter_by_id_endpoint"
+      ],
+      "retry_check": "get_chapter_by_id_endpoint",
+      "effect_note": "Before retrying, verify absence in the correct accessible project with get_chapter_by_id_endpoint; permission failure is not proof of absence."
     },
     "delete_chat_response_test_route": {
       "method": "DELETE",
@@ -2493,19 +2569,30 @@
     "delete_project": {
       "method": "DELETE",
       "path": "/v1/studio/projects/{project_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Deletes the project; this does not refund previously billed work.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_project_by_id"
+      ],
+      "retry_check": "get_project_by_id",
+      "effect_note": "Before retrying, verify the same project ID is absent with get_project_by_id; permission failure is not proof of absence or a billing reversal."
     },
     "delete_pvc_voice_sample": {
       "method": "DELETE", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -3147,53 +3234,100 @@
     "edit_chapter": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/chapters/{chapter_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Replaces supplied chapter content or settings without promising conversion.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_chapter_by_id_endpoint"
+      ],
+      "retry_check": "get_chapter_by_id_endpoint",
+      "effect_note": "Before retrying, compare the requested name and exact content with get_chapter_by_id_endpoint; the chapter list alone cannot verify content."
     },
     "edit_project": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Overwrites project metadata and default voices.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_project_by_id"
+      ],
+      "retry_check": "get_project_by_id",
+      "effect_note": "Before retrying, compare requested fields and default voice IDs or references with get_project_by_id."
     },
     "edit_project_content": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/content",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Replaces project content; optional auto-conversion spends credits and replaces generated output.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "long",
+      "follow_ups": [
+        "get_chapters",
+        "get_chapter_by_id_endpoint"
+      ],
+      "retry_check": {
+        "unavailable_reason": "get_chapters followed by get_chapter_by_id_endpoint can inspect exact parsed content, but cannot verify original upload bytes or every auto-conversion effect. Do not repeat replacement or conversion without checking these reads and the project snapshots; project metadata alone is insufficient."
+      },
+      "effect_note": "Read get_chapters, then get_chapter_by_id_endpoint for each resulting chapter to compare exact content. Use get_project_snapshots for new converted output. Submitted URLs are fetched only by the provider.",
+      "sensitive_request_fields": [
+        [
+          "from_url"
+        ]
+      ],
+      "file_bindings": [
+        {
+          "field": "from_document",
+          "kind": "document"
+        }
+      ]
     },
     "edit_pvc_voice": {
       "method": "POST", "path": "/v1/voices/pvc/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -10623,19 +10757,30 @@
     "update_pronunciation_dictionaries": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/pronunciation-dictionaries",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "studio",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "effect_reason": "Replaces the project dictionary set and can mark affected text for reconversion; later reconversion consumes credits.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "timeout": "standard",
+      "follow_ups": [
+        "get_project_by_id"
+      ],
+      "retry_check": "get_project_by_id",
+      "effect_note": "Before retrying, compare dictionary locators and versions with get_project_by_id. Chapter reads inspect affected conversion statistics; this request does not automatically reconvert."
     },
     "update_secret_route": {
       "method": "PATCH",

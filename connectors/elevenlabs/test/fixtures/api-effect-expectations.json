@@ -2796,5 +2796,15 @@
   "get_project_snapshots": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
   "get_projects": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
   "stream_chapter_snapshot_audio": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"},
-  "stream_project_snapshot_archive_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"}
+  "stream_project_snapshot_archive_endpoint": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_read_resource"},
+  "add_chapter": {"profile": "create", "method": "POST", "tool": "elevenlabs_create_resource", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "add_project": {"profile": "create", "method": "POST", "tool": "elevenlabs_create_resource", "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}},
+  "convert_chapter_endpoint": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "convert_project_endpoint": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "delete_chapter_endpoint": {"profile": "delete", "method": "DELETE", "tool": "elevenlabs_delete_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "delete_project": {"profile": "delete", "method": "DELETE", "tool": "elevenlabs_delete_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "edit_chapter": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "edit_project": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "edit_project_content": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "update_pronunciation_dictionaries": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}}
 }

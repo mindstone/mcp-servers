@@ -7,11 +7,11 @@ Retrieved: 2026-11-08T21:07:54.389549+00:00
 SHA-256 (original decompressed bytes): `794bccdc06ac77a90e576807fac9d00204f5af6bba115a84bfd71ace208c11dc`
 Source census: 375 paths; 515 HTTP operation IDs; 2,675,026 bytes.
 
-Partition: **348 admitted + 58 planned + 109 excluded = 515**.
+Partition: **358 admitted + 48 planned + 109 excluded = 515**.
 
 Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.
 
-Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 348 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
+Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the 358 admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.
 
 Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.
 
@@ -40,7 +40,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | Operation ID | Method | Path | Status | Milestone | Family | Profile | Existing coverage | Existing package:tool references | Reason / replacements |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | accept_merge_proposal_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/merge | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| add_chapter | POST | /v1/studio/projects/{project_id}/chapters | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| add_chapter | POST | /v1/studio/projects/{project_id}/chapters | admitted | 10 | studio | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_documentation_to_knowledge_base | POST | /v1/convai/knowledge-base | excluded | — | knowledge-base | — | not-worth-exposing | — | Deprecated upload accepts file or URL, optional name and optional agent attachment, and returns AddKnowledgeBaseResponseModel. Create a file or URL document with optional name; for attachment, read the agent and explicitly patch caller-authored structured knowledge_base locators including existing locators and the new locator. Multi-step replacement differs in inputs and atomic behavior; no automatic GET/merge/PATCH or cleanup. Documentation or deprecated routes with explicitly described replacements. Replacement IDs: create_file_document_route, create_url_document_route, get_agent_route, patch_agent_settings_route |
 | add_from_file | POST | /v1/pronunciation-dictionaries/add-from-file | admitted | 9 | pronunciation-dictionaries | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_from_rules | POST | /v1/pronunciation-dictionaries/add-from-rules | admitted | 9 | pronunciation-dictionaries | create | partial | @mindstone/mcp-server-elevenlabs:add_pronunciation_dictionary | Supports name, description and rules; provider workspace permission options are not exposed. |
@@ -49,7 +49,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | add_mcp_tool_config_override_route | POST | /v1/convai/mcp-servers/{mcp_server_id}/tool-configs | admitted | 7 | mcp-servers | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_member | POST | /v1/workspace/groups/{group_id}/members | excluded | — | identity_and_seats | — | not-worth-exposing | — | Identity, membership and seat administration belongs in the provider dashboard. |
 | add_merge_proposal_comment_route | POST | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id}/comments | admitted | 7 | agents | create | missing | — | No existing tool maps to this exact HTTP operation. |
-| add_project | POST | /v1/studio/projects | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| add_project | POST | /v1/studio/projects | admitted | 10 | studio | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_pvc_voice_samples | POST | /v1/voices/pvc/{voice_id}/samples | admitted | 9 | voices | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_rules | POST | /v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/add-rules | admitted | 9 | pronunciation-dictionaries | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | add_sharing_voice | POST | /v1/voices/add/{public_user_id}/{voice_id} | admitted | 9 | voices | create | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -73,8 +73,8 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | compose_detailed | POST | /v1/music/detailed | admitted | 9 | music | run_job | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_detailed_stream | POST | /v1/music/detailed/stream | planned | 9 | music | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | compose_plan | POST | /v1/music/plan | admitted | 9 | music | read | partial | @mindstone/mcp-server-elevenlabs:create_music_plan | Maps prompt and duration_seconds to music_length_ms and fixes model_id to music_v1; source_composition_plan and enable_logging are absent. |
-| convert_chapter_endpoint | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/convert | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| convert_project_endpoint | POST | /v1/studio/projects/{project_id}/convert | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| convert_chapter_endpoint | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id}/convert | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| convert_project_endpoint | POST | /v1/studio/projects/{project_id}/convert | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | copy_analysis_item_route | POST | /v1/convai/analysis-items/{analysis_item_id}/copy | admitted | 7 | analysis-items | create | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_agent_conversation_ticket_route | POST | /v1/convai/triage-tickets | admitted | 7 | triage-tickets | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | create_agent_deployment_route | POST | /v1/convai/agents/{agent_id}/deployments | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -129,7 +129,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | delete_audio_isolation_history_item | DELETE | /v1/audio-isolation/history/{history_item_id} | admitted | 9 | audio-isolation | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_auth_connection | DELETE | /v1/workspace/auth-connections/{auth_connection_id} | planned | 10 | workspace/auth-connections | — | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_batch_call | DELETE | /v1/convai/batch-calling/{batch_id} | admitted | 8 | batch-calling | delete | missing | — | No existing tool maps to this exact HTTP operation. |
-| delete_chapter_endpoint | DELETE | /v1/studio/projects/{project_id}/chapters/{chapter_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| delete_chapter_endpoint | DELETE | /v1/studio/projects/{project_id}/chapters/{chapter_id} | admitted | 10 | studio | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_chat_response_test_route | DELETE | /v1/convai/agent-testing/{test_id} | admitted | 1 | agent-testing | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_conversation_group_route | DELETE | /v1/convai/realtime/conversation-groups/{conversation_group_id} | admitted | 8 | realtime | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_conversation_route | DELETE | /v1/convai/conversations/{conversation_id} | admitted | 7 | conversations | delete | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -143,7 +143,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | delete_mcp_server_route | DELETE | /v1/convai/mcp-servers/{mcp_server_id} | admitted | 7 | mcp-servers | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_phone_number_route | DELETE | /v1/convai/phone-numbers/{phone_number_id} | admitted | 8 | phone-numbers | delete | covered | @mindstone/mcp-server-elevenlabs-agents:delete_phone_number | Deletes phone_number_id on the exact endpoint; there are no other current request controls. |
 | delete_procedure_draft_route | DELETE | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft | admitted | 7 | agents | delete | missing | — | No existing tool maps to this exact HTTP operation. |
-| delete_project | DELETE | /v1/studio/projects/{project_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| delete_project | DELETE | /v1/studio/projects/{project_id} | admitted | 10 | studio | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_pvc_voice_sample | DELETE | /v1/voices/pvc/{voice_id}/samples/{sample_id} | admitted | 9 | voices | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_rag_index | DELETE | /v1/convai/knowledge-base/{documentation_id}/rag-index/{rag_index_id} | admitted | 7 | knowledge-base | delete | missing | — | No existing tool maps to this exact HTTP operation. |
 | delete_sample | DELETE | /v1/voices/{voice_id}/samples/{sample_id} | admitted | 9 | voices | delete | missing | — | No existing tool maps to this exact HTTP operation. |
@@ -181,9 +181,9 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | dubbing_transcript_segments_update | PATCH | /v1/dubbing/project/{project_id}/transcript/segments | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | duplicate_agent_route | POST | /v1/convai/agents/{agent_id}/duplicate | admitted | 1 | agents | create | covered | @mindstone/mcp-server-elevenlabs-agents:duplicate_agent | Supports agent_id and optional name, the complete current operation input; may perform a follow-up read to resolve the agent response. |
 | duplicate_speech_engine | POST | /v1/speech-engine/{speech_engine_id}/duplicate | planned | 10 | speech-engine | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| edit_chapter | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| edit_project | POST | /v1/studio/projects/{project_id} | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
-| edit_project_content | POST | /v1/studio/projects/{project_id}/content | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| edit_chapter | POST | /v1/studio/projects/{project_id}/chapters/{chapter_id} | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| edit_project | POST | /v1/studio/projects/{project_id} | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
+| edit_project_content | POST | /v1/studio/projects/{project_id}/content | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | edit_pvc_voice | POST | /v1/voices/pvc/{voice_id} | admitted | 9 | voices | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | edit_pvc_voice_sample | POST | /v1/voices/pvc/{voice_id}/samples/{sample_id} | admitted | 9 | voices | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | edit_service_account_api_key | PATCH | /v1/service-accounts/{service_account_user_id}/api-keys/{api_key_id} | excluded | — | account_and_keys | — | not-worth-exposing | — | Credential administration belongs in the provider dashboard. |
@@ -532,7 +532,7 @@ Deprecated upload replacement: create a file **or URL** document, preserving opt
 | update_merge_proposal_route | PATCH | /v1/convai/agents/{agent_id}/merge-proposals/{merge_proposal_id} | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_phone_number_route | PATCH | /v1/convai/phone-numbers/{phone_number_id} | admitted | 8 | phone-numbers | change | partial | @mindstone/mcp-server-elevenlabs-agents:update_phone_number | Updates selected number fields; not every provider setting is exposed. |
 | update_procedure_draft_route | PATCH | /v1/convai/agents/{agent_id}/branches/{branch_id}/procedures/{procedure_id}/draft | admitted | 7 | agents | change | missing | — | No existing tool maps to this exact HTTP operation. |
-| update_pronunciation_dictionaries | POST | /v1/studio/projects/{project_id}/pronunciation-dictionaries | planned | 10 | studio | — | missing | — | No existing tool maps to this exact HTTP operation. |
+| update_pronunciation_dictionaries | POST | /v1/studio/projects/{project_id}/pronunciation-dictionaries | admitted | 10 | studio | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_secret_route | PATCH | /v1/convai/secrets/{secret_id} | admitted | 7 | secrets | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_segment_language | PATCH | /v1/dubbing/resource/{dubbing_id}/segment/{segment_id}/{language} | admitted | 9 | dubbing | change | missing | — | No existing tool maps to this exact HTTP operation. |
 | update_settings_route | PATCH | /v1/convai/settings | admitted | 7 | settings | change | missing | — | No existing tool maps to this exact HTTP operation. |

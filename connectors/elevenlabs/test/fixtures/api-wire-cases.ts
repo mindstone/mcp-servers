@@ -49,7 +49,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
-  ...studioCases as WireCase[],
+  ...studioCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...supportingCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...legacyDubbingCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...dubbingCases.filter(wire => !('multipart' in wire)) as WireCase[],
@@ -252,6 +252,7 @@ export interface MultipartWireCase extends WireCase {
   multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[]; multiple?: boolean };
 }
 export const multipartCases: MultipartWireCase[] = [
+  ...studioCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...supportingCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...legacyDubbingCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...dubbingCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
