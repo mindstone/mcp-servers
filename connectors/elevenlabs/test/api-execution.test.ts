@@ -137,11 +137,11 @@ describe('actual SDK definitions and independent admission census', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('has independent cases for every admission, with exactly 248 non-upload cases', async () => {
-    expect(apiWireCases).toHaveLength(248);
-    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'audio_isolation', 'create_file_document_route', 'create_finetune', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
+  it('has independent cases for every admission, with exactly 259 non-upload cases', async () => {
+    expect(apiWireCases).toHaveLength(259);
+    expect(multipartCases.map(wire => wire.id).sort()).toEqual(['add_from_file', 'add_pvc_voice_samples', 'add_voice', 'audio_isolation', 'create_file_document_route', 'create_finetune', 'edit_voice', 'forced_alignment', 'get_similar_library_voices', 'post_agent_avatar_route', 'post_agent_hold_audio_route', 'request_pvc_manual_verification', 'separate_song_stems', 'speech_to_speech_full', 'speech_to_text', 'update_file_document_route', 'upload_file_route', 'upload_song', 'video_to_music']);
     const expectedIds = [...apiWireCases, ...multipartCases].map(wire => wire.id).sort();
-    expect(new Set(expectedIds).size).toBe(263);
+    expect(new Set(expectedIds).size).toBe(278);
     const catalog = await loadApiCatalog();
     expect(catalog.operations.map(op => op.operation_id).sort()).toEqual(expectedIds);
     expect(catalog.operations.filter(op => op.request.media_type === 'multipart/form-data').map(op => op.operation_id).sort()).toEqual(multipartCases.map(wire => wire.id).sort());
@@ -275,6 +275,7 @@ describe('literal provider wire contracts through the real SDK registration', ()
       expect(result.json.follow_up_operations).toEqual([wire.id === 'post_agent_avatar_route' ? 'get_agent_widget_route' : wire.id === 'post_agent_hold_audio_route' ? 'get_agent_route' : 'get_conversation_history_route']);
       expect(result.json.next_step).toContain('Before using or attaching this result');
     } else if (wire.id === 'create_finetune') expect(result.json.next_step).toContain('get_finetune (path_params.finetune_id)');
+    else if (['edit_voice', 'add_pvc_voice_samples', 'request_pvc_manual_verification'].includes(wire.id)) expect(result.json.next_step).toContain('get_voice_by_id (path_params.voice_id)');
     else expect(result.json.next_step).toBeUndefined();
   });
 });

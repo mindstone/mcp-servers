@@ -437,21 +437,16 @@
       "replacements": []
     },
     "add_pvc_voice_samples": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}/samples",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}/samples", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Adds recordings to an existing professional voice; does not start separation, training or verification.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "add_pvc_voice_samples", "path_params": {"voice_id": "voice_example"}, "body": {"remove_background_noise": false}, "files": [{"field": "files", "file_paths": ["/workspace/first.wav", "/workspace/second.mp3"]}]}],
+      "file_bindings": [{"field": "files", "kind": "audio"}],
+      "timeout": "long"
     },
     "add_rules": {
       "method": "POST",
@@ -552,25 +547,16 @@
       "rank": 50
     },
     "add_voice": {
-      "method": "POST",
-      "path": "/v1/voices/add",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:clone_voice"
-        ],
-        "reason": "Supports all current multipart fields: name, files, remove_background_noise, description and JSON-encoded labels.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/voice-clone.ts"
-        ]
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/add", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Creates an instant voice clone from supplied recordings and metadata; verification may still be required. No training or verification is submitted automatically.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:clone_voice"], "reason": "Supports all current multipart fields: name, files, remove_background_noise, description and JSON-encoded labels.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/voice-clone.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "add_voice", "body": {"name": "Acme narrator", "labels": {"language": "en"}}, "files": [{"field": "files", "file_paths": ["/workspace/first.wav", "/workspace/second.mp3"]}]}],
+      "file_bindings": [{"field": "files", "kind": "audio"}],
+      "timeout": "long"
     },
     "add_voice_to_user_voice_collection": {
       "method": "POST", "path": "/v1/voices/collections/{collection_id}/voice/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
@@ -1729,21 +1715,15 @@
       "replacements": []
     },
     "create_pvc_voice": {
-      "method": "POST",
-      "path": "/v1/voices/pvc",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "create",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Creates professional voice metadata without samples, training or verification; those require separate explicit requests.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "create_pvc_voice", "body": {"name": "Acme professional narrator", "language": "en", "labels": {"accent": "neutral"}}}],
+      "timeout": "standard"
     },
     "create_realtime_session": {
       "method": "POST",
@@ -2553,21 +2533,15 @@
       "replacements": []
     },
     "delete_pvc_voice_sample": {
-      "method": "DELETE",
-      "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes the selected professional voice sample; use only when explicitly requested.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "delete_pvc_voice_sample", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "standard"
     },
     "delete_rag_index": {
       "method": "DELETE",
@@ -2602,21 +2576,15 @@
       "effect_note": "Deletes the selected document RAG index."
     },
     "delete_sample": {
-      "method": "DELETE",
-      "path": "/v1/voices/{voice_id}/samples/{sample_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/voices/{voice_id}/samples/{sample_id}", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes the selected sample from an existing voice; use only when explicitly requested.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "delete_sample", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "standard"
     },
     "delete_secret_route": {
       "method": "DELETE",
@@ -2768,25 +2736,15 @@
       "timeout": "standard"
     },
     "delete_voice": {
-      "method": "DELETE",
-      "path": "/v1/voices/{voice_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:delete_voice"
-        ],
-        "reason": "Deletes by path voice_id on the exact endpoint.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/voice-clone.ts"
-        ]
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/voices/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Permanently deletes the selected voice; use only when explicitly requested.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:delete_voice"], "reason": "Deletes by path voice_id on the exact endpoint.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/voice-clone.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "delete_voice", "path_params": {"voice_id": "voice_example"}}],
+      "timeout": "standard"
     },
     "delete_whatsapp_account": {
       "method": "DELETE",
@@ -3290,38 +3248,26 @@
       "replacements": []
     },
     "edit_pvc_voice": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes metadata on an existing professional voice; does not submit training or verification.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "edit_pvc_voice", "path_params": {"voice_id": "voice_example"}, "body": {"description": "A clear narrator.", "labels": {"language": "en"}}}],
+      "timeout": "standard"
     },
     "edit_pvc_voice_sample": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes an existing sample; selected_speaker_ids replaces the previous selection and trims are milliseconds. Does not start training.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "edit_pvc_voice_sample", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}, "body": {"selected_speaker_ids": ["speaker_0", "speaker_2"], "trim_start_time": 100, "trim_end_time": 2400, "file_name": "narration.wav", "remove_background_noise": false}}],
+      "timeout": "standard"
     },
     "edit_service_account_api_key": {
       "method": "PATCH",
@@ -3343,21 +3289,16 @@
       "reason": "Credential administration belongs in the provider dashboard."
     },
     "edit_voice": {
-      "method": "POST",
-      "path": "/v1/voices/{voice_id}/edit",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/{voice_id}/edit", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes an existing voice and can append recordings or replace metadata; no training, verification or deletion is automatic.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "edit_voice", "path_params": {"voice_id": "voice_example"}, "body": {"name": "Acme narrator", "labels": "{\"language\":\"en\"}"}, "files": [{"field": "files", "file_paths": ["/workspace/sample.wav"]}]}],
+      "file_bindings": [{"field": "files", "kind": "audio"}],
+      "timeout": "long"
     },
     "edit_voice_settings": {
       "method": "POST", "path": "/v1/voices/{voice_id}/settings/edit", "status": "admitted", "milestone": 9, "family": "voices",
@@ -3889,21 +3830,15 @@
       ]
     },
     "get_audio_from_sample": {
-      "method": "GET",
-      "path": "/v1/voices/{voice_id}/samples/{sample_id}/audio",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/voices/{voice_id}/samples/{sample_id}/audio", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads existing sample audio into a workspace file; does not generate audio or change the voice.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_audio_from_sample", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "long"
     },
     "get_audio_full_from_speech_history_item": {
       "method": "GET",
@@ -5245,38 +5180,26 @@
       "timeout": "standard"
     },
     "get_pvc_sample_speakers": {
-      "method": "GET",
-      "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads separation status and detected speakers without starting separation or polling automatically.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pvc_sample_speakers", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "standard"
     },
     "get_pvc_sample_visual_waveform": {
-      "method": "GET",
-      "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/waveform",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/waveform", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads the selected sample waveform as provider-supplied numeric data without processing the sample.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_pvc_sample_visual_waveform", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "standard"
     },
     "get_pvc_voice_captcha": {
       "method": "GET",
@@ -5293,7 +5216,8 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "reason": "Pending a reviewed captcha response contract: the pinned GET 200 declares no content; https://elevenlabs.io/docs/api-reference/voices/pvc/verification/captcha also supplies no representation. The quickstart shows a base64 PNG but does not establish HTTP framing or media type (https://elevenlabs.io/docs/eleven-api/guides/how-to/voices/professional-voice-cloning). No reviewed response override exists; keep challenge retrieval and submission planned together."
     },
     "get_rag_index_overview": {
       "method": "GET",
@@ -7761,21 +7685,16 @@
       "timeout": "long"
     },
     "request_pvc_manual_verification": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}/verification",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}/verification", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Submits verification documents and changes an existing professional voice verification state; submission is not approval. Only submit when explicitly requested; never automatically train or retry.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "request_pvc_manual_verification", "path_params": {"voice_id": "voice_example"}, "body": {"extra_text": "Supporting documents for the requested review."}, "files": [{"field": "files", "file_paths": ["/workspace/first.pdf", "/workspace/second.txt"]}]}],
+      "file_bindings": [{"field": "files", "kind": ["image", "document"]}],
+      "timeout": "long"
     },
     "requests_list": {
       "method": "POST",
@@ -7995,21 +7914,15 @@
       "reason": "Removed direct streaming simulation. Saved Tests replace the workflow without equivalent streaming semantics."
     },
     "run_pvc_voice_training": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}/train",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}/train", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Starts training that changes an existing professional voice trained state and may consume account resources; acceptance does not mean training completed. Only submit when requested; never automatically poll or retry.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_voice_by_id"],
+      "examples": [{"operation_id": "run_pvc_voice_training", "path_params": {"voice_id": "voice_example"}, "body": {"model_id": "eleven_multilingual_v2"}}],
+      "timeout": "long"
     },
     "search_groups": {
       "method": "GET",
@@ -9778,21 +9691,15 @@
       ]
     },
     "start_speaker_separation": {
-      "method": "POST",
-      "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/separate-speakers",
-      "status": "planned",
-      "milestone": 9,
-      "family": "voices",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/voices/pvc/{voice_id}/samples/{sample_id}/separate-speakers", "status": "admitted", "milestone": 9, "family": "voices",
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Starts processing that changes an existing sample speaker-separation state; acceptance does not mean separation is complete. No automatic polling or training.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_pvc_sample_speakers"],
+      "examples": [{"operation_id": "start_speaker_separation", "path_params": {"voice_id": "voice_example", "sample_id": "sample_example"}}],
+      "timeout": "long"
     },
     "stream_chapter_snapshot_audio": {
       "method": "POST",
@@ -11173,7 +11080,8 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "reason": "Pending a reviewed captcha response contract: the pinned GET 200 declares no content; https://elevenlabs.io/docs/api-reference/voices/pvc/verification/captcha also supplies no representation. The quickstart shows a base64 PNG but does not establish HTTP framing or media type (https://elevenlabs.io/docs/eleven-api/guides/how-to/voices/professional-voice-cloning). No reviewed response override exists; keep challenge retrieval and submission planned together."
     },
     "video_to_music": {
       "method": "POST", "path": "/v1/music/video-to-music", "status": "admitted", "milestone": 9, "family": "music",

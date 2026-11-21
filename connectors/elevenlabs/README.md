@@ -29,6 +29,10 @@ The API tools also read models, account and subscription information, browse voi
 
 Creating a collection does not add a voice. Adding an existing voice to a collection uses the change tool; removing membership or deleting a collection uses delete and keeps the voices themselves. Shared voices can be saved, voice settings edited, and a voice replicated into the caller-supplied target workspace. Replication keeps the target workspace unchanged and does not switch the connector's API origin. Save a generated preview with `create_voice`, then read its returned voice ID with `get_voice_by_id`. Existing preview audio can also be streamed into a workspace MP3 through `text_to_voice_preview_stream`; a failed read follows the same partial-file rules as other audio reads and can simply be repeated. These reads do not generate another preview or play it.
 
+Instant cloning, voice edits and professional voice management also use the API tools. Create a professional voice record, upload samples, select speakers and trim times, or explicitly request separation, training or manual verification. Creating a record or uploading samples starts none of those later steps. Separation and training change an existing voice or sample, so they use the change tool. Acceptance does not mean completion; read states explicitly when needed. Verification submission is not approval. Nothing is polled, retried, trained, verified or deleted automatically.
+
+Recording and verification-document uploads accept repeated `files` operands through `file_paths`, with authorization checked for every path. The pinned spec gives no upload size limit for these routes, so the shared safe file-size checks and call deadline apply. Voice `labels` keep string values unchanged and encode object values once; PVC metadata accepts object labels. Sample trims stay in milliseconds and `selected_speaker_ids` replaces the full previous selection. Sample audio downloads use only concrete media types in the shared audio table and follow the same partial-file rule as other reads. Captcha retrieval and captcha submission remain unavailable: the pinned response and public reference do not define the challenge representation reliably enough to return it truthfully.
+
 Single-use tokens use the create tool. The pinned token types are `realtime_scribe`, `batch_scribe` and `tts_websocket`; tokens expire after 15 minutes and are consumed on use. Minting a token starts no connection. Only the declared token in success `data` is returned as a usable credential; diagnostics and provider errors omit it. The assistant receives it and the host may retain it in conversation history. Stored account key previews are redacted.
 
 Discover each API operation's contract before calling it. Saving an agent draft uses the change tool because it replaces your existing draft on that branch, if any. Merges, accepted merge proposals and rebases affect callers at once when the target branch serves live traffic.
@@ -246,10 +250,10 @@ the first N recipients; it is not a continuation cursor.
 | Tool | Operations | Effect |
 | --- | --- | --- |
 | `elevenlabs_discover_api` | Local search and request/response contracts | No HTTP or API key needed |
-| `elevenlabs_read_resource` | 109 resource reads and calculations | Read only |
-| `elevenlabs_create_resource` | 37 creates, including agents, documents, indexes and saved Tests | May consume credits |
-| `elevenlabs_change_resource` | 51 edits, including file replacement | May overwrite content, configuration or arrays |
-| `elevenlabs_delete_resource` | 33 deletes | Destructive |
+| `elevenlabs_read_resource` | 112 resource reads and calculations | Read only |
+| `elevenlabs_create_resource` | 39 creates, including agents, documents, indexes and saved Tests | May consume credits |
+| `elevenlabs_change_resource` | 58 edits, including file replacement | May overwrite content, configuration or arrays |
+| `elevenlabs_delete_resource` | 36 deletes | Destructive |
 | `elevenlabs_run_agent_tests` | Run, cancel and resubmit saved Tests | May consume credits and invoke real integrations |
 | `elevenlabs_run_job` | Speech, dialogue, sound and music generation, processing and training | May consume credits and create provider records |
 | `elevenlabs_query_knowledge` | Retrieve information from knowledge documents (RAG) | Read only; may consume credits |

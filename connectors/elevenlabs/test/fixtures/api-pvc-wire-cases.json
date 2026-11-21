@@ -1,0 +1,472 @@
+[
+  {
+    "id": "add_voice",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "Acme narrator",
+        "remove_background_noise": false,
+        "description": "A clear narrator.",
+        "labels": {
+          "language": "en",
+          "accent": "neutral"
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/add",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice_new",
+      "requires_verification": true
+    },
+    "multipart": {
+      "field": "files",
+      "fileName": "recording.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ],
+      "multiple": true,
+      "scalars": [
+        [
+          "name",
+          "Acme narrator"
+        ],
+        [
+          "remove_background_noise",
+          "false"
+        ],
+        [
+          "description",
+          "A clear narrator."
+        ],
+        [
+          "labels",
+          "{\"language\":\"en\",\"accent\":\"neutral\"}"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "edit_voice",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "name": "Revised narrator",
+        "labels": "{\"language\":\"en\"}",
+        "moderate_metadata": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/edit",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    },
+    "multipart": {
+      "field": "files",
+      "fileName": "recording.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ],
+      "multiple": true,
+      "scalars": [
+        [
+          "name",
+          "Revised narrator"
+        ],
+        [
+          "labels",
+          "{\"language\":\"en\"}"
+        ],
+        [
+          "moderate_metadata",
+          "false"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "delete_voice",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/voices/voice%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "delete_sample",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "get_audio_from_sample",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/audio",
+    "query": [],
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "ID3 sample audio bytes"
+  },
+  {
+    "id": "create_pvc_voice",
+    "profile": "create",
+    "args": {
+      "body": {
+        "name": "Acme professional narrator",
+        "language": "en",
+        "description": null,
+        "labels": {
+          "accent": "neutral"
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice_new"
+    },
+    "body": {
+      "name": "Acme professional narrator",
+      "language": "en",
+      "description": null,
+      "labels": {
+        "accent": "neutral"
+      }
+    }
+  },
+  {
+    "id": "edit_pvc_voice",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "name": "Updated professional narrator",
+        "language": "en",
+        "description": null,
+        "labels": {
+          "language": "en"
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice/a ?#"
+    },
+    "body": {
+      "name": "Updated professional narrator",
+      "language": "en",
+      "description": null,
+      "labels": {
+        "language": "en"
+      }
+    }
+  },
+  {
+    "id": "add_pvc_voice_samples",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "remove_background_noise": false
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": [
+      {
+        "sample_id": "sample_new",
+        "file_name": "recording.wav",
+        "mime_type": "audio/wav",
+        "size_bytes": 7,
+        "hash": "example-hash",
+        "trim_start": 0,
+        "trim_end": 2200,
+        "speaker_separation": {
+          "voice_id": "voice/a ?#",
+          "sample_id": "sample_new",
+          "status": "not_started",
+          "speakers": null,
+          "selected_speaker_ids": null
+        }
+      }
+    ],
+    "multipart": {
+      "field": "files",
+      "fileName": "recording.wav",
+      "mime": "audio/wav",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        255,
+        128
+      ],
+      "multiple": true,
+      "scalars": [
+        [
+          "remove_background_noise",
+          "false"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "edit_pvc_voice_sample",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      },
+      "body": {
+        "remove_background_noise": false,
+        "selected_speaker_ids": [
+          "speaker_2",
+          "speaker_0"
+        ],
+        "trim_start_time": 125,
+        "trim_end_time": 2425,
+        "file_name": "new name.wav"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice/a ?#"
+    },
+    "body": {
+      "remove_background_noise": false,
+      "selected_speaker_ids": [
+        "speaker_2",
+        "speaker_0"
+      ],
+      "trim_start_time": 125,
+      "trim_end_time": 2425,
+      "file_name": "new name.wav"
+    }
+  },
+  {
+    "id": "delete_pvc_voice_sample",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "get_pvc_sample_visual_waveform",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/waveform",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "sample_id": "sample/a ?#",
+      "visual_waveform": [
+        0,
+        0.2,
+        -0.15,
+        1
+      ]
+    }
+  },
+  {
+    "id": "get_pvc_sample_speakers",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/speakers",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voice_id": "voice/a ?#",
+      "sample_id": "sample/a ?#",
+      "status": "completed",
+      "speakers": {
+        "speaker_0": {
+          "speaker_id": "speaker_0",
+          "duration_secs": 2.5,
+          "utterances": null
+        }
+      },
+      "selected_speaker_ids": [
+        "speaker_0"
+      ]
+    }
+  },
+  {
+    "id": "start_speaker_separation",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#",
+        "sample_id": "sample/a ?#"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/samples/sample%2Fa%20%3F%23/separate-speakers",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "run_pvc_voice_training",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "model_id": "eleven_multilingual_v2"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/train",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    },
+    "body": {
+      "model_id": "eleven_multilingual_v2"
+    }
+  },
+  {
+    "id": "request_pvc_manual_verification",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "voice_id": "voice/a ?#"
+      },
+      "body": {
+        "extra_text": "Please review the supplied documents."
+      }
+    },
+    "method": "POST",
+    "path": "/v1/voices/pvc/voice%2Fa%20%3F%23/verification",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    },
+    "multipart": {
+      "field": "files",
+      "fileName": "verification.pdf",
+      "mime": "application/pdf",
+      "bytes": [
+        37,
+        80,
+        68,
+        70,
+        45,
+        0,
+        255
+      ],
+      "multiple": true,
+      "scalars": [
+        [
+          "extra_text",
+          "Please review the supplied documents."
+        ]
+      ]
+    }
+  }
+]

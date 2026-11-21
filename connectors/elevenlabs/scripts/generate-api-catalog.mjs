@@ -77,6 +77,12 @@ const stage96Profiles = {
   change: 'update_user_voice_collection add_voice_to_user_voice_collection edit_voice_settings',
   delete: 'delete_user_voice_collection remove_voice_from_user_voice_collection',
 };
+const stage97Profiles = {
+  read: 'get_audio_from_sample get_pvc_sample_visual_waveform get_pvc_sample_speakers',
+  create: 'add_voice create_pvc_voice',
+  change: 'edit_voice edit_pvc_voice add_pvc_voice_samples edit_pvc_voice_sample start_speaker_separation run_pvc_voice_training request_pvc_manual_verification',
+  delete: 'delete_voice delete_sample delete_pvc_voice_sample',
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -90,7 +96,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -201,7 +207,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -283,7 +289,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 263, planned: 143, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 278, planned: 128, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -301,6 +307,10 @@ function validateProductionCensus(policy) {
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
   const fileBindings = {
+    add_voice: [{ field: 'files', kind: 'audio' }],
+    edit_voice: [{ field: 'files', kind: 'audio' }],
+    add_pvc_voice_samples: [{ field: 'files', kind: 'audio' }],
+    request_pvc_manual_verification: [{ field: 'files', kind: ['image', 'document'] }],
     upload_song: [{ field: 'file', kind: 'audio' }],
     separate_song_stems: [{ field: 'file', kind: 'audio' }],
     create_finetune: [{ field: 'files', kind: 'audio' }],

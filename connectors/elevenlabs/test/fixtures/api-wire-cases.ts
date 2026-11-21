@@ -1,3 +1,4 @@
+import pvcCases from './api-pvc-wire-cases.json' with { type: 'json' };
 import voiceInventoryCases from './api-voice-inventory-wire-cases.json' with { type: 'json' };
 import mixedCases from './api-mixed-wire-cases.json' with { type: 'json' };
 import musicCases from './api-music-wire-cases.json' with { type: 'json' };
@@ -44,6 +45,7 @@ const test = { id: 'test_example', name: 'Guide mock test', type: 'simulation' }
 const invocation = { id: 'invocation_example', test_runs: [] };
 
 export const apiWireCases: WireCase[] = [
+  ...pvcCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...voiceInventoryCases as WireCase[],
   ...musicCases.filter(wire => !('multipart' in wire)) as WireCase[],
   ...mixedCases as WireCase[],
@@ -242,6 +244,7 @@ export interface MultipartWireCase extends WireCase {
   multipart: { scalars: [string, string][]; field: string; fileName: string; mime: string; bytes: number[]; multiple?: boolean };
 }
 export const multipartCases: MultipartWireCase[] = [
+  ...pvcCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...musicCases.filter(wire => 'multipart' in wire) as MultipartWireCase[],
   ...processingCases as MultipartWireCase[],
   {
