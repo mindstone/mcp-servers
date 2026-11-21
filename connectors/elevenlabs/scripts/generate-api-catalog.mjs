@@ -89,6 +89,11 @@ const stage98Profiles = {
   delete: 'dubbing_project_delete dubbing_language_delete dubbing_transcript_segment_delete',
   change: 'dubbing_transcript_segment_update dubbing_transcript_segments_update dubbing_transcript_segment_add dubbing_target_transcript_segment_update dubbing_target_transcript_segments_update dubbing_target_transcript_regenerate',
 };
+const stage99Profiles = {
+  read: 'get_dubbing_resource get_similar_voices_for_speaker list_dubs get_dubbed_metadata get_dubbed_file get_dubbed_transcript_file get_dubbing_transcripts',
+  change: 'add_language create_clip update_segment_language migrate_segments transcribe translate dub update_speaker create_speaker render',
+  delete: 'delete_segment delete_dubbing', run_job: 'create_dubbing',
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -102,7 +107,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -213,7 +218,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -295,7 +300,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 295, planned: 111, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 315, planned: 91, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -313,6 +318,7 @@ function validateProductionCensus(policy) {
     requireEqual(actual, families, `milestone ${milestone} family census`);
   }
   const fileBindings = {
+    create_dubbing: [{"field": "background_audio_file", "kind": "audio"}, {"field": "csv_file", "kind": "document", "allowed_media_types": ["text/csv"]}, {"field": "file", "kind": "audio"}, {"field": "foreground_audio_file", "kind": "audio"}],
     dubbing_project_create: [{"field": "file", "kind": "audio", "max_bytes": 3221225472}, {"field": "transcript", "kind": "document", "allowed_media_types": ["application/json"], "max_bytes": 4194304}],
     add_voice: [{ field: 'files', kind: 'audio' }],
     edit_voice: [{ field: 'files', kind: 'audio' }],

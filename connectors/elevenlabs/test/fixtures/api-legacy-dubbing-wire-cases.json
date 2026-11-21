@@ -1,0 +1,778 @@
+[
+  {
+    "id": "get_dubbing_resource",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/resource/dub_example",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "id": "dub_example",
+      "version": 7,
+      "source_language": "en",
+      "target_languages": [
+        "es",
+        "fr"
+      ],
+      "input": {
+        "src": "source.mp4",
+        "content_type": "video/mp4",
+        "bucket_name": "example-bucket",
+        "random_path_slug": "example",
+        "duration_secs": 4,
+        "is_audio": false,
+        "url": "https://example.com/source.mp4"
+      },
+      "background": null,
+      "foreground": null,
+      "speaker_tracks": {
+        "speaker_example": {
+          "id": "speaker_example",
+          "media_ref": {
+            "src": "source.mp4",
+            "content_type": "video/mp4",
+            "bucket_name": "example-bucket",
+            "random_path_slug": "example",
+            "duration_secs": 4,
+            "is_audio": false,
+            "url": "https://example.com/source.mp4"
+          },
+          "speaker_name": "Narrator",
+          "voices": {
+            "es": "track-clone"
+          },
+          "segments": [
+            "segment_example"
+          ]
+        }
+      },
+      "speaker_segments": {
+        "segment_example": {
+          "id": "segment_example",
+          "start_time": 0,
+          "end_time": 2,
+          "text": "Hello.",
+          "subtitles": [],
+          "dubs": {
+            "es": {
+              "start_time": 0,
+              "end_time": 2,
+              "text": null,
+              "subtitles": [],
+              "audio_stale": true,
+              "media_ref": null
+            }
+          }
+        }
+      },
+      "renders": {
+        "render_example": {
+          "id": "render_example",
+          "version": 7,
+          "language": "es",
+          "type": "mp4",
+          "media_ref": null,
+          "status": "processing"
+        }
+      }
+    }
+  },
+  {
+    "id": "add_language",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "language": null
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/language",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "language": null
+    }
+  },
+  {
+    "id": "create_clip",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "speaker_id": "speaker_example"
+      },
+      "body": {
+        "start_time": 1,
+        "end_time": 3,
+        "text": null,
+        "translations": {
+          "es": "Hola.",
+          "fr": "Bonjour."
+        }
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/speaker/speaker_example/segment",
+    "query": [],
+    "status": 201,
+    "media": "application/json",
+    "response": {
+      "version": 8,
+      "new_segment": "segment_new"
+    },
+    "body": {
+      "start_time": 1,
+      "end_time": 3,
+      "text": null,
+      "translations": {
+        "es": "Hola.",
+        "fr": "Bonjour."
+      }
+    }
+  },
+  {
+    "id": "update_segment_language",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "segment_id": "segment_example",
+        "language": "es"
+      },
+      "body": {
+        "start_time": null,
+        "end_time": 2.5,
+        "text": null
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/resource/dub_example/segment/segment_example/es",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "start_time": null,
+      "end_time": 2.5,
+      "text": null
+    }
+  },
+  {
+    "id": "migrate_segments",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "segment_ids": [
+          "segment_second",
+          "segment_first"
+        ],
+        "speaker_id": "speaker_second"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/migrate-segments",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "segment_ids": [
+        "segment_second",
+        "segment_first"
+      ],
+      "speaker_id": "speaker_second"
+    }
+  },
+  {
+    "id": "delete_segment",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "segment_id": "segment_example"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/dubbing/resource/dub_example/segment/segment_example",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    }
+  },
+  {
+    "id": "transcribe",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "segments": [
+          "segment_second",
+          "segment_first"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/transcribe",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "segments": [
+        "segment_second",
+        "segment_first"
+      ]
+    }
+  },
+  {
+    "id": "translate",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "segments": [
+          "segment_second",
+          "segment_first"
+        ],
+        "languages": [
+          "fr",
+          "es"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/translate",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "segments": [
+        "segment_second",
+        "segment_first"
+      ],
+      "languages": [
+        "fr",
+        "es"
+      ]
+    }
+  },
+  {
+    "id": "dub",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "segments": [
+          "segment_second",
+          "segment_first"
+        ],
+        "languages": [
+          "fr",
+          "es"
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/dub",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "segments": [
+        "segment_second",
+        "segment_first"
+      ],
+      "languages": [
+        "fr",
+        "es"
+      ]
+    }
+  },
+  {
+    "id": "update_speaker",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "speaker_id": "speaker_example"
+      },
+      "body": {
+        "speaker_name": null,
+        "voice_id": "track-clone",
+        "voice_stability": 0.65,
+        "voice_similarity": 1,
+        "voice_style": null,
+        "languages": [
+          "fr",
+          "es"
+        ]
+      }
+    },
+    "method": "PATCH",
+    "path": "/v1/dubbing/resource/dub_example/speaker/speaker_example",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8
+    },
+    "body": {
+      "speaker_name": null,
+      "voice_id": "track-clone",
+      "voice_stability": 0.65,
+      "voice_similarity": 1,
+      "voice_style": null,
+      "languages": [
+        "fr",
+        "es"
+      ]
+    }
+  },
+  {
+    "id": "create_speaker",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      },
+      "body": {
+        "speaker_name": "Narrator",
+        "voice_id": "voice_library_example",
+        "voice_stability": null,
+        "voice_similarity": 0.75,
+        "voice_style": 0.2
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/speaker",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8,
+      "speaker_id": "speaker_new"
+    },
+    "body": {
+      "speaker_name": "Narrator",
+      "voice_id": "voice_library_example",
+      "voice_stability": null,
+      "voice_similarity": 0.75,
+      "voice_style": 0.2
+    }
+  },
+  {
+    "id": "get_similar_voices_for_speaker",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "speaker_id": "speaker_example"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/resource/dub_example/speaker/speaker_example/similar-voices",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "voices": [
+        {
+          "voice_id": "voice_library_example",
+          "name": "Narrator",
+          "category": "professional",
+          "description": null,
+          "preview_url": "https://example.com/preview.mp3"
+        }
+      ]
+    }
+  },
+  {
+    "id": "render",
+    "profile": "change",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "language": "es"
+      },
+      "body": {
+        "render_type": "mp4",
+        "normalize_volume": null
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing/resource/dub_example/render/es",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "version": 8,
+      "render_id": "render_new"
+    },
+    "body": {
+      "render_type": "mp4",
+      "normalize_volume": null
+    }
+  },
+  {
+    "id": "list_dubs",
+    "profile": "read",
+    "args": {
+      "query_params": {
+        "cursor": "cursor & prior",
+        "page_size": 2,
+        "dubbing_status": "dubbed",
+        "dubbing_statuses": [
+          "dubbed",
+          "preparing"
+        ],
+        "dubbing_models": [
+          "dubbing_v1"
+        ],
+        "target_language_codes": [
+          "es",
+          "fr"
+        ],
+        "creation_sources": [
+          "dubbing_api"
+        ],
+        "filter_by_creator": "personal",
+        "order_by": "name",
+        "order_direction": "ASCENDING"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing",
+    "query": [
+      [
+        "cursor",
+        "cursor & prior"
+      ],
+      [
+        "page_size",
+        "2"
+      ],
+      [
+        "dubbing_status",
+        "dubbed"
+      ],
+      [
+        "dubbing_statuses",
+        "dubbed"
+      ],
+      [
+        "dubbing_statuses",
+        "preparing"
+      ],
+      [
+        "dubbing_models",
+        "dubbing_v1"
+      ],
+      [
+        "target_language_codes",
+        "es"
+      ],
+      [
+        "target_language_codes",
+        "fr"
+      ],
+      [
+        "creation_sources",
+        "dubbing_api"
+      ],
+      [
+        "filter_by_creator",
+        "personal"
+      ],
+      [
+        "order_by",
+        "name"
+      ],
+      [
+        "order_direction",
+        "ASCENDING"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "dubs": [
+        {
+          "dubbing_id": "dub_example",
+          "name": "Acme guide",
+          "status": "dubbed",
+          "source_language": "en",
+          "target_languages": [
+            "es"
+          ],
+          "editable": true,
+          "created_at": "2026-11-08T12:00:00Z",
+          "media_metadata": {
+            "content_type": "video/mp4",
+            "duration": 4
+          },
+          "error": null
+        }
+      ],
+      "next_cursor": "cursor & next",
+      "has_more": true
+    }
+  },
+  {
+    "id": "create_dubbing",
+    "profile": "run_job",
+    "args": {
+      "body": {
+        "name": "Acme guide",
+        "source_url": "https://example.com/source.mp4",
+        "source_lang": "en",
+        "target_lang": "es",
+        "target_accent": null,
+        "num_speakers": 2,
+        "watermark": false,
+        "start_time": null,
+        "end_time": 4,
+        "highest_resolution": true,
+        "drop_background_audio": false,
+        "use_profanity_filter": null,
+        "dubbing_studio": true,
+        "disable_voice_cloning": true,
+        "mode": "manual",
+        "csv_fps": 24
+      }
+    },
+    "method": "POST",
+    "path": "/v1/dubbing",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "dubbing_id": "dub_new",
+      "expected_duration_sec": 4
+    },
+    "multipart": {
+      "scalars": [
+        [
+          "name",
+          "Acme guide"
+        ],
+        [
+          "source_url",
+          "https://example.com/source.mp4"
+        ],
+        [
+          "source_lang",
+          "en"
+        ],
+        [
+          "target_lang",
+          "es"
+        ],
+        [
+          "num_speakers",
+          "2"
+        ],
+        [
+          "watermark",
+          "false"
+        ],
+        [
+          "end_time",
+          "4"
+        ],
+        [
+          "highest_resolution",
+          "true"
+        ],
+        [
+          "drop_background_audio",
+          "false"
+        ],
+        [
+          "dubbing_studio",
+          "true"
+        ],
+        [
+          "disable_voice_cloning",
+          "true"
+        ],
+        [
+          "mode",
+          "manual"
+        ],
+        [
+          "csv_fps",
+          "24"
+        ]
+      ],
+      "field": "file",
+      "fileName": "source.mp4",
+      "mime": "video/mp4",
+      "bytes": [
+        0,
+        128,
+        255,
+        10,
+        42
+      ]
+    }
+  },
+  {
+    "id": "get_dubbed_metadata",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/dub_example",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "dubbing_id": "dub_example",
+      "name": "Acme guide",
+      "status": "dubbed",
+      "source_language": "en",
+      "target_languages": [
+        "es"
+      ],
+      "editable": true,
+      "created_at": "2026-11-08T12:00:00Z",
+      "media_metadata": {
+        "content_type": "video/mp4",
+        "duration": 4
+      },
+      "error": null
+    }
+  },
+  {
+    "id": "delete_dubbing",
+    "profile": "delete",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example"
+      }
+    },
+    "method": "DELETE",
+    "path": "/v1/dubbing/dub_example",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "get_dubbed_file",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "language_code": "es"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/dub_example/audio/es",
+    "query": [],
+    "status": 200,
+    "media": "audio/mpeg",
+    "response": "original automatic audio"
+  },
+  {
+    "id": "get_dubbed_transcript_file",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "language_code": "es"
+      },
+      "query_params": {
+        "format_type": "json"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/dub_example/transcript/es",
+    "query": [
+      [
+        "format_type",
+        "json"
+      ]
+    ],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "language": "es",
+      "utterances": [
+        {
+          "text": "Hola.",
+          "speaker_id": "speaker_example",
+          "start_s": 0,
+          "end_s": 2,
+          "words": []
+        }
+      ]
+    }
+  },
+  {
+    "id": "get_dubbing_transcripts",
+    "profile": "read",
+    "args": {
+      "path_params": {
+        "dubbing_id": "dub_example",
+        "language_code": "es",
+        "format_type": "json"
+      }
+    },
+    "method": "GET",
+    "path": "/v1/dubbing/dub_example/transcripts/es/format/json",
+    "query": [],
+    "status": 200,
+    "media": "application/json",
+    "response": {
+      "transcript_format": "json",
+      "srt": null,
+      "webvtt": null,
+      "json": {
+        "language": "es",
+        "utterances": []
+      }
+    }
+  }
+]

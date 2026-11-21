@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Deprecated legacy editable dubbing operations through the API tools, with explicit transcription, translation, dubbing and asynchronous rendering. Optional CSV and foreground/background uploads keep their operands; downloads return the original automatic dub, not an edited render. Current project routes stay preferred in discovery.
+
 - Dubbing projects, language targets and source or translated transcript editing through the API tools. Project creation prepays the first language; queued is not completed. Bulk edits stay atomic, regeneration replaces existing output, and deletion does not undo billing. Signed output URLs are returned without fetching them.
 
 - Instant cloning and professional voice management through the API tools: samples, trims, speaker selection, explicit separation and training, and manual verification documents. Submission is not approval; no automatic next step. Captcha retrieval and submission await a reliable response contract.

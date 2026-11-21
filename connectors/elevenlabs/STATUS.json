@@ -22,6 +22,7 @@
       "transcription and audio processing",
       "dubbing and history",
       "dubbing projects, language targets, atomic transcript edits and explicit replacement regeneration; no automatic polling or output-URL fetching",
+      "deprecated legacy editable dubbing, optional CSV and audio uploads, original automatic MPEG/MP4 downloads and transcript reads; current project operations preferred",
       "API discovery and voice-agent lifecycle",
       "agent tools, knowledge bases and tests",
       "conversations and review",

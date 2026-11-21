@@ -12,7 +12,7 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(295);
+    expect(catalog.operations).toHaveLength(315);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([

@@ -309,21 +309,17 @@
       "replacements": []
     },
     "add_language": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/language",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/language", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Adds a language to an existing legacy resource without generating transcriptions, translations or audio.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "add_language", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"language": "fr"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_language_create for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Adds a language to an existing legacy resource without generating transcriptions, translations or audio. Prefer dubbing_language_create for current projects."
     },
     "add_mcp_server_tool_approval_route": {
       "method": "POST",
@@ -1277,21 +1273,17 @@
       ]
     },
     "create_clip": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/segment",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/segment", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Adds a segment for one speaker in every available language without generating transcriptions, translations or audio.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "create_clip", "path_params": {"dubbing_id": "dubbing_example", "speaker_id": "speaker_example"}, "body": {"start_time": 1, "end_time": 3, "text": null, "translations": {"es": "Hola."}}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_transcript_segment_add for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Adds a segment for one speaker in every available language without generating transcriptions, translations or audio. Prefer dubbing_transcript_segment_add for current projects."
     },
     "create_conversation_group_route": {
       "method": "POST",
@@ -1369,25 +1361,19 @@
       "effect_note": "Asks the provider to fetch the URL and may consume credits. max_depth is deprecated and has no effect."
     },
     "create_dubbing": {
-      "method": "POST",
-      "path": "/v1/dubbing",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "partial",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:create_dubbing"
-        ],
-        "reason": "Supports multipart file or source_url, target_lang, name, source_lang, num_speakers and watermark; other provider controls are absent.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"
-        ]
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "run_job",
+      "effects": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Dubs a provided audio or video file into the given language and may consume credits. Acceptance is not completion.",
+      "existing_coverage": {"status": "partial", "tools": ["@mindstone/mcp-server-elevenlabs:create_dubbing"], "reason": "Supports multipart file or source_url, target_lang, name, source_lang, num_speakers and watermark; other provider controls are absent.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"]},
+      "replacements": [],
+      "follow_ups": ["get_dubbed_metadata", "list_dubs"],
+      "examples": [{"operation_id": "create_dubbing", "body": {"source_url": "https://example.com/source.mp4", "source_lang": "en", "target_lang": "es", "dubbing_studio": true}}],
+      "timeout": "long",
+      "rank": -10,
+      "file_bindings": [{"field": "background_audio_file", "kind": "audio"}, {"field": "csv_file", "kind": "document", "allowed_media_types": ["text/csv"]}, {"field": "file", "kind": "audio"}, {"field": "foreground_audio_file", "kind": "audio"}],
+      "sensitive_request_fields": [["source_url"]],
+      "effect_note": "Deprecated provider route; prefer dubbing_project_create for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first. Manual CSV mode is experimental and production use is strongly discouraged. Library voices use custom voice slots and require add_voice_from_voice_library permission; insufficient slots fail the dub. The pin declares no upload byte limits for these fields; shared safe file checks and the existing deadline apply.",
+      "discovery_summary": "Deprecated: Dubs a provided audio or video file into the given language and may consume credits. Prefer dubbing_project_create for current projects."
     },
     "create_environment": {
       "method": "POST",
@@ -1835,21 +1821,17 @@
       "reason": "Credential administration belongs in the provider dashboard."
     },
     "create_speaker": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/speaker",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/speaker", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Adds a speaker across every available language, optionally using a clone or library voice and synthesis settings.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "create_speaker", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"speaker_name": "Narrator", "voice_id": "voice_example", "voice_stability": 0.65, "voice_similarity": 1, "voice_style": 0}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation. The resource read shows the version, name and voice, not the stability, similarity or style values.",
+      "discovery_summary": "Deprecated: Adds a speaker across every available language, optionally using a clone or library voice and synthesis settings."
     },
     "create_speech_engine": {
       "method": "POST",
@@ -2313,25 +2295,17 @@
       "examples": [{"operation_id": "delete_conversation_tag_route", "path_params": {"tag_id": "tag_example"}}]
     },
     "delete_dubbing": {
-      "method": "DELETE",
-      "path": "/v1/dubbing/{dubbing_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:delete_dubbing"
-        ],
-        "reason": "Deletes by dubbing_id on the exact endpoint.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"
-        ]
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/dubbing/{dubbing_id}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes a legacy dubbing project and its outputs. Deletion does not refund work already running or billed.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:delete_dubbing"], "reason": "Deletes by dubbing_id on the exact endpoint.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"]},
+      "replacements": [],
+      "follow_ups": ["get_dubbed_metadata"],
+      "examples": [{"operation_id": "delete_dubbing", "path_params": {"dubbing_id": "dubbing_example"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_project_delete for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Deletes a legacy dubbing project and its outputs. Prefer dubbing_project_delete for current projects."
     },
     "delete_environment": {
       "method": "DELETE",
@@ -2613,21 +2587,17 @@
       "follow_ups": ["get_secrets_route"]
     },
     "delete_segment": {
-      "method": "DELETE",
-      "path": "/v1/dubbing/resource/{dubbing_id}/segment/{segment_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "DELETE", "path": "/v1/dubbing/resource/{dubbing_id}/segment/{segment_id}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Deletes an existing legacy segment. Deletion does not refund work already running or billed.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "delete_segment", "path_params": {"dubbing_id": "dubbing_example", "segment_id": "segment_example"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_transcript_segment_delete for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Deletes an existing legacy segment. Prefer dubbing_transcript_segment_delete for current projects."
     },
     "delete_service_account_api_key": {
       "method": "DELETE",
@@ -2844,21 +2814,17 @@
       "replacements": []
     },
     "dub": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/dub",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/dub", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Regenerates segment dubs and may also transcribe and translate missing parts; generation may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "dub", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"segments": ["segment_first"], "languages": null}}],
+      "timeout": "long",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation.",
+      "discovery_summary": "Deprecated: Regenerates segment dubs and may also transcribe and translate missing parts; generation may consume credits."
     },
     "dubbing_language_create": {
       "method": "POST",
@@ -4368,97 +4334,69 @@
       "follow_ups": []
     },
     "get_dubbed_file": {
-      "method": "GET",
-      "path": "/v1/dubbing/{dubbing_id}/audio/{language_code}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:download_dubbed_audio"
-        ],
-        "reason": "Downloads by dubbing_id and language_code on the exact endpoint.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"
-        ]
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/{dubbing_id}/audio/{language_code}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Downloads the original automatic dub as MP3 or MP4, never a later edited render.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:download_dubbed_audio"], "reason": "Downloads by dubbing_id and language_code on the exact endpoint.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_dubbed_file", "path_params": {"dubbing_id": "dubbing_example", "language_code": "es"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_language_get for current project output URLs. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first. This returns the original automatic dub. For an edited legacy output explicitly request render, then inspect get_dubbing_resource; no render or download is started automatically.",
+      "discovery_summary": "Deprecated: Downloads the original automatic dub as MP3 or MP4, never a later edited render. Prefer dubbing_language_get for current project output URLs."
     },
     "get_dubbed_metadata": {
-      "method": "GET",
-      "path": "/v1/dubbing/{dubbing_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "covered",
-        "tools": [
-          "@mindstone/mcp-server-elevenlabs:get_dubbing"
-        ],
-        "reason": "Reads dubbing_id on the exact metadata endpoint; response is projected to selected fields.",
-        "evidence": [
-          "@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"
-        ]
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/{dubbing_id}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads an existing legacy dubbing job metadata and progress without starting work.",
+      "existing_coverage": {"status": "covered", "tools": ["@mindstone/mcp-server-elevenlabs:get_dubbing"], "reason": "Reads dubbing_id on the exact metadata endpoint; response is projected to selected fields.", "evidence": ["@mindstone/mcp-server-elevenlabs/src/tools/dubbing.ts"]},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_dubbed_metadata", "path_params": {"dubbing_id": "dubbing_example"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_project_get for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Reads an existing legacy dubbing job metadata and progress without starting work. Prefer dubbing_project_get for current projects."
     },
     "get_dubbed_transcript_file": {
-      "method": "GET",
-      "path": "/v1/dubbing/{dubbing_id}/transcript/{language_code}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/{dubbing_id}/transcript/{language_code}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads an existing transcript as declared JSON or subtitle text without generating another transcription.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_dubbed_transcript_file", "path_params": {"dubbing_id": "dubbing_example", "language_code": "es"}, "query_params": {"format_type": "srt"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_target_transcript_get for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first. Use dubbing_transcript_get for the current source transcript. JSON format is not supported for Dubbing Studio.",
+      "discovery_summary": "Deprecated: Reads an existing transcript as declared JSON or subtitle text without generating another transcription. Prefer dubbing_target_transcript_get for current projects."
     },
     "get_dubbing_resource": {
-      "method": "GET",
-      "path": "/v1/dubbing/resource/{dubbing_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/resource/{dubbing_id}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads an existing legacy editable resource, segments, speaker assignments and render state.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_dubbing_resource", "path_params": {"dubbing_id": "dubbing_example"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_project_get for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Reads an existing legacy editable resource, segments, speaker assignments and render state. Prefer dubbing_project_get for current projects."
     },
     "get_dubbing_transcripts": {
-      "method": "GET",
-      "path": "/v1/dubbing/{dubbing_id}/transcripts/{language_code}/format/{format_type}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/{dubbing_id}/transcripts/{language_code}/format/{format_type}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads an existing structured transcript in the requested representation without starting work.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_dubbing_transcripts", "path_params": {"dubbing_id": "dubbing_example", "language_code": "es", "format_type": "json"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_target_transcript_get for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first. Use dubbing_transcript_get for the current source transcript. JSON format is not supported for Dubbing Studio.",
+      "discovery_summary": "Deprecated: Reads an existing structured transcript in the requested representation without starting work. Prefer dubbing_target_transcript_get for current projects."
     },
     "get_environment_variable": {
       "method": "GET",
@@ -5465,21 +5403,17 @@
       "reviewed_post_read": "Searches existing shared-library voices from an audio sample; no voice is created or changed."
     },
     "get_similar_voices_for_speaker": {
-      "method": "GET",
-      "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Reads the ten closest library voices for an existing speaker without changing the resource.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "get_similar_voices_for_speaker", "path_params": {"dubbing_id": "dubbing_example", "speaker_id": "speaker_example"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation.",
+      "discovery_summary": "Deprecated: Reads the ten closest library voices for an existing speaker without changing the resource."
     },
     "get_single_use_token": {
       "method": "POST", "path": "/v1/single-use-token/{token_type}", "status": "admitted", "milestone": 9, "family": "single-use-token",
@@ -6366,21 +6300,17 @@
       "rank": 50
     },
     "list_dubs": {
-      "method": "GET",
-      "path": "/v1/dubbing",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "GET", "path": "/v1/dubbing", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Lists accessible legacy dubs without creating or editing them.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": [],
+      "examples": [{"operation_id": "list_dubs", "query_params": {"page_size": 20}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_project_list for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Lists accessible legacy dubs without creating or editing them. Prefer dubbing_project_list for current projects."
     },
     "list_environment_variables": {
       "method": "GET",
@@ -6852,21 +6782,17 @@
       "sensitive_response_fields": [["phone_numbers", "*", "outbound_trunk", "headers", "*"], ["phone_numbers", "*", "provider_config", "headers", "*"]]
     },
     "migrate_segments": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/migrate-segments",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/migrate-segments", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Reassigns the selected existing segments to another speaker.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "migrate_segments", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"segment_ids": ["segment_second", "segment_first"], "speaker_id": "speaker_second"}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation.",
+      "discovery_summary": "Deprecated: Reassigns the selected existing segments to another speaker."
     },
     "patch_agent_settings_route": {
       "method": "PATCH",
@@ -7641,21 +7567,17 @@
       "timeout": "standard"
     },
     "render": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/render/{language}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/render/{language}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Asynchronously regenerates output media from the latest editable state; segments not yet dubbed will be omitted. Acceptance is not completion; processing may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "render", "path_params": {"dubbing_id": "dubbing_example", "language": "es"}, "body": {"render_type": "mp4", "normalize_volume": null}}],
+      "timeout": "long",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_target_transcript_regenerate for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Asynchronously regenerates output media from the latest editable state; segments not yet dubbed will be omitted. Prefer dubbing_target_transcript_regenerate for current projects."
     },
     "replicate_voice_to_isolated_environment": {
       "method": "POST", "path": "/v1/voices/{voice_id}/replicate-to-isolated-environment", "status": "admitted", "milestone": 9, "family": "voices",
@@ -10164,38 +10086,30 @@
       "timeout": "long"
     },
     "transcribe": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/transcribe",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/transcribe", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Regenerates stored transcriptions for selected segments without translating or dubbing them; processing may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "transcribe", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"segments": ["segment_second", "segment_first"]}}],
+      "timeout": "long",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation.",
+      "discovery_summary": "Deprecated: Regenerates stored transcriptions for selected segments without translating or dubbing them; processing may consume credits."
     },
     "translate": {
-      "method": "POST",
-      "path": "/v1/dubbing/resource/{dubbing_id}/translate",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "POST", "path": "/v1/dubbing/resource/{dubbing_id}/translate", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Regenerates stored translations and may also transcribe missing source text, without regenerating dubs; processing may consume credits.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "translate", "path_params": {"dubbing_id": "dubbing_example"}, "body": {"segments": ["segment_first"], "languages": ["es", "fr"]}}],
+      "timeout": "long",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation.",
+      "discovery_summary": "Deprecated: Regenerates stored translations and may also transcribe missing source text, without regenerating dubs; processing may consume credits."
     },
     "unassign_conversation_tag_route": {
       "method": "DELETE",
@@ -10748,21 +10662,17 @@
       "sensitive_request_fields": [["value"]]
     },
     "update_segment_language": {
-      "method": "PATCH",
-      "path": "/v1/dubbing/resource/{dubbing_id}/segment/{segment_id}/{language}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "PATCH", "path": "/v1/dubbing/resource/{dubbing_id}/segment/{segment_id}/{language}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes one language segment text or timing without regenerating its dub.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "update_segment_language", "path_params": {"dubbing_id": "dubbing_example", "segment_id": "segment_example", "language": "es"}, "body": {"text": null, "start_time": 1.5, "end_time": null}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; prefer dubbing_target_transcript_segment_update for current projects. Legacy dubbing IDs and current project/target IDs are distinct; discover its contract first.",
+      "discovery_summary": "Deprecated: Changes one language segment text or timing without regenerating its dub. Prefer dubbing_target_transcript_segment_update for current projects."
     },
     "update_settings_route": {
       "method": "PATCH",
@@ -10784,21 +10694,17 @@
       "examples": [{"operation_id": "update_settings_route", "body": {"rag_retention_period_days": 15}}]
     },
     "update_speaker": {
-      "method": "PATCH",
-      "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}",
-      "status": "planned",
-      "milestone": 9,
-      "family": "dubbing",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
-      "existing_coverage": {
-        "status": "missing",
-        "tools": [],
-        "reason": "No existing tool maps to this exact HTTP operation.",
-        "evidence": []
-      },
-      "replacements": []
+      "method": "PATCH", "path": "/v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}", "status": "admitted", "milestone": 9, "family": "dubbing", "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Changes an existing speaker name, clone or library voice and synthesis settings in the selected languages.",
+      "existing_coverage": {"status": "missing", "tools": [], "reason": "No existing tool maps to this exact HTTP operation.", "evidence": []},
+      "replacements": [],
+      "follow_ups": ["get_dubbing_resource"],
+      "examples": [{"operation_id": "update_speaker", "path_params": {"dubbing_id": "dubbing_example", "speaker_id": "speaker_example"}, "body": {"speaker_name": null, "voice_id": "track-clone", "languages": ["es"], "voice_stability": 0.65, "voice_similarity": 1, "voice_style": null}}],
+      "timeout": "standard",
+      "rank": -10,
+      "effect_note": "Deprecated provider route; there is no direct current equivalent for this legacy operation. The resource read shows the version, name and voice, not the stability, similarity or style values.",
+      "discovery_summary": "Deprecated: Changes an existing speaker name, clone or library voice and synthesis settings in the selected languages."
     },
     "update_speech_engine": {
       "method": "PATCH",

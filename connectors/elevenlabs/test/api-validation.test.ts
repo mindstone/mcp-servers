@@ -209,7 +209,7 @@ describe('API request validation over the preserved provider graph', () => {
     expect((await errorFrom(validateRequest('read', create({}), createRedactor([])))).code).toBe('WRONG_TOOL');
     expect((await errorFrom(getOperation('missing_operation'))).code).toBe('UNKNOWN_OPERATION');
     expect((await errorFrom(getOperation('constructor'))).code).toBe('UNKNOWN_OPERATION');
-    for (const operation_id of ['missing_operation', 'get_dubbing_resource', 'add_documentation_to_knowledge_base']) {
+    for (const operation_id of ['missing_operation', 'audio_isolation_stream', 'add_documentation_to_knowledge_base']) {
       const error = await errorFrom(validateRequest('create', { operation_id, body: {} }, createRedactor([])));
       expect(error.toJSON()).toEqual({
         ok: false, code: 'UNKNOWN_OPERATION',

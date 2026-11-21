@@ -56,7 +56,7 @@ describe('conversation and ticket contracts', () => {
       expect(description).toHaveProperty('contract', expect.stringContaining('"deprecated":false'));
       if (wire.profile === 'read') expect(description).toHaveProperty('contract', expect.stringContaining('summary'));
     }
-    for (const id of ['get_dubbing_resource']) {
+    for (const id of ['audio_isolation_stream']) {
       await expect(validateRequest('create', { operation_id: id }, createRedactor([]))).rejects.toMatchObject({ code: 'UNKNOWN_OPERATION' });
     }
   });

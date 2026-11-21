@@ -65,7 +65,7 @@ describe('knowledge-base admission and discovery', () => {
 
   it('refuses discovery-summary overrides on non-admitted operations', () => {
     const policy = structuredClone(policyInput);
-    Object.assign(policy.operations.get_dubbing_resource, { discovery_summary: 'Unreviewed summary.' });
+    Object.assign(policy.operations.audio_isolation_stream, { discovery_summary: 'Unreviewed summary.' });
     expect(() => validatePolicy(policy, rosters)).toThrow('non-admitted transport metadata');
   });
 
