@@ -120,6 +120,13 @@ describe('discovery', () => {
     }
   });
 
+  it('matches a word and its plural, both ways', async () => {
+    const ids = async (query: string) => (await discoverOperations({ query, family: 'agents', limit: 25 })).operations.map(op => op.operation_id);
+    expect((await ids('agent summary'))[0]).toBe('get_agent_summaries_route');
+    expect((await ids('agents summaries'))[0]).toBe('get_agent_summaries_route');
+    expect(await discoverOperations({ query: 'statuses', limit: 25 })).toEqual(await discoverOperations({ query: 'status', limit: 25 }));
+  });
+
   it('uses token overlap, stable ID ties, and offset pagination', async () => {
     const first = await discoverOperations({ query: 'webhook', family: 'tools', limit: 2 });
     expect(first).toMatchObject({ operations: [{ operation_id: 'add_tool_route' }, { operation_id: 'delete_tool_route' }], next_cursor: '2', total: 6 });

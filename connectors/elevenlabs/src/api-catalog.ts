@@ -378,6 +378,13 @@ function listing(op: ApiOperation) {
   return { operation_id: op.operation_id, tool: op.tool, profile: op.profile, family: family(op), effects: op.effects,
     contract: envelope({ summary: op.summary, description: op.description }, op.operation_id) };
 }
+/** One form for a word and its plural, so a search for "summary" finds "summaries" and "agent" finds "agents". */
+function wordForm(word: string): string {
+  if (word.length <= 3 || /(?:ss|us)$/.test(word)) return word;
+  if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (/(?:ss|us|x|ch|sh)es$/.test(word)) return word.slice(0, -2);
+  return word.endsWith('s') ? word.slice(0, -1) : word;
+}
 let lastDiscovery: { key: string; result: { operations: ReturnType<typeof listing>[]; total: number; next_cursor: string | null } } | undefined;
 export async function discoverOperations(input: unknown = {}) {
   const parsed = discoveryInputSchema.safeParse(input);
@@ -386,7 +393,7 @@ export async function discoverOperations(input: unknown = {}) {
   if (args.operation_id) return describeOperation(args.operation_id, args.definition);
   const key = JSON.stringify(args);
   if (lastDiscovery?.key === key) return lastDiscovery.result;
-  const tokens = (value: string) => value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const tokens = (value: string) => (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).map(wordForm);
   const query = new Set(tokens(args.query ?? ''));
   const ranked = (await loadApiCatalog()).operations.filter(op => !args.family || family(op) === args.family).map(op => {
     const words = new Set(tokens([op.operation_id, op.summary, op.family, family(op), ...op.search_aliases].join(' ')));
