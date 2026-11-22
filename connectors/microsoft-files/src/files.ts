@@ -861,21 +861,54 @@ export async function readTextFile(
 const MAX_LIST_PAGES = 10;
 
 // nextLink is an absolute URL supplied by the upstream and the SDK attaches
-// the bearer token to whatever it fetches, so only ever follow links back to
-// the Graph host itself. A link anywhere else is treated as the end of the
-// collection (results so far are still returned, flagged truncated).
-function isGraphHostUrl(url: string): boolean {
+// the bearer token to whatever it fetches, so a link is only followed when it
+// continues the list that was asked for: Graph v1.0, the same path segment by
+// segment (each decoded once and compared exactly, since drive and item IDs
+// are case-sensitive), and no query keys beyond paging ones. Any other link
+// ends the list (results so far are still returned, flagged truncated).
+const CONTINUATION_QUERY_KEYS = new Set(['$skiptoken', '$skip', '$top']);
+
+function continuationUrl(startEndpoint: string, nextLink: string): string | undefined {
+  let url: URL;
+  let actual: string[];
+  let expected: string[];
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' && parsed.hostname === 'graph.microsoft.com';
+    url = new URL(nextLink);
+    actual = url.pathname.split('/').map(decodeURIComponent);
+    expected = ['', 'v1.0', ...startEndpoint.split('/').slice(1)].map(decodeURIComponent);
   } catch {
-    return false;
+    return undefined;
   }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== 'graph.microsoft.com' ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    // An empty fragment leaves url.hash empty, so check the raw link.
+    nextLink.includes('#')
+  ) {
+    return undefined;
+  }
+  if (actual.length !== expected.length || actual.some((segment, i) => segment !== expected[i])) {
+    return undefined;
+  }
+  if (![...url.searchParams.keys()].every((key) => CONTINUATION_QUERY_KEYS.has(key.toLowerCase()))) {
+    return undefined;
+  }
+  // Send the URL as parsed here, not the raw link: the Graph SDK only treats
+  // a lowercase `https://` string as absolute, so a spelling such as
+  // `HTTPS://` or a backslash would otherwise reach a different path.
+  return url.href;
 }
+
+const REFUSED_NEXT_LINK_NOTE =
+  "Stopped early: Microsoft's link to the next page did not belong to this list, so it was not followed. Results so far are shown.";
 
 interface PagedValues<S extends { value: unknown[] }> {
   value: S['value'];
   truncated: boolean;
+  refusedNextLink: boolean;
 }
 
 async function collectPagedValues<S extends { value: unknown[]; '@odata.nextLink'?: string }>(
@@ -888,6 +921,7 @@ async function collectPagedValues<S extends { value: unknown[]; '@odata.nextLink
   let next: string | undefined = endpoint;
   let pages = 0;
   let truncated = false;
+  let refusedNextLink = false;
   while (next) {
     if (pages >= MAX_LIST_PAGES) {
       truncated = true;
@@ -897,18 +931,13 @@ async function collectPagedValues<S extends { value: unknown[]; '@odata.nextLink
     all.push(...parsed.value);
     pages += 1;
     const nextLink: string | undefined = parsed['@odata.nextLink'];
-    if (nextLink === undefined) {
-      next = undefined;
-    } else if (isGraphHostUrl(nextLink)) {
-      next = nextLink;
-    } else {
-      // Hostile or malformed continuation link: stop, keep the valid pages,
-      // and flag the truncation instead of fetching an arbitrary URL.
-      next = undefined;
+    next = nextLink === undefined ? undefined : continuationUrl(endpoint, nextLink);
+    if (nextLink !== undefined && next === undefined) {
       truncated = true;
+      refusedNextLink = true;
     }
   }
-  return { value: all as S['value'], truncated };
+  return { value: all as S['value'], truncated, refusedNextLink };
 }
 
 export async function inviteToFile(
@@ -945,7 +974,7 @@ export async function listFilePermissions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/permissions');
-  const { value, truncated } = await collectPagedValues(
+  const { value, truncated, refusedNextLink } = await collectPagedValues(
     client,
     endpoint,
     GraphPermissionListSchema,
@@ -955,6 +984,7 @@ export async function listFilePermissions(
   return {
     count: value.length,
     truncated,
+    ...(refusedNextLink ? { note: REFUSED_NEXT_LINK_NOTE } : {}),
     permissions: value.map((permission) =>
       formatPermission(permission, 'list_file_permissions'),
     ),
@@ -989,7 +1019,7 @@ export async function listFileVersions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/versions');
-  const { value, truncated } = await collectPagedValues(
+  const { value, truncated, refusedNextLink } = await collectPagedValues(
     client,
     endpoint,
     GraphDriveItemVersionListSchema,
@@ -999,6 +1029,7 @@ export async function listFileVersions(
   return {
     count: value.length,
     truncated,
+    ...(refusedNextLink ? { note: REFUSED_NEXT_LINK_NOTE } : {}),
     versions: value.map((version) => ({
       // Structural, NOT enveloped: version.id round-trips verbatim as the
       // versionId argument of restore_file_version.
@@ -1046,7 +1077,7 @@ export async function listFileActivities(
   const endpoint = args.path
     ? buildDriveItemEndpoint(args.path, '/activities')
     : '/me/drive/activities';
-  const { value, truncated } = await collectPagedValues(
+  const { value, truncated, refusedNextLink } = await collectPagedValues(
     client,
     endpoint,
     GraphItemActivityListSchema,
@@ -1056,6 +1087,7 @@ export async function listFileActivities(
   return {
     count: value.length,
     truncated,
+    ...(refusedNextLink ? { note: REFUSED_NEXT_LINK_NOTE } : {}),
     activities: value.map((activity) =>
       formatActivity(activity, 'list_file_activities'),
     ),

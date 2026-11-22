@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 - File and folder paths, item IDs, permission IDs and version IDs are now checked and percent-encoded before they go into a Microsoft Graph address. A path or ID that could point the request at another resource (a `..` segment, a backslash, or for IDs `?`, `#` or `%`) is refused with an error that names the argument but not its value. Search text is now an escaped OData string, so a `'` in it cannot end the search early.
+- When listing file permissions, versions and activity, the connector now follows Microsoft's link to the next page only when it continues the same list. Any other link is not followed: the results so far are returned with a note saying the list stopped early, so a wrong or hostile link cannot use your sign-in for a different request.
 
 ### Fixed
 

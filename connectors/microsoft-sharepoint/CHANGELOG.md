@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
 - Site, library, item, list, page, folder and permission IDs and library paths are now checked and percent-encoded before they go into a Microsoft Graph address, and a value that could point the request at another resource (for example a `..` segment) is refused with an error that names the argument but not its value. Site IDs work in both the `hostname,siteCollectionId,webId` and `hostname:/sites/name` forms. Search text, the `get_site_by_path` path and a caller-written list `filter` are escaped or encoded so they cannot change the request.
 - `get_sites_delta` now follows only Graph v1.0 delta links and refuses beta ones.
+- When listing list columns, file versions and item permissions, the connector now follows Microsoft's link to the next page only when it continues the same list. Any other link is not followed: the results so far are returned with a note saying the list stopped early, so a wrong or hostile link cannot use your sign-in for a different request.
 
 ## [0.2.1] - 2026-08-10
 

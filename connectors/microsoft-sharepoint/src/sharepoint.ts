@@ -75,18 +75,65 @@ export function validateVendorUrl(rawUrl: unknown): URL | null {
 const MAX_COLLECTION_ITEMS = 1000;
 
 /**
- * Parse a Graph collection page and follow `@odata.nextLink` continuations
- * (each vendor-host validated; the Graph client passes absolute URLs through)
- * until the collection is exhausted or capped. `truncated: true` marks the
- * result as a prefix rather than the complete collection, so callers never
- * mistake "first page only" for "everything".
+ * A nextLink is followed with the user's token attached, so only when it
+ * continues the list that was asked for: Graph v1.0, the same path segment by
+ * segment (each decoded once and compared exactly, since drive and item IDs
+ * are case-sensitive), and no query keys beyond paging ones.
+ */
+const CONTINUATION_QUERY_KEYS = new Set(['$skiptoken', '$skip', '$top']);
+
+function continuationUrl(startEndpoint: string, nextLink: string): string | undefined {
+  let url: URL;
+  let actual: string[];
+  let expected: string[];
+  try {
+    url = new URL(nextLink);
+    actual = url.pathname.split('/').map(decodeURIComponent);
+    expected = ['', 'v1.0', ...startEndpoint.split('/').slice(1)].map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== 'graph.microsoft.com' ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    // An empty fragment leaves url.hash empty, so check the raw link.
+    nextLink.includes('#')
+  ) {
+    return undefined;
+  }
+  if (actual.length !== expected.length || actual.some((segment, i) => segment !== expected[i])) {
+    return undefined;
+  }
+  if (![...url.searchParams.keys()].every((key) => CONTINUATION_QUERY_KEYS.has(key.toLowerCase()))) {
+    return undefined;
+  }
+  // Send the URL as parsed here, not the raw link: the Graph SDK only treats
+  // a lowercase `https://` string as absolute, so a spelling such as
+  // `HTTPS://` or a backslash would otherwise reach a different path.
+  return url.href;
+}
+
+const REFUSED_NEXT_LINK_NOTE =
+  "Stopped early: Microsoft's link to the next page did not belong to this list, so it was not followed. Results so far are shown.";
+
+/**
+ * Parse a Graph collection page (the response to `startEndpoint`) and follow
+ * `@odata.nextLink` continuations of that same list until the collection is
+ * exhausted or capped. `truncated: true` marks the result as a prefix rather
+ * than the complete collection, so callers never mistake "first page only" for
+ * "everything"; `refusedNextLink: true` says it stopped at a link that did not
+ * continue the list.
  */
 async function fetchGraphCollection<S extends z.ZodTypeAny>(
   client: Client,
   itemSchema: S,
+  startEndpoint: string,
   firstResponse: unknown,
   signal: AbortSignal,
-): Promise<{ items: z.infer<S>[]; truncated: boolean }> {
+): Promise<{ items: z.infer<S>[]; truncated: boolean; refusedNextLink: boolean }> {
   const pageSchema = z.object({
     value: z.array(itemSchema),
     '@odata.nextLink': z.string().optional(),
@@ -94,12 +141,18 @@ async function fetchGraphCollection<S extends z.ZodTypeAny>(
   let page = pageSchema.parse(firstResponse);
   const items = [...page.value];
   let nextLink = page['@odata.nextLink'];
-  while (nextLink !== undefined && items.length < MAX_COLLECTION_ITEMS && validateVendorUrl(nextLink)) {
-    page = pageSchema.parse(await client.api(nextLink).options({ signal }).get());
+  let refusedNextLink = false;
+  while (nextLink !== undefined && items.length < MAX_COLLECTION_ITEMS) {
+    const url = continuationUrl(startEndpoint, nextLink);
+    if (url === undefined) {
+      refusedNextLink = true;
+      break;
+    }
+    page = pageSchema.parse(await client.api(url).options({ signal }).get());
     items.push(...page.value);
     nextLink = page['@odata.nextLink'];
   }
-  return { items, truncated: nextLink !== undefined };
+  return { items, truncated: nextLink !== undefined, refusedNextLink };
 }
 
 const GraphIdentitySchema = z.object({
@@ -1540,13 +1593,12 @@ export async function listListColumns(
     );
   }
 
-  const response = await client
-    .api(siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/columns`))
-    .options({ signal })
-    .get();
-  const { items: columns, truncated } = await fetchGraphCollection(
+  const endpoint = siteEndpoint(args.siteId, `/lists/${listSegment(args.listId)}/columns`);
+  const response = await client.api(endpoint).options({ signal }).get();
+  const { items: columns, truncated, refusedNextLink } = await fetchGraphCollection(
     client,
     GraphColumnDefinitionSchema,
+    endpoint,
     response,
     signal,
   );
@@ -1556,9 +1608,11 @@ export async function listListColumns(
     listId: args.listId,
     count: columns.length,
     truncated,
-    ...(truncated
-      ? { note: 'Result capped — this list has more columns than returned here.' }
-      : {}),
+    ...(refusedNextLink
+      ? { note: REFUSED_NEXT_LINK_NOTE }
+      : truncated
+        ? { note: 'Result capped — this list has more columns than returned here.' }
+        : {}),
     columns: columns.map((column) => ({
       id: column.id,
       name: wrapUntrusted(column.name, 'microsoft-sharepoint:list_list_columns:name'),
@@ -1836,9 +1890,10 @@ export async function listFileVersions(
   const top = Math.min(args.top ?? 50, 200);
   const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/versions`;
   const response = await client.api(endpoint).options({ signal }).top(top).get();
-  const { items: versions, truncated } = await fetchGraphCollection(
+  const { items: versions, truncated, refusedNextLink } = await fetchGraphCollection(
     client,
     GraphDriveItemVersionSchema,
+    endpoint,
     response,
     signal,
   );
@@ -1848,9 +1903,11 @@ export async function listFileVersions(
     itemId: args.itemId,
     count: versions.length,
     truncated,
-    ...(truncated
-      ? { note: 'Result capped — this file has more versions than returned here.' }
-      : {}),
+    ...(refusedNextLink
+      ? { note: REFUSED_NEXT_LINK_NOTE }
+      : truncated
+        ? { note: 'Result capped — this file has more versions than returned here.' }
+        : {}),
     versions: versions.map((version) => ({
       id: version.id,
       size: formatSize(version.size),
@@ -1884,9 +1941,10 @@ export async function listItemPermissions(
 
   const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions`;
   const response = await client.api(endpoint).options({ signal }).get();
-  const { items: permissions, truncated } = await fetchGraphCollection(
+  const { items: permissions, truncated, refusedNextLink } = await fetchGraphCollection(
     client,
     GraphPermissionSchema,
+    endpoint,
     response,
     signal,
   );
@@ -1896,9 +1954,11 @@ export async function listItemPermissions(
     itemId: args.itemId,
     count: permissions.length,
     truncated,
-    ...(truncated
-      ? { note: 'Result capped — this item has more permissions than returned here.' }
-      : {}),
+    ...(refusedNextLink
+      ? { note: REFUSED_NEXT_LINK_NOTE }
+      : truncated
+        ? { note: 'Result capped — this item has more permissions than returned here.' }
+        : {}),
     permissions: permissions.map((permission) => formatPermission(permission, 'list_item_permissions')),
   });
 }

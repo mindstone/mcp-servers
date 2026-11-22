@@ -24,6 +24,8 @@ import { isAllowedUploadHost, validateContentRedirectUrl, validateUploadSessionU
 import { FilesBusinessError } from '../src/types.js';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+const REFUSED_NOTE =
+  "Stopped early: Microsoft's link to the next page did not belong to this list, so it was not followed. Results so far are shown.";
 
 describe('upload session URL policy (unit)', () => {
   it.each([
@@ -657,12 +659,151 @@ describe('list pagination', () => {
     );
     const result = await client.callTool('list_file_permissions', { path: 'item-1' });
     expect(result.isError).not.toBe(true);
-    const json = result.json as { count: number; truncated: boolean };
+    const json = result.json as { count: number; truncated: boolean; note?: string };
     expect(json.count).toBe(1);
     expect(json.truncated).toBe(true);
+    expect(json.note).toBe(REFUSED_NOTE);
     expect(
       state.requests.some((r) => r.url.startsWith('https://evil.example.com/')),
     ).toBe(false);
+  });
+
+  /**
+   * Serves page one (and optionally page two) for whatever the tool asks
+   * first, records every outbound request URL, and answers anything else with
+   * an empty page so a wrongly followed link shows up as an extra request.
+   */
+  function servePages(firstNextLink: string, secondNextLink?: string): string[] {
+    const urls: string[] = [];
+    mswServer.use(
+      http.all(/.*/, ({ request }) => {
+        if (new URL(request.url).hostname.startsWith('login.')) return undefined;
+        urls.push(request.url);
+        if (urls.length === 1) {
+          return HttpResponse.json({ value: [{ id: 'p1' }], '@odata.nextLink': firstNextLink });
+        }
+        if (urls.length === 2) {
+          return HttpResponse.json({
+            value: [{ id: 'p2' }],
+            ...(secondNextLink ? { '@odata.nextLink': secondNextLink } : {}),
+          });
+        }
+        return HttpResponse.json({ value: [{ id: 'p3' }] });
+      }),
+    );
+    return urls;
+  }
+
+  const ITEM_START = `${GRAPH_BASE}/me/drive/items/item-1/permissions`;
+  const PATH_START = `${GRAPH_BASE}/me/drive/root:/Reports/Q1.txt:/permissions`;
+
+  it.each([
+    ['$skiptoken', `${ITEM_START}?$skiptoken=p2`],
+    ['an echoed $top with $skiptoken', `${ITEM_START}?$top=5&$skiptoken=p2`],
+    ['$skip', `${ITEM_START}?$skip=1`],
+    ['paging key names in another case', `${ITEM_START}?$SkipToken=p2`],
+    ['a percent-encoded paging key name', `${ITEM_START}?%24skiptoken=p2`],
+  ])('follows a nextLink to the same item list with %s', async (_label, nextLink) => {
+    const urls = servePages(nextLink);
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean; note?: string };
+    expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
+    expect(json.note).toBeUndefined();
+    expect(urls).toHaveLength(2);
+    expect(urls[1].startsWith(`${ITEM_START}?`)).toBe(true);
+  });
+
+  // The Graph SDK only treats a lowercase `https://` string as absolute; any
+  // other spelling would be joined onto the base URL as a relative path. The
+  // request must go to the URL the check parsed, not the raw spelling.
+  it.each([
+    ['an upper-case scheme', 'HTTPS://graph.microsoft.com/v1.0/me/drive/items/item-1/permissions?$skiptoken=p2'],
+    ['backslashes', 'https:\\\\graph.microsoft.com\\v1.0\\me\\drive\\items\\item-1\\permissions?$skiptoken=p2'],
+  ])('requests the checked URL, not the raw spelling, for %s', async (_label, nextLink) => {
+    const urls = servePages(nextLink);
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    expect(urls).toEqual([ITEM_START, `${ITEM_START}?$skiptoken=p2`]);
+  });
+
+  it('follows a nextLink that percent-encodes the same path differently', async () => {
+    const urls = servePages(`${GRAPH_BASE}/me/drive/root%3A/Report%73/Q1.txt%3A/permissions?$skiptoken=p2`);
+    const result = await client.callTool('list_file_permissions', { path: '/Reports/Q1.txt' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean };
+    expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
+    expect(urls).toHaveLength(2);
+  });
+
+  it.each([
+    ['another Graph list', `${GRAPH_BASE}/me/messages`],
+    ['the parent collection', `${GRAPH_BASE}/me/drive/root/permissions?$skiptoken=p2`],
+    ['the beta API', `https://graph.microsoft.com/beta/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['a longer path', `${PATH_START}/extra?$skiptoken=p2`],
+    ['a trailing slash', `${PATH_START}/?$skiptoken=p2`],
+    ['an empty segment', `${GRAPH_BASE}/me/drive//root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['a ; suffix', `${PATH_START};x=1?$skiptoken=p2`],
+    ['%2F standing in for /', `${GRAPH_BASE}/me/drive/root:%2FReports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['double encoding', `${GRAPH_BASE}/me/drive/root%253A/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['a malformed escape', `${GRAPH_BASE}/me/drive/root:/Reports/Q1%E0%A4.txt:/permissions?$skiptoken=p2`],
+    ['the path in different case', `${GRAPH_BASE}/me/drive/root:/reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['an extra $expand key', `${PATH_START}?$skiptoken=p2&$expand=children`],
+    ['an encoded extra $filter key', `${PATH_START}?$skiptoken=p2&%24filter=x`],
+    ['http', `http://graph.microsoft.com/v1.0/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['credentials', `https://user:pw@graph.microsoft.com/v1.0/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['an explicit port', `https://graph.microsoft.com:8443/v1.0/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['a fragment', `${PATH_START}?$skiptoken=p2#x`],
+    ['an empty fragment', `${PATH_START}?$skiptoken=p2#`],
+    ['another host', `https://evil.example.com/v1.0/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+    ['a relative link', `/v1.0/me/drive/root:/Reports/Q1.txt:/permissions?$skiptoken=p2`],
+  ])('refuses and never fetches a nextLink with %s', async (_label, nextLink) => {
+    const urls = servePages(nextLink);
+    const result = await client.callTool('list_file_permissions', { path: '/Reports/Q1.txt' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean; note?: string };
+    expect(json.count).toBe(1);
+    expect(json.truncated).toBe(true);
+    expect(json.note).toBe(REFUSED_NOTE);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toMatch(/\/me\/drive\/root:\/Reports\/Q1\.txt:\/permissions$/);
+  });
+
+  it('refuses a drive item ID in different case', async () => {
+    const urls = servePages(`${GRAPH_BASE}/me/drive/items/ITEM-1/permissions?$skiptoken=p2`);
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    const json = result.json as { truncated: boolean; note?: string };
+    expect(json.truncated).toBe(true);
+    expect(json.note).toBe(REFUSED_NOTE);
+    expect(urls).toHaveLength(1);
+  });
+
+  it('keeps pages one and two when page two carries a hostile link', async () => {
+    const urls = servePages(`${ITEM_START}?$skiptoken=p2`, `${GRAPH_BASE}/me/messages?$skiptoken=p3`);
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    const json = result.json as { count: number; truncated: boolean; note?: string; permissions: Array<{ id: string }> };
+    expect(json.permissions.map((p) => p.id)).toEqual(['p1', 'p2']);
+    expect(json.truncated).toBe(true);
+    expect(json.note).toBe(REFUSED_NOTE);
+    expect(urls).toHaveLength(2);
+  });
+
+  it.each([
+    ['list_file_versions', { path: 'item-1' }, `${GRAPH_BASE}/me/drive/items/item-1/versions`],
+    ['list_file_activities', { path: 'item-1' }, `${GRAPH_BASE}/me/drive/items/item-1/activities`],
+    ['list_file_activities', {}, `${GRAPH_BASE}/me/drive/activities`],
+  ])('%s binds its nextLink to its own list', async (tool, args, start) => {
+    const urls = servePages(`${start}?$skiptoken=p2`, `${GRAPH_BASE}/me/drive/items/item-1/permissions?$skiptoken=p3`);
+    const result = await client.callTool(tool, args);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean; note?: string };
+    expect(json.count).toBe(2);
+    expect(json.truncated).toBe(true);
+    expect(json.note).toBe(REFUSED_NOTE);
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).toBe(`${start}?$skiptoken=p2`);
   });
 
   it('single-page responses report truncated: false', async () => {
