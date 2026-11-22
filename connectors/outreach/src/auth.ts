@@ -18,6 +18,7 @@ import {
 } from './types.js';
 import { isBridgeConfigured } from './bridge.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { readHardenedJsonFile } from './hardened-json-file.js';
 
 /**
  * Default OAuth scope set requested when OUTREACH_OAUTH_SCOPES is not set.
@@ -162,35 +163,30 @@ function atomicWriteFile(filePath: string, data: string): void {
   }
 }
 
+/** Size caps for the stored files; real ones are a few KiB at most. */
+export const MAX_STORED_ACCOUNTS_BYTES = 256 * 1024;
+export const MAX_STORED_TOKEN_BYTES = 64 * 1024;
+
 /**
- * Read and validate a stored JSON file. A missing file gives `undefined`
- * silently; an unreadable, corrupt or wrong-shaped file gives `undefined` and
- * one fixed stderr line (never the file's content).
+ * Read and validate a stored JSON file through the hardened reader: a symlink
+ * as the file itself, a FIFO or other special file, or a file over `maxBytes`
+ * is refused rather than followed, waited on or read whole. A symlinked config
+ * directory still works. A missing file gives `undefined` silently; any other
+ * refusal gives `undefined` and one fixed stderr line (never the path or the
+ * file's content), so the account reads as needing to reconnect.
  */
-function readStoredJson<T>(filePath: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, label: string): T | undefined {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(filePath, 'utf-8');
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') {
-      console.error(`[Outreach MCP] Stored ${label} file could not be read (${code ?? 'unknown error'}); ignoring it.`);
-    }
-    return undefined;
+function readStoredJson<S extends z.ZodTypeAny>(
+  filePath: string,
+  schema: S,
+  maxBytes: number,
+  label: string,
+): z.infer<S> | undefined {
+  const result = readHardenedJsonFile(filePath, schema, maxBytes);
+  if (result.ok) return result.value;
+  if (!result.missing) {
+    console.error(`[Outreach MCP] Stored ${label} file was refused (${result.reason}); ignoring it.`);
   }
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    console.error(`[Outreach MCP] Stored ${label} file is not valid JSON; ignoring it.`);
-    return undefined;
-  }
-  const parsed = schema.safeParse(json);
-  if (!parsed.success) {
-    console.error(`[Outreach MCP] Stored ${label} file has an unexpected shape; ignoring it.`);
-    return undefined;
-  }
-  return parsed.data;
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +195,7 @@ function readStoredJson<T>(filePath: string, schema: z.ZodType<T, z.ZodTypeDef, 
 
 export function loadAccounts(): OutreachAccountsConfig {
   ensureDirectories();
-  return readStoredJson(getAccountsPath(), outreachAccountsConfigSchema, 'accounts') ?? { accounts: [] };
+  return readStoredJson(getAccountsPath(), outreachAccountsConfigSchema, MAX_STORED_ACCOUNTS_BYTES, 'accounts') ?? { accounts: [] };
 }
 
 export function saveAccounts(config: OutreachAccountsConfig): void {
@@ -208,7 +204,7 @@ export function saveAccounts(config: OutreachAccountsConfig): void {
 }
 
 export function loadToken(accountId: string): OutreachTokenData | null {
-  return readStoredJson(getTokenPath(accountId), outreachTokenDataSchema, 'credentials') ?? null;
+  return readStoredJson(getTokenPath(accountId), outreachTokenDataSchema, MAX_STORED_TOKEN_BYTES, 'credentials') ?? null;
 }
 
 export function saveToken(accountId: string, token: OutreachTokenData): void {

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { http, HttpResponse, passthrough } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -189,6 +190,103 @@ describe('Stored credential files — Outreach MCP server', () => {
       expect(lines[0]).not.toContain(VENDOR_MARKER);
     });
   }
+
+  function tokenFile(): string {
+    return path.join(configPath, 'credentials', 'acct.token.json');
+  }
+
+  function expectOneRefusal(label: 'accounts' | 'credentials', reason: RegExp): void {
+    const lines = stderrLines(errSpy);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(new RegExp(`^\\[Outreach MCP\\] Stored ${label} file was refused \\(`));
+    expect(lines[0]).toMatch(reason);
+    expect(lines[0]).not.toContain(VENDOR_MARKER);
+    expect(lines[0]).not.toContain(basePath);
+  }
+
+  it.skipIf(isWindows)('refuses a token file that is a symlink, even to a valid token', async () => {
+    const target = path.join(basePath, 'elsewhere.json');
+    fs.writeFileSync(target, JSON.stringify(sampleToken({ access_token: VENDOR_MARKER })));
+    fs.symlinkSync(target, tokenFile());
+    const { loadToken } = await loadAuth();
+
+    expect(loadToken('acct')).toBeNull();
+    expectOneRefusal('credentials', /symbolic link/);
+  });
+
+  it.skipIf(isWindows)('refuses an accounts file that is a symlink', async () => {
+    const target = path.join(basePath, 'elsewhere.json');
+    fs.writeFileSync(target, JSON.stringify({ accounts: [{ id: 'a', username: VENDOR_MARKER, connected_at: '2026-01-01T00:00:00Z' }] }));
+    fs.symlinkSync(target, path.join(configPath, 'accounts.json'));
+    const { loadAccounts } = await loadAuth();
+
+    expect(loadAccounts()).toEqual({ accounts: [] });
+    expectOneRefusal('accounts', /symbolic link/);
+  });
+
+  it.skipIf(isWindows)('refuses a FIFO at the token path without waiting for a writer', async () => {
+    execFileSync('mkfifo', [tokenFile()]);
+    const { loadToken } = await loadAuth();
+
+    expect(loadToken('acct')).toBeNull();
+    expectOneRefusal('credentials', /not a regular file/);
+  });
+
+  it('refuses a directory at the token path', async () => {
+    fs.mkdirSync(tokenFile());
+    const { loadToken } = await loadAuth();
+
+    expect(loadToken('acct')).toBeNull();
+    expectOneRefusal('credentials', /not a regular file/);
+  });
+
+  const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+  it.skipIf(isWindows || isRoot)('refuses an unreadable token file with a fixed line and no error text', async () => {
+    fs.writeFileSync(tokenFile(), JSON.stringify(sampleToken({ access_token: VENDOR_MARKER })));
+    fs.chmodSync(tokenFile(), 0o000);
+    const { loadToken } = await loadAuth();
+
+    expect(loadToken('acct')).toBeNull();
+    expectOneRefusal('credentials', /could not be read/);
+    expect(stderrLines(errSpy)[0]).not.toContain('EACCES');
+  });
+
+  it('refuses an oversized token file without reading it whole', async () => {
+    const { loadToken, MAX_STORED_TOKEN_BYTES } = await loadAuth();
+    const padded = JSON.stringify({ ...sampleToken(), pad: 'x'.repeat(MAX_STORED_TOKEN_BYTES) });
+    fs.writeFileSync(tokenFile(), padded);
+
+    expect(loadToken('acct')).toBeNull();
+    expectOneRefusal('credentials', /too large/);
+  });
+
+  it('refuses an oversized accounts file', async () => {
+    const { loadAccounts, MAX_STORED_ACCOUNTS_BYTES } = await loadAuth();
+    fs.writeFileSync(
+      path.join(configPath, 'accounts.json'),
+      JSON.stringify({ accounts: [], pad: 'x'.repeat(MAX_STORED_ACCOUNTS_BYTES) }),
+    );
+
+    expect(loadAccounts()).toEqual({ accounts: [] });
+    expectOneRefusal('accounts', /too large/);
+  });
+
+  it.skipIf(isWindows)('still reads stored files through a symlinked config directory', async () => {
+    const linkedConfig = path.join(basePath, 'linked-config');
+    fs.symlinkSync(configPath, linkedConfig);
+    vi.stubEnv('OUTREACH_CONFIG_DIR', linkedConfig);
+    fs.writeFileSync(
+      path.join(configPath, 'accounts.json'),
+      JSON.stringify({ accounts: [{ id: 'acct', username: 'jane@example.com', connected_at: '2026-01-01T00:00:00Z' }] }),
+    );
+    fs.writeFileSync(tokenFile(), JSON.stringify(sampleToken()));
+    const { loadAccounts, loadToken } = await loadAuth();
+
+    expect(loadAccounts().accounts.map((a) => a.id)).toEqual(['acct']);
+    expect(loadToken('acct')).toMatchObject({ access_token: 'tok' });
+    expect(stderrLines(errSpy)).toEqual([]);
+  });
 
   it('still loads a token file that lacks refresh_token, as older versions could write', async () => {
     const { refresh_token: _dropped, ...withoutRefresh } = sampleToken();
