@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
+### Changed
+
+- Hardened host-bridge and saved sign-in reads, safer sign-in writes, SOQL quoting repair, Salesforce API v67.0.
+
 ### Fixed
 
 - `salesforce_query` now accepts two SQL quoting habits that Salesforce refuses: a doubled apostrophe inside a string (`'O''Brien'`) is sent as `'O\'Brien'`, and a double-quoted string (`"Acme"`) is sent single-quoted. Valid SOQL is sent unchanged.
