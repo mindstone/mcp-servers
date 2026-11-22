@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 
 - Token file reads refuse links and special files; compose card declares its send so the host can mark a card sent when the assistant sends that same draft
+- Permission errors now include Slack's `needed` and `provided` scope names, so the app can offer to reconnect with the missing permission
 
 ### Fixed
 
