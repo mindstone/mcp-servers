@@ -115,9 +115,10 @@ export async function postToBridge(
   });
 
   if (response.status === 401 || response.status === 403) {
-    // Discarding the body is connection hygiene only: an errored body stream
-    // must not replace the unauthorized answer.
-    await response.body?.cancel().catch(() => {
+    // Discarding the body is connection hygiene only, so it is not awaited: a
+    // cancel that never settles (msw's mocked bodies do not) must not hold the
+    // unauthorized answer, and an errored body stream must not replace it.
+    void response.body?.cancel().catch(() => {
       console.error(`[${connector}] bridge reply body could not be discarded`);
     });
     return {

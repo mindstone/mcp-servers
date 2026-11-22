@@ -213,7 +213,7 @@ export async function fetchFirstTenantId(accessToken: string): Promise<string> {
     );
   }
   if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined);
+    void response.body?.cancel().catch(() => undefined);
     throw new XeroConnectorError(`Could not list your Xero companies (HTTP ${response.status}).`);
   }
   let data: unknown;

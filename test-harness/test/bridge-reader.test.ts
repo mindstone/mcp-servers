@@ -11,6 +11,8 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { HttpResponse, http as mswHttp } from 'msw';
+import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -327,4 +329,25 @@ describe('postToBridge', () => {
     await expect(post()).rejects.toThrow();
     expect(seen).toHaveLength(1);
   });
+});
+
+// Connector tests mock the bridge with msw, whose mocked bodies never settle
+// `body.cancel()`: the refused path must answer without waiting on it. msw
+// listens only inside this block, so the loopback server above stays
+// unintercepted.
+describe('postToBridge against an msw mock', () => {
+  const PORT = 45_999;
+  const msw = setupServer();
+
+  beforeAll(() => msw.listen({ onUnhandledRequest: 'error' }));
+  afterAll(() => msw.close());
+
+  it.each([401, 403])('answers a refused %i that has a body without waiting on its cancel', async (status) => {
+    msw.use(mswHttp.post(`http://127.0.0.1:${PORT}/*`, () => HttpResponse.json({ success: true }, { status })));
+    const statePath = writeState({ port: PORT, token: TOKEN });
+    expect(await postToBridge('/credentials/save', {}, { connector: 'demo', timeoutMs: 5_000, statePath })).toEqual({
+      success: false,
+      error: `Bridge returned ${status}: unauthorized. Check host app authentication.`,
+    });
+  }, 2_000);
 });

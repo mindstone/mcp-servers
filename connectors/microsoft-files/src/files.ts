@@ -1109,9 +1109,10 @@ async function fetchDriveItemBytes(
       signal,
     });
     if (page.status >= 300 && page.status < 400) {
-      // Best-effort cleanup of the (typically empty) redirect body; the
-      // policy decisions below are the observable part.
-      await page.body?.cancel().catch(() => undefined);
+      // Best-effort cleanup of the (typically empty) redirect body, not awaited
+      // so a cancel that never settles cannot hold the redirect; the policy
+      // decisions below are the observable part.
+      void page.body?.cancel().catch(() => undefined);
       const location = page.headers.get('location');
       if (!location) {
         throw new FilesBusinessError(

@@ -130,9 +130,10 @@ export const bridgeRequest = async (
   });
 
   if (response.status === 401 || response.status === 403) {
-    // Discarding the body is connection hygiene only: an errored body stream
-    // must not replace the unauthorized answer.
-    await response.body?.cancel().catch((error: unknown) => {
+    // Discarding the body is connection hygiene only, so it is not awaited: a
+    // cancel that never settles must not hold the unauthorized answer, and an
+    // errored body stream must not replace it.
+    void response.body?.cancel().catch((error: unknown) => {
       console.error(`[wise] bridge reply body could not be discarded (${errorKind(error)})`);
     });
     return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
