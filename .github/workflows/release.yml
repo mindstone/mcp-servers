@@ -412,6 +412,7 @@ jobs:
             echo "::notice::Not bundling dependencies: local links in production: ${links}"
             exit 0
           fi
+          node ../../scripts/check-bundled-shared.mjs .
           npm pkg set bundleDependencies=true --json
           echo "Bundling $(jq '[.packages | to_entries[] | select(.key != "" and .value.dev != true)] | length' package-lock.json) production packages"
 

@@ -2,8 +2,9 @@
 // Run the workflow's actual shell with deterministic registry responses and time.
 // Usage: node --test scripts/release-readiness.test.mjs
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -209,4 +210,222 @@ test('production wait shell parses in bash', () => {
   const result = spawnSync('bash', ['-n'], { input: stepShell(waitName), encoding: 'utf8' });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
+});
+
+const sharedName = '@mindstone/shared-example';
+const sharedPath = `node_modules/${sharedName}`;
+const sharedIntegrity = 'sha512-current-example';
+
+function runAsync(command, args, options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { ...options, timeout: 20000 });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
+  });
+}
+
+test('bundle refuses cached npm success during a registry outage and removes its probe cache', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'release-cache-'));
+  const probeRoot = join(directory, 'probes');
+  mkdirSync(probeRoot);
+  const env = { ...process.env, npm_config_cache: join(directory, 'user-cache'),
+    npm_config_userconfig: join(directory, 'user.npmrc'), npm_config_globalconfig: join(directory, 'global.npmrc'),
+    npm_config_fetch_retries: '0', npm_config_fetch_timeout: '1000', NODE_DISABLE_COMPILE_CACHE: '1', TMPDIR: probeRoot };
+  writeFileSync(env.npm_config_userconfig, '');
+  writeFileSync(env.npm_config_globalconfig, '');
+  let broken = false;
+  let current = '0.1.0';
+  let requests = 0;
+  const artifacts = {};
+  const server = createServer((request, response) => {
+    requests++;
+    if (broken) return request.socket.destroy();
+    if (request.url.endsWith('.tgz')) return response.end(artifacts[request.url.split('/').at(-1)].bytes);
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Cache-Control', 'public, max-age=300');
+    response.end(JSON.stringify({ name: sharedName, 'dist-tags': { latest: current },
+      versions: Object.fromEntries(Object.values(artifacts).filter(a => a.version <= current).map(a => [a.version, {
+        name: sharedName, version: a.version,
+        dist: { integrity: a.integrity, shasum: a.shasum, tarball: `${env.npm_config_registry}${a.filename}` },
+      }])),
+    }));
+  });
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    env.npm_config_registry = `http://127.0.0.1:${server.address().port}/`;
+    for (const version of ['0.1.0', '0.1.1']) {
+      const source = join(directory, version);
+      mkdirSync(source);
+      writeFileSync(join(source, 'package.json'), JSON.stringify({ name: sharedName, version }));
+      const packed = spawnSync('npm', ['pack', '--json', '--ignore-scripts'], { cwd: source, env, encoding: 'utf8', timeout: 20000 });
+      assert.ifError(packed.error);
+      assert.equal(packed.status, 0, packed.stderr);
+      const artifact = JSON.parse(packed.stdout)[0];
+      artifacts[artifact.filename] = { ...artifact, bytes: readFileSync(join(source, artifact.filename)) };
+    }
+    const packageDir = join(directory, 'consumer');
+    mkdirSync(packageDir);
+    writeFileSync(join(packageDir, 'package.json'), JSON.stringify(identity));
+    const packages = sharedPackages();
+    packages[sharedPath].integrity = Object.values(artifacts)[0].integrity;
+    writeFileSync(join(packageDir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
+    const query = ['pack', `${sharedName}@^0.1.0`, '--dry-run', '--json', '--ignore-scripts', '--prefer-online'];
+    const warm = await runAsync('npm', query, { cwd: packageDir, env });
+    assert.equal(warm.status, 0, warm.stderr);
+    assert.equal(JSON.parse(warm.stdout)[0].version, '0.1.0');
+    current = '0.1.1';
+    broken = true;
+    requests = 0;
+    const cached = await runAsync('npm', query, { cwd: packageDir, env });
+    assert.equal(cached.status, 0, cached.stderr);
+    assert.equal(JSON.parse(cached.stdout)[0].version, '0.1.0', 'real npm falls back to the warm answer');
+    assert.ok(requests > 0, 'npm attempted revalidation');
+    const result = await runAsync(process.execPath, [new URL('./check-bundled-shared.mjs', import.meta.url).pathname, packageDir], { env });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /could not ask npm/);
+    assert.deepEqual(readdirSync(probeRoot), [], 'probe cache must be removed after failure');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('bundle refuses a current version label with an older artifact integrity', () => {
+  const packages = sharedPackages('0.1.1');
+  packages[sharedPath].integrity = 'sha512-older-example';
+  const result = runBundle({ packages });
+  assertNotBundled(result);
+  assert.match(result.stderr, /lockfile would pack a different file/i);
+  assert.match(result.stderr, /npm update @mindstone\/shared-example --package-lock-only --ignore-scripts/);
+});
+
+function runBundle({ packages, answer = JSON.stringify([{ name: sharedName, version: '0.1.1', integrity: sharedIntegrity }]), status = 0 }) {
+  const directory = mkdtempSync(join(tmpdir(), 'release-bundle-'));
+  try {
+    const packageDir = join(directory, 'connectors', 'example');
+    const scriptsDir = join(directory, 'scripts');
+    mkdirSync(join(packageDir, 'node_modules'), { recursive: true });
+    mkdirSync(scriptsDir);
+    const checker = new URL('./check-bundled-shared.mjs', import.meta.url);
+    if (existsSync(checker)) copyFileSync(checker, join(scriptsDir, 'check-bundled-shared.mjs'));
+    writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ ...identity, dependencies: packages[''].dependencies }));
+    writeFileSync(join(packageDir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
+    for (const [location, entry] of Object.entries(packages)) {
+      if (!location || !location.startsWith('node_modules/') || entry.link) continue;
+      mkdirSync(join(packageDir, location), { recursive: true });
+      writeFileSync(join(packageDir, location, 'package.json'), JSON.stringify(entry));
+    }
+    const logPath = join(directory, 'calls.jsonl');
+    writeFileSync(logPath, '');
+    writeFileSync(join(directory, 'npm'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.TEST_LOG, JSON.stringify(args) + '\\n');
+if (args[0] === 'pack') {
+  const cache = args[args.indexOf('--cache') + 1];
+  if (!args.includes('--cache') || fs.readdirSync(cache).length !== 0) throw new Error('Expected a new empty probe cache');
+  fs.writeFileSync(require('node:path').join(cache, 'probe-marker'), '');
+  process.stdout.write(process.env.TEST_ANSWER);
+  process.exit(Number(process.env.TEST_STATUS));
+}
+`, { mode: 0o755 });
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepShell('Bundle the tested dependency tree')], {
+      cwd: packageDir,
+      env: { ...process.env, PATH: directory + ':' + process.env.PATH, TEST_LOG: logPath,
+        TEST_ANSWER: answer, TEST_STATUS: String(status) },
+      encoding: 'utf8', timeout: 20000,
+    });
+    assert.ifError(result.error);
+    const calls = readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+    for (const args of calls.filter(args => args[0] === 'pack')) {
+      assert.equal(existsSync(args[args.indexOf('--cache') + 1]), false, 'probe cache must be removed on success and failure');
+    }
+    return { ...result, calls };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function sharedPackages(version = '0.1.0') {
+  return { '': { dependencies: { [sharedName]: '^0.1.0' } }, [sharedPath]: { version, integrity: sharedIntegrity } };
+}
+
+function assertNotBundled(result) {
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.calls.some(args => args[0] === 'pkg'), false);
+}
+
+test('bundle refuses a stale first-party lock and names both versions before setting bundleDependencies', () => {
+  const result = runBundle({ packages: sharedPackages() });
+  assertNotBundled(result);
+  assert.match(result.stderr, /@mindstone\/shared-example.*0\.1\.0.*0\.1\.1/);
+  assert.match(result.stderr, /npm update @mindstone\/shared-example --package-lock-only --ignore-scripts/);
+});
+
+for (const [label, response] of Object.entries({
+  unreadable: { status: 1, answer: 'private registry diagnostic' },
+  malformed: { answer: 'not json' },
+  missing: { answer: '[]' },
+  'missing version': { answer: JSON.stringify([{ name: sharedName }]) },
+  'missing integrity': { answer: JSON.stringify([{ name: sharedName, version: '0.1.1' }]) },
+  'empty integrity': { answer: JSON.stringify([{ name: sharedName, version: '0.1.1', integrity: ' ' }]) },
+})) {
+  test(`bundle refuses a ${label} registry answer without exposing npm output`, () => {
+    const result = runBundle({ packages: sharedPackages(), ...response });
+    assertNotBundled(result);
+    assert.match(result.stderr, /@mindstone\/shared-example.*nothing was published.*retry/i);
+    assert.equal(result.stderr.includes(response.answer), false);
+  });
+}
+
+test('bundle accepts the current first-party lock and queries npm with the declared range', () => {
+  const result = runBundle({ packages: sharedPackages('0.1.1') });
+  assert.equal(result.status, 0, result.stderr);
+  const request = result.calls.find(args => args[0] === 'pack');
+  assert.deepEqual(request, [
+    'pack', `${sharedName}@^0.1.0`, '--dry-run', '--json', '--ignore-scripts', '--prefer-online',
+    '--cache', request.at(-1),
+  ]);
+  assert.ok(result.calls.some(args => args[0] === 'pkg' && args.includes('bundleDependencies=true')));
+});
+
+test('bundle refuses a lock with missing integrity', () => {
+  const packages = sharedPackages('0.1.1');
+  delete packages[sharedPath].integrity;
+  const result = runBundle({ packages });
+  assertNotBundled(result);
+  assert.match(result.stderr, /lockfile would pack a different file/i);
+});
+
+test('bundle with no first-party production dependency needs no registry request', () => {
+  const result = runBundle({ packages: { '': { dependencies: { example: '^1.0.0' } }, 'node_modules/example': { version: '1.0.0' } } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.calls.some(args => args[0] === 'pack'), false);
+  assert.ok(result.calls.some(args => args[0] === 'pkg'));
+});
+
+test('bundle ignores a development-only first-party file link', () => {
+  const result = runBundle({ packages: {
+    '': { devDependencies: { [sharedName]: 'file:../../packages/shared-example' } },
+    [sharedPath]: { resolved: '../../packages/shared-example', link: true, dev: true },
+    '../../packages/shared-example': { name: sharedName, version: '0.1.0', dev: true },
+  } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.calls.some(args => args[0] === 'pack'), false);
+  assert.ok(result.calls.some(args => args[0] === 'pkg'));
+});
+
+test('bundle checks a nested first-party copy using its dependent package range', () => {
+  const result = runBundle({ packages: {
+    '': { dependencies: { example: '^1.0.0' } },
+    'node_modules/example': { version: '1.0.0', dependencies: { [sharedName]: '~0.1.0' } },
+    [`node_modules/example/${sharedPath}`]: { version: '0.1.0' },
+  } });
+  assertNotBundled(result);
+  assert.match(result.stderr, /@mindstone\/shared-example.*0\.1\.0.*0\.1\.1/);
+  assert.equal(result.calls.find(args => args[0] === 'pack')?.[1], `${sharedName}@~0.1.0`);
 });
