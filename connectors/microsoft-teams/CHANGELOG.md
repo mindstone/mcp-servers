@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-22
+
+### Changed
+
+- Fix connection and sign-in logs showing your full email (now masked; error text and file paths may still show it), and draft Cancel saying 'Nothing sent' after your assistant sent the original
+
 ## [0.3.4] - 2026-11-21
 
 ### Changed
