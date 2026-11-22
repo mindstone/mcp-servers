@@ -4,6 +4,14 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- `send_chat_message`, `compose_chat_message` and `list_chat_messages` now say that Teams chats have no threaded replies, so when asked to reply to a specific chat message the assistant sends a new message and tells the user so.
+
+### Removed
+
+- `reply_to_message`, which tried to reply in chats through a route Microsoft Graph doesn't have and failed every time. Teams chats have no threaded replies; send a new message with `send_chat_message` or `compose_chat_message`. Channel replies (`reply_to_channel_message`) are unchanged.
+
 ## [0.3.5] - 2026-11-22
 
 ### Changed

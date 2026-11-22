@@ -12,7 +12,6 @@ const EXPECTED_TOOLS = [
   'list_chat_messages',
   'compose_chat_message',
   'send_chat_message',
-  'reply_to_message',
   'find_user',
   'create_chat',
   'search_messages',
@@ -34,7 +33,6 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   // send_chat_message), so it keeps the non-destructive write annotations.
   compose_chat_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   send_chat_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-  reply_to_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   find_user: { readOnlyHint: true, openWorldHint: true },
   create_chat: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   search_messages: { readOnlyHint: true, openWorldHint: true },
@@ -50,7 +48,6 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
 
 const DESTRUCTIVE_TOOLS = [
   'send_chat_message',
-  'reply_to_message',
   'create_chat',
   'send_channel_message',
   'reply_to_channel_message',
@@ -76,7 +73,7 @@ describe('microsoft-teams tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 17 teams tools in the locked surface', async () => {
+  it('registers exactly the 16 teams tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

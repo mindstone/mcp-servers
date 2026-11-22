@@ -94,7 +94,6 @@ describe('microsoft-teams request targets', () => {
         'messageId',
         'teams-message-marker',
       ],
-      ['reply_to_message', { chatId: 'chat-1', messageId: '../teams-reply-message-marker', content: 'hi' }, 'messageId', 'teams-reply-message-marker'],
       ['get_user_presence', { userId: '../teams-presence-marker' }, 'userId', 'teams-presence-marker'],
       ['get_user_presence', { userId: '../teams-presence-dot-marker' }, 'userId', 'teams-presence-dot-marker'],
       ['find_user', { query: '..@x/../../teams-find-marker' }, 'query', 'teams-find-marker'],

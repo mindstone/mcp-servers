@@ -16,7 +16,6 @@ const EMPTY_ARG_CASES: Array<{ tool: string; args: Record<string, unknown>; para
   { tool: 'get_chat', args: { chatId: '' }, param: 'chatId' },
   { tool: 'list_chat_messages', args: { chatId: '  ' }, param: 'chatId' },
   { tool: 'send_chat_message', args: { chatId: 'chat-1', content: '' }, param: 'content' },
-  { tool: 'reply_to_message', args: { chatId: 'chat-1', messageId: '', content: 'Hi' }, param: 'messageId' },
   { tool: 'list_channels', args: { teamId: '' }, param: 'teamId' },
   { tool: 'list_channel_messages', args: { teamId: 'team-1', channelId: '' }, param: 'channelId' },
   {

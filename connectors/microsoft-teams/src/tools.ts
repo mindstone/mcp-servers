@@ -20,7 +20,6 @@ import {
   listTeams,
   PRESENCE_AVAILABILITY_VALUES,
   replyToChannelMessage,
-  replyToChatMessage,
   searchMessages,
   sendChannelMessage,
   sendChatMessage,
@@ -140,7 +139,8 @@ export function registerTeamsTools(server: McpServer): void {
   server.registerTool(
     'list_chat_messages',
     {
-      description: 'Get recent messages from a chat.',
+      description:
+        'Get recent messages from a chat. Teams chats have no threaded replies: messages in a chat are one flat list, with no replies under them. To answer a specific message, send a new message (compose_chat_message lets the user review it first) and tell the user it will go as a new message.',
       inputSchema: z.object({
         chatId: z.string().describe('Chat ID'),
         top: z.number().optional().describe('Max messages to return (default: 50, max: 50)'),
@@ -165,7 +165,7 @@ export function registerTeamsTools(server: McpServer): void {
   server.registerTool(
     'compose_chat_message',
     {
-      description: `Open an inline editable message compose form before sending to a Teams chat. Use this when the user wants to write or send a Teams message so they can review and edit it first. Does NOT send directly — the form posts the message (via send_chat_message) when the user clicks Send.
+      description: `Open an inline editable message compose form before sending to a Teams chat. Use this when the user wants to write or send a Teams message so they can review and edit it first. Does NOT send directly — the form posts the message (via send_chat_message) when the user clicks Send. Teams chats have no threaded replies: the message goes as a new message, with no quote or thread. When asked to reply to a specific chat message, tell the user it will go as a new message.
 
 PARAMETERS: target (the chat ID to send to), text (message content).`,
       inputSchema: z
@@ -227,7 +227,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     'send_chat_message',
     {
       description:
-        'Send a message now to a Teams chat, as the user; everyone in the chat sees it straight away. It cannot be unsent from here. To let the user review and edit it first, use compose_chat_message.',
+        'Send a message now to a Teams chat, as the user; everyone in the chat sees it straight away. It cannot be unsent from here. To let the user review and edit it first, use compose_chat_message. Teams chats have no threaded replies: this sends a new message, with no quote or thread. When asked to reply to a specific chat message, tell the user it will go as a new message.',
       inputSchema: z.object({
         chatId: z.string().describe('Chat ID'),
         content: z.string().describe('Message content (HTML supported)'),
@@ -236,25 +236,6 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
-    ),
-  );
-
-  server.registerTool(
-    'reply_to_message',
-    {
-      description:
-        'Send a reply now to a specific message in a Teams chat, as the user; everyone in the chat sees it. It cannot be unsent from here.',
-      inputSchema: z
-        .object({
-          chatId: z.string().describe('Chat ID'),
-          messageId: z.string().describe('ID of the chat message to reply to'),
-          content: z.string().describe('Reply content (HTML supported)'),
-        })
-        .strict(),
-      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
-    },
-    withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => replyToChatMessage(c, args, signal))),
     ),
   );
 
