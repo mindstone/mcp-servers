@@ -1,5 +1,18 @@
 {
   "schema_version": 1,
+  "credential_issuers": {
+    "create_realtime_session": "Issues a new ephemeral realtime client credential.",
+    "get_conversation_signed_link": "Issues a new signed conversation connection URL.",
+    "get_signed_url_deprecated": "Issues a new signed conversation connection URL.",
+    "get_livekit_token": "Issues a new LiveKit connection token.",
+    "get_single_use_token": "Issues a new single-use connection credential.",
+    "register_twilio_call": "Issues TwiML connection instructions for the registered call.",
+    "get_agent_link_route": "Issues an agent-link conversation token.",
+    "dubbing_language_create": "Issues signed audio and subtitle output links.",
+    "dubbing_language_get": "Issues fresh signed audio and subtitle output links.",
+    "dubbing_language_list": "Issues fresh signed audio and subtitle output links.",
+    "create_workspace_webhook_route": "Issues a new HMAC delivery signing secret, returned only at creation."
+  },
   "source": {
     "url": "https://api.elevenlabs.io/openapi.json",
     "retrieved_at": "2026-11-08T21:07:54.389549+00:00",
@@ -122,6 +135,8 @@
   },
   "reserved_profiles": [],
   "family_retry_checks": {
+    "workspace/resources": {"read": "get_resource_metadata"},
+    "workspace/webhooks": {"read": "get_workspace_webhooks_route"},
     "workspace/auth-connections": {
       "read": "list_auth_connections"
     },
@@ -2333,19 +2348,25 @@
     "create_workspace_webhook_route": {
       "method": "POST",
       "path": "/v1/workspace/webhooks",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/webhooks",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Registers an external destination that will receive workspace data. The pinned create settings support HMAC only. Returns a new signing secret only in data at creation; keep it to verify deliveries because no list recovers it. The connector never contacts the destination.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Registers an external destination that will receive workspace data. The pinned create settings support HMAC only. Returns a new signing secret only in data at creation; keep it to verify deliveries because no list recovers it. The connector never contacts the destination.",
+      "timeout": "standard",
+      "follow_ups": ["get_workspace_webhooks_route"],
+      "retry_check": {"unavailable_reason": "No complete lookup: the webhook list confirms destination, name and auth metadata, but cannot recover the signing secret or show custom request headers. Do not claim full verification or blindly create another destination."},
+      "credential_return_fields": [["webhook_secret"]],
+      "sensitive_request_fields": [["settings", "webhook_url"]]
     },
     "delete_agent_conversation_ticket_route": {
       "method": "DELETE",
@@ -3166,19 +3187,23 @@
     "delete_workspace_webhook_route": {
       "method": "DELETE",
       "path": "/v1/workspace/webhooks/{webhook_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/webhooks",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes an external delivery destination and may break dependent products. Check get_workspace_webhooks_route that the exact webhook ID is absent.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Removes an external delivery destination and may break dependent products. Check get_workspace_webhooks_route that the exact webhook ID is absent. No previously billed work is refunded.",
+      "timeout": "standard",
+      "follow_ups": ["get_workspace_webhooks_route"],
+      "retry_check": "get_workspace_webhooks_route"
     },
     "disable": {
       "method": "POST",
@@ -3752,19 +3777,23 @@
     "edit_workspace_webhook_route": {
       "method": "PATCH",
       "path": "/v1/workspace/webhooks/{webhook_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/webhooks",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Enables or disables delivery and replaces supplied event subscriptions, request headers and retry configuration. Both is_disabled and name are required; omitted events stay unchanged. The pin does not accept a replacement destination URL on edit.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Enables or disables delivery and replaces supplied event subscriptions, request headers and retry configuration. Both is_disabled and name are required; omitted events stay unchanged. The pin does not accept a replacement destination URL on edit.",
+      "timeout": "standard",
+      "follow_ups": ["get_workspace_webhooks_route"],
+      "retry_check": {"unavailable_reason": "No complete lookup: the webhook list confirms name and disabled state, and events with include_usages:true; it cannot show request headers or the retry setting. Do not claim full verification."}
     },
     "export_batch_call": {
       "method": "GET",
@@ -5744,19 +5773,23 @@
     "get_resource_metadata": {
       "method": "GET",
       "path": "/v1/workspace/resources/{resource_id}",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/resources",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Read existing resource metadata with the required resource_type query parameter. share_options contains principal names, IDs and types, not per-principal roles. Repeat the same read.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Read existing resource metadata with the required resource_type query parameter. share_options contains principal names, IDs and types, not per-principal roles. Repeat the same read.",
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_resource_metadata"
     },
     "get_secret_dependencies_route": {
       "method": "GET",
@@ -6496,19 +6529,23 @@
     "get_workspace_webhooks_route": {
       "method": "GET",
       "path": "/v1/workspace/webhooks",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/webhooks",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "read",
+      "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+      "effect_reason": "Read stored webhook configuration without contacting destinations. is_disabled is manual; is_auto_disabled reports provider disabling after repeated failures. Failure code and timestamp are separate status information. include_usages:true includes events and usage for admins. Signing secrets, request headers and retry settings are absent. Repeat the same read.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Read stored webhook configuration without contacting destinations. is_disabled is manual; is_auto_disabled reports provider disabling after repeated failures. Failure code and timestamp are separate status information. include_usages:true includes events and usage for admins. Signing secrets, request headers and retry settings are absent. Repeat the same read.",
+      "timeout": "standard",
+      "follow_ups": [],
+      "retry_check": "get_workspace_webhooks_route"
     },
     "handle_exotel_outbound_call": {
       "method": "POST",
@@ -8589,19 +8626,23 @@
     "share_resource_endpoint": {
       "method": "POST",
       "path": "/v1/workspace/resources/{resource_id}/share",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/resources",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "change",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Grants or overwrites a user's, group's or workspace API key's role, changing who can reach the resource. Submit exactly one of user_email, group_id or workspace_api_key_id; the last is an identifier, not the API key value. Requires admin access.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Grants or overwrites a user's, group's or workspace API key's role, changing who can reach the resource. Submit exactly one of user_email, group_id or workspace_api_key_id; the last is an identifier, not the API key value. Requires admin access.",
+      "timeout": "standard",
+      "follow_ups": ["get_resource_metadata"],
+      "retry_check": {"unavailable_reason": "No universal lookup verifies the assignment: metadata shows group-role mappings, not exact user or workspace API-key roles. Inspect visible group mappings only; do not claim full verification."}
     },
     "smart_search_conversation_messages_route": {
       "method": "GET",
@@ -10786,19 +10827,23 @@
     "unshare_resource_endpoint": {
       "method": "POST",
       "path": "/v1/workspace/resources/{resource_id}/unshare",
-      "status": "planned",
+      "status": "admitted",
       "milestone": 10,
       "family": "workspace/resources",
-      "profile": null,
-      "effects": null,
-      "effect_reason": null,
+      "profile": "delete",
+      "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+      "effect_reason": "Removes a user's, group's or workspace API key's access. The creator's access cannot be removed. Submit exactly one recipient; requires admin access.",
       "existing_coverage": {
         "status": "missing",
         "tools": [],
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": [],
+      "effect_note": "Removes a user's, group's or workspace API key's access. The creator's access cannot be removed. Submit exactly one recipient; requires admin access. No previously billed work is refunded.",
+      "timeout": "standard",
+      "follow_ups": ["get_resource_metadata"],
+      "retry_check": {"unavailable_reason": "No universal lookup verifies revocation: group removal can be inspected in role mappings, but absence from share_options does not prove a user's or key's access was removed. The creator's access cannot be removed."}
     },
     "update_agent_conversation_ticket_route": {
       "method": "PATCH",

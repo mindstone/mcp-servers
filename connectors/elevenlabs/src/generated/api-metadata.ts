@@ -57,9 +57,12 @@ export const apiFamilies = {
   "whatsapp-accounts": "whatsapp-accounts",
   "workspace/analytics": "workspace/analytics",
   "workspace/audit-logs": "workspace/audit-logs",
-  "workspace/auth-connections": "workspace/auth-connections"
+  "workspace/auth-connections": "workspace/auth-connections",
+  "workspace/resources": "workspace/resources",
+  "workspace/webhooks": "workspace/webhooks"
 } as const;
-export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts","workspace/analytics","workspace/audit-logs","workspace/auth-connections"] as const;
+export const approvedCredentialReturns: Readonly<Record<string, readonly (readonly string[])[]>> = {"create_public_template_run":[["outputs","*","content_url"],["outputs","*","content","*","**","content_url"]],"create_realtime_session":[["value"]],"create_workspace_webhook_route":[["webhook_secret"]],"dubbing_language_create":[["outputs","lossless_audio"],["outputs","subtitles"]],"dubbing_language_get":[["outputs","lossless_audio"],["outputs","subtitles"]],"dubbing_language_list":[["languages","*","outputs","lossless_audio"],["languages","*","outputs","subtitles"]],"get_agent_link_route":[["token","conversation_token"]],"get_asset":[["content_url"]],"get_conversation_signed_link":[["signed_url"]],"get_image_generation":[["content_url"]],"get_knowledge_base_source_file_url":[["signed_url"]],"get_livekit_token":[["token"]],"get_project_by_id":[["assets","*","signed_url"],["assets","*","signed_preview_url"],["assets","*","thumbnail_sheets","*","signed_cloud_url"],["assets","*","asset_preview_signed_url"],["assets","*","thumbnail_signed_url"]],"get_public_template_run":[["outputs","*","content_url"],["outputs","*","content","*","**","content_url"]],"get_signed_url_deprecated":[["signed_url"]],"get_single_use_token":[["token"]],"get_text_to_speech_generation":[["content_url"]],"get_video_generation":[["content_url"]],"list_assets":[["assets","*","content_url"]],"list_image_generations":[["generations","*","content_url"]],"list_public_template_runs":[["runs","*","outputs","*","content_url"],["runs","*","outputs","*","content","*","**","content_url"]],"list_text_to_speech_generations":[["generations","*","content_url"]],"list_video_generations":[["generations","*","content_url"]],"register_twilio_call":[[]],"upload_asset":[["content_url"]]};
+export const discoveryFamilies = ["agents","tools","knowledge","tests","analysis-items","analytics","assets","audio-effects","audio-isolation","audio-native","batch-calling","conversation","conversations","dubbing","environment-variables","environments","exotel","flows","forced-alignment","history","llm-usage","mcp-servers","models","music","phone-numbers","pronunciation-dictionaries","realtime","secrets","settings","shared-voices","similar-voices","single-use-token","sip-trunk","sound-generation","speech-engine","speech-to-text","studio","tags","text-to-dialogue","text-to-speech","text-to-voice","triage-tickets","twilio","usage","user","users","v2/phone-numbers","voice-changer","voices","voices-v2","whatsapp","whatsapp-accounts","workspace/analytics","workspace/audit-logs","workspace/auth-connections","workspace/resources","workspace/webhooks"] as const;
 export const profileOperationIds = {
   "read": [
     "compile_procedures_route",
@@ -153,6 +156,7 @@ export const profileOperationIds = {
     "get_pvc_sample_visual_waveform",
     "get_rag_index_overview",
     "get_rag_indexes",
+    "get_resource_metadata",
     "get_secret_dependencies_route",
     "get_secret_route",
     "get_secrets_route",
@@ -184,6 +188,7 @@ export const profileOperationIds = {
     "get_whatsapp_account",
     "get_workspace_audit_logs",
     "get_workspace_batch_calls",
+    "get_workspace_webhooks_route",
     "list_agent_conversation_tickets_route",
     "list_agent_deployments_route",
     "list_analysis_item_versions_route",
@@ -300,6 +305,7 @@ export const profileOperationIds = {
     "create_phone_number_route",
     "create_public_template_run",
     "create_speaker",
+    "create_workspace_webhook_route",
     "dub",
     "dubbing_target_transcript_regenerate",
     "dubbing_target_transcript_segment_update",
@@ -314,6 +320,7 @@ export const profileOperationIds = {
     "edit_pvc_voice_sample",
     "edit_voice",
     "edit_voice_settings",
+    "edit_workspace_webhook_route",
     "merge_agent_conversation_tickets_route",
     "merge_branch_into_target",
     "migrate_segments",
@@ -334,6 +341,7 @@ export const profileOperationIds = {
     "run_pvc_voice_training",
     "set_conversation_group_route",
     "set_rules",
+    "share_resource_endpoint",
     "start_speaker_separation",
     "submit_merge_proposal_review_route",
     "transcribe",
@@ -408,6 +416,7 @@ export const profileOperationIds = {
     "delete_user_voice_collection",
     "delete_voice",
     "delete_whatsapp_account",
+    "delete_workspace_webhook_route",
     "dubbing_language_delete",
     "dubbing_project_delete",
     "dubbing_transcript_segment_delete",
@@ -417,6 +426,7 @@ export const profileOperationIds = {
     "remove_procedure_route",
     "remove_voice_from_user_voice_collection",
     "unassign_conversation_tag_route",
+    "unshare_resource_endpoint",
     "update_environment_variable"
   ],
   "run_job": [

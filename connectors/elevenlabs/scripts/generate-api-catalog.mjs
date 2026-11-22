@@ -130,6 +130,11 @@ const stage108Profiles = {
   change: 'create_auth_connection update_auth_connection',
   delete: 'delete_auth_connection', read: 'list_auth_connections',
 };
+const stage109Profiles = {
+  read: 'get_resource_metadata get_workspace_webhooks_route',
+  change: 'share_resource_endpoint create_workspace_webhook_route edit_workspace_webhook_route',
+  delete: 'unshare_resource_endpoint delete_workspace_webhook_route',
+};
 const profileTuples = {
   read: [true, false, true, true], create: [false, false, false, true],
   change: [false, true, false, true], delete: [false, true, false, true],
@@ -143,7 +148,7 @@ export const PROFILE_TOOLS = Object.freeze({
   change: 'elevenlabs_change_resource', delete: 'elevenlabs_delete_resource',
   run_job: 'elevenlabs_run_job', tests: 'elevenlabs_run_agent_tests', query_knowledge: 'elevenlabs_query_knowledge', place_call: 'elevenlabs_place_call',
 });
-const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles, stage102Profiles, stage103Profiles, stage104Profiles, stage105Profiles, stage106Profiles, stage107Profiles, stage108Profiles].flatMap(groups => Object.entries(groups)
+const reviewedProfiles = Object.fromEntries([idsByProfile, stage7Profiles, stage75Profiles, stage76Profiles, stage81Profiles, stage82Profiles, stage83Profiles, stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles, stage102Profiles, stage103Profiles, stage104Profiles, stage105Profiles, stage106Profiles, stage107Profiles, stage108Profiles, stage109Profiles].flatMap(groups => Object.entries(groups)
   .flatMap(([profile, ids]) => ids.split(' ').map(id => [id, profile]))));
 
 const exclusionGroups = {
@@ -216,6 +221,7 @@ const operationSchema = z.object({
 }).strict();
 export const policySchema = z.object({
   schema_version: z.literal(1), source: sourceSchema,
+  credential_issuers: z.record(text),
   compatibility_overlay: z.object({
     schema_constraints: text, enum_snapshot_date: z.literal('2026-11-08'), enum_error_advice: text,
     forbidden_aliases: z.array(aliasSchema), alias_behavior: text,
@@ -263,7 +269,7 @@ export function matchesPrefix(path, prefix) {
 }
 function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
-  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage102Profiles, stage103Profiles, stage104Profiles, stage105Profiles, stage106Profiles, stage107Profiles, stage108Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
+  if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage102Profiles, stage103Profiles, stage104Profiles, stage105Profiles, stage106Profiles, stage107Profiles, stage108Profiles, stage109Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
@@ -320,6 +326,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
       if (row.reviewed_post_read !== undefined && (row.method !== 'POST' || row.profile !== 'read')) refuse('misplaced reviewed POST read', id);
       if (row.reviewed_patch_delete !== undefined && (row.method !== 'PATCH' || row.profile !== 'delete')) refuse('misplaced reviewed PATCH delete', id);
       if (row.manual_pagination !== undefined && (row.method !== 'GET' || row.profile !== 'read')) refuse('invalid manual pagination', id);
+      if (row.credential_return_fields && !policy.credential_issuers[id]) refuse('credential return requires declared issuer', id);
       if (credentialIssuers.includes(id) && !row.credential_return_fields) refuse('missing credential return fields', id);
       if (id === 'create_realtime_session' && ['sensitive_request_fields', 'sensitive_response_fields'].some(field => !row[field]?.some(path => isDeepStrictEqual(path, realtimeAuthorizationPath)))) refuse('missing realtime authorization protection', id);
       const retryCheck = policy.family_retry_checks[row.family]?.[row.profile === 'tests' ? 'tests' : 'read'];
@@ -348,12 +355,15 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 395, planned: 11, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 402, planned: 4, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
     requireEqual(policy.exclusion_groups[group].count, expected.count, `exclusion count ${group}`);
     requireEqual(rows.filter(row => row.exclusion_group === group).length, expected.count, `exclusion rows ${group}`);
+  }
+  for (const id of Object.keys(policy.credential_issuers)) {
+    if (policy.operations[id]?.status !== 'admitted' || !policy.operations[id].credential_return_fields) refuse('invalid credential issuer', id);
   }
   requireEqual(Object.entries(policy.operations).filter(([, row]) => row.status === 'admitted').map(([id]) => id).sort(), Object.keys(reviewedProfiles).sort(), 'exact admitted IDs');
   for (const [id, row] of Object.entries(policy.operations)) {
@@ -645,7 +655,7 @@ export function credentialRequestPaths(schema, defs, path = [], seen = new Set()
   for (const [key, child] of Object.entries(schema.properties ?? {})) {
     if (credentialIdentifiers.has(key)) continue;
     const operand = [...path, key];
-    if (mode === 'returns' ? /url$/i.test(key) && (key === 'signed_url' || /signed URL/i.test(child.description ?? '')) : isCredentialKey(key) && (mode !== 'response' || !schemaMetadataValue(child, defs))
+    if (mode === 'returns' ? /url$/i.test(key) && (/(?:^|_)signed(?:_|$)/i.test(key) || /signed URL/i.test(child.description ?? '')) : isCredentialKey(key) && (mode !== 'response' || !schemaMetadataValue(child, defs))
       || (key === 'value' && (/secret/i.test(component) || headerRecord))) {
       paths.push(['request_headers', 'request_meta'].includes(key) ? [...operand, '*'] : operand);
     } else if (mode !== 'returns' && /headers$/i.test(key) && !/variable name to header name/i.test(child.description ?? '')) {
@@ -848,6 +858,7 @@ export function renderMetadata(catalog) {
   const profileOperationIds = Object.fromEntries(Object.keys(PROFILE_TOOLS).map(profile => [profile, catalog.operations.filter(op => op.profile === profile).map(op => op.operation_id).sort()]));
   return '// Generated by scripts/generate-api-catalog.mjs; do not edit.\n'
     + `export const apiFamilies = ${JSON.stringify(families, null, 2)} as const;\n`
+    + `export const approvedCredentialReturns: Readonly<Record<string, readonly (readonly string[])[]>> = ${JSON.stringify(Object.fromEntries(catalog.operations.filter(op => op.credential_return_fields).map(op => [op.operation_id, op.credential_return_fields])))};\n`
     + `export const discoveryFamilies = ${JSON.stringify(discoveryFamilies)} as const;\n`
     + `export const profileOperationIds = ${JSON.stringify(profileOperationIds, null, 2)} as const;\n`;
 }

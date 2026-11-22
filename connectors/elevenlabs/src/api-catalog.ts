@@ -1,7 +1,7 @@
 import { audioUploadMediaTypes } from './tools/file-input.js';
 import { createRedactor } from './api-sensitive.js';
 import { z } from 'zod';
-import { apiFamilies, discoveryFamilies } from './generated/api-metadata.js';
+import { apiFamilies, discoveryFamilies, approvedCredentialReturns } from './generated/api-metadata.js';
 import { ElevenLabsError } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { binaryFileShape, multipartFieldEncoding } from './api-multipart-shapes.mjs';
@@ -251,6 +251,7 @@ export function validateApiCatalog(raw: unknown): ApiCatalog {
     if (op.reviewed_get_create !== undefined && (op.method !== 'GET' || op.profile !== 'create' || !reviewedGetCreate)) invalid('Misplaced reviewed GET create.');
     if (op.reviewed_patch_delete !== undefined && (op.method !== 'PATCH' || op.profile !== 'delete')) invalid('Misplaced reviewed PATCH delete.');
     if (op.reviewed_post_read !== undefined && (op.method !== 'POST' || op.profile !== 'read')) invalid('Misplaced reviewed POST read.');
+    if (op.credential_return_fields?.some(path => !approvedCredentialReturns[op.operation_id]?.some(approved => JSON.stringify(approved) === JSON.stringify(path)))) invalid('Credential return requires declared issuer or schema-declared signed media.');
     if (credentialIssuers.includes(op.operation_id) && !op.credential_return_fields) invalid('Missing credential return fields.');
     if (op.operation_id === 'create_realtime_session' && [op.sensitive_request_fields, op.sensitive_response_fields].some(paths => !paths?.some(path => JSON.stringify(path) === JSON.stringify(realtimeAuthorizationPath)))) invalid('Missing realtime authorization protection.');
     const queries = Object.keys(op.parameters.query.properties);

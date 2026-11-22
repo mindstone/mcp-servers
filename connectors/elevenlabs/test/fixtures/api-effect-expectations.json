@@ -2843,5 +2843,12 @@
   "edit_chapter": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
   "edit_project": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
   "edit_project_content": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
-  "update_pronunciation_dictionaries": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}}
+  "update_pronunciation_dictionaries": {"profile": "change", "method": "POST", "tool": "elevenlabs_change_resource", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}},
+  "get_resource_metadata": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"},
+  "share_resource_endpoint": {"profile": "change", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_change_resource"},
+  "unshare_resource_endpoint": {"profile": "delete", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_delete_resource"},
+  "create_workspace_webhook_route": {"profile": "change", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "POST", "tool": "elevenlabs_change_resource"},
+  "delete_workspace_webhook_route": {"profile": "delete", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "DELETE", "tool": "elevenlabs_delete_resource"},
+  "edit_workspace_webhook_route": {"profile": "change", "effects": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true}, "method": "PATCH", "tool": "elevenlabs_change_resource"},
+  "get_workspace_webhooks_route": {"profile": "read", "effects": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true}, "method": "GET", "tool": "elevenlabs_read_resource"}
 }

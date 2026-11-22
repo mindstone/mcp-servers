@@ -1,0 +1,273 @@
+[
+  {
+    "id": "share_resource_endpoint",
+    "case": "user",
+    "profile": "change",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/share",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "role": "viewer",
+        "user_email": "jane@example.com"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "user_email": "jane@example.com"
+    }
+  },
+  {
+    "id": "unshare_resource_endpoint",
+    "case": "user",
+    "profile": "delete",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/unshare",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "user_email": "jane@example.com"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "user_email": "jane@example.com"
+    }
+  },
+  {
+    "id": "share_resource_endpoint",
+    "case": "group",
+    "profile": "change",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/share",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "role": "viewer",
+        "group_id": "group_example"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "group_id": "group_example"
+    }
+  },
+  {
+    "id": "unshare_resource_endpoint",
+    "case": "group",
+    "profile": "delete",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/unshare",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "group_id": "group_example"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "group_id": "group_example"
+    }
+  },
+  {
+    "id": "share_resource_endpoint",
+    "case": "key",
+    "profile": "change",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/share",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "role": "viewer",
+        "workspace_api_key_id": "workspace_key_example"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "workspace_api_key_id": "workspace_key_example"
+    }
+  },
+  {
+    "id": "unshare_resource_endpoint",
+    "case": "key",
+    "profile": "delete",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example/unshare",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "body": {
+        "resource_type": "project",
+        "workspace_api_key_id": "workspace_key_example"
+      }
+    },
+    "response": {
+      "status": "ok",
+      "workspace_api_key_id": "workspace_key_example"
+    }
+  },
+  {
+    "id": "get_resource_metadata",
+    "case": "metadata",
+    "profile": "read",
+    "method": "GET",
+    "url": "https://api.elevenlabs.io/v1/workspace/resources/project_example?resource_type=project",
+    "args": {
+      "path_params": {
+        "resource_id": "project_example"
+      },
+      "query_params": {
+        "resource_type": "project"
+      }
+    },
+    "response": {
+      "resource_id": "project_example",
+      "resource_name": "Acme Guide",
+      "resource_type": "project",
+      "creator_user_id": "creator_example",
+      "anonymous_access_level_override": null,
+      "role_to_group_ids": {
+        "admin": [
+          "creator_example"
+        ],
+        "viewer": [
+          "group_example"
+        ]
+      },
+      "share_options": [
+        {
+          "name": "jane@example.com",
+          "id": "user_example",
+          "type": "user"
+        },
+        {
+          "name": "Acme Reviewers",
+          "id": "group_example",
+          "type": "group"
+        },
+        {
+          "name": "Acme Reader",
+          "id": "workspace_key_example",
+          "type": "key"
+        }
+      ]
+    }
+  },
+  {
+    "id": "create_workspace_webhook_route",
+    "case": "hmac",
+    "profile": "change",
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/workspace/webhooks",
+    "args": {
+      "body": {
+        "settings": {
+          "auth_type": "hmac",
+          "name": "Acme Results",
+          "webhook_url": "https://callback.example.com/events?access=canary-url-0001",
+          "request_headers": {
+            "X-Anything": "canary-header /+0001"
+          }
+        }
+      }
+    },
+    "response": {
+      "webhook_id": "webhook_example",
+      "webhook_secret": "canary-secret-0001"
+    }
+  },
+  {
+    "id": "edit_workspace_webhook_route",
+    "case": "edit",
+    "profile": "change",
+    "method": "PATCH",
+    "url": "https://api.elevenlabs.io/v1/workspace/webhooks/webhook_example",
+    "args": {
+      "path_params": {
+        "webhook_id": "webhook_example"
+      },
+      "body": {
+        "name": "Acme Renamed",
+        "is_disabled": false,
+        "retry_enabled": true,
+        "request_headers": {
+          "X-Anything": "canary-header /+0002"
+        },
+        "events": [
+          "flows",
+          "speech_to_text"
+        ]
+      }
+    },
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "delete_workspace_webhook_route",
+    "case": "delete",
+    "profile": "delete",
+    "method": "DELETE",
+    "url": "https://api.elevenlabs.io/v1/workspace/webhooks/webhook_example",
+    "args": {
+      "path_params": {
+        "webhook_id": "webhook_example"
+      }
+    },
+    "response": {
+      "status": "ok"
+    }
+  },
+  {
+    "id": "get_workspace_webhooks_route",
+    "case": "list",
+    "profile": "read",
+    "method": "GET",
+    "url": "https://api.elevenlabs.io/v1/workspace/webhooks?include_usages=true",
+    "args": {
+      "query_params": {
+        "include_usages": true
+      }
+    },
+    "response": {
+      "webhooks": [
+        {
+          "name": "Acme Results",
+          "webhook_id": "webhook_example",
+          "webhook_url": "https://callback.example.com/events?access=canary-stored-url-0001",
+          "is_disabled": false,
+          "is_auto_disabled": true,
+          "created_at_unix": 1800000000,
+          "auth_type": "hmac",
+          "events": [
+            "flows",
+            "speech_to_text"
+          ],
+          "usage": [
+            {
+              "usage_type": "Flows"
+            }
+          ],
+          "most_recent_failure_error_code": 503,
+          "most_recent_failure_timestamp": 1800000010
+        }
+      ]
+    }
+  }
+]

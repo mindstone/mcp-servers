@@ -180,7 +180,7 @@ it.each(cases)('$id refuses every other profile and all file bindings before dis
   expect(files.isError).toBe(true); expect(fetch).not.toHaveBeenCalled();
 });
 it('exempts only the exact credential locator names while literal header values remain secrets', () => {
-  expect([...credentialIdentifiers].sort()).toEqual(['auth_connection_id', 'credential_id', 'env_var_label', 'secret_id', 'variable_name']);
+  expect([...credentialIdentifiers].sort()).toEqual(['auth_connection_id', 'credential_id', 'env_var_label', 'secret_id', 'variable_name', 'workspace_api_key_id']);
   const secrets = sensitiveValues({ speech_engine: { request_headers: {
     'X-Dynamic': { variable_name: 'customer_region' }, 'X-Reference': { secret_id: 'secret_reference' },
     variable_name: 'literal-variable-header', secret_id: 'literal-secret-header',

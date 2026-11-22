@@ -19,7 +19,9 @@ The API tools also cover crawl jobs, RAG indexes, document summaries and chunks,
 
 The API tools also read speech and isolation history, stored transcripts, pronunciation dictionaries and millisecond usage metrics. History continuation and isolation search pages remain caller controlled; speech history cannot verify music or sound effects. History audio, multi-item ZIP downloads and PLS lexicons stream into workspace files without extraction or XML parsing. PLS arrives as binary `text/plain` and is saved with a `.txt` extension. Rule replacement replaces the whole set; addition and removal affect only named rules and return new version identifiers unchanged. Metadata and archive edits leave the version unchanged. Speech, dialogue, voice-conversion and isolation streams use the same file writer and progress as other binary results; they may consume credits, with no live playback or automatic retry. Deletion does not refund work already billed. The curated history, usage and dictionary tools keep their existing behavior.
 
-The API tools also read Studio projects, chapters, muted-track IDs and snapshot metadata. Existing chapter snapshots download as MPEG audio; project snapshot archives keep their declared ZIP bytes and stay zipped. Share IDs remain available, filenames come from the connector, and metadata URLs are returned without fetching them. Reads can be repeated explicitly; snapshot metadata does not verify a saved file. Project snapshot audio streaming remains unavailable pending a declared response format.
+Workspace sharing can grant, overwrite or remove a user's, group's or service-account key's access. Metadata shows group-role mappings and principal choices, not a complete per-user or key role map; the creator keeps access. Workspace webhooks register destinations for workspace data, list configuration, change delivery settings or remove destinations. HMAC creation returns its signing secret once: keep it for delivery verification; lists cannot recover it. Header values stay hidden, stored destination URLs remain wrapped data and are never fetched. Lists cannot verify custom headers or retries; edits require both a name and disabled state and cannot change the destination URL.
+
+The API tools also read Studio projects, chapters, muted-track IDs and snapshot metadata. Existing chapter snapshots download as MPEG audio; project snapshot archives keep their declared ZIP bytes and stay zipped. Share IDs remain available, filenames come from the connector, and metadata URLs, including signed asset previews and thumbnails, are returned without fetching them. Reads can be repeated explicitly; snapshot metadata does not verify a saved file. Project snapshot audio streaming remains unavailable pending a declared response format.
 
 Studio writes create projects and chapters, edit metadata or exact chapter content, replace project content and pronunciation dictionaries, convert output, and delete projects or chapters. Document uploads use the existing document file binding; source and callback URLs go only to the provider. Conversion spends credits: acceptance is not a finished snapshot. Read the named snapshot list and compare new output before repeating a conversion. Lost creation responses require inspecting candidates, not trusting a project name. Content replacement needs chapter detail reads; project metadata cannot verify uploaded bytes. Deletion does not refund billed work.
 
@@ -181,13 +183,13 @@ and create and run saved Tests for its responses and tool calls. Choose them whe
 you need to set up or maintain an agent that responds in a conversation. Use the
 audio tools below for direct speech generation, transcription and audio processing.
 
-The nine API tools cover **395 admitted operations in source** from the
+The nine API tools cover **402 admitted operations in source** from the
 2026-11-08 API snapshot. Here, admitted means supported by these nine tools in
 this connector snapshot; consult the package changelog for release history and find them with `elevenlabs_discover_api` or the coverage
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 395 admitted, 11 planned and 109 excluded, with reasons and
+515 operations: 402 admitted, 4 planned and 109 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.

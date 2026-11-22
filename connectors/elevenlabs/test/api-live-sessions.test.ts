@@ -28,7 +28,35 @@ afterEach(async () => { await pair.close(); setApiKey(''); vi.restoreAllMocks();
 describe('live session credential boundaries', () => {
   it('declares the five session effects and the single-use issuer without assumed follow-up reads', async () => {
     const catalog = await loadApiCatalog();
-    expect(catalog.operations.filter(op => op.credential_return_fields).map(op => op.operation_id).sort()).toEqual([...cases.map(wire => wire.id), 'get_single_use_token', 'dubbing_language_create', 'dubbing_language_get', 'dubbing_language_list', 'get_agent_link_route', 'get_knowledge_base_source_file_url', 'create_public_template_run', 'get_public_template_run', 'list_public_template_runs', 'get_asset', 'upload_asset', 'list_assets', 'get_image_generation', 'get_video_generation', 'get_text_to_speech_generation', 'list_image_generations', 'list_video_generations', 'list_text_to_speech_generations', 'get_project_by_id'].sort());
+    expect(Object.fromEntries(catalog.operations.filter(op => op.credential_return_fields)
+      .map(op => [op.operation_id, op.credential_return_fields]))).toEqual({
+      create_public_template_run: [['outputs', '*', 'content_url'], ['outputs', '*', 'content', '*', '**', 'content_url']],
+      create_realtime_session: [['value']],
+      create_workspace_webhook_route: [['webhook_secret']],
+      dubbing_language_create: [['outputs', 'lossless_audio'], ['outputs', 'subtitles']],
+      dubbing_language_get: [['outputs', 'lossless_audio'], ['outputs', 'subtitles']],
+      dubbing_language_list: [['languages', '*', 'outputs', 'lossless_audio'], ['languages', '*', 'outputs', 'subtitles']],
+      get_agent_link_route: [['token', 'conversation_token']],
+      get_asset: [['content_url']],
+      get_conversation_signed_link: [['signed_url']],
+      get_image_generation: [['content_url']],
+      get_knowledge_base_source_file_url: [['signed_url']],
+      get_livekit_token: [['token']],
+      get_project_by_id: [['assets', '*', 'signed_url'], ['assets', '*', 'signed_preview_url'],
+        ['assets', '*', 'thumbnail_sheets', '*', 'signed_cloud_url'], ['assets', '*', 'asset_preview_signed_url'], ['assets', '*', 'thumbnail_signed_url']],
+      get_public_template_run: [['outputs', '*', 'content_url'], ['outputs', '*', 'content', '*', '**', 'content_url']],
+      get_signed_url_deprecated: [['signed_url']],
+      get_single_use_token: [['token']],
+      get_text_to_speech_generation: [['content_url']],
+      get_video_generation: [['content_url']],
+      list_assets: [['assets', '*', 'content_url']],
+      list_image_generations: [['generations', '*', 'content_url']],
+      list_public_template_runs: [['runs', '*', 'outputs', '*', 'content_url'], ['runs', '*', 'outputs', '*', 'content', '*', '**', 'content_url']],
+      list_text_to_speech_generations: [['generations', '*', 'content_url']],
+      list_video_generations: [['generations', '*', 'content_url']],
+      register_twilio_call: [[]],
+      upload_asset: [['content_url']],
+    });
     for (const wire of cases) {
       const op = catalog.operations.find(op => op.operation_id === wire.id)!;
       expect(op.profile).toBe(wire.profile);

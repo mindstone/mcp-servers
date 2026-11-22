@@ -19,6 +19,11 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Share workspace resources with people, groups or service-account keys, replace their roles and remove access. The creator keeps the keys to the castle.
+- Create and manage workspace webhooks. The HMAC signing secret is shown once at creation; keep it for verifying deliveries. Lists show destinations and delivery status, with stored header secrets kept private.
+
+- Studio asset previews and thumbnail links are returned as signed links, without fetching them.
+
 - Manage integration authentication connections: store or update credentials, inspect metadata and dependencies, and remove connections. Stored secrets are never shown back; saving them does not prove they work.
 
 - Published-template inspection and execution, tabular analytics and enterprise audit reads through the API tools. Template runs can use another workspace's workflow and deliver outputs to configured webhooks; audit records keep their personal data. A run's headline status is no substitute for checking its outputs.

@@ -248,7 +248,8 @@ it('declares signed asset, generation, Studio and template media URLs centrally 
     get_asset: [['content_url']], upload_asset: [['content_url']], list_assets: [['assets', '*', 'content_url']],
     get_image_generation: [['content_url']], get_video_generation: [['content_url']], get_text_to_speech_generation: [['content_url']],
     list_image_generations: [['generations', '*', 'content_url']], list_video_generations: [['generations', '*', 'content_url']], list_text_to_speech_generations: [['generations', '*', 'content_url']],
-    get_project_by_id: [['assets', '*', 'signed_url']],
+    get_project_by_id: [['assets', '*', 'signed_url'], ['assets', '*', 'asset_preview_signed_url'],
+      ['assets', '*', 'signed_preview_url'], ['assets', '*', 'thumbnail_sheets', '*', 'signed_cloud_url'], ['assets', '*', 'thumbnail_signed_url']],
     create_public_template_run: [['outputs', '*', 'content_url']], get_public_template_run: [['outputs', '*', 'content_url']], list_public_template_runs: [['runs', '*', 'outputs', '*', 'content_url']],
   };
   const catalog = await loadApiCatalog();
@@ -274,6 +275,14 @@ it('declares signed asset, generation, Studio and template media URLs centrally 
     expect(payload(result)).toEqual(row.response);
   }
   expect(fetch).toHaveBeenCalledTimes(13);
+});
+
+it.each(['asset_preview_signed_url', 'signed_preview_url', 'thumbnail_signed_url', 'signed_cloud_url'])('declares %s while masking credential branches beneath it', async field => {
+  const op = await getOperation('get_project_by_id');
+  const path = ['assets', '*', ...(field === 'signed_cloud_url' ? ['thumbnail_sheets', '*'] : []), field];
+  expect(op.credential_return_fields).toContainEqual(path);
+  const response = plant(path, { token: 'canary-secret-0001' });
+  expect(JSON.stringify(createRedactor([]).redact(response, op))).not.toContain('canary-secret-0001');
 });
 
 it.each([true, false, 'exception'] as const)('redacts the current and newly submitted account keys in bridge %s replies', async outcome => {

@@ -12,7 +12,7 @@ describe('strict catalogue metadata and reference integrity', () => {
   it('checks the actual generated shape and shares the cached immutable catalogue', async () => {
     const catalog = await loadApiCatalog();
     expect(await loadApiCatalog()).toBe(catalog);
-    expect(catalog.operations).toHaveLength(395);
+    expect(catalog.operations).toHaveLength(402);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(await getOperation('get_agent_route')).toBe(await getOperation('get_agent_route'));
     expect(Object.values(API_TOOLS)).toEqual([
@@ -148,7 +148,7 @@ describe('discovery', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiBoundaryError);
       const failure = error as ApiBoundaryError;
-      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, assets, audio-effects, audio-isolation, audio-native, batch-calling, conversation, conversations, dubbing, environment-variables, environments, exotel, flows, forced-alignment, history, llm-usage, mcp-servers, models, music, phone-numbers, pronunciation-dictionaries, realtime, secrets, settings, shared-voices, similar-voices, single-use-token, sip-trunk, sound-generation, speech-engine, speech-to-text, studio, tags, text-to-dialogue, text-to-speech, text-to-voice, triage-tickets, twilio, usage, user, users, v2/phone-numbers, voice-changer, voices, voices-v2, whatsapp, whatsapp-accounts, workspace/analytics, workspace/audit-logs, workspace/auth-connections.' });
+      expect(failure.issues).toContainEqual({ path: ['family'], keyword: 'invalid_enum_value', message: 'Allowed values: agents, tools, knowledge, tests, analysis-items, analytics, assets, audio-effects, audio-isolation, audio-native, batch-calling, conversation, conversations, dubbing, environment-variables, environments, exotel, flows, forced-alignment, history, llm-usage, mcp-servers, models, music, phone-numbers, pronunciation-dictionaries, realtime, secrets, settings, shared-voices, similar-voices, single-use-token, sip-trunk, sound-generation, speech-engine, speech-to-text, studio, tags, text-to-dialogue, text-to-speech, text-to-voice, triage-tickets, twilio, usage, user, users, v2/phone-numbers, voice-changer, voices, voices-v2, whatsapp, whatsapp-accounts, workspace/analytics, workspace/audit-logs, workspace/auth-connections, workspace/resources, workspace/webhooks.' });
       expect(failure.resolution).toContain('elevenlabs_discover_api({query:"agents"})');
       expect(failure.resolution).toContain("previous discovery result's next_cursor");
       expect(failure.resolution).toContain('Replace create_agent_route in both examples with the operation_id you intend to use.');
