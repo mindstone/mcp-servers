@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-11-22
+
+### Changed
+
+- Keeps the 'Your assistant sent the original version' notice on an edited email card through Cancel and Reopen; Cancel no longer says 'Nothing sent' after the assistant sent the original.
+
 ## [0.5.7] - 2026-11-21
 
 ### Changed
