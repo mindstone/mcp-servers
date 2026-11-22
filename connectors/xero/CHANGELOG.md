@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `list-profit-and-loss` now applies the standard-layout and payments-only choices as asked. Before, the payments-only choice was sent as the standard-layout option, and payments-only was never applied.
+
 ### Security
 
 - Only error text this connector wrote reaches the AI. An unexpected error (a bug, a dropped connection, an SDK failure) is reported as a fixed sentence, so it can no longer quote internal details; Xero's own explanation of a refused request (a 4xx, such as a validation message) is still passed on; the body of a Xero server error (a 5xx) is not.
