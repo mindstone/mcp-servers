@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-22
+
+### Changed
+
+- Fix connection and sign-in logs showing your full email (now masked; error text and file paths may still show it), and draft Cancel saying 'Nothing sent' after your assistant sent the original
+
 ## [0.4.2] - 2026-11-21
 
 ### Changed
