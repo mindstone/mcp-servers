@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
+### Changed
+
+- Adds call and generation-job tools and 221 more API operations, accepts more audio file types, and masks credentials in every reply and error.
+
 ### Added
 
 - Manage integration authentication connections: store or update credentials, inspect metadata and dependencies, and remove connections. Stored secrets are never shown back; saving them does not prove they work.
