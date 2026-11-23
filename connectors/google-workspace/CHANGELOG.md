@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-23
+
+### Changed
+
+- The Gmail send tool now says up front that it replies in a thread, and quoting is advice, never a reason to hold back an approved reply.
+
 ## [0.5.8] - 2026-11-22
 
 ### Changed
