@@ -256,6 +256,7 @@ minting or call permission. Returned credentials stay usable in enveloped `data`
 the assistant receives them and the host may retain them in the conversation.
 Provider failure diagnostics omit raw detail for these operations. Echoed upstream
 realtime tool authorization remains write-only and is redacted. Issued credentials are masked by field name outside their declared response paths, but copies inside unrelated string fields are not caught.
+The same field-name masking applies to every operation's reply and to every named tool's reply (such as voice labels from `get_voice`): a secret-named field or signed link the provider sends beyond the documented shape is redacted, while secret references such as `secret_id` and fixed labels from the schema stay readable.
 The API key and submitted secrets are always redacted, even if an issued credential has the same value.
 Raw SIP messages are withheld from phone-number and conversation logs because they may contain stored header credentials.
 

@@ -1,6 +1,6 @@
 import { matchesFieldPath } from './api-field-paths.mjs';
 import { isRecord } from './api-catalog.js';
-import { credentialIdentifiers, isCredentialKey } from './api-credential-keys.mjs';
+import { credentialIdentifiers, isCredentialKey, isSignedLinkKey } from './api-credential-keys.mjs';
 import { escapeUntrustedTags, wrapUntrusted } from './untrusted-content.js';
 
 type SubmittedSecret = string | number | boolean;
@@ -70,6 +70,8 @@ interface ResponseRedaction {
   credential_return_fields?: readonly (readonly string[])[];
   reference?: ReferenceGuard;
   credentialReturn?: ReferenceGuard;
+  /** A value the schema fixes by enum or const is a label, not a secret, matching the generator's exemption. */
+  metadata?: ReferenceGuard;
 }
 
 /**
@@ -98,8 +100,10 @@ export function createRedactor(secrets: readonly SubmittedSecret[]): Redactor {
   function redact(value: unknown, response?: ResponseRedaction): unknown {
     if (response) {
       value = redactAtPaths(value, response.sensitive_response_fields ?? [], response.reference);
-      if (response.credential_return_fields) {
-        const returns = response.credential_return_fields;
+      {
+        // Every structured response is masked: undeclared credential-named extras reach the AI from any
+        // operation, and only declared issuers have returns to let through.
+        const returns = response.credential_return_fields ?? [];
         // The mask applies to parsed response keys, not JSON documents embedded in strings; only the submitted-secret and API-key matcher applies there.
         function mask(item: unknown, path: string[], sensitive = false): unknown {
           if (response?.reference?.(value, path)) return item;
@@ -107,10 +111,10 @@ export function createRedactor(secrets: readonly SubmittedSecret[]): Redactor {
           if (isRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) => {
             const childPath = [...path, key];
             const returnContainer = returns.some(declared => declared.length > childPath.length && childPath.every((part, index) => declared[index] === '*' || declared[index] === part));
-            return [key, mask(child, childPath, sensitive || ((isCredentialKey(key) || key === 'signed_url') && !returnContainer))];
+            return [key, mask(child, childPath, sensitive || ((isCredentialKey(key) || isSignedLinkKey(key)) && !returnContainer))];
           }));
           const issued = returns.some(declared => matchesFieldPath(declared, path) && (!declared.includes('**') || response?.credentialReturn?.(value, path)));
-          return sensitive && !issued && ['string', 'number', 'boolean'].includes(typeof item) ? '[REDACTED]' : item;
+          return sensitive && !issued && ['string', 'number', 'boolean'].includes(typeof item) && !response?.metadata?.(value, path) ? '[REDACTED]' : item;
         }
         // Only actual response paths bypass credential-key masking. Submitted-secret matching below
         // still applies everywhere, including issued values that equal (or contain) a submitted secret.

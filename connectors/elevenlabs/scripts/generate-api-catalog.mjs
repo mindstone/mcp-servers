@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { connectorHeaders, credentialIdentifiers, isCredentialKey } from '../src/api-credential-keys.mjs';
+import { connectorHeaders, credentialIdentifiers, isCredentialKey, isSignedLinkKey } from '../src/api-credential-keys.mjs';
 import { binaryFileShape, multipartFieldEncoding } from '../src/api-multipart-shapes.mjs';
 import { audioRepresentation, audioUploadMediaTypes, base64AudioSchema, multipartResponseSchema, isBinaryMedia } from '../src/api-media.mjs';
 
@@ -655,7 +655,7 @@ export function credentialRequestPaths(schema, defs, path = [], seen = new Set()
   for (const [key, child] of Object.entries(schema.properties ?? {})) {
     if (credentialIdentifiers.has(key)) continue;
     const operand = [...path, key];
-    if (mode === 'returns' ? /url$/i.test(key) && (/(?:^|_)signed(?:_|$)/i.test(key) || /signed URL/i.test(child.description ?? '')) : isCredentialKey(key) && (mode !== 'response' || !schemaMetadataValue(child, defs))
+    if (mode === 'returns' ? isSignedLinkKey(key) || (/url$/i.test(key) && /signed URL/i.test(child.description ?? '')) : isCredentialKey(key) && (mode !== 'response' || !schemaMetadataValue(child, defs))
       || (key === 'value' && (/secret/i.test(component) || headerRecord))) {
       paths.push(['request_headers', 'request_meta'].includes(key) ? [...operand, '*'] : operand);
     } else if (mode !== 'returns' && /headers$/i.test(key) && !/variable name to header name/i.test(child.description ?? '')) {

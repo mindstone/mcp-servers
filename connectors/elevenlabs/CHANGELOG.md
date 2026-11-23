@@ -17,6 +17,10 @@ are maintained manually as part of the PR review checklist.
 - Create and manage workspace webhooks. The HMAC signing secret is shown once at creation; keep it for verifying deliveries. Lists show destinations and delivery status, with stored header secrets kept private.
 - Studio asset previews and thumbnail links are returned as signed links, without fetching them.
 
+### Security
+
+- Masks secret-named fields and signed links that a reply carries beyond its documented shape, in every operation and every named tool (voice labels included) rather than only the operations that issue credentials. A fixed label such as a conversation's authorisation method stays readable.
+
 ## [0.8.0] - 2026-11-21
 
 ### Changed

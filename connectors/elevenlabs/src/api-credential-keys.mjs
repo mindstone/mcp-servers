@@ -9,3 +9,12 @@ const credentialKey = /(?:authorization|api_?key|(?:^|_)(?:token|secret|password
 export function isCredentialKey(key) {
   return !credentialIdentifiers.has(key) && !(key !== 'token' && continuationIdentifier.test(key)) && credentialKey.test(key);
 }
+
+/**
+ * A signed link is a bearer credential: masked unless the operation declares it as an intended return.
+ * The generator declares schema-declared ones by this same rule, so both sides agree.
+ * @param {string} key
+ */
+export function isSignedLinkKey(key) {
+  return /url$/i.test(key) && /(?:^|_)signed(?:_|$)/i.test(key);
+}

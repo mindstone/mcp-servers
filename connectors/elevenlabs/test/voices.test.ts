@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createElevenLabsHandlers } from './helpers/elevenlabs-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -50,6 +51,40 @@ describe('Voice tools', () => {
       expect(parsed.voices[0].name).toBe(
         '<untrusted-content source="elevenlabs:list_voices:name">Adam</untrusted-content>',
       );
+    });
+  });
+  describe('credential-named reply fields', () => {
+    const canary = 'canary-review-unissued-credential';
+    const voice = { voice_id: 'voice_example', name: 'Example', labels: { webhook_secret: canary, accent: 'English' } };
+
+    it('get_voice masks a credential-named label and keeps the others readable', async () => {
+      mswServer.use(http.get('https://api.elevenlabs.io/v1/voices/:voiceId', () => HttpResponse.json(voice)));
+      testClient = await createTestClient({ env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' } });
+
+      const result = await testClient.callTool('get_voice', { voice_id: 'voice_example' });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.text).not.toContain(canary);
+      const parsed = JSON.parse(result.text);
+      // Label keys and values are both enveloped as untrusted content.
+      const labels = Object.values(parsed.voice.labels) as string[];
+      expect(labels.some(value => value.includes('[REDACTED]'))).toBe(true);
+      expect(labels.some(value => value.includes('English'))).toBe(true);
+    });
+
+    it('list_voices masks a credential-named label and keeps the others readable', async () => {
+      mswServer.use(http.get('https://api.elevenlabs.io/v2/voices', () => HttpResponse.json({ voices: [voice], has_more: false })));
+      testClient = await createTestClient({ env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' } });
+
+      const result = await testClient.callTool('list_voices', {});
+
+      expect(result.isError).toBeFalsy();
+      expect(result.text).not.toContain(canary);
+      const parsed = JSON.parse(result.text);
+      // Label keys and values are both enveloped as untrusted content.
+      const labels = Object.values(parsed.voices[0].labels) as string[];
+      expect(labels.some(value => value.includes('[REDACTED]'))).toBe(true);
+      expect(labels.some(value => value.includes('English'))).toBe(true);
     });
   });
 });

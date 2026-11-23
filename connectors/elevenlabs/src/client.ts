@@ -217,7 +217,9 @@ export async function elevenLabsJson<T>(
 ): Promise<T> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   try {
-    return createRedactor([apiKey]).redact(await response.json()) as T;
+    // Named tools declare no credential returns, so the shared field-name mask hides every
+    // credential-named or signed-link field, including open maps such as voice labels.
+    return createRedactor([apiKey]).redact(await response.json(), {}) as T;
   } catch (error) {
     // A body-read abort or mid-stream timeout rejects here too — report it as
     // TIMEOUT so the remediation advice matches the actual fault, instead of

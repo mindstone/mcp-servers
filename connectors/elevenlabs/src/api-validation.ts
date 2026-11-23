@@ -151,7 +151,8 @@ export class ApiValidator {
   /** Preserve only closed, schema-valid reference alternatives at sensitive paths. */
   referenceGuard(schemas: readonly (JsonSchema | undefined)[]): ReferenceGuard { return this.schemaGuard(schemas, true); }
   credentialReturnGuard(schemas: readonly (JsonSchema | undefined)[]): ReferenceGuard { return this.schemaGuard(schemas, false); }
-  private schemaGuard(schemas: readonly (JsonSchema | undefined)[], references: boolean): ReferenceGuard {
+  metadataGuard(schemas: readonly (JsonSchema | undefined)[]): ReferenceGuard { return this.schemaGuard(schemas, false, true); }
+  private schemaGuard(schemas: readonly (JsonSchema | undefined)[], references: boolean, metadata = false): ReferenceGuard {
     const pointer = (key: string) => key.replace(/~/g, '~0').replace(/\//g, '~1');
     const visit = (schema: unknown, item: unknown, path: readonly string[], location = '', seen = new Set<string>()): boolean => {
       if (!isRecord(schema)) return false;
@@ -162,13 +163,14 @@ export class ApiValidator {
         const name = ref.slice('#/$defs/'.length).replace(/~1/g, '/').replace(/~0/g, '~');
         return visit(this.catalog.$defs[name], item, path, ref.slice(1), next);
       }
+      if (metadata && !path.length && ((Array.isArray(schema.enum) && schema.enum.includes(item)) || (Object.hasOwn(schema, 'const') && schema.const === item))) return true;
       const properties = isRecord(schema.properties) ? schema.properties : {};
       if (isRecord(item) && Object.entries(properties).some(([key, child]) => isRecord(child) && Object.hasOwn(child, 'const')
         && Object.hasOwn(item, key) && item[key] !== child.const)) return false;
       const keys = Object.keys(properties);
       const dynamic = isRecord(properties.type) && properties.type.const === 'dynamic';
       const reference = keys.length > 0 && (keys.every(key => credentialIdentifiers.has(key)) || dynamic);
-      if (!references && path.length === 1 && Object.hasOwn(properties, path[0]) && location && isRecord(item)
+      if (!metadata && !references && path.length === 1 && Object.hasOwn(properties, path[0]) && location && isRecord(item)
         && this.ajv.getSchema(`${this.graphId}#${location}`)?.(ownData(item))) return true;
       if (references && reference && location && isRecord(item) && Object.keys(item).every(key => Object.hasOwn(properties, key))
         && this.ajv.getSchema(`${this.graphId}#${location}`)?.(ownData(item))) return true;
@@ -334,7 +336,7 @@ export async function createSuccessReceipt(operationId: string, status: number, 
   const artifact = binary ? parseApiResponse(artifactSchema, parsedData, 'API artifact') : undefined;
   const response_contract = binary || descriptor.base64_audio?.sequence || descriptor.multipart ? 'matched' as const : validator.validateResponse(op, status, descriptor.media_type, parsedData, redactor);
   const pagination = binary ? {} : projectPagination(op, parsedData);
-  if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, { ...op, reference: validator.referenceGuard([descriptor.schema]), credentialReturn: validator.credentialReturnGuard([descriptor.schema]) });
+  if (!binary) parsedData = redactor.redact(fileData === undefined ? parsedData : fileData, { ...op, reference: validator.referenceGuard([descriptor.schema]), credentialReturn: validator.credentialReturnGuard([descriptor.schema]), metadata: validator.metadataGuard([descriptor.schema]) });
   const data = descriptor.media_type === null || binary ? null : wrapUntrusted(descriptor.media_type === 'application/json' || descriptor.multipart ? JSON.stringify(parsedData) : String(parsedData), `elevenlabs:api:${op.operation_id}`);
   const followUps = await Promise.all(op.follow_ups.map(id => getOperation(id)));
   const metadata = Object.keys(headers).length ? wrapUntrusted(JSON.stringify(redactor.redact({ response_headers: headers }, op)), `elevenlabs:api:${op.operation_id}`) : undefined;

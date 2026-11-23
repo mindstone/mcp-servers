@@ -13,6 +13,8 @@ import { unwrapUntrusted } from '../src/untrusted-content.js';
 import { compileCatalog, loadCoverageRosters, PINNED_SOURCE, validatePolicy } from '../scripts/generate-api-catalog.mjs';
 import policyInput from '../api/operation-policy.json' with { type: 'json' };
 import cases from './fixtures/api-workspace-access-wire-cases.json' with { type: 'json' };
+import conversationCases from './fixtures/api-conversations-wire-cases.json' with { type: 'json' };
+import familyCases from './fixtures/api-json-family-wire-cases.json' with { type: 'json' };
 
 const key = 'canary-connector-key-0001';
 const secret = 'canary-secret-0001';
@@ -127,6 +129,49 @@ it('returns the signing secret only at creation and preserves list state and aut
     fetch.mockResolvedValueOnce(Response.json(response));
     expect(data((await pair.callTool('elevenlabs_read_resource', input(list))).text)).toEqual(response);
   }
+});
+
+it('masks credential-named fields the provider adds to a stored webhook list, keeping identifiers and state readable', async () => {
+  const canaries = ['canary-unissued-signing-secret', 'canary-stored-header-secret'];
+  const response = { webhooks: [{ ...list.response.webhooks![0], webhook_secret: canaries[0], request_headers: { 'X-Custom': canaries[1] } }] };
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(response));
+  const result = await pair.callTool('elevenlabs_read_resource', input(list));
+  expect(result.isError, result.text).not.toBe(true);
+  expect(JSON.parse(result.text)).toMatchObject({ response_contract: 'matched' });
+  expect(data(result.text)).toEqual({ webhooks: [{ ...list.response.webhooks![0], webhook_secret: '[REDACTED]', request_headers: { 'X-Custom': '[REDACTED]' } }] });
+  absent(result.text, canaries);
+});
+
+it.each([edit, cases.find(row => row.id === 'share_resource_endpoint' && row.case === 'key')!])('$id masks an added signing secret in a change reply while identifiers stay readable', async row => {
+  const added = 'canary-change-reply-secret';
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ ...row.response, webhook_id: 'webhook_example', secret_id: 'secret_example', webhook_secret: added }));
+  const result = await pair.callTool('elevenlabs_change_resource', input(row));
+  expect(result.isError, result.text).not.toBe(true);
+  expect(data(result.text)).toEqual({ ...row.response, webhook_id: 'webhook_example', secret_id: 'secret_example', webhook_secret: '[REDACTED]' });
+  absent(result.text, [added]);
+});
+
+it('applies the same mask to other operations: extra credential and signed-link fields go, enum labels stay', async () => {
+  const history = conversationCases.find(row => row.id === 'get_conversation_history_route')!;
+  const extras = ['canary-provider-token', 'https://media.example.com/clip?signature=canary-signed-link'];
+  const response = { ...history.response, metadata: { ...history.response.metadata, authorization_method: 'signed_url', provider_token: extras[0] }, recording_signed_url: extras[1] };
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(response));
+  const result = await pair.callTool('elevenlabs_read_resource', { operation_id: history.id, ...history.args });
+  expect(result.isError, result.text).not.toBe(true);
+  expect(JSON.parse(result.text)).toMatchObject({ response_contract: 'matched' });
+  expect(data(result.text)).toEqual({ ...response, metadata: { ...response.metadata, provider_token: '[REDACTED]' }, recording_signed_url: '[REDACTED]' });
+  absent(result.text, extras);
+});
+
+it('keeps stored secret references readable inside a masked header map', async () => {
+  const settings = familyCases.find(row => row.id === 'get_settings_route')!;
+  const raw = 'canary-settings-header-value';
+  const webhook = { url: 'https://callback.example.com/start', request_headers: { 'X-Ref': { secret_id: 'secret_example' }, 'X-Raw': raw } };
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ conversation_initiation_client_data_webhook: webhook }));
+  const result = await pair.callTool('elevenlabs_read_resource', { operation_id: settings.id, ...settings.args });
+  expect(result.isError, result.text).not.toBe(true);
+  expect(data(result.text)).toEqual({ conversation_initiation_client_data_webhook: { ...webhook, request_headers: { 'X-Ref': { secret_id: 'secret_example' }, 'X-Raw': '[REDACTED]' } } });
+  absent(result.text, [raw]);
 });
 
 it('refuses missing metadata query and both missing required edit fields without dispatch', async () => {
