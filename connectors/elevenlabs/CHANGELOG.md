@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-23
+
+### Changed
+
+- Audio tools refuse an error reply sent in place of audio instead of saving it as the audio file
+
 ### Fixed
 
 - Speech, sound effects, music, dialogue, voice changing and audio isolation now refuse an error reply that ElevenLabs sends in place of audio: nothing is saved, and the tool reports what went wrong instead of handing over an unplayable file and calling it a success.
