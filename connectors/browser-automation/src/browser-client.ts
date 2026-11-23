@@ -76,12 +76,18 @@ let bundledBinary: string | null = null;
  */
 function resolveBundledBinary(): string {
   if (!bundledBinary) {
-    const bin = dirname(createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js'));
+    // The binary is in a platform package, an optional dependency of
+    // agent-browser, so it is resolved from agent-browser's own folder.
+    const fromAgentBrowser = createRequire(createRequire(import.meta.url).resolve('agent-browser/package.json'));
     const glibc = (process.report.getReport() as { header?: { glibcVersionRuntime?: string } }).header?.glibcVersionRuntime;
-    const os = process.platform === 'linux' && !glibc ? 'linux-musl' : process.platform;
-    // The package ships one Windows binary, which ARM Windows runs by emulation.
-    const name = process.platform === 'win32' ? 'agent-browser-win32-x64.exe' : `agent-browser-${os}-${process.arch}`;
-    bundledBinary = join(bin, name);
+    // There is one Windows binary, which ARM Windows runs by emulation.
+    const platformPackage = process.platform === 'win32'
+      ? '@agent-browser/cli-win32-x64-msvc'
+      : process.platform === 'linux'
+        ? `@agent-browser/cli-linux-${process.arch}-${glibc ? 'gnu' : 'musl'}`
+        : `@agent-browser/cli-${process.platform}-${process.arch}`;
+    const name = process.platform === 'win32' ? 'agent-browser.exe' : 'agent-browser';
+    bundledBinary = join(dirname(fromAgentBrowser.resolve(`${platformPackage}/package.json`)), 'bin', name);
     // Hosts may install without lifecycle scripts, which set this.
     if (process.platform !== 'win32') {
       try {

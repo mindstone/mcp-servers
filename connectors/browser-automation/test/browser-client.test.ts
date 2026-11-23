@@ -113,7 +113,7 @@ describe('execAgentBrowser — argument shape', () => {
 describe('execAgentBrowser — the bundled agent-browser', () => {
   const originalEnv = process.env.AGENT_BROWSER_SHOW_WINDOW;
   // Matches either path separator, so the assertion holds on any host OS.
-  const NATIVE_BINARY = /[\\/]node_modules[\\/]agent-browser[\\/]bin[\\/]agent-browser-[a-z0-9-]+(\.exe)?$/;
+  const NATIVE_BINARY = /[\\/]node_modules[\\/]@agent-browser[\\/]cli-[a-z0-9-]+[\\/]bin[\\/]agent-browser(\.exe)?$/;
 
   afterEach(() => {
     vi.restoreAllMocks();

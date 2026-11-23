@@ -21,6 +21,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Changed
 
+- Upgrade `agent-browser` from 0.33.2 to 0.43.0. A stuck tab no longer breaks the whole browser session, restoring a saved session no longer exposes its sign-ins to the page's scripts, and sessions are reused and relaunched more reliably. The native binary now comes from agent-browser's per-platform package, and switching tabs with `browser_tabs` sends the tab ids the tab list shows (`t1`, `t2`, ...), the only form the new CLI accepts.
+
 - `browser_tabs` now says it can also open and close tabs, and `browser_click` reminds the assistant to check with the user before a click that sends, deletes or pays.
 
 ## [0.2.6] - 2026-11-06

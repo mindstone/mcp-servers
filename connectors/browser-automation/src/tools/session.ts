@@ -17,7 +17,7 @@ export function registerSessionTools(server: McpServer): void {
       description: 'List open tabs, open a new tab, close the current tab, or switch to a tab by number.',
       inputSchema: {
         action: z.enum(['list', 'new', 'close']).optional().describe('Tab action. Omit to list tabs.'),
-        tab_number: z.number().optional().describe('Tab number to switch to (from the tab list). When given, action is ignored.'),
+        tab_number: z.number().int().positive().optional().describe('Tab to switch to: the number in its id in the tab list, e.g. 2 for [t2]. When given, action is ignored.'),
       },
       annotations: {
         readOnlyHint: false,
@@ -28,7 +28,8 @@ export function registerSessionTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       if (args.tab_number !== undefined) {
-        await execAgentBrowser(['tab', String(args.tab_number)]);
+        // The tab list names tabs t1, t2, ..., and the CLI takes only those ids.
+        await execAgentBrowser(['tab', `t${args.tab_number}`]);
         return JSON.stringify({ ok: true, message: `Switched to tab ${args.tab_number}` });
       }
       const cliAction = args.action ?? 'list';

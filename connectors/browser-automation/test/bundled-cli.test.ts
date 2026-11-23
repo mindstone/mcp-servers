@@ -12,7 +12,7 @@ it('runs the real bundled binary, whatever is on PATH', async () => {
 
     const { stdout } = await execAgentBrowser(['--version']);
 
-    expect(stdout).toContain('agent-browser 0.33.2');
+    expect(stdout).toContain('agent-browser 0.43.0');
   } finally {
     vi.unstubAllEnvs();
     rmdirSync(emptyPath);

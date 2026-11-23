@@ -98,7 +98,7 @@ This server uses the `agent-browser` CLI to control the browser.
 
 ### Installing agent-browser
 
-Nothing to do: installing this server installs `agent-browser` with it (pinned to 0.33.2), and the server always runs that copy's native binary directly. No shell and no `npx` are involved, so this works the same on Windows, macOS and Linux. An `agent-browser` on your PATH is not used.
+Nothing to do: installing this server installs `agent-browser` with it (pinned to 0.43.0), and the server always runs that copy's native binary directly. No shell and no `npx` are involved, so this works the same on Windows, macOS and Linux. An `agent-browser` on your PATH is not used.
 
 ## Configuration
 
