@@ -422,7 +422,7 @@ This tool does not send the email directly. It prepares the draft and launches t
     name: 'send_workspace_email',
     _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: false, when: [{ relativeTo: 'parent', selector: ['content'], test: 'falsy' }] }] } },
     category: 'Gmail/Messages',
-    description: `Send an email from a Gmail account.
+    description: `Send an email from a Gmail account: a new email, or a reply in an existing thread (pass reply_to_message_id).
 
 TIP: If you are drafting an email for the user to review before sending, prefer compose_workspace_email — it opens an inline editable form so the user can edit and send themselves.
 
@@ -447,7 +447,7 @@ REPLY TO EXISTING EMAIL:
 { "to": ["original-sender@example.com"], "subject": "Re: Meeting Tomorrow", "body": "Sounds good!\\n\\nOn Mon, Jan 6, 2026 at 10:00 AM, Alice <alice@example.com> wrote:\\n> Hey, are we still on for tomorrow's meeting?\\n> Let me know if the time works.", "reply_to_message_id": "18c5a2b3d4e5f6g7" }
 
 IMPORTANT: For replies, use reply_to_message_id with the Gmail message ID. This auto-sets threading headers.
-You MUST include quoted previous messages in the body — the threading headers alone do not include prior message content. Many recipients use non-threaded email clients or see the message in notifications without thread context. Use get_workspace_email_thread first to fetch the conversation, then include the prior messages with conventional quoting (plain text: "> " prefix with "On DATE, SENDER wrote:" header; HTML: <blockquote> tags).
+The threading headers do not add earlier messages to the body, so quote the message you are answering below your reply: many recipients read outside a threaded view. Use get_workspace_email_thread to fetch it, then quote it conventionally (plain text: "> " prefix with an "On DATE, SENDER wrote:" line; HTML: <blockquote> tags). Quoting is good practice, never a reason to hold back an approved reply: if you can't quote, send the reply anyway, and pass on any threading warning the tool returns.
 
 FORWARD AN EMAIL:
 { "to": ["bob@example.com"], "subject": "Fwd: Meeting Tomorrow", "body": "FYI see below.\\n\\n---------- Forwarded message ----------\\nFrom: Alice <alice@example.com>\\nDate: Mon, Jan 6, 2026\\nSubject: Meeting Tomorrow\\nTo: You <you@example.com>\\n\\nHey, are we still on for tomorrow's meeting?" }
