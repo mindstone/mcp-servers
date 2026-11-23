@@ -1,10 +1,30 @@
 import fs from 'node:fs/promises';
+import syncFs from 'node:fs';
+import { setTimeout as realDelay } from 'node:timers/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import { getHttpsServerOptions } from 'office-addin-dev-certs';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const sidecarSpawn = vi.hoisted(() => ({
+  override: undefined as undefined | ((spawn: typeof import('node:child_process').spawn) => ChildProcess),
+}));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...original,
+    spawn: ((...args: Parameters<typeof original.spawn>) => {
+      const script = args[1]?.[0];
+      if (typeof script === 'string' && /[\\/]sidecar[\\/]cli\.js$/.test(script) && sidecarSpawn.override) {
+        return sidecarSpawn.override(original.spawn);
+      }
+      return original.spawn(...args);
+    }) as typeof original.spawn,
+  };
+});
 
 type EnsureSidecarTestHooks = {
   ensureSidecar: () => Promise<{
@@ -75,7 +95,7 @@ async function startLivePid(): Promise<ChildProcess> {
 }
 
 async function stopChild(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
     cleanupChildren.delete(child);
     return;
   }
@@ -83,11 +103,12 @@ async function stopChild(child: ChildProcess): Promise<void> {
   await new Promise<void>((resolve) => {
     child.once('exit', () => resolve());
     child.kill('SIGTERM');
-    setTimeout(() => {
+    const escalation = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill('SIGKILL');
       }
     }, 250);
+    child.once('exit', () => clearTimeout(escalation));
   });
   cleanupChildren.delete(child);
 }
@@ -184,6 +205,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
+  sidecarSpawn.override = undefined;
   for (const server of Array.from(cleanupServers)) {
     await server.close();
     cleanupServers.delete(server);
@@ -409,5 +432,183 @@ describe('server.cjs ensureSidecar', () => {
 
     expect(spawnSpy).toHaveBeenCalledOnce();
     expect(sentinel.reason).toBe('pid-dead-under-lock');
+  });
+});
+
+describe('defaultSpawnSidecarAndWait (real default)', () => {
+  let child: ChildProcess | undefined;
+  let spawnError: Error | undefined;
+  let killSpy: ReturnType<typeof vi.spyOn>;
+
+  async function observeExit(): Promise<void> {
+    const deadline = Date.now() + 750;
+    while (child!.exitCode === null && child!.signalCode === null && Date.now() < deadline) {
+      await realDelay(10);
+    }
+  }
+
+  function fixture(mode: 'ready' | 'silent' | 'exit' | 'missing', port?: number): void {
+    sidecarSpawn.override = (realSpawn) => {
+      child = mode === 'missing'
+        ? realSpawn(path.join(stateDir, 'missing-node'), [], { stdio: 'pipe' })
+        : realSpawn(process.execPath, ['-e', mode === 'exit'
+          ? 'process.exit(3);'
+          : `${mode === 'ready' ? 'process.stdout.write("{\\"ready\\":true}\\n");' : ''}setInterval(() => {}, 1_000);`], {
+          stdio: 'pipe',
+          detached: false,
+        });
+      cleanupChildren.add(child);
+      killSpy = vi.spyOn(child, 'kill');
+      child.once('error', (error) => { spawnError = error; });
+      if (port !== undefined) {
+        syncFs.writeFileSync(stateFilePath, JSON.stringify({ port, token: 'fixture-token', pid: child.pid }));
+      }
+      return child;
+    };
+  }
+
+  async function expectDiagnosticsKept(): Promise<void> {
+    expect(JSON.parse(await fs.readFile(lastFailureFilePath, 'utf8')).code).toBe('port-in-use');
+  }
+
+  beforeEach(async () => {
+    child = undefined;
+    spawnError = undefined;
+    await fs.rm(stateFilePath, { force: true });
+    await writeLastFailureFile({ code: 'port-in-use' });
+    const existsSync = syncFs.existsSync;
+    vi.spyOn(syncFs, 'existsSync').mockImplementation((file) => (
+      /[\\/]sidecar[\\/]cli\.js$/.test(String(file)) || existsSync(file)
+    ));
+  });
+
+  it('keeps a successfully verified child alive beyond the 30 s startup deadline', async () => {
+    const health = await startHealthServer((_req, res) => { res.writeHead(200); res.end(); });
+    fixture('ready', health.port);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    await expect(hooks.ensureSidecar()).resolves.toMatchObject({ port: health.port, token: 'fixture-token' });
+    expect(child!.pid).toBeGreaterThan(0);
+    expect(() => process.kill(child!.pid!, 0)).not.toThrow();
+    await expect(fs.stat(lastFailureFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    await vi.advanceTimersByTimeAsync(31_000);
+    await observeExit();
+
+    expect(child!.signalCode).toBeNull();
+    expect(child!.exitCode).toBeNull();
+    expect(killSpy).not.toHaveBeenCalled();
+    expect(() => process.kill(child!.pid!, 0)).not.toThrow();
+  });
+
+  it('times out once without ready output and signals only its owned child', async () => {
+    const bystander = await startLivePid();
+    fixture('silent');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const rejection = expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar startup timed out after 30s');
+    const deadline = Date.now() + 2_000;
+    while ((!child || vi.getTimerCount() === 0) && Date.now() < deadline) await realDelay(10);
+    expect(child?.pid).toBeGreaterThan(0);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    await vi.advanceTimersByTimeAsync(31_000);
+    await rejection;
+    await observeExit();
+    expect(child!.signalCode).toBe('SIGTERM');
+    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(killSpy).toHaveBeenCalledTimes(1);
+    expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
+    await expectDiagnosticsKept();
+  });
+
+  it('preserves the original missing-executable error without a late kill attempt', async () => {
+    fixture('missing');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const error = await hooks.ensureSidecar().catch((caught: Error) => caught);
+    expect(error).toBe(spawnError);
+    expect(error).toMatchObject({ code: 'ENOENT' });
+    const callsAtRejection = killSpy.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(killSpy).toHaveBeenCalledTimes(callsAtRejection);
+    await expectDiagnosticsKept();
+  });
+
+  it('preserves a synchronous spawn exception when no child was assigned', async () => {
+    const error = new Error('fixture spawn failed synchronously');
+    sidecarSpawn.override = () => { throw error; };
+    await expect(hooks.ensureSidecar()).rejects.toBe(error);
+    await expectDiagnosticsKept();
+  });
+
+  it('rejects an early non-zero exit without a late kill attempt', async () => {
+    fixture('exit');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar exited during startup (code=3)');
+    expect(child!.exitCode).toBe(3);
+    const callsAtRejection = killSpy.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(killSpy).toHaveBeenCalledTimes(callsAtRejection);
+    await expectDiagnosticsKept();
+  });
+
+  it('kills its child after ready output without readable state and preserves the error', async () => {
+    const bystander = await startLivePid();
+    fixture('ready');
+    await expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar started but state file did not become readable in time.');
+    await observeExit();
+    expect(child!.signalCode).toBe('SIGTERM');
+    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+    expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
+    await expectDiagnosticsKept();
+  }, 12_000);
+
+  it.each(['non-200', 'refused'] as const)('kills its child after ready output with %s health and preserves the error', async (mode) => {
+    const health = await startHealthServer((_req, res) => { res.writeHead(500); res.end(); });
+    if (mode === 'refused') {
+      await health.close();
+      cleanupServers.delete(health);
+    }
+    const bystander = await startLivePid();
+    fixture('ready', health.port);
+    await expect(hooks.ensureSidecar()).rejects.toThrow(`Sidecar state file points to port ${health.port} but /health is not responding.`);
+    await observeExit();
+    expect(child!.signalCode).toBe('SIGTERM');
+    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+    expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
+    await expectDiagnosticsKept();
+  }, 12_000);
+
+  it('adopts healthy state discovered while waiting on another live lock holder', async () => {
+    const owner = await startLivePid();
+    const health = await startHealthServer((_req, res) => { res.writeHead(200); res.end(); });
+    const lockPath = path.join(stateDir, 'sidecar.lock');
+    await fs.writeFile(lockPath, String(owner.pid));
+    const unexpectedSpawn = vi.fn(() => { throw new Error('unexpected sidecar spawn'); });
+    sidecarSpawn.override = unexpectedSpawn;
+    try {
+      const pending = hooks.ensureSidecar();
+      await realDelay(50);
+      await writeStateFile({ port: health.port, token: 'lock-owner-token', pid: owner.pid! });
+      await expect(pending).resolves.toMatchObject({ token: 'lock-owner-token', pid: owner.pid });
+      expect(unexpectedSpawn).not.toHaveBeenCalled();
+      expect(() => process.kill(owner.pid!, 0)).not.toThrow();
+    } finally {
+      await fs.rm(lockPath, { force: true });
+    }
+  });
+
+  it('shares one lazy spawn between concurrent callers, then adopts it without signalling', async () => {
+    const health = await startHealthServer((_req, res) => { res.writeHead(200); res.end(); });
+    fixture('ready', health.port);
+    const spawnOverride = vi.fn(sidecarSpawn.override!);
+    sidecarSpawn.override = spawnOverride;
+    const [first, second] = await Promise.all([hooks.ensureSidecar(), hooks.ensureSidecar()]);
+    expect(first).toMatchObject({ pid: child!.pid });
+    expect(second).toEqual(first);
+    await expect(hooks.ensureSidecar()).resolves.toEqual(first);
+    expect(spawnOverride).toHaveBeenCalledTimes(1);
+    expect(killSpy).not.toHaveBeenCalled();
+    expect(() => process.kill(child!.pid!, 0)).not.toThrow();
   });
 });

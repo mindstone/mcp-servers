@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Keep the Office helper running after successful lazy startup instead of stopping it at 30 seconds, and stop failed starts promptly.
+
 - Managed startup can wait up to five minutes after the helper begins installing the add-in; Ready still follows the install results. Setup distinguishes blocked target access from other installation failures, with conditional recovery advice and no private paths. Status labels the last automatic setup diagnostic as historical, since later manual setup may have succeeded. The standalone lazy-start path retains its separate 30-second startup limit.
 
 - Share sequential manifest installation between setup and the helper, report target-access failures with operation/errno metadata, redact filesystem errors from setup guidance, and signal managed startup waits over IPC.

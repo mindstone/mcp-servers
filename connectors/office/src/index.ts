@@ -402,82 +402,86 @@ const defaultSpawnSidecarAndWait = async () => {
 
   fs.mkdirSync(stateDir, { recursive: true });
 
-  await new Promise((resolve, reject) => {
-    const env = {
-      ...process.env,
-      MCP_OFFICE_SIDECAR_STATE_DIR: stateDir,
-    };
-    const addinDir = resolveAddinDir();
-    if (addinDir) env.MCP_OFFICE_ADDIN_DIR = addinDir;
+  let child;
+  // Always clean up this activation's child, including failed state/health verification.
+  const killChildIfAlive = () => {
+    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
+  };
 
-    const child = spawn(process.execPath, [script], {
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: false,
+  try {
+    await new Promise((resolve, reject) => {
+      const env = {
+        ...process.env,
+        MCP_OFFICE_SIDECAR_STATE_DIR: stateDir,
+      };
+      const addinDir = resolveAddinDir();
+      if (addinDir) env.MCP_OFFICE_ADDIN_DIR = addinDir;
+
+      child = spawn(process.execPath, [script], {
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+      });
+
+      sidecarChild = child;
+      let stdoutBuf = '';
+      let settled = false;
+      let startupTimer;
+      const settle = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(startupTimer);
+        fn(arg);
+      };
+
+      child.stdout.on('data', (chunk) => {
+        stdoutBuf += chunk.toString();
+        if (stdoutBuf.includes('\n')) {
+          settle(resolve);
+        }
+      });
+
+      child.stderr.on('data', (chunk) => {
+        // Suppress cert-trust noise from office-addin-dev-certs
+        const msg = chunk.toString();
+        if (!msg.includes('trusted access') && !msg.includes('Certificate:') && !msg.includes('Key:')) {
+          process.stderr.write(chunk);
+        }
+      });
+
+      child.on('error', (err) => {
+        if (sidecarChild === child) sidecarChild = null;
+        settle(reject, err);
+      });
+
+      child.on('exit', (code) => {
+        if (sidecarChild === child) sidecarChild = null;
+        settle(reject, new Error(`Sidecar exited during startup (code=${code})`));
+      });
+
+      // Timeout after 30s
+      startupTimer = setTimeout(() => {
+        settle(reject, new Error('Sidecar startup timed out after 30s'));
+      }, 30_000);
     });
 
-    sidecarChild = child;
-    let stdoutBuf = '';
-    let settled = false;
-    const settle = (fn, arg) => {
-      if (settled) return;
-      settled = true;
-      fn(arg);
-    };
+    // Stdout '\n' means the CLI printed its ready JSON — state file IS written by now,
+    // but add a short bounded wait + HTTP ping to defend against any residual races.
+    const state = await waitForState(5_000);
+    if (!state) {
+      throw new Error('Sidecar started but state file did not become readable in time.');
+    }
 
-    child.stdout.on('data', (chunk) => {
-      stdoutBuf += chunk.toString();
-      if (stdoutBuf.includes('\n')) {
-        settle(resolve);
-      }
-    });
+    const reachable = await pingSidecar(state, 5_000);
+    if (!reachable) {
+      throw new Error(`Sidecar state file points to port ${state.port} but /health is not responding.`);
+    }
 
-    child.stderr.on('data', (chunk) => {
-      // Suppress cert-trust noise from office-addin-dev-certs
-      const msg = chunk.toString();
-      if (!msg.includes('trusted access') && !msg.includes('Certificate:') && !msg.includes('Key:')) {
-        process.stderr.write(chunk);
-      }
-    });
-
-    // Always kill the spawned child on startup failure or timeout. Without this,
-    // an orphan can keep running, write state, and bind to fallback ports — leaving
-    // the next ensureSidecar() call to potentially adopt a sidecar of unknown vintage.
-    const killChildIfAlive = () => {
-      try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
-    };
-
-    child.on('error', (err) => {
-      sidecarChild = null;
-      killChildIfAlive();
-      settle(reject, err);
-    });
-
-    child.on('exit', (code) => {
-      sidecarChild = null;
-      settle(reject, new Error(`Sidecar exited during startup (code=${code})`));
-    });
-
-    // Timeout after 30s
-    setTimeout(() => {
-      killChildIfAlive();
-      settle(reject, new Error('Sidecar startup timed out after 30s'));
-    }, 30_000);
-  });
-
-  // Stdout '\n' means the CLI printed its ready JSON — state file IS written by now,
-  // but add a short bounded wait + HTTP ping to defend against any residual races.
-  const state = await waitForState(5_000);
-  if (!state) {
-    throw new Error('Sidecar started but state file did not become readable in time.');
+    cleanupLastFailureFile();
+  } catch (err) {
+    killChildIfAlive();
+    throw err;
   }
-
-  const reachable = await pingSidecar(state, 5_000);
-  if (!reachable) {
-    throw new Error(`Sidecar state file points to port ${state.port} but /health is not responding.`);
-  }
-
-  cleanupLastFailureFile();
 };
 
 let spawnSidecarAndWait = defaultSpawnSidecarAndWait;

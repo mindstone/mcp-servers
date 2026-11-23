@@ -193,6 +193,8 @@ npx -y @mindstone/mcp-server-office
 node dist/index.js
 ```
 
+The 30-second lazy-start deadline ends at the helper's ready signal; once state and health checks succeed, that deadline no longer limits the helper's lifetime.
+
 ## Configuration
 
 ### Environment variables
