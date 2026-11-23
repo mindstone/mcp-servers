@@ -84,7 +84,7 @@ After a deprecation lands:
 
 1. Open a GitHub Security Advisory at https://github.com/mindstone/mcp-servers/security/advisories so consumers using `npm audit` see the CVE.
 2. Update the connector's `CHANGELOG.md` `### Security` section with the advisory ID.
-3. Notify the host (MindstoneRebel) team via the standard cross-repo dispatch — the catalog-sync workflow handles version pinning automatically once the host catalog is updated to point at the patched version.
+3. Pin the patched version in MindstoneRebel: `npm run mcp:release` opens the catalog-pin PR itself; after a hand publish, open a Rebel PR by hand updating `resources/connector-catalog.json`.
 
 ## Named Maintainers
 

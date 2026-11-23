@@ -100,19 +100,7 @@ npm publish --access=public --provenance=false
 
 `--access=public` is required for first-time publishes under the new scope. `--provenance=false` is explicit because no GitHub Actions OIDC token is being minted — manual publishes cannot produce provenance attestations.
 
-After the publish lands, fire the catalog-sync dispatch to Rebel:
-
-```sh
-cd /Users/<you>/development/mcp-servers
-MAIN_SHA=$(git rev-parse origin/main)
-gh api repos/mindstone/MindstoneRebel/dispatches \
-  --method POST \
-  -f event_type=connector-published \
-  -F "client_payload[connector]=<connector>" \
-  -F "client_payload[package]=@mindstone/mcp-server-<connector>" \
-  -F "client_payload[version]=<X.Y.Z>" \
-  -F "client_payload[sha]=$MAIN_SHA"
-```
+After the publish lands, open a Rebel PR by hand that adds or pins the new version in `resources/connector-catalog.json` (a normal `npm run mcp:release` opens this PR itself).
 
 Verify the publish landed cleanly:
 
