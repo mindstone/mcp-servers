@@ -263,6 +263,41 @@ export function extensionFromContentType(contentType: string | null | undefined)
 }
 
 /**
+ * Save an audio response to a workspace file, or refuse it when ElevenLabs sent
+ * JSON instead (an error body despite a 2xx status): nothing is written, and the
+ * flattened error is reported with the credential redactor applied.
+ */
+async function saveAudioResponse(
+  apiKey: string,
+  urlPath: string,
+  options: ElevenLabsFetchOptions,
+  failure: { prefix: string; code: string; resolution: string },
+  fileExtension?: string,
+): Promise<AudioResult> {
+  const redactor = options.redactor ?? createRedactor([apiKey]);
+  const response = await elevenLabsFetch(apiKey, urlPath, options);
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    const detail = await extractErrorDetail(response);
+    throw new ElevenLabsError(
+      detail
+        ? formatApiErrorMessage(failure.prefix, detail, redactor)
+        : `${failure.prefix}: API returned JSON instead of audio`,
+      failure.code,
+      detail ? getErrorResolution(422, detail, redactor) : failure.resolution,
+    );
+  }
+
+  const ext = fileExtension ?? extensionFromContentType(contentType);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
+  const filePath = writeWorkspaceArtifact(fileName, buffer);
+
+  return { filePath, sizeBytes: buffer.length };
+}
+
+/**
  * Make an API call that returns raw audio binary. Save to file and return path.
  */
 export async function elevenLabsAudio(
@@ -271,15 +306,11 @@ export async function elevenLabsAudio(
   options: ElevenLabsFetchOptions = {},
   fileExtension?: string,
 ): Promise<AudioResult> {
-  const response = await elevenLabsFetch(apiKey, urlPath, options);
-  const contentType = response.headers.get('content-type');
-  const ext = fileExtension ?? extensionFromContentType(contentType);
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
-  const filePath = writeWorkspaceArtifact(fileName, buffer);
-
-  return { filePath, sizeBytes: buffer.length };
+  return saveAudioResponse(apiKey, urlPath, options, {
+    prefix: 'Audio generation failed',
+    code: 'INVALID_RESPONSE',
+    resolution: 'Retry the request; if it persists, the ElevenLabs API response format may have changed.',
+  }, fileExtension);
 }
 
 /**
@@ -291,25 +322,9 @@ export async function elevenLabsBinaryDownload(
   urlPath: string,
   options: ElevenLabsFetchOptions = {},
 ): Promise<AudioResult> {
-  const redactor = options.redactor ?? createRedactor([apiKey]);
-  const response = await elevenLabsFetch(apiKey, urlPath, options);
-  const contentType = response.headers.get('content-type') ?? '';
-
-  if (contentType.includes('application/json')) {
-    const detail = await extractErrorDetail(response);
-    throw new ElevenLabsError(
-      detail
-        ? formatApiErrorMessage('Download failed', detail, redactor)
-        : 'Download failed: API returned JSON instead of audio',
-      'DOWNLOAD_FAILED',
-      detail ? getErrorResolution(422, detail, redactor) : 'Verify dubbing status with get_dubbing before downloading.',
-    );
-  }
-
-  const ext = extensionFromContentType(contentType);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
-  const filePath = writeWorkspaceArtifact(fileName, buffer);
-
-  return { filePath, sizeBytes: buffer.length };
+  return saveAudioResponse(apiKey, urlPath, options, {
+    prefix: 'Download failed',
+    code: 'DOWNLOAD_FAILED',
+    resolution: 'Verify dubbing status with get_dubbing before downloading.',
+  });
 }

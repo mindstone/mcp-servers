@@ -205,6 +205,50 @@ describe('Speech tools', () => {
     });
   });
 
+  describe('a JSON reply to an audio request', () => {
+    let workspaceDir: string;
+
+    afterEach(() => {
+      if (workspaceDir) fs.rmSync(workspaceDir, { recursive: true, force: true });
+    });
+
+    it.each([
+      ['generate_sound_effect', { prompt: 'Thunder rolling in the distance' }],
+      ['generate_speech', { text: 'Hello there', voice_id: 'voice-test-001' }],
+    ] as const)('%s refuses it, saves nothing and keeps the key out of the error', async (tool, args) => {
+      workspaceDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'eleven-json-audio-')));
+      // The JSON overrides come first: within one use() call the first matching handler wins.
+      mswServer.use(
+        http.post('https://api.elevenlabs.io/v1/sound-generation', () =>
+          HttpResponse.json(
+            { detail: { status: 'quota_exceeded', message: `Quota exceeded for key ${MOCK_API_KEY}` } },
+            { status: 200 },
+          ),
+        ),
+        http.post('https://api.elevenlabs.io/v1/text-to-speech/:voiceId', () =>
+          HttpResponse.json(
+            { detail: { status: 'quota_exceeded', message: `Quota exceeded for key ${MOCK_API_KEY}` } },
+            { status: 200 },
+          ),
+        ),
+        ...createElevenLabsHandlers(),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspaceDir },
+      });
+
+      const result = await testClient.callTool(tool, { ...args });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.code).toBe('INVALID_RESPONSE');
+      expect(parsed.error).toContain('Audio generation failed');
+      expect(parsed.error).toContain('quota_exceeded');
+      expect(result.text).not.toContain(MOCK_API_KEY);
+      expect(fs.readdirSync(workspaceDir, { recursive: true })).toEqual([]);
+    });
+  });
+
   describe('generate_speech — default voice fallback edge cases', () => {
     function premadeVoice(voice_id: string, name: string) {
       return { voice_id, name, category: 'premade' as const, description: '', labels: {}, preview_url: '' };

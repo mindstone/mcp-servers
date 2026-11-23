@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Speech, sound effects, music, dialogue, voice changing and audio isolation now refuse an error reply that ElevenLabs sends in place of audio: nothing is saved, and the tool reports what went wrong instead of handing over an unplayable file and calling it a success.
+
 ## [0.9.0] - 2026-11-23
 
 ### Changed
