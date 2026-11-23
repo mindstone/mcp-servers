@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-23
+
+### Changed
+
+- Workspace resource sharing and webhooks, signed Studio preview links, and credential-named fields masked in every operation's reply
+
 ### Added
 
 - Share workspace resources with people, groups or service-account keys, replace their roles and remove access. The creator keeps the keys to the castle.
