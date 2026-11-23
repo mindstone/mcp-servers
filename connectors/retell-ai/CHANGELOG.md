@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-23
+
+### Changed
+
+- Report a failed API key save as an error and read the host bridge through the hardened reader
+
 ### Fixed
 
 - `configure_retell_api_key` no longer says the key was configured when the host app failed to save it. A failed save is now reported as an error (`SAVE_FAILED`) and the key is not kept, and without a host app the reply says plainly that the key lasts for this session only.
