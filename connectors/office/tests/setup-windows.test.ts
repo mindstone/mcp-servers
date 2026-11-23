@@ -4,10 +4,11 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerWindowsAddin, unregisterWindowsAddin } from '../src/sidecar/manifest.js';
+import { installManifestsToWefFolders, MAC_WEF_PATHS, unregisterWindowsAddin } from '../src/sidecar/manifest.js';
 
-vi.mock('../src/sidecar/manifest.js', () => ({
-  registerWindowsAddin: vi.fn(),
+vi.mock('../src/sidecar/manifest.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/sidecar/manifest.js')>(),
+  installManifestsToWefFolders: vi.fn(),
   unregisterWindowsAddin: vi.fn(),
 }));
 
@@ -22,10 +23,12 @@ let stateDir: string;
 let stateFile: string;
 let client: Client | undefined;
 let testApi: ServerTestApi | undefined;
+let priorExitListeners: ReturnType<typeof process.listeners>;
 
 beforeEach(async () => {
   vi.resetModules();
-  vi.mocked(registerWindowsAddin).mockReset();
+  priorExitListeners = process.listeners('exit');
+  vi.mocked(installManifestsToWefFolders).mockReset();
   vi.mocked(unregisterWindowsAddin).mockReset();
   stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'office-setup-state-'));
   stateFile = path.join(stateDir, 'sidecar-state.json');
@@ -37,6 +40,9 @@ afterEach(async () => {
   testApi?.resetForTests();
   client = undefined;
   testApi = undefined;
+  for (const listener of process.listeners('exit')) {
+    if (!priorExitListeners.includes(listener)) process.removeListener('exit', listener);
+  }
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await fs.rm(stateDir, { recursive: true, force: true });
@@ -76,12 +82,14 @@ describe('Windows setup tool', () => {
     expect(result).toMatchObject({ ok: true, data: { summary: expect.stringContaining('all: removed') } });
     expect(result.data.summary).toContain(uninstallGuidance);
     expect(unregisterWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
-    expect(registerWindowsAddin).not.toHaveBeenCalled();
+    expect(installManifestsToWefFolders).not.toHaveBeenCalled();
   });
 
   it('removes an owned Mac manifest and gives the same keep-it-removed advice', async () => {
     const home = await fs.mkdtemp(path.join(os.tmpdir(), 'office-setup-home-'));
+    const originalPaths = { ...MAC_WEF_PATHS };
     try {
+      Object.assign(MAC_WEF_PATHS, Object.fromEntries(['word', 'excel', 'powerpoint'].map(app => [app, path.join(home, 'Library/Containers', `com.microsoft.${app === 'word' ? 'Word' : app === 'excel' ? 'Excel' : 'Powerpoint'}`, 'Data/Documents/wef')])));
       // The Mac manifest paths are computed from the home folder at import time.
       vi.spyOn(os, 'homedir').mockReturnValue(home);
       const wordWef = path.join(home, 'Library/Containers/com.microsoft.Word/Data/Documents/wef');
@@ -97,6 +105,7 @@ describe('Windows setup tool', () => {
       await expect(fs.stat(path.join(wordWef, 'manifest.xml'))).rejects.toMatchObject({ code: 'ENOENT' });
       expect(unregisterWindowsAddin).not.toHaveBeenCalled();
     } finally {
+      Object.assign(MAC_WEF_PATHS, originalPaths);
       await fs.rm(home, { recursive: true, force: true });
     }
   });
@@ -116,9 +125,9 @@ describe('Windows setup tool', () => {
     api.setSpawnSidecarAndWaitForTests(async () => {
       await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', pid: process.pid, manifestPath }));
     });
-    vi.mocked(registerWindowsAddin).mockImplementation(async () => ({
+    vi.mocked(installManifestsToWefFolders).mockResolvedValue([{
       app: 'all', path: manifestPath, status,
-    }));
+    }]);
 
     const result = await setup('install');
     expect(result.ok).toBe(true);
@@ -127,22 +136,36 @@ describe('Windows setup tool', () => {
     expect(text).toContain('Home tab');
     expect(text).toContain('Developer Add-ins');
     expect(text).toContain(`all: ${status}`);
-    expect(registerWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
+    expect(installManifestsToWefFolders).toHaveBeenCalledExactlyOnceWith(stateDir);
   });
 });
 
 
-it('does not report setup success when registration fails', async () => {
+it.each(['EACCES', 1, undefined] as const)('does not report setup success when registration fails (%s)', async code => {
   const api = await connectSetup();
   api.setSpawnSidecarAndWaitForTests(async () => {
     await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', pid: process.pid, manifestPath: path.join(stateDir, 'manifest.xml') }));
   });
-  vi.mocked(registerWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Registration denied' });
-  expect(await setup('install')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Registration denied') } });
+  const { registerWindowsAddin } = await vi.importActual<typeof import('../src/sidecar/manifest.js')>('../src/sidecar/manifest.js');
+  const runner = vi.fn().mockResolvedValueOnce({ stdout: '' }).mockRejectedValueOnce(Object.assign(new Error('Registration denied'), { code }));
+  const registration = await registerWindowsAddin(path.join(stateDir, 'manifest.xml'), runner);
+  vi.mocked(installManifestsToWefFolders).mockResolvedValue([registration]);
+  const result = await setup('install');
+  expect(result).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining(code ? `all: failed (${code})` : 'all: failed') } });
+  if (!code) expect(result.error.message).not.toContain('(');
+  expect(JSON.stringify(result)).not.toContain(stateDir);
+  expect(result.error.message).not.toContain('Next steps');
+  expect(result.error.message).not.toContain('Registration denied');
 });
 
-it('reports a failed registry delete on uninstall', async () => {
+it.each(['ENOENT', 5, undefined] as const)('reports a failed registry delete on uninstall (%s)', async code => {
   await connectSetup();
-  vi.mocked(unregisterWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Delete denied' });
-  expect(await setup('uninstall')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Delete denied') } });
+  const actual = await vi.importActual<typeof import('../src/sidecar/manifest.js')>('../src/sidecar/manifest.js');
+  const runner = vi.fn().mockResolvedValueOnce({ stdout: '' }).mockRejectedValueOnce(Object.assign(new Error('Delete denied'), { code }));
+  vi.mocked(unregisterWindowsAddin).mockResolvedValue(await actual.unregisterWindowsAddin(path.join(stateDir, 'manifest.xml'), runner));
+  const result = await setup('uninstall');
+  expect(result).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: code ? `all: failed (${code})` : 'all: failed' } });
+  expect(JSON.stringify(result)).not.toContain('Delete denied');
+  expect(JSON.stringify(result)).not.toContain('Next steps');
+  expect(JSON.stringify(result)).not.toContain(stateDir);
 });

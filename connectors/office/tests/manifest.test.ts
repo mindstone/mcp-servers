@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_SIDECAR_PORT,
   installManifestsToWefFolders,
+  registerWindowsAddin,
   SIDECAR_PORT_FALLBACKS,
   unregisterWindowsAddin,
   writeManifest,
@@ -199,7 +200,7 @@ describe('installManifestsToWefFolders (Windows)', () => {
     const manifestPath = await writeManifest(52100, stateDir);
     const registryRunner = vi.fn().mockRejectedValue(Object.assign(new Error('spawn reg ENOENT'), { code: 'ENOENT' }));
     const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
-    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT' }]);
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT', code: 'ENOENT' }]);
     expect(registryRunner).toHaveBeenCalledTimes(2);
   });
 
@@ -240,7 +241,7 @@ describe('unregisterWindowsAddin', () => {
   it('reports failed when reg.exe cannot be spawned', async () => {
     const runner = vi.fn().mockRejectedValue(Object.assign(new Error('spawn reg ENOENT'), { code: 'ENOENT' }));
     expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
-      app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT',
+      app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT', code: 'ENOENT',
     });
     expect(runner).toHaveBeenCalledTimes(1);
   });
@@ -250,13 +251,32 @@ describe('unregisterWindowsAddin', () => {
       .mockResolvedValueOnce({ stdout: '' })
       .mockRejectedValueOnce(Object.assign(new Error('Access is denied.'), { code: 1 }));
     expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
-      app: 'all', path: manifestPath, status: 'failed', error: 'Access is denied.',
+      app: 'all', path: manifestPath, status: 'failed', error: 'Access is denied.', code: '1',
     });
     expect(runner.mock.calls).toEqual([
       [registryCommand, ['query', registryKey, '/v', manifestPath]],
       [registryCommand, ['delete', registryKey, '/v', manifestPath, '/f']],
     ]);
   });
+});
+
+describe('actual Windows failure producers', () => {
+  it.each(['EACCES', 'ENOENT', 1, 5, 0, undefined, NaN, Infinity] as const)(
+    'preserves only safe diagnostic code %s from exec failure', async code => {
+      const manifestPath = String.raw`C:\Users\Test User\manifest.xml`;
+      const error = Object.assign(new Error(`Access denied: ${manifestPath}`), { code });
+      for (const producer of [registerWindowsAddin, unregisterWindowsAddin]) {
+        const exec = vi.fn().mockResolvedValueOnce({ stdout: '' }).mockRejectedValueOnce(error);
+        const result = await producer(manifestPath, exec);
+        expect(result.status).toBe('failed');
+        if (typeof code === 'string' || typeof code === 'number' && Number.isFinite(code)) {
+          expect(result).toHaveProperty('code', String(code));
+          expect(result.code).not.toContain(manifestPath);
+        } else expect(result).not.toHaveProperty('code');
+        expect(exec.mock.calls[1]?.[1][0]).toBe(producer === registerWindowsAddin ? 'add' : 'delete');
+      }
+    },
+  );
 });
 
 describe('installManifestsToWefFolders (unsupported platform)', () => {

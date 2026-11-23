@@ -7,7 +7,7 @@ const codes = [
   'UNSUPPORTED_OPERATION', 'INVALID_OPERATION', 'GENERAL_EXCEPTION', 'APP_NOT_CONNECTED',
   'ADDIN_DISCONNECTED', 'COMMAND_TIMEOUT', 'SIDECAR_NOT_RUNNING', 'SIDECAR_ERROR',
   'UNAUTHORIZED', 'INVALID_REQUEST', 'INTERNAL_ERROR', 'UNKNOWN_ERROR', 'CONNECTION_DISABLED',
-  'UNKNOWN_COMMAND', 'ADDIN_EXECUTION_ERROR',
+  'UNKNOWN_COMMAND', 'ADDIN_EXECUTION_ERROR', 'OFFICE_ACCESS_BLOCKED', 'OFFICE_SETUP_TIMEOUT',
 ];
 const retryable = new Set([
   'GENERAL_EXCEPTION', 'APP_NOT_CONNECTED', 'ADDIN_DISCONNECTED', 'COMMAND_TIMEOUT',
@@ -19,6 +19,12 @@ const format = (payload: unknown) => {
 };
 
 describe('one Office result shape', () => {
+  it.each([null, undefined, false])('keeps malformed local failures inside the existing result envelope (%s)', payload => {
+    const { mcp, result } = format(payload);
+    expect(mcp.isError).toBe(true);
+    expect(result).toMatchObject({ ok: false, error: { code: 'UNKNOWN_ERROR', retryable: false } });
+  });
+
   it.each(codes)('formats %s with catalog recovery', (code) => {
     const { mcp, result } = format(stampUntrustedSource({ success: false, code, error: 'Office detail' }, 'word', 'insert_text'));
     expect(mcp.isError).toBe(true);

@@ -5,7 +5,12 @@ export const WefInstallResultSchema = z.object({
   path: z.string().optional(),
   status: z.enum(['installed', 'unchanged', 'skipped', 'failed']),
   error: z.string().optional(),
-}).strict();
+  step: z.enum(['read-source', 'read-target', 'create-folder', 'write-target']).optional(),
+  code: z.string().optional(),
+}).strict().refine(
+  (result) => result.status === 'failed' || (result.step === undefined && result.code === undefined),
+  { message: 'Operation metadata is only valid on failed installs' },
+);
 
 export const ReadySignalSchema = z.object({
   type: z.literal('ready'),
@@ -18,3 +23,13 @@ export const ReadySignalSchema = z.object({
 
 export type WefInstallResult = z.infer<typeof WefInstallResultSchema>;
 export type ReadySignal = z.infer<typeof ReadySignalSchema>;
+
+// This signal travels only over the manager's Node IPC channel, never stdout.
+export const SetupWaitSignalSchema = z.object({
+  type: z.literal('office-setup-wait'),
+}).strict();
+
+export function isTargetAccessBlocked(result: WefInstallResult, platform: string): boolean {
+  return platform === 'darwin' && result.status === 'failed' && result.code === 'EPERM'
+    && (result.step === 'read-target' || result.step === 'create-folder' || result.step === 'write-target');
+}

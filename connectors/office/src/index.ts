@@ -14,7 +14,6 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
-import os from 'node:os';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +29,9 @@ import {
 import { z } from 'zod';
 import { readHardenedJsonFile } from './hardened-json-file.js';
 import { wrapUntrustedJsonValues } from './untrusted-content.js';
-import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
+import { installManifestsToWefFolders, MAC_WEF_PATHS, unregisterWindowsAddin } from './sidecar/manifest.js';
+import { isTargetAccessBlocked } from './shared/sidecar/readySignal.js';
+import { isOfficeInstallFailureCode } from './shared/sidecar/errorMessages.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -561,7 +562,7 @@ const ensureSidecar = async () => {
     }
 
     if (!lockHeld) {
-      throw new Error('Timed out waiting to acquire sidecar lock.');
+      throw Object.assign(new Error(officeStillStartingFix), { code: 'office-still-starting' });
     }
 
     try {
@@ -634,11 +635,7 @@ const requestSidecar = async (app, action, params) => {
   try {
     await ensureSidecar();
   } catch (err) {
-    return {
-      success: false,
-      error: `Failed to start Office sidecar: ${err.message}`,
-      code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING',
-    };
+    return sidecarStartFailure(err);
   }
 
   let state = loadSidecarState();
@@ -726,6 +723,14 @@ const readTools = {
   office: 'rebel_office_status',
 };
 const lookFirst = (app) => `Read the current state with ${readTools[app] || readTools.office}, correct the target or arguments, then try again.`;
+const officeStillStartingFix = "If the user's computer is showing a question about Mindstone Rebel, ask them to answer it before retrying.";
+const sidecarStartFailure = (err) => ({
+  success: false,
+  code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING',
+  error: err.code === 'office-still-starting' ? "Rebel's Office connection is still starting." : `Failed to start Office sidecar: ${err.message}`,
+  ...(err.code === 'office-still-starting' ? { setupStillStarting: true } : {}),
+});
+
 const ERROR_CATALOG = {
   PARTIAL: { retryable: false, fix: 'Inspect the created slide: find its id in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex for rebel_office_powerpoint_get_slide_content or rebel_office_powerpoint_delete_slide. Complete the missing work or delete the slide before retrying.' },
   INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
@@ -741,6 +746,8 @@ const ERROR_CATALOG = {
   COMMAND_TIMEOUT: { retryable: true, fix: 'Read the current state before repeating an edit; it may already have completed. Then try a smaller range or fewer items.' },
   CONNECTION_DISABLED: { retryable: false, fix: 'Ask whoever manages this Rebel installation to re-enable the Office connection before trying again.' },
   SIDECAR_NOT_RUNNING: { retryable: true, fix: 'Enable Microsoft Office in Settings → Connectors, then run rebel_office_setup and try again.' },
+  OFFICE_ACCESS_BLOCKED: { retryable: false, fix: "The user's computer blocked Rebel's setup in Word, Excel and PowerPoint. This setup lets Rebel work with their documents. Ask whether it asked about Mindstone Rebel accessing data from other apps. If they chose Don't Allow, ask them to quit and reopen Rebel and choose Allow if asked. Don't retry until they say they have. If it didn't ask again, tell them plainly Rebel can't fix this by itself yet." },
+  OFFICE_SETUP_TIMEOUT: { retryable: false, fix: "Rebel could not finish adding the connection that lets it work with the user's Office documents. If their computer is still asking whether Mindstone Rebel can access data from other apps, ask them to answer it, then choose Try again in the Microsoft Office connection settings in Rebel. If that action is unavailable, ask them to turn on or connect Microsoft Office there and wait for its connection status to update." },
   SIDECAR_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
   UNAUTHORIZED: { retryable: false, fix: 'Restart the Microsoft Office connector in Settings to restore its connection credentials.' },
   INVALID_REQUEST: { retryable: false, fix: lookFirst },
@@ -814,7 +821,8 @@ const toMcpResult = (result) => {
     const { retryable, fix } = ERROR_CATALOG[code];
     body = { ok: false, app, action, error: {
       code, message: wrap(typeof result?.error === 'string' ? result.error : 'Unknown error'),
-      fix: typeof fix === 'function' ? fix(app) : fix, retryable,
+      fix: result?.setupStillStarting === true && code === 'SIDECAR_NOT_RUNNING' ? officeStillStartingFix
+        : !source && action === 'status' && result?.setup ? result.setup.fix : (typeof fix === 'function' ? fix(app) : fix), retryable,
     } };
   } else {
     let data = result.data !== undefined ? result.data : result;
@@ -1021,48 +1029,6 @@ server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
 // Setup helpers — install or remove the Office add-in
 // ---------------------------------------------------------------------------
 
-/**
- * macOS wef folder paths where Office looks for sideloaded add-in manifests.
- * Dropping a manifest.xml here makes the add-in appear automatically in the app.
- */
-const MAC_WEF_PATHS = {
-  word: path.join(os.homedir(), 'Library/Containers/com.microsoft.Word/Data/Documents/wef'),
-  excel: path.join(os.homedir(), 'Library/Containers/com.microsoft.Excel/Data/Documents/wef'),
-  powerpoint: path.join(os.homedir(), 'Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef'),
-};
-
-/**
- * Copy the manifests into macOS wef folders or register the Windows manifest.
- * Creates the macOS wef directories if they don't exist.
- * Returns an array of {app, path, status} results.
- */
-const installManifest = async (manifestDir) => {
-  const results = [];
-
-  if (process.platform === 'darwin') {
-    // Each Office app gets its own per-app manifest (single host per file)
-    for (const [app, wefDir] of Object.entries(MAC_WEF_PATHS)) {
-      const perAppManifest = path.join(manifestDir, `manifest.${app}.xml`);
-      const fallbackManifest = path.join(manifestDir, 'manifest.xml');
-      const source = fs.existsSync(perAppManifest) ? perAppManifest : fallbackManifest;
-
-      try {
-        fs.mkdirSync(wefDir, { recursive: true });
-        fs.copyFileSync(source, path.join(wefDir, 'manifest.xml'));
-        results.push({ app, path: wefDir, status: 'installed' });
-      } catch (err) {
-        results.push({ app, path: wefDir, status: 'failed', error: err.message });
-      }
-    }
-  } else if (process.platform === 'win32') {
-    results.push(await registerWindowsAddin(path.join(manifestDir, 'manifest.xml')));
-  } else {
-    results.push({ app: 'all', path: 'unknown', status: 'skipped', error: `Unsupported platform: ${process.platform}` });
-  }
-
-  return results;
-};
-
 // The sidecar serves HTTPS on localhost with a trusted local certificate (see src/sidecar/index.ts).
 
 /**
@@ -1083,15 +1049,11 @@ const uninstallManifest = async () => {
           results.push({ app, status: 'not_installed' });
         }
       } catch (err) {
-        results.push({ app, status: 'failed', error: err.message });
+        results.push({ app, status: 'failed', ...(typeof err.code === 'string' ? { code: err.code } : {}) });
       }
     }
   } else if (process.platform === 'win32') {
-    if (!stateDir) {
-      results.push({ app: 'all', status: 'failed', error: "The Office sidecar state directory isn't configured." });
-    } else {
-      results.push(await unregisterWindowsAddin(path.join(stateDir, manifestName)));
-    }
+    results.push(await unregisterWindowsAddin(path.join(stateDir, manifestName)));
   }
 
   return results;
@@ -1100,6 +1062,16 @@ const uninstallManifest = async () => {
 // ---------------------------------------------------------------------------
 // Tool definitions
 // ---------------------------------------------------------------------------
+
+// Only operation identifiers leave setup: raw filesystem messages and paths stay local.
+const safeInstallDetails = (results) => results.map(({ app, status, step, code }) => ({
+  app, status, ...(step ? { step } : {}), ...(code ? { code } : {}),
+}));
+const installSummary = (results) => results.map(r =>
+  `${r.app}: ${r.status}${r.step || r.code ? ` (${[r.step, r.code].filter(Boolean).join(', ')})` : ''}`,
+).join('\n');
+const setupCode = (code) => code === 'office-access-blocked' ? 'OFFICE_ACCESS_BLOCKED'
+  : code === 'office-setup-timeout' ? 'OFFICE_SETUP_TIMEOUT' : 'SIDECAR_ERROR';
 
 const uninstallGuidance = 'To keep the add-in removed, turn off the Office connector; otherwise it is added again the next time the connector starts.';
 
@@ -1133,18 +1105,21 @@ registerTool(TOOL_NAMES.setup, {
 }, async (input) => {
   const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'setup'));
   if (input.action === 'uninstall') {
+    if (process.platform === 'win32' && !stateDir) {
+      return respond({ success: false, code: 'SIDECAR_ERROR', error: "all: failed (The Office sidecar state directory isn't configured.)" });
+    }
     const results = await uninstallManifest();
-    const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
+    const summary = installSummary(results);
     return respond(results.some(r => r.status === 'failed')
       ? { success: false, code: 'SIDECAR_ERROR', error: summary }
-      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal. ${uninstallGuidance}` } });
+      : { success: true, data: { results: safeInstallDetails(results), summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal. ${uninstallGuidance}` } });
   }
 
   // Lazy-start the sidecar so we have a manifest + state file to work with
   try {
     await ensureSidecar();
   } catch (err) {
-    return respond({ success: false, code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING', error: `Failed to start Office sidecar: ${err.message}` });
+    return respond(sidecarStartFailure(err));
   }
 
   const state = loadSidecarState();
@@ -1162,12 +1137,12 @@ registerTool(TOOL_NAMES.setup, {
     return respond({ success: false, code: 'SIDECAR_ERROR', error: 'Manifest directory not found. The sidecar may need to be restarted. Try disabling and re-enabling the Microsoft Office connector in Settings.' });
   }
 
-  const manifestResults = await installManifest(manifestDir);
+  const manifestResults = await installManifestsToWefFolders(manifestDir);
   const allInstalled = manifestResults.every(r => r.status === 'installed' || r.status === 'unchanged');
   steps.push({
     step: 'Install manifest',
     status: allInstalled ? 'done' : 'partial',
-    details: manifestResults,
+    details: safeInstallDetails(manifestResults),
   });
 
   // Build summary
@@ -1176,9 +1151,16 @@ registerTool(TOOL_NAMES.setup, {
     lines.push(`\n${step.step}: ${step.status}`);
     if (Array.isArray(step.details)) {
       for (const d of step.details) {
-        lines.push(`  ${d.app}: ${d.status}${d.error ? ` — ${d.error}` : ''}`);
+        lines.push(`  ${installSummary([d])}`);
       }
     }
+  }
+
+  if (!allInstalled) {
+    return respond({ success: false,
+      code: manifestResults.some(result => isTargetAccessBlocked(result, process.platform)) ? 'OFFICE_ACCESS_BLOCKED' : 'SIDECAR_ERROR',
+      error: lines.join('\n'),
+    });
   }
 
   lines.push('\nNext steps:');
@@ -1188,9 +1170,7 @@ registerTool(TOOL_NAMES.setup, {
   lines.push('3. Click it to open the connection panel');
   lines.push('4. Once it shows "Connected", you\'re ready to go!');
 
-  return respond(allInstalled
-    ? { success: true, data: { steps, summary: lines.join('\n') } }
-    : { success: false, code: 'SIDECAR_ERROR', error: lines.join('\n') });
+  return respond({ success: true, data: { steps, summary: lines.join('\n') } });
 });
 
 // 0b. rebel_office_status — Check connection status
@@ -1209,7 +1189,15 @@ registerTool(TOOL_NAMES.status, {
 }, async () => {
   const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'status'));
   const state = loadSidecarState();
+  const lastSetupCode = readLastEagerStartErrorCode(state);
+  const setup = isOfficeInstallFailureCode(lastSetupCode)
+    ? {
+      code: setupCode(lastSetupCode),
+      message: 'The last recorded automatic setup attempt did not finish; a later manual setup may have succeeded.',
+      fix: `If the add-in is still unavailable, use this guidance for that past automatic attempt; a later manual setup may have succeeded. ${ERROR_CATALOG[setupCode(lastSetupCode)].fix}`,
+    } : undefined;
   if (!state) {
+    if (setup) return respond({ success: false, code: setup.code, error: setup.message, setup });
     return respond({ success: false, code: 'SIDECAR_ERROR', error: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors; the add-in installs automatically." });
   }
   try {
@@ -1218,7 +1206,7 @@ registerTool(TOOL_NAMES.status, {
     if (health.success === false) return respond(health);
     const apps = Object.fromEntries(['word', 'excel', 'powerpoint'].map(app => [app, health.connected?.[app] === true ? 'connected' : 'not_connected']));
     return respond({ success: true, data: { sidecar: 'running', apps,
-      ...(Object.values(apps).every(status => status === 'not_connected') ? {
+      ...(setup ? { setup } : Object.values(apps).every(status => status === 'not_connected') ? {
         fix: 'Open Word, Excel or PowerPoint and click Rebel on the Home tab (first use on Windows: Add-ins → Developer Add-ins → Rebel).',
       } : {}),
     } });

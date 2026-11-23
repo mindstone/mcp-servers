@@ -49,7 +49,7 @@ try {
   console.error(`[office-sidecar-cli] Ready on https://127.0.0.1:${sidecar.port}`);
   if (sidecar.wefInstallResults && sidecar.wefInstallResults.length > 0) {
     const summary = sidecar.wefInstallResults
-      .map((r) => `${r.app}=${r.status}${r.error ? ` (${r.error})` : ''}`)
+      .map((r) => `${r.app}=${r.status}${r.status === 'failed' ? ` (${r.step ?? 'unknown'},${r.code ?? 'unknown'})` : ''}`)
       .join(', ');
     console.error(`[office-sidecar-cli] Manifest install: ${summary}`);
   }

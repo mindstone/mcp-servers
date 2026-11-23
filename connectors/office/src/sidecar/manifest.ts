@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import type { WefInstallResult as ReadyInstallResult } from '../shared/sidecar/readySignal.js';
 
 const MANIFEST_FILE = 'manifest.xml';
 
@@ -40,7 +41,7 @@ export const SIDECAR_PORT_FALLBACKS: readonly number[] = [
  * macOS per-app WEF folders where Office reads sideloaded manifests.
  * Each Office app on macOS is containerized with its own wef folder.
  */
-const MAC_WEF_PATHS: Record<OfficeHost, string> = {
+export const MAC_WEF_PATHS: Record<OfficeHost, string> = {
   word: path.join(os.homedir(), 'Library/Containers/com.microsoft.Word/Data/Documents/wef'),
   excel: path.join(os.homedir(), 'Library/Containers/com.microsoft.Excel/Data/Documents/wef'),
   powerpoint: path.join(os.homedir(), 'Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef'),
@@ -312,6 +313,8 @@ export interface WefInstallResult {
   path: string;
   status: WefInstallStatus;
   error?: string;
+  step?: ReadyInstallResult['step'];
+  code?: string;
 }
 
 const WINDOWS_ADDIN_KEY = String.raw`HKCU\Software\Microsoft\Office\16.0\WEF\Developer`;
@@ -321,6 +324,14 @@ const execRegistry = promisify(execFile);
 export type WindowsRegistryRunner = (command: string, args: string[]) => Promise<{ stdout: string }>;
 
 const runRegistry: WindowsRegistryRunner = (command, args) => execRegistry(command, args, { windowsHide: true });
+
+function registryFailureCode(error: unknown): { code?: string } {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = error.code;
+    if (typeof code === 'string' || typeof code === 'number' && Number.isFinite(code)) return { code: String(code) };
+  }
+  return {};
+}
 
 /** Register the combined manifest for all Windows Office apps. Result path is the manifest path. */
 export async function registerWindowsAddin(
@@ -342,7 +353,7 @@ export async function registerWindowsAddin(
     await runner(WINDOWS_REGISTRY_COMMAND, ['add', WINDOWS_ADDIN_KEY, '/v', manifestPath, '/t', 'REG_SZ', '/d', manifestPath, '/f']);
     return { app: 'all', path: manifestPath, status: 'installed' };
   } catch (err) {
-    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err) };
+    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err), ...registryFailureCode(err) };
   }
 }
 
@@ -350,7 +361,7 @@ export async function registerWindowsAddin(
 export async function unregisterWindowsAddin(
   manifestPath: string,
   runner: WindowsRegistryRunner = runRegistry,
-): Promise<{ app: 'all'; path: string; status: 'removed' | 'not_installed' | 'failed'; error?: string }> {
+): Promise<{ app: 'all'; path: string; status: 'removed' | 'not_installed' | 'failed'; error?: string; code?: string }> {
   try {
     try {
       await runner(WINDOWS_REGISTRY_COMMAND, ['query', WINDOWS_ADDIN_KEY, '/v', manifestPath]);
@@ -361,7 +372,7 @@ export async function unregisterWindowsAddin(
     await runner(WINDOWS_REGISTRY_COMMAND, ['delete', WINDOWS_ADDIN_KEY, '/v', manifestPath, '/f']);
     return { app: 'all', path: manifestPath, status: 'removed' };
   } catch (err) {
-    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err) };
+    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err), ...registryFailureCode(err) };
   }
 }
 
@@ -378,6 +389,20 @@ async function readFileOrNull(filePath: string): Promise<string | null> {
     }
     throw err;
   }
+}
+
+function failedInstall(
+  app: OfficeHost,
+  wefDir: string,
+  step: NonNullable<WefInstallResult['step']>,
+  error: unknown,
+): WefInstallResult {
+  return {
+    app, path: wefDir, status: 'failed', step,
+    error: error instanceof Error ? error.message : String(error),
+    ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      ? { code: error.code } : {}),
+  };
 }
 
 export interface WefInstallOverrides {
@@ -412,27 +437,35 @@ export async function installManifestsToWefFolders(
       const wefDir = overrides.macPaths?.[host] ?? MAC_WEF_PATHS[host];
       const target = path.join(wefDir, MANIFEST_FILE);
 
+      // A failed source read must never start a read of an Office container.
+      let newContent: string;
       try {
-        const [newContent, existingContent] = await Promise.all([
-          fs.readFile(source, 'utf8'),
-          readFileOrNull(target),
-        ]);
+        newContent = await fs.readFile(source, 'utf8');
+      } catch (error) {
+        results.push(failedInstall(host, wefDir, 'read-source', error));
+        continue;
+      }
 
-        if (existingContent === newContent) {
-          results.push({ app: host, path: wefDir, status: 'unchanged' });
-          continue;
-        }
+      let existingContent: string | null;
+      try {
+        existingContent = await readFileOrNull(target);
+      } catch (error) {
+        results.push(failedInstall(host, wefDir, 'read-target', error));
+        continue;
+      }
+      if (existingContent === newContent) {
+        results.push({ app: host, path: wefDir, status: 'unchanged' });
+        continue;
+      }
 
+      let step: NonNullable<WefInstallResult['step']> = 'create-folder';
+      try {
         await fs.mkdir(wefDir, { recursive: true });
+        step = 'write-target';
         await fs.writeFile(target, newContent, { encoding: 'utf8' });
         results.push({ app: host, path: wefDir, status: 'installed' });
-      } catch (err) {
-        results.push({
-          app: host,
-          path: wefDir,
-          status: 'failed',
-          error: err instanceof Error ? err.message : String(err),
-        });
+      } catch (error) {
+        results.push(failedInstall(host, wefDir, step, error));
       }
     }
     return results;

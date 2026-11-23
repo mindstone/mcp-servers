@@ -110,6 +110,10 @@ the installation to re-enable it; Settings cannot override that decision.
 - macOS or Windows with Microsoft 365 Word, Excel, and/or PowerPoint installed
 - A trusted local certificate for Office; your computer may ask you to approve it when it is first created or renewed
 
+On first setup, your computer may also ask whether Mindstone Rebel can access
+data from other apps. Choose Allow so Rebel can connect. If it asked and you chose Don't Allow, quit and reopen Rebel, then
+choose Allow if it asks again. Reopening may not bring the question back.
+
 On Windows, the helper registers the generated manifest under the current user's
 `HKCU\Software\Microsoft\Office\16.0\WEF\Developer` registry key so the add-in appears
 in Word, Excel and PowerPoint. This registration needs no administrator access.

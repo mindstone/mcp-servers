@@ -1109,6 +1109,7 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
     const shouldInstall = options.installToWefFolders ?? true;
     if (shouldInstall) {
       try {
+        if (process.platform === 'darwin') process.send?.({ type: 'office-setup-wait' });
         wefInstallResults = await installManifestsToWefFolders(stateDir);
         const failed = wefInstallResults.filter((r) => r.status === 'failed');
         if (failed.length > 0) {
@@ -1116,14 +1117,15 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
           // Log clearly so the problem is visible in logs.
           console.error(
             `[office-sidecar] Some WEF manifest installs failed: ${failed
-              .map((r) => `${r.app}=${r.error ?? 'unknown'}`)
+              .map((r) => `${r.app}=failed(${r.step ?? 'unknown'},${r.code ?? 'unknown'})`)
               .join('; ')}`,
           );
         }
       } catch (err) {
         // Unexpected error during install — log but don't crash the sidecar,
         // since the add-in may already be installed from a previous run.
-        console.error('[office-sidecar] Failed to install manifests to WEF folders:', err);
+        console.error('[office-sidecar] Failed to install manifests to WEF folders:',
+          err && typeof err === 'object' && 'code' in err ? err.code : 'unknown');
       }
     }
   }
