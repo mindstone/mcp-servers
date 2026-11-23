@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-11-23
+
+### Changed
+
+- Rate-limited and failing Slack reads now return within minutes with a retry time, instead of retrying for up to half an hour.
+
 ### Fixed
 
 - When Slack rate-limits a request, tools now answer at once with how many seconds to wait, instead of waiting silently and retrying. Other failures are retried at most twice by default with short, capped waits, so a call can no longer hang for many minutes.
