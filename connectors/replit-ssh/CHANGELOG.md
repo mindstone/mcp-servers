@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-23
+
+### Changed
+
+- Setup now creates its temporary SSH key and config files exclusively, refusing an existing file or link at the temporary name.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
