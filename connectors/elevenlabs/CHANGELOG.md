@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Share workspace resources with people, groups or service-account keys, replace their roles and remove access. The creator keeps the keys to the castle.
+- Create and manage workspace webhooks. The HMAC signing secret is shown once at creation; keep it for verifying deliveries. Lists show destinations and delivery status, with stored header secrets kept private.
+- Studio asset previews and thumbnail links are returned as signed links, without fetching them.
+
 ## [0.8.0] - 2026-11-21
 
 ### Changed
@@ -18,11 +24,6 @@ are maintained manually as part of the PR review checklist.
 - Adds call and generation-job tools and 221 more API operations, accepts more audio file types, and masks credentials in every reply and error.
 
 ### Added
-
-- Share workspace resources with people, groups or service-account keys, replace their roles and remove access. The creator keeps the keys to the castle.
-- Create and manage workspace webhooks. The HMAC signing secret is shown once at creation; keep it for verifying deliveries. Lists show destinations and delivery status, with stored header secrets kept private.
-
-- Studio asset previews and thumbnail links are returned as signed links, without fetching them.
 
 - Manage integration authentication connections: store or update credentials, inspect metadata and dependencies, and remove connections. Stored secrets are never shown back; saving them does not prove they work.
 
