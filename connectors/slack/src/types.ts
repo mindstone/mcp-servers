@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import type { RetryOptions } from '@slack/web-api';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -39,25 +40,38 @@ function resolveRequestTimeoutMs(): number {
 
 export const REQUEST_TIMEOUT_MS = resolveRequestTimeoutMs();
 
+const DEFAULT_MAX_RETRIES = 2;
+
 /**
- * Number of WebClient retries on transient failures. Defaults to 10 (the
- * `@slack/web-api` default of `tenRetriesInAboutThirtyMinutes`). Override
- * via `SLACK_MAX_RETRIES` — useful on cloud, where long retry budgets can
- * stack into multi-minute hangs, and in tests, where we want to assert the
- * cohort timeout fires without paying for 10 successive retries.
+ * Number of WebClient retries on transient failures. Defaults to 2; override
+ * via `SLACK_MAX_RETRIES` (0-20). Each attempt is bounded by
+ * `REQUEST_TIMEOUT_MS`, so the retry count is what bounds a failing call.
  */
 function resolveMaxRetries(): number {
   const raw = process.env.SLACK_MAX_RETRIES;
-  if (raw === undefined || raw === '') return 10;
+  if (raw === undefined || raw === '') return DEFAULT_MAX_RETRIES;
   const parsed = Number.parseInt(raw, 10);
   if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 20) return parsed;
   console.error(
-    `[slack-mcp] SLACK_MAX_RETRIES=${raw} is invalid; falling back to 10.`,
+    `[slack-mcp] SLACK_MAX_RETRIES=${raw} is invalid; falling back to ${DEFAULT_MAX_RETRIES}.`,
   );
-  return 10;
+  return DEFAULT_MAX_RETRIES;
 }
 
-export const MAX_RETRIES = resolveMaxRetries();
+const MAX_RETRIES = resolveMaxRetries();
+
+/**
+ * The WebClient retry policy. Every field is explicit: passing only
+ * `retries` leaves the backoff uncapped (1 s, 2 s, 4 s ... with no ceiling),
+ * so a few retries could still add minutes of silent waiting.
+ */
+export const SLACK_RETRY_CONFIG: RetryOptions = {
+  retries: MAX_RETRIES,
+  factor: 2,
+  minTimeout: 1_000,
+  maxTimeout: 5_000,
+  randomize: true,
+};
 
 /**
  * Default `next_step` per error code.
@@ -88,7 +102,7 @@ export const DEFAULT_NEXT_STEP_BY_CODE: Record<string, string> = {
   REFRESH_NO_CLIENT_CREDENTIALS: 'authenticate_slack_workspace',
   NOT_CONNECTED: 'authenticate_slack_workspace',
   MISSING_SCOPE: 'authenticate_slack_workspace',
-  RATE_LIMITED: 'retry_after_delay',
+  rate_limited: 'retry_after_delay',
   CHANNEL_LOOKUP_FAILED: 'list_slack_channels',
   CHANNEL_NOT_FOUND: 'list_slack_channels',
   USER_NOT_FOUND: 'lookup_user_by_email',

@@ -6,6 +6,7 @@ import {
   abortableSignal,
   assertSlackOwnedHttpsUrl,
   errorJson,
+  parseRetryAfterHeader,
   parseSlackFileId,
   withErrorHandling,
 } from '../utils.js';
@@ -147,6 +148,19 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
         downloadUrl,
         token,
       );
+      if (downloadResponse.status === 429) {
+        const retryAfter = parseRetryAfterHeader(downloadResponse.headers.get('retry-after'));
+        const resolution = `Slack rate-limited the request. Wait ${retryAfter ? `${retryAfter} seconds` : 'a moment'} and retry.`;
+        return errorJson({
+          error: 'Download failed: Slack rate-limited the request (HTTP 429)',
+          code: 'rate_limited',
+          resolution,
+          action_required: resolution,
+          next_step: 'retry_after_delay',
+          ...(retryAfter ? { retry_after_seconds: retryAfter } : {}),
+          file_id: fileId,
+        });
+      }
       if (!downloadResponse.ok) {
         return errorJson({
           error: `Download failed: Slack returned HTTP ${downloadResponse.status}`,

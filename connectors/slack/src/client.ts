@@ -11,7 +11,7 @@
 import { WebClient, type WebClientOptions } from '@slack/web-api';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ConnectorError, MAX_RETRIES, REQUEST_TIMEOUT_MS, type SlackWorkspace } from './types.js';
+import { ConnectorError, REQUEST_TIMEOUT_MS, SLACK_RETRY_CONFIG, type SlackWorkspace } from './types.js';
 import { SlackTokenProvider } from './tokenProvider.js';
 import { readRegularFileNoFollow, UnsafeTokenFileError } from './safeTokenFileRead.js';
 import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage, setSlackErrorTokenRole } from './utils.js';
@@ -134,13 +134,15 @@ const testFetchAdapter: ((config: any) => Promise<any>) | undefined =
  * conversations.list, etc.) without per-call plumbing — axios uses this as
  * its request `timeout` and aborts on expiry.
  *
- * `retryConfig.retries` is bounded by `MAX_RETRIES` so a single timeout
- * doesn't fan out into the 30-minute default p-retry budget — important for
- * cloud (we want fail-fast) and for tests (we assert behaviour quickly).
+ * `rejectRateLimitedCalls` makes an HTTP 429 fail at once with Slack's
+ * retry-after seconds instead of the library sleeping through Retry-After and
+ * retrying silently; the tool answer tells the caller how long to wait.
+ * `retryConfig` is the explicit capped policy in `SLACK_RETRY_CONFIG`.
  */
 const baseClientOpts: WebClientOptions = {
   timeout: REQUEST_TIMEOUT_MS,
-  retryConfig: { retries: MAX_RETRIES },
+  rejectRateLimitedCalls: true,
+  retryConfig: SLACK_RETRY_CONFIG,
 };
 
 const clientOpts: WebClientOptions = testFetchAdapter

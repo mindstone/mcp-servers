@@ -193,6 +193,7 @@ export function withErrorHandling<T>(
                 next_step: slackError.next_step,
                 needed: slackError.needed,
                 provided: slackError.provided,
+                retry_after_seconds: slackError.retry_after_seconds,
                 ...role,
               }),
             },
@@ -413,6 +414,7 @@ interface SlackErrorInfo {
   next_step: string;
   needed?: string;
   provided?: string;
+  retry_after_seconds?: number;
 }
 
 function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
@@ -420,20 +422,14 @@ function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
   const e = error as Record<string, unknown>;
   const data = e.data as Record<string, unknown> | undefined;
 
-  // Rate limit
-  if (
-    e.code === 'slack_webapi_rate_limited' ||
-    (data && data.error === 'ratelimited')
-  ) {
-    const retryAfter =
-      (typeof e.retryAfter === 'number' && e.retryAfter) ||
-      (data && typeof data.retry_after === 'number' && data.retry_after) ||
-      undefined;
+  if (isRateLimitError(error)) {
+    const retryAfter = rateLimitRetryAfterSeconds(error);
     const wait = retryAfter ? `${retryAfter} seconds` : 'a moment';
     return {
       code: 'rate_limited',
       resolution: `Slack rate-limited the request. Wait ${wait} and retry.`,
       next_step: 'retry_after_delay',
+      retry_after_seconds: retryAfter,
     };
   }
 
@@ -492,12 +488,47 @@ function extractSlackErrorCode(error: unknown): SlackErrorInfo | null {
   }
 }
 
-/** True if the error is a Slack rate-limit error. */
+/**
+ * True if the error is a Slack rate-limit error: the library's
+ * `slack_webapi_rate_limited_error` (HTTP 429, carries `retryAfter`) or a
+ * Slack response body with `error: 'ratelimited'`.
+ */
 export function isRateLimitError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const e = error as Record<string, unknown>;
   const data = e.data as Record<string, unknown> | undefined;
-  return e.code === 'slack_webapi_rate_limited' || data?.error === 'ratelimited';
+  return (
+    e.code === 'slack_webapi_rate_limited_error' ||
+    e.code === 'slack_webapi_rate_limited' ||
+    data?.error === 'ratelimited'
+  );
+}
+
+/** Seconds Slack asked us to wait, when the rate-limit error carries it. */
+export function rateLimitRetryAfterSeconds(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const e = error as Record<string, unknown>;
+  const data = e.data as Record<string, unknown> | undefined;
+  if (typeof e.retryAfter === 'number' && e.retryAfter > 0) return e.retryAfter;
+  if (typeof data?.retry_after === 'number' && data.retry_after > 0) return data.retry_after;
+  return undefined;
+}
+
+/**
+ * Seconds from an HTTP `Retry-After` header, given either as delay-seconds
+ * or as an HTTP date. Undefined when the header is absent or unreadable.
+ */
+export function parseRetryAfterHeader(value: string | null, now: number = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number.parseInt(trimmed, 10);
+    return seconds > 0 ? seconds : undefined;
+  }
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return undefined;
+  const seconds = Math.ceil((at - now) / 1000);
+  return seconds > 0 ? seconds : undefined;
 }
 
 /** True if the error is an `invalid_auth` / `token_expired` family error. */

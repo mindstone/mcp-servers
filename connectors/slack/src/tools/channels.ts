@@ -150,7 +150,7 @@ envelopes per AGENTS.md invariant #6 — do not strip them.`,
       const isConcise = args.response_format === 'concise';
       const rawMessages = result.messages || [];
       const userIds = extractUserIdsFromMessages(rawMessages);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const messages = rawMessages.map((msg) =>
         enrichMessageWithUserInfo({
           ts_slack: msg.ts,
@@ -175,6 +175,7 @@ envelopes per AGENTS.md invariant #6 — do not strip them.`,
       const hasMore = !!nextCursor;
       return JSON.stringify({
         ok: true,
+        ...userNames,
         messages,
         nextCursor,
         hasMore,
@@ -473,7 +474,7 @@ Returns most-recent-unread-first.`,
         const result = await userClient.conversations.history({ channel: channelId, limit });
         const rawMessages = result.messages || [];
         const userIds = extractUserIdsFromMessages(rawMessages);
-        await resolveUserIdsToCache(userIds);
+        const userNames = await resolveUserIdsToCache(userIds);
         const messages = rawMessages.map((msg) =>
           enrichMessageWithUserInfo({
             ts_slack: msg.ts,
@@ -487,6 +488,7 @@ Returns most-recent-unread-first.`,
         );
         return JSON.stringify({
           ok: true,
+          ...userNames,
           fallback: true,
           fallbackReason: `Unread position not available for this ${channelType}. Showing recent messages instead.`,
           messages,
@@ -502,7 +504,7 @@ Returns most-recent-unread-first.`,
       });
       const rawMessages = result.messages || [];
       const userIds = extractUserIdsFromMessages(rawMessages);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const messages = rawMessages.map((msg) =>
         enrichMessageWithUserInfo({
           ts_slack: msg.ts,
@@ -516,6 +518,7 @@ Returns most-recent-unread-first.`,
       );
       return JSON.stringify({
         ok: true,
+        ...userNames,
         unreadCount: messages.length,
         totalUnread: totalUnread ?? null,
         last_read_ts_slack: lastRead,

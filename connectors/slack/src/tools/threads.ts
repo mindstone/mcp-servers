@@ -66,7 +66,7 @@ use download_slack_file with files[].id to download an attachment.`,
       });
       const rawMessages = result.messages || [];
       const userIds = extractUserIdsFromMessages(rawMessages);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const messages = rawMessages.map((msg) =>
         enrichMessageWithUserInfo({
           ts_slack: msg.ts,
@@ -80,6 +80,7 @@ use download_slack_file with files[].id to download an attachment.`,
       const hasMore = !!nextCursor;
       return JSON.stringify({
         ok: true,
+        ...userNames,
         messages,
         nextCursor,
         hasMore,

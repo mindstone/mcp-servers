@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- When Slack rate-limits a request, tools now answer at once with how many seconds to wait, instead of waiting silently and retrying. Other failures are retried at most twice by default with short, capped waits, so a call can no longer hang for many minutes.
+- Reading messages no longer stalls looking up every author's name once Slack is rate-limiting or failing: the messages come back at once, unresolved people are shown by ID, and a note says why. A rate-limited file download also says how long to wait.
+
 ## [0.3.9] - 2026-11-21
 
 ### Changed

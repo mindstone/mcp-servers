@@ -8,7 +8,15 @@ import type { WebClient } from '@slack/web-api';
 import { z } from 'zod';
 import { getSlackReaderClient, getSlackUserClient, getTokenProvider, runSlackRead } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
-import { AUTH_REQUIRED_CODES, errorJson, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage } from './utils.js';
+import {
+  AUTH_REQUIRED_CODES,
+  errorJson,
+  isMissingScopeError,
+  isRateLimitError,
+  isTokenExpiredError,
+  rateLimitRetryAfterSeconds,
+  sanitizeErrorMessage,
+} from './utils.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /** Shape of a projected Slack file attachment surfaced in tool responses. */
@@ -56,7 +64,7 @@ interface CachedUser {
 }
 
 const userCache = new Map<string, CachedUser>();
-const userLookupInFlight = new Map<string, Promise<void>>();
+const userLookupInFlight = new Map<string, Promise<UserNamesNote>>();
 
 /**
  * Resolve the authenticated Slack user ID from the persisted token metadata,
@@ -124,36 +132,79 @@ export async function withOwnBotMentionsAsPlainText(text: string | undefined): P
 }
 
 /**
- * Resolve user IDs into the in-memory cache. Uses parallel `users.info`
- * calls (faster than `users.list` on large workspaces). Failures are
- * non-fatal — unresolved users simply don't get enriched.
+ * Fields a read tool adds to its answer when some author or mention names
+ * could not be looked up: `user_names_note` says so plainly, and
+ * `user_names_retry_after_seconds` carries Slack's Retry-After when known.
+ * Empty when every name was resolved (or failed only per user).
  */
-export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
+export interface UserNamesNote {
+  user_names_note?: string;
+  user_names_retry_after_seconds?: number;
+}
+
+/**
+ * True when a `users.info` failure says Slack itself is rate-limiting or
+ * failing (HTTP 429, 5xx, timeout, network), rather than answering about
+ * this one user (e.g. `user_not_found`). After such a failure, starting
+ * more look-ups only adds waiting.
+ */
+function isUpstreamFailure(error: unknown): boolean {
+  if (isRateLimitError(error)) return true;
+  const code = (error as { code?: unknown } | null)?.code;
+  return code !== 'slack_webapi_platform_error';
+}
+
+function userNamesNote(failure: { error: unknown } | undefined): UserNamesNote {
+  if (!failure) return {};
+  if (isRateLimitError(failure.error)) {
+    const retryAfter = rateLimitRetryAfterSeconds(failure.error);
+    return {
+      user_names_note:
+        'Some user names could not be looked up because Slack was rate-limiting requests; those users are shown by ID only.' +
+        (retryAfter ? ` Names should resolve again after about ${retryAfter} seconds.` : ''),
+      ...(retryAfter ? { user_names_retry_after_seconds: retryAfter } : {}),
+    };
+  }
+  return {
+    user_names_note:
+      'Some user names could not be looked up because Slack was failing to answer; those users are shown by ID only.',
+  };
+}
+
+/**
+ * Resolve user IDs into the in-memory cache. Uses parallel `users.info`
+ * calls in batches (faster than `users.list` on large workspaces). A failure
+ * for one user is non-fatal: that user simply isn't enriched. Once a batch
+ * shows Slack rate-limiting or failing, no further batches are started, and
+ * the returned note tells the model which happened, so the messages already
+ * fetched come back promptly with the unresolved users left as IDs.
+ */
+export async function resolveUserIdsToCache(userIds: string[]): Promise<UserNamesNote> {
   const uniqueIds = [...new Set(userIds.map((id) => id.toUpperCase()))];
-  const inFlightPromises: Promise<void>[] = [];
+  const inFlightPromises: Promise<UserNamesNote>[] = [];
   const unknownIds: string[] = [];
 
   for (const id of uniqueIds) {
     if (userCache.has(id)) continue;
     const inflight = userLookupInFlight.get(id);
     if (inflight) {
-      inFlightPromises.push(inflight);
+      if (!inFlightPromises.includes(inflight)) inFlightPromises.push(inflight);
     } else {
       unknownIds.push(id);
     }
   }
 
   if (unknownIds.length === 0) {
-    if (inFlightPromises.length > 0) await Promise.all(inFlightPromises);
-    return;
+    return firstNote(await Promise.all(inFlightPromises));
   }
 
-  const lookupPromise = (async () => {
+  const lookupPromise = (async (): Promise<UserNamesNote> => {
     try {
       const resolved = await runSlackRead(async (client) => {
         const users = new Map<string, CachedUser>();
+        let upstreamFailure: { error: unknown } | undefined;
         const CONCURRENCY = 5;
-        for (let i = 0; i < unknownIds.length; i += CONCURRENCY) {
+        for (let i = 0; i < unknownIds.length && !upstreamFailure; i += CONCURRENCY) {
           const batch = unknownIds.slice(i, i + CONCURRENCY);
           const outcomes = await Promise.allSettled(
             batch.map(id => client.users.info({ user: id })),
@@ -168,6 +219,7 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
                 { error: sanitizeErrorMessage(message) },
                 '[slack-mcp] User name enrichment unavailable.',
               );
+              if (!upstreamFailure && isUpstreamFailure(error)) upstreamFailure = { error };
               continue;
             }
             const result = outcome.value;
@@ -180,9 +232,10 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
             }
           }
         }
-        return users;
+        return { users, upstreamFailure };
       });
-      for (const [id, user] of resolved ?? []) userCache.set(id, user);
+      for (const [id, user] of resolved?.users ?? []) userCache.set(id, user);
+      return userNamesNote(resolved?.upstreamFailure);
     } catch (error) {
       if (error instanceof ConnectorError && !AUTH_REQUIRED_CODES.includes(error.code)) throw error;
       const message = error instanceof Error ? error.message : String(error);
@@ -190,6 +243,7 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
         { error: sanitizeErrorMessage(message) },
         '[slack-mcp] User name enrichment unavailable.',
       );
+      return {};
     }
   })();
 
@@ -197,12 +251,16 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
     userLookupInFlight.set(id, lookupPromise);
   }
   try {
-    await Promise.all([lookupPromise, ...inFlightPromises]);
+    return firstNote(await Promise.all([lookupPromise, ...inFlightPromises]));
   } finally {
     for (const id of unknownIds) {
       userLookupInFlight.delete(id);
     }
   }
+}
+
+function firstNote(notes: UserNamesNote[]): UserNamesNote {
+  return notes.find((n) => n.user_names_note) ?? {};
 }
 
 /** Extract user IDs from message bodies (author + `<@U…>` mentions). */
@@ -297,11 +355,14 @@ export async function resolveChannelId(channelInput: string): Promise<string> {
         `Use channel ID instead (e.g., C1234567890), or reconnect Slack to grant the required scope.`,
       );
     }
-    if (errMsg.includes('ratelimited')) {
+    if (isRateLimitError(error)) {
+      const retryAfter = rateLimitRetryAfterSeconds(error);
+      const wait = retryAfter ? `in ${retryAfter} seconds` : 'in a moment';
       throw new ConnectorError(
         `Rate limited while searching for channel.`,
-        'RATE_LIMITED',
-        `Try again in a moment, or use channel ID directly.`,
+        'rate_limited',
+        `Try again ${wait}, or use channel ID directly.`,
+        retryAfter ? { retry_after_seconds: retryAfter } : undefined,
       );
     }
     throw new ConnectorError(

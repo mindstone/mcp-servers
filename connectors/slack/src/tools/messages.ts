@@ -409,7 +409,7 @@ left out when to_me, after or before is set.`,
       const isConcise = args.response_format === 'concise';
       const rawMatches = result.matches;
       const userIds = extractUserIdsFromMessages(rawMatches);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const matches = rawMatches.map((m) =>
         enrichMessageWithUserInfo({
           ts_slack: m.ts,
@@ -422,6 +422,7 @@ left out when to_me, after or before is set.`,
       );
       return JSON.stringify({
         ok: true,
+        ...userNames,
         messages: matches,
         total: result.total,
         page: result.page,
@@ -493,7 +494,7 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
       const isConcise = args.response_format === 'concise';
       const rawMatches = result.matches;
       const userIds = extractUserIdsFromMessages(rawMatches);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const matches = rawMatches.map((m) =>
         enrichMessageWithUserInfo({
           ts_slack: m.ts,
@@ -506,6 +507,7 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
       );
       return JSON.stringify({
         ok: true,
+        ...userNames,
         messages: matches,
         total: result.total,
         page: result.page,
@@ -624,9 +626,10 @@ Prefers user token (broader read access to public channels).`,
         }
         const allMessages = includeThread ? threadContext : [found];
         const userIds = extractUserIdsFromMessages(allMessages);
-        await resolveUserIdsToCache(userIds);
+        const userNames = await resolveUserIdsToCache(userIds);
         return JSON.stringify({
           ok: true,
+          ...userNames,
           url: args.url,
           channel: parsed.channelId,
           is_thread_reply: true,
@@ -666,9 +669,10 @@ Prefers user token (broader read access to public channels).`,
         files: mapSlackFiles(message),
       };
       const userIds = extractUserIdsFromMessages([msgForEnrich]);
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       return JSON.stringify({
         ok: true,
+        ...userNames,
         url: args.url,
         channel: parsed.channelId,
         is_thread_reply: false,

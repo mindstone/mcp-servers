@@ -63,9 +63,9 @@
         },
         {
           "name": "SLACK_MAX_RETRIES",
-          "description": "WebClient retries on transient failures (0-20). Lower this on cloud to avoid stacking long retry budgets into multi-minute hangs.",
+          "description": "Retries on transient failures (0-20), with backoff capped at 5 s. Rate limits are not retried.",
           "isRequired": false,
-          "default": "10",
+          "default": "2",
           "format": "number"
         },
         {

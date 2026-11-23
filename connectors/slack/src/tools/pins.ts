@@ -75,10 +75,11 @@ in #channel" meeting-prep questions.`,
       const userIds = extractUserIdsFromMessages(
         items.map((i) => ({ user: i.user, text: undefined })),
       );
-      await resolveUserIdsToCache(userIds);
+      const userNames = await resolveUserIdsToCache(userIds);
       const enriched = items.map((i) => enrichMessageWithUserInfo(i));
       return JSON.stringify({
         ok: true,
+        ...userNames,
         channel: channelId,
         pins: enriched,
         count: enriched.length,
