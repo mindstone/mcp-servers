@@ -1,5 +1,5 @@
 /**
- * FOX-11926: after a person approved a reply, an agent searched for a reply tool,
+ * After a person approved a reply, an agent searched for a reply tool,
  * found only the draft tool, and held the reply back: send_workspace_email's
  * opening line said only "Send an email", and its reply section demanded the
  * whole earlier thread be quoted. Tool search and summaries read the opening
