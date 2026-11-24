@@ -33,11 +33,127 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   if (originalWindow === undefined) {
     Reflect.deleteProperty(globalObject, 'window');
   } else {
     globalObject.window = originalWindow;
   }
+});
+
+describe('Office replacement credential classification', () => {
+  it.each(['default', 'injected'] as const)('%s runtime reads the cell on every call and keeps one JSON retry', async (runtime) => {
+    setWindowToken('fictional-A');
+    const auth: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (isDiagLogUrl(String(input))) return new Response(null, { status: 204 });
+      auth.push(new Headers(init?.headers).get('authorization')!);
+      return auth.length === 1 ? jsonResponse({ success: true, conversationId: 'fictional', messages: [], turnStatus: 'idle' })
+        : jsonResponse({}, 401);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    vi.resetModules();
+    const client = await import('../src/addin/chatClient.js');
+    const options = { sidecarToken: 'hint-A', conversationId: 'fictional', ...(runtime === 'injected' ? { fetchImpl } : {}) };
+    expect((await client.getHistory(options)).ok).toBe(true);
+    setWindowToken('fictional-B');
+    const noteRejected = vi.fn(async () => 'unchanged' as const);
+    const result = await client.getHistory({ ...options, credential: { noteRejected } });
+    expect(result).toMatchObject({ ok: false, error: 'UNAUTHORIZED' });
+    expect(auth).toEqual(['Bearer fictional-A', 'Bearer fictional-B', 'Bearer fictional-B']);
+    expect(noteRejected.mock.calls).toEqual([['fictional-B'], ['fictional-B']]);
+  });
+
+  it.each(['create', 'message', 'history', 'focus'] as const)('maps unknown %s rejection through the shared typed mapper without a retry', async (route) => {
+    setWindowToken('fictional-A');
+    let calls = 0;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      if (isDiagLogUrl(String(input))) return new Response(null, { status: 204 });
+      calls += 1;
+      return jsonResponse({}, 401);
+    });
+    const client = await import('../src/addin/chatClient.js');
+    const noteRejected = vi.fn(async () => 'unknown' as const);
+    const config = { sidecarToken: 'hint-A', conversationId: 'fictional', fetchImpl, credential: { noteRejected } };
+    const result = route === 'create' ? await client.createConversation({ ...config, intent: 'chat', userText: 'Fictional request' })
+      : route === 'message' ? await client.sendMessage({ ...config, text: 'Fictional request' })
+        : route === 'history' ? await client.getHistory(config) : await client.focusInRebel(config);
+    expect(result).toMatchObject({ ok: false, error: 'NETWORK_ERROR' });
+    expect(calls).toBe(1);
+    expect(noteRejected).toHaveBeenCalledWith('fictional-A');
+  });
+
+  it.each(['changed', 'unchanged', 'unknown'] as const)('classifies stream-open %s with at most one GET reissue', async (outcome) => {
+    setWindowToken('fictional-A');
+    const auth: string[] = [];
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const requestHeaders: Headers[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (isDiagLogUrl(String(input))) return new Response(null, { status: 204 });
+      expect(String(input)).toBe('/intent/conversation/fictional/stream');
+      expect(init?.method).toBe('GET');
+      expect(init?.body).toBeUndefined();
+      auth.push(new Headers(init?.headers).get('authorization')!);
+      signals.push(init?.signal);
+      requestHeaders.push(new Headers(init?.headers));
+      return jsonResponse({}, 401); // Even the reissued GET cannot recurse.
+    });
+    const noteRejected = vi.fn(async () => {
+      if (outcome === 'changed') setWindowToken('fictional-B');
+      return outcome;
+    });
+    const errors: Error[] = [];
+    const reason = await waitForCloseReason((onClose) => connectStream({
+      sidecarToken: 'hint-A', conversationId: 'fictional', fetchImpl,
+      credential: { noteRejected }, onEvent: () => undefined,
+      onError: (error) => errors.push(error), onClose,
+    }));
+    expect(auth).toEqual(outcome === 'changed' ? ['Bearer fictional-A', 'Bearer fictional-B'] : ['Bearer fictional-A']);
+    expect(noteRejected).toHaveBeenCalledTimes(1);
+    if (signals.length === 2) expect(signals[1]).toBe(signals[0]);
+    if (outcome === 'changed') {
+      expect(requestHeaders[0]!.get('x-rebel-diag-id')).toMatch(__diagRequestIdRegex);
+      expect(Object.fromEntries(requestHeaders[1]!.entries())).toEqual({
+        ...Object.fromEntries(requestHeaders[0]!.entries()), authorization: 'Bearer fictional-B',
+      });
+    }
+    expect(reason).toBe('error');
+    expect(errors[0]?.message).toMatch(outcome === 'unknown' ? /^NETWORK_ERROR:/ : /^UNAUTHORIZED:/);
+  });
+
+  it('does not reissue a cancelled stream after its shared refresh finishes', async () => {
+    setWindowToken('fictional-A');
+    let release!: (value: 'changed') => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    const noteRejected = vi.fn(() => { started(); return new Promise<'changed'>((resolve) => { release = resolve; }); });
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
+    const closes: string[] = [];
+    const connection = connectStream({
+      sidecarToken: 'hint-A', conversationId: 'fictional', fetchImpl, credential: { noteRejected },
+      onEvent: () => undefined, onClose: (reason) => closes.push(reason ?? ''),
+    });
+    await entered;
+    connection.close();
+    setWindowToken('fictional-B');
+    release('changed');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchImpl.mock.calls.filter((call) => !isDiagLogUrl(String(call[0])))).toHaveLength(1);
+    expect(closes).toEqual(['aborted']);
+  });
+
+  it('keeps a genuine SSE revoked terminal without any refresh', async () => {
+    setWindowToken('fictional-A');
+    const noteRejected = vi.fn(async () => 'changed' as const);
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => isDiagLogUrl(String(input))
+      ? new Response(null, { status: 204 }) : sseResponse(['event: revoked\ndata: {"reason":"token_revoked"}\n\n']));
+    const reason = await waitForCloseReason((onClose) => connectStream({
+      sidecarToken: 'hint-A', conversationId: 'fictional', fetchImpl, credential: { noteRejected },
+      onEvent: () => undefined, onClose,
+    }));
+    expect(reason).toBe('revoked');
+    expect(noteRejected).not.toHaveBeenCalled();
+  });
 });
 
 function setWindowToken(token: string): void {

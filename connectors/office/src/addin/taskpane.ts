@@ -25,11 +25,14 @@ import { getPowerpointCommandHandler } from './commands/powerpointCommands.js';
 import type { OfficeApp } from '../shared/office/protocol.js';
 import { createChatUI, type ChatController } from './chatUI.js';
 import {
+  createAbortScope,
   installTaskpaneDiagnosticGlobal,
   type BridgeConfig,
   type DocumentContext,
   type TaskpaneDiagnosticApi,
 } from './chatClient.js';
+import { z } from 'zod';
+import type { SidecarCredential } from './websocket.js';
 
 // ---------------------------------------------------------------------------
 // Config resolution
@@ -99,12 +102,56 @@ function getBridgeConfig(config: SidecarConfig): BridgeConfig | null {
   return { sidecarToken: config.token };
 }
 
+export function createSidecarCredential(config: SidecarConfig): SidecarCredential {
+  let inFlight: Promise<void> | null = null;
+  const refresh = async (): Promise<void> => {
+    const scope = createAbortScope(5_000);
+    try {
+      const url = new URL('/taskpane.html', window.location.origin);
+      const response = await fetch(url, {
+        credentials: 'omit', cache: 'no-store', redirect: 'error',
+        referrerPolicy: 'no-referrer', mode: 'same-origin', signal: scope.signal,
+      });
+      if (!response.ok || response.redirected || response.url !== url.href ||
+          !/^text\/html(?:;|$)/i.test(response.headers.get('content-type') ?? '')) {
+        throw new TypeError('Invalid sidecar bootstrap response');
+      }
+      const html = await response.text();
+      const assignments = html.match(/window\.__REBEL_SIDECAR_CONFIG\s*=/g);
+      const match = /<script>window\.__REBEL_SIDECAR_CONFIG=(\{[^<]*?\});<\/script>/.exec(html);
+      if (assignments?.length !== 1 || !match) throw new TypeError('Invalid sidecar bootstrap assignment');
+      const next = z.object({
+        port: z.number().int().refine((port) => port === Number(window.location.port)),
+        token: z.string().min(1), bridgeReady: z.boolean().optional(),
+      }).strict().parse(JSON.parse(match[1]!));
+      if (scope.signal.aborted) throw new DOMException('Bootstrap aborted', 'AbortError');
+      config.token = next.token;
+      config.bridgeReady = next.bridgeReady;
+    } finally {
+      scope.cleanup();
+    }
+  };
+  return {
+    async noteRejected(sentToken) {
+      if (config.token !== sentToken) return 'changed';
+      inFlight ??= refresh().finally(() => { inFlight = null; });
+      try {
+        await inFlight;
+        return config.token === sentToken ? 'unchanged' : 'changed';
+      } catch {
+        console.warn('[rebel-addin] Sidecar credential refresh unavailable');
+        return 'unknown';
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Debug section (legacy status + command log)
 // ---------------------------------------------------------------------------
 
 const MAX_LOG_ENTRIES = 5;
-const AUTO_PROBE_INTERVAL_MS = 60_000;
+const AUTO_PROBE_INTERVAL_MS = 5_000;
 const HEALTH_CHECK_TIMEOUT_MS = 2_000;
 
 export type TaskpaneState = ConnectionState | 'rebel-closed';
@@ -275,16 +322,17 @@ export function createTaskpaneController(options: {
   let autoProbeInterval: ReturnType<typeof setInterval> | null = null;
   let visibilityListenerAttached = false;
   let probeInFlight = false;
+  let disposed = false;
 
   const attemptReconnect = async (): Promise<void> => {
-    if (state !== 'rebel-closed' || probeInFlight) {
+    if (disposed || state !== 'rebel-closed' || probeInFlight) {
       return;
     }
 
     probeInFlight = true;
     try {
       const healthy = await probeHealth(fetchImpl, healthUrl);
-      if (!healthy || state !== 'rebel-closed') {
+      if (disposed || !healthy || state !== 'rebel-closed') {
         return;
       }
 
@@ -357,6 +405,7 @@ export function createTaskpaneController(options: {
     getState: () => state,
     setState,
     dispose: () => {
+      disposed = true;
       stopClosedStateWatchers();
       retryButton?.removeEventListener('click', handleRetryClick);
     },
@@ -474,6 +523,7 @@ export function initializeTaskpane(): void {
     }
 
     console.log(`[rebel-addin] Connecting to sidecar on port ${config.port}`);
+    const credential = createSidecarCredential(config);
 
     // --- Mount the embedded chat UI ----------------------------------------
     // The chat UI is independent of the sidecar WS — it talks HTTP to the
@@ -487,7 +537,8 @@ export function initializeTaskpane(): void {
       const documentContext = captureDocumentContext(appConfig.app);
       chatController = createChatUI({
         container: chatRoot,
-        bridgeConfig,
+        bridgeConfig: bridgeConfig ? { ...bridgeConfig, credential } : null,
+        commandState: 'authenticating',
         documentContext,
         getDocumentContext: () => captureDocumentContext(appConfig.app),
       });
@@ -510,9 +561,16 @@ export function initializeTaskpane(): void {
       app: appConfig.app,
       version: '1.0.0',
       config,
+      credential,
       onCommand: createCommandDispatcher(appConfig.getHandler),
-      onStateChange: (state) => controller?.setState(state),
-      onGaveUp: () => controller?.setState('rebel-closed'),
+      onStateChange: (state) => {
+        controller?.setState(state);
+        chatController?.setCommandState(state);
+      },
+      onGaveUp: () => {
+        controller?.setState('rebel-closed');
+        chatController?.setCommandState('rebel-closed');
+      },
     });
 
     controller = createTaskpaneController({ client });
@@ -524,6 +582,7 @@ export function initializeTaskpane(): void {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       chatController?.dispose();
       controller?.dispose();
+      client.disconnect();
     });
   });
 }

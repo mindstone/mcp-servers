@@ -20,6 +20,7 @@ import { handleIntentProxy } from './intentProxy.js';
 import {
   buildErrorResponse,
   createInternalError,
+  createAppNotConnectedError,
   createInvalidRequestError,
   createUnauthorizedError,
   fromAppBridgeError,
@@ -641,6 +642,8 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
   const commandRouter = new CommandRouter<OfficeAppId>(connectionManager, {
     timeoutMs: options.commandTimeoutMs ?? 30_000,
   });
+  let stopped = false;
+  const registrationWaits = new Map<OfficeAppId, Set<() => void>>();
   connectionManager.on('disconnect', (appId: OfficeAppId) => {
     commandRouter.rejectPendingForApp(appId);
   });
@@ -880,6 +883,7 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
         throw createInvalidRequestError('Only POST requests are supported for command routes.');
       }
 
+      const deadline = Date.now() + (options.commandTimeoutMs ?? 30_000);
       const route = parseCommandPath(requestUrl.pathname);
       if (!route) {
         throw createInvalidRequestError('Command route must be /{app}/{action}.');
@@ -887,9 +891,41 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
 
       const params = await parseJsonBody(req);
       const appId = toOfficeAppId(route.app);
+      const cancelled = (): boolean => req.aborted || res.destroyed || req.socket.destroyed;
+      if (!connectionManager.getConnection(appId)) {
+        await new Promise<void>((resolve, reject) => {
+          const waits = registrationWaits.get(appId) ?? new Set<() => void>();
+          registrationWaits.set(appId, waits);
+          let expired = false;
+          const check = (): void => {
+            const failed = expired || stopped || cancelled() || Date.now() >= deadline;
+            if (!failed && !connectionManager.getConnection(appId)) return;
+            clearTimeout(timer);
+            req.removeListener('aborted', check);
+            res.removeListener('close', check);
+            req.socket.removeListener('close', check);
+            waits.delete(check);
+            if (waits.size === 0) registrationWaits.delete(appId);
+            if (failed) reject(createAppNotConnectedError(route.app));
+            else resolve();
+          };
+          const timer = setTimeout(() => { expired = true; check(); }, Math.max(0, deadline - Date.now()));
+          waits.add(check);
+          req.once('aborted', check);
+          res.once('close', check);
+          req.socket.once('close', check);
+          check();
+        });
+      }
+      const remaining = deadline - Date.now();
+      if (stopped || cancelled() || remaining <= 0 || !connectionManager.getConnection(appId)) {
+        throw createAppNotConnectedError(route.app);
+      }
       let result: CommandResult;
       try {
-        result = await commandRouter.routeCommand(appId, route.action, params);
+        result = await commandRouter.dispatch({
+          appId, capability: route.action, payload: params, timeoutMs: remaining,
+        });
       } catch (err) {
         // Core's CommandRouter throws/rejects with `AppBridgeError` plain
         // objects. Translate to Office's `SidecarHttpError` so the outer
@@ -927,6 +963,7 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
   const socketStates = new WeakMap<WebSocket, SocketAuthState>();
 
   webSocketServer.on('connection', (socket) => {
+    const sessionId = generateToken();
     const authTimer = setTimeout(() => {
       const state = socketStates.get(socket);
       if (!state?.authenticated) {
@@ -968,7 +1005,8 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
           // `{ type, appId, ... }` message. `validateRegisterMessage`
           // returns `null` on malformed payloads.
           const normalised = validateRegisterMessage(message);
-          if (!normalised) {
+          if (!normalised || (normalised.capabilities ?? []).some((capability) =>
+            !capability || typeof capability !== 'object' || typeof capability.id !== 'string' || !capability.id.trim())) {
             socket.close(4002, 'Invalid register message');
             return;
           }
@@ -982,6 +1020,13 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
               ? { version: normalised.appVersion }
               : {}),
           });
+          const ack: import('../shared/appBridge/shared/protocol.js').RegisteredAck = {
+            type: 'registered', sessionId,
+            acceptedCapabilities: (normalised.capabilities ?? []).map((capability) => capability.id),
+            serverProtocolVersion: '1.0', minClientProtocolVersion: '1.0',
+          };
+          socket.send(JSON.stringify(ack));
+          for (const wake of registrationWaits.get(normalised.appId) ?? []) wake();
           return;
         }
 
@@ -1151,12 +1196,12 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
 
   connectionManager.startHeartbeat();
 
-  let stopped = false;
   const stop = async (): Promise<void> => {
     if (stopped) {
       return;
     }
     stopped = true;
+    for (const waits of registrationWaits.values()) for (const settle of waits) settle();
 
     connectionManager.stopHeartbeat();
     commandRouter.dispose();

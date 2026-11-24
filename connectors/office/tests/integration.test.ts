@@ -296,7 +296,7 @@ describe('integration: MCP → sidecar → add-in pipeline', () => {
   });
 
   it('returns friendly error when target app is not connected', async () => {
-    const { sidecar, baseUrl } = await startTestServer();
+    const { sidecar, baseUrl } = await startTestServer({ commandTimeoutMs: 100 });
 
     // Send to Word — not connected
     const wordRes = await fetchHttps(`${baseUrl}/word/read_document`, {
@@ -569,7 +569,7 @@ describe('integration: MCP → sidecar → add-in pipeline', () => {
   });
 
   it('disconnecting one app does not affect others', async () => {
-    const { sidecar, baseUrl } = await startTestServer();
+    const { sidecar, baseUrl } = await startTestServer({ commandTimeoutMs: 1000 });
 
     const wordSocket = await connectWebSocket(sidecar.port);
     await authenticateAndRegister(wordSocket, sidecar.token, 'word', baseUrl);
@@ -605,7 +605,7 @@ describe('integration: MCP → sidecar → add-in pipeline', () => {
   });
 
   it('accepts commands after client disconnects and reconnects', async () => {
-    const { sidecar, baseUrl } = await startTestServer();
+    const { sidecar, baseUrl } = await startTestServer({ commandTimeoutMs: 1000 });
 
     // First connection
     const socket1 = await connectWebSocket(sidecar.port);

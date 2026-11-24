@@ -23,6 +23,7 @@ import {
   type IntentTransportAdapter,
   type StreamCloseReason,
 } from '../shared/intentClient/index.js';
+import type { SidecarCredential } from './websocket.js';
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -39,6 +40,7 @@ export interface SidecarChatConfig {
   sidecarToken: string;
   /** Optional explicit origin for tests (e.g. https://127.0.0.1:port). */
   originBase?: string;
+  credential?: SidecarCredential;
 }
 
 export interface TaskpaneDiagnosticApi {
@@ -211,6 +213,7 @@ interface TransportAuthHints {
   sidecarToken?: string;
   originBase?: string;
   conversationId?: string;
+  credential?: SidecarCredential;
 }
 
 interface TokenMetadata {
@@ -219,6 +222,7 @@ interface TokenMetadata {
 }
 
 interface OfficeTransportAdapter extends IntentTransportAdapter {
+  noteRejected(sentToken: string): Promise<'changed' | 'unchanged' | 'unknown'>;
   setAuthHints(hints: TransportAuthHints): void;
   handleUnauthorizedResponse(): void;
   handleAuthRevoked(): void;
@@ -232,7 +236,6 @@ interface OfficeTransportAdapterOptions {
 
 class OfficeSidecarTransportAdapter implements OfficeTransportAdapter {
   private authHints: TransportAuthHints = {};
-  private cachedMintedToken: string | null = null;
   private readonly defaultFetch: typeof fetch;
 
   constructor(options: OfficeTransportAdapterOptions = {}) {
@@ -241,6 +244,7 @@ class OfficeSidecarTransportAdapter implements OfficeTransportAdapter {
 
   setAuthHints(hints: TransportAuthHints): void {
     this.authHints = {
+      ...(hints.credential ? { credential: hints.credential } : {}),
       ...(isNonEmptyString(hints.sidecarToken) ? { sidecarToken: hints.sidecarToken } : {}),
       ...(typeof hints.originBase === 'string' ? { originBase: hints.originBase } : {}),
       ...(isNonEmptyString(hints.conversationId)
@@ -321,31 +325,26 @@ class OfficeSidecarTransportAdapter implements OfficeTransportAdapter {
   }
 
   handleUnauthorizedResponse(): void {
-    this.cachedMintedToken = null;
   }
 
   handleAuthRevoked(): void {
-    this.cachedMintedToken = null;
+  }
+
+  async noteRejected(sentToken: string): Promise<'changed' | 'unchanged' | 'unknown'> {
+    if (readWindowSidecarToken() && readWindowSidecarToken() !== sentToken) return 'changed';
+    return this.authHints.credential?.noteRejected(sentToken) ?? 'unchanged';
   }
 
   peekTokenMetadata(): TokenMetadata {
+    const token = readWindowSidecarToken() ?? readString(this.authHints.sidecarToken);
     return {
-      tokenLen: this.cachedMintedToken?.length ?? 0,
-      tokenPrefix: this.cachedMintedToken?.slice(0, 4) ?? '-',
+      tokenLen: token?.length ?? 0,
+      tokenPrefix: token?.slice(0, 4) ?? '-',
     };
   }
 
   private async ensureMintedToken(): Promise<string | null> {
-    if (this.cachedMintedToken) {
-      return this.cachedMintedToken;
-    }
-    const minted = await this.mintToken();
-    if (!minted) {
-      this.cachedMintedToken = null;
-      return null;
-    }
-    this.cachedMintedToken = minted;
-    return minted;
+    return this.mintToken();
   }
 
   private async mintToken(): Promise<string | null> {
@@ -619,7 +618,7 @@ function rewriteUrlPath(url: string, nextPath: string): string {
   return nextPath;
 }
 
-function createLegacyRouteFetch(fetchImpl: typeof fetch): typeof fetch {
+function createLegacyRouteFetch(fetchImpl: typeof fetch, transport: OfficeTransportAdapter): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const originalUrl = String(input);
     const route = detectSharedIntentRoute(originalUrl);
@@ -701,12 +700,24 @@ function createLegacyRouteFetch(fetchImpl: typeof fetch): typeof fetch {
       }
     }
 
-    return fetchImpl(url, {
+    const request = {
       ...init,
       method,
       headers,
       body,
-    });
+    };
+    const response = await fetchImpl(url, request);
+    if (response.status !== 401) return response;
+    const sentToken = headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
+    const outcome = await transport.noteRejected(sentToken);
+    await response.body?.cancel();
+    if (init?.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+    if (outcome === 'unknown') throw new TypeError('Sidecar credential refresh unavailable');
+    if (route !== 'stream' || outcome !== 'changed') return response;
+    if (init?.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+    const refreshed = new Headers(headers);
+    refreshed.set('authorization', `Bearer ${readWindowSidecarToken()}`);
+    return fetchImpl(url, { ...request, headers: refreshed });
   }) as typeof fetch;
 }
 
@@ -719,6 +730,7 @@ interface RuntimeInput {
   originBase?: string;
   conversationId?: string;
   fetchImpl?: typeof fetch;
+  credential?: SidecarCredential;
 }
 
 interface RuntimeContext {
@@ -745,7 +757,7 @@ const defaultDiagnostics = composeDiagnosticSinks(defaultBufferSink, defaultSide
 const defaultClient = createIntentClient({
   transport: defaultTransport,
   diagnostics: defaultDiagnostics,
-  fetchImpl: createLegacyRouteFetch(resolveFetchImpl()),
+  fetchImpl: createLegacyRouteFetch(resolveFetchImpl(), defaultTransport),
 });
 
 export function getTaskpaneDiagnosticApi(): TaskpaneDiagnosticApi {
@@ -780,7 +792,7 @@ function createRuntime(input: RuntimeInput): RuntimeContext {
   const client = createIntentClient({
     transport,
     diagnostics: composeDiagnosticSinks(bufferSink, sidecarSink),
-    fetchImpl: createLegacyRouteFetch(fetchImpl),
+    fetchImpl: createLegacyRouteFetch(fetchImpl, transport),
   });
   return { client, transport };
 }
@@ -801,6 +813,7 @@ async function prepareRuntime(
 
   const runtime = createRuntime(input);
   runtime.transport.setAuthHints({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     ...(isNonEmptyString(input.conversationId)
@@ -820,7 +833,7 @@ interface AttemptFailure {
   timedOut: boolean;
 }
 
-function createAbortScope(timeoutMs: number, externalSignal?: AbortSignal): {
+export function createAbortScope(timeoutMs: number, externalSignal?: AbortSignal): {
   signal: AbortSignal;
   timedOut: boolean;
   cleanup(): void;
@@ -904,6 +917,7 @@ export async function createConversation(
   input: CreateConversationInput,
 ): Promise<CreateConversationResult> {
   const prepared = await prepareRuntime({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
@@ -947,6 +961,7 @@ export async function createConversation(
 
 export async function sendMessage(input: SendMessageInput): Promise<SendMessageResult> {
   const prepared = await prepareRuntime({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     conversationId: input.conversationId,
@@ -988,6 +1003,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
 
 export async function getHistory(input: GetHistoryInput): Promise<GetHistoryResult> {
   const prepared = await prepareRuntime({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     conversationId: input.conversationId,
@@ -1029,6 +1045,7 @@ export async function getHistory(input: GetHistoryInput): Promise<GetHistoryResu
 
 export async function focusInRebel(input: FocusInRebelInput): Promise<FocusInRebelResult> {
   const prepared = await prepareRuntime({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     conversationId: input.conversationId,
@@ -1084,6 +1101,7 @@ export function connectStream(input: ConnectStreamInput): StreamConnection {
   });
 
   runtime.transport.setAuthHints({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     conversationId: input.conversationId,
@@ -1148,9 +1166,10 @@ export function connectStream(input: ConnectStreamInput): StreamConnection {
 }
 
 export async function probeReachability(
-  input: Pick<BridgeConfig, 'sidecarToken' | 'originBase'> & { fetchImpl?: typeof fetch },
+  input: Pick<BridgeConfig, 'sidecarToken' | 'originBase' | 'credential'> & { fetchImpl?: typeof fetch },
 ): Promise<boolean> {
   const prepared = await prepareRuntime({
+    ...(input.credential ? { credential: input.credential } : {}),
     sidecarToken: input.sidecarToken,
     ...(typeof input.originBase === 'string' ? { originBase: input.originBase } : {}),
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),

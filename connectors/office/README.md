@@ -15,6 +15,10 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 - **Surface:** desktop-addin
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
+## Unreleased source-development note
+
+In the current source tree, after a helper restart the task pane reacquires the new helper's credential in place and reconnects without reloading, so its conversation and draft stay in place. The registration acknowledgement decides when the pane shows Connected; it does not cause that preservation. A request made while no Office app is registered now waits for registration within the existing 30-second command timeout (separate from the helper's 30-second startup timer) before returning the existing not-connected error; before this fix, that error was immediate. This describes unreleased source behavior only; it does not change or retroactively describe the published 0.4.1 package.
+
 ## Why this exists
 
 At the time we built this, Microsoft did not ship an MCP server for the *desktop* Office apps, and the community options we found either targeted cloud-stored documents through Microsoft Graph or only worked on Windows. We needed something that could edit a Word document, Excel workbook, or PowerPoint deck the user already has open — on both macOS and Windows — with live access to selections, formulas, and tracked changes. This package bundles the MCP server, the small local helper that talks to Office, and the Office Add-in itself into a single npm install, so the three pieces always ship at the same version.

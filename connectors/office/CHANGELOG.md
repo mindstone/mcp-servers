@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- After a helper restart, an already-open task pane reacquires the new helper's credential in place and reconnects without reloading, so its conversation and draft stay in place. The registration acknowledgement decides when the pane shows Connected; it does not cause that preservation. A command sent while no Office app is registered now waits for registration within its existing 30-second command timeout (separate from the helper's 30-second startup timer) before returning the existing not-connected error; before this fix, that error was immediate.
+
 - Keep the Office helper running after successful lazy startup instead of stopping it at 30 seconds, and stop failed starts promptly.
 
 - Managed startup can wait up to five minutes after the helper begins installing the add-in; Ready still follows the install results. Setup distinguishes blocked target access from other installation failures, with conditional recovery advice and no private paths. Status labels the last automatic setup diagnostic as historical, since later manual setup may have succeeded. The standalone lazy-start path retains its separate 30-second startup limit.

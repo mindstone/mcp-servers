@@ -44,6 +44,7 @@ import {
   SidecarHttpError,
 } from '../src/shared/office/errors.js';
 import { startOfficeSidecar, type OfficeSidecar } from '../src/sidecar/index.js';
+import type { RegisteredAck } from '../src/shared/appBridge/shared/protocol.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers (copied from sidecar.test.ts — tests need their own HTTPS
@@ -409,6 +410,7 @@ describe('Stage 8 — end-to-end legacy register handshake', () => {
     const { sidecar, baseUrl } = await startTestServer();
     const socket = await connectWebSocket(sidecar.port);
     cleanupSockets.push(socket);
+    const registered = new Promise<RegisteredAck>((resolve) => socket.once('message', (raw) => resolve(JSON.parse(raw.toString()))));
 
     socket.send(JSON.stringify({ type: 'auth', token: sidecar.token }));
     socket.send(
@@ -416,6 +418,13 @@ describe('Stage 8 — end-to-end legacy register handshake', () => {
     );
 
     await waitForConnection(baseUrl, 'word');
+    const ack = await registered;
+    expect(ack).toEqual({
+      type: 'registered', sessionId: expect.any(String), acceptedCapabilities: [],
+      serverProtocolVersion: '1.0', minClientProtocolVersion: '1.0',
+    });
+    expect(ack.sessionId.trim()).not.toBe('');
+    expect(ack.sessionId).not.toBe(sidecar.token);
 
     const health = (await (await fetchHttps(`${baseUrl}/health`)).json()) as {
       connected: { word: boolean; excel: boolean; powerpoint: boolean };
@@ -429,6 +438,7 @@ describe('Stage 8 — end-to-end legacy register handshake', () => {
     const { sidecar, baseUrl } = await startTestServer();
     const socket = await connectWebSocket(sidecar.port);
     cleanupSockets.push(socket);
+    const registered = new Promise<RegisteredAck>((resolve) => socket.once('message', (raw) => resolve(JSON.parse(raw.toString()))));
 
     socket.send(JSON.stringify({ type: 'auth', token: sidecar.token }));
     socket.send(
@@ -437,14 +447,44 @@ describe('Stage 8 — end-to-end legacy register handshake', () => {
         appId: 'office-excel',
         protocolVersion: '1.0',
         appVersion: '16.77',
+        capabilities: [{ id: 'read_range' }, { id: 'get_worksheets' }],
       }),
     );
 
     await waitForConnection(baseUrl, 'excel');
+    const ack = await registered;
+    expect(ack).toEqual({
+      type: 'registered', sessionId: expect.any(String), acceptedCapabilities: ['read_range', 'get_worksheets'],
+      serverProtocolVersion: '1.0', minClientProtocolVersion: '1.0',
+    });
+    expect(ack.sessionId.trim()).not.toBe('');
+    expect(ack.sessionId).not.toBe(sidecar.token);
 
     const health = (await (await fetchHttps(`${baseUrl}/health`)).json()) as {
       connected: Record<string, boolean>;
     };
     expect(health.connected.excel).toBe(true);
+  });
+
+  it.each([
+    ['invalid app', { type: 'register', app: 'not-office', version: '1.0' }],
+    ...[null, 7, 'read_range', {}, { id: '' }, { id: ' ' }, { id: 7 }].map((capability) => [
+      `invalid capability ${JSON.stringify(capability)}`,
+      { type: 'register', appId: 'office-excel', capabilities: [capability] },
+    ]),
+  ])('closes malformed registration with 4002 before accepting it: %s', async (_label, register) => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    cleanupSockets.push(socket);
+    const messages: unknown[] = [];
+    socket.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
+    const closed = new Promise<number>((resolve) => socket.once('close', resolve));
+    socket.send(JSON.stringify({ type: 'auth', token: sidecar.token }));
+    socket.send(JSON.stringify(register));
+    expect(await closed).toBe(4002);
+    expect(messages).toEqual([]);
+    const health = await (await fetchHttps(`${baseUrl}/health`)).json() as { connected: Record<string, boolean> };
+    expect(health.connected.excel).toBe(false);
+    expect(health.connected.word).toBe(false);
   });
 });

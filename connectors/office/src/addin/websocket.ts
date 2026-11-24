@@ -13,6 +13,22 @@ import type {
   ResponseSuccessMessage,
   SidecarToAddinMessage,
 } from '../shared/office/protocol.js';
+import { z } from 'zod';
+import type { RegisteredAck } from '../shared/appBridge/shared/protocol.js';
+
+export interface SidecarCredential {
+  noteRejected(sentToken: string): Promise<'changed' | 'unchanged' | 'unknown'>;
+}
+
+const registeredAckSchema: z.ZodType<RegisteredAck> = z.object({
+  type: z.literal('registered'), sessionId: z.string().trim().min(1),
+  acceptedCapabilities: z.array(z.string().min(1)),
+  serverProtocolVersion: z.literal('1.0'), minClientProtocolVersion: z.literal('1.0'),
+});
+const commandSchema = z.object({
+  type: z.literal('command'), id: z.string().min(1),
+  action: z.string().min(1), params: z.record(z.unknown()),
+});
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'authenticating' | 'connected';
 
@@ -67,6 +83,7 @@ export class SidecarWebSocketClient {
   private readonly onStateChange: StateChangeListener;
   private readonly onGaveUp: (() => void) | undefined;
   private readonly maxReconnectElapsedMs: number;
+  private readonly credential: SidecarCredential | undefined;
 
   constructor(options: {
     app: OfficeApp;
@@ -76,10 +93,12 @@ export class SidecarWebSocketClient {
     onStateChange: StateChangeListener;
     onGaveUp?: () => void;
     maxReconnectElapsedMs?: number;
+    credential?: SidecarCredential;
   }) {
     this.app = options.app;
     this.version = options.version;
     this.config = options.config;
+    this.credential = options.credential;
     this.onCommand = options.onCommand;
     this.onStateChange = options.onStateChange;
     this.onGaveUp = options.onGaveUp;
@@ -145,12 +164,15 @@ export class SidecarWebSocketClient {
       }
 
       this.socket = socket;
+      let sentToken = '';
 
       socket.onopen = () => {
+        if (this.disposed || socket !== this.socket) return;
         this.setState('authenticating');
 
         // First message: auth token
-        const authMsg: AuthMessage = { type: 'auth', token: this.config.token };
+        sentToken = this.config.token;
+        const authMsg: AuthMessage = { type: 'auth', token: sentToken };
         socket.send(JSON.stringify(authMsg));
 
         // Second message: register as Word add-in
@@ -161,21 +183,29 @@ export class SidecarWebSocketClient {
         };
         socket.send(JSON.stringify(registerMsg));
 
-        this.reconnectAttempts = 0;
-        this.firstReconnectAttemptAt = undefined;
-        this.gaveUp = false;
-        this.setState('connected');
+        this.firstReconnectAttemptAt ??= Date.now();
+        this.clearReconnectTimer();
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null;
+          if (!this.disposed && socket === this.socket) this.setState('disconnected');
+        }, Math.max(0, this.maxReconnectElapsedMs - (Date.now() - this.firstReconnectAttemptAt)));
       };
 
       socket.onmessage = (event) => {
-        this.handleMessage(String(event.data));
+        if (!this.disposed && socket === this.socket) this.handleMessage(String(event.data), socket);
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        if (this.disposed || socket !== this.socket) return;
         this.socket = null;
+        this.clearReconnectTimer();
         this.setState('disconnected');
 
-        if (!this.disposed) {
+        if (event.code === 4001 && this.credential) {
+          void this.credential.noteRejected(sentToken).then(() => {
+            if (!this.disposed && this.socket === null && !this.connectInFlight) this.scheduleReconnect();
+          });
+        } else if (!this.disposed) {
           this.scheduleReconnect();
         }
       };
@@ -210,7 +240,7 @@ export class SidecarWebSocketClient {
     this.onStateChange(newState);
   }
 
-  private handleMessage(raw: string): void {
+  private handleMessage(raw: string, socket: WebSocket): void {
     let message: SidecarToAddinMessage;
     try {
       message = JSON.parse(raw) as SidecarToAddinMessage;
@@ -224,13 +254,20 @@ export class SidecarWebSocketClient {
       return;
     }
 
+    if (registeredAckSchema.safeParse(message).success) {
+      this.acceptRegistration();
+      return;
+    }
     switch (message.type) {
       case 'command':
-        void this.dispatchCommand(message as CommandMessage);
+        if (commandSchema.safeParse(message).success) {
+          this.acceptRegistration();
+          void this.dispatchCommand(message as CommandMessage, socket);
+        }
         break;
       case 'ping': {
         const pong: PongMessage = { type: 'pong' };
-        this.socket?.send(JSON.stringify(pong));
+        socket.send(JSON.stringify(pong));
         break;
       }
       default:
@@ -238,9 +275,18 @@ export class SidecarWebSocketClient {
     }
   }
 
-  private async dispatchCommand(command: CommandMessage): Promise<void> {
+  private acceptRegistration(): void {
+    this.clearReconnectTimer();
+    this.reconnectAttempts = 0;
+    this.firstReconnectAttemptAt = undefined;
+    this.gaveUp = false;
+    this.setState('connected');
+  }
+
+  private async dispatchCommand(command: CommandMessage, socket: WebSocket): Promise<void> {
     try {
       const result = await this.onCommand(command.action, command.params);
+      if (this.disposed || socket !== this.socket) return;
 
       if (result.success) {
         const response: ResponseSuccessMessage = {
@@ -249,7 +295,7 @@ export class SidecarWebSocketClient {
           success: true,
           data: result.data,
         };
-        this.socket?.send(JSON.stringify(response));
+        socket.send(JSON.stringify(response));
       } else {
         const response: ResponseErrorMessage = {
           type: 'response',
@@ -258,9 +304,10 @@ export class SidecarWebSocketClient {
           error: result.error,
           ...(result.code ? { code: result.code } : {}),
         };
-        this.socket?.send(JSON.stringify(response));
+        socket.send(JSON.stringify(response));
       }
     } catch (error) {
+      if (this.disposed || socket !== this.socket) return;
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       const response: ResponseErrorMessage = {
         type: 'response',
@@ -269,7 +316,7 @@ export class SidecarWebSocketClient {
         error: errorMsg,
         code: 'ADDIN_EXECUTION_ERROR',
       };
-      this.socket?.send(JSON.stringify(response));
+      socket.send(JSON.stringify(response));
     }
   }
 
@@ -289,6 +336,7 @@ export class SidecarWebSocketClient {
     const delay = Math.min(
       MIN_RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts),
       MAX_RECONNECT_DELAY_MS,
+      this.maxReconnectElapsedMs - (now - this.firstReconnectAttemptAt),
     );
 
     this.reconnectAttempts += 1;
@@ -296,6 +344,10 @@ export class SidecarWebSocketClient {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      if (Date.now() - this.firstReconnectAttemptAt! >= this.maxReconnectElapsedMs) {
+        this.giveUp();
+        return;
+      }
       void this.connect();
     }, delay);
   }

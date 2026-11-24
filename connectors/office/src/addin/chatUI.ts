@@ -67,6 +67,7 @@ import {
   type OfficeDocumentScope,
   type OfficeDocumentScopeResolution,
 } from './documentScope.js';
+import type { TaskpaneState } from './taskpane.js';
 
 export type ChatPhase = 'not-ready' | 'idle' | 'chatting';
 
@@ -126,6 +127,7 @@ interface ChatUIViewState {
 }
 
 export interface ChatUIOptions {
+  commandState?: TaskpaneState;
   /** Root container for the chat UI (provided by taskpane.html). */
   container: HTMLElement;
   /** Bridge connection config (injected by the sidecar). Null when not ready. */
@@ -137,6 +139,7 @@ export interface ChatUIOptions {
 }
 
 export interface ChatController {
+  setCommandState(state: TaskpaneState): void;
   /**
    * Update the bridge config once the sidecar finishes pairing with the
    * App Bridge (or when pairing is revoked). Passing null drops the pane
@@ -480,6 +483,7 @@ export function createChatUI(
     ...dependencies,
   };
   let bridgeConfig = options.bridgeConfig;
+  let commandState = options.commandState;
   const documentContextProvider = createOfficeDocumentContextProvider(
     options.documentContext,
   );
@@ -531,6 +535,12 @@ export function createChatUI(
   render();
 
   return {
+    setCommandState(state): void {
+      if (disposed) return;
+      commandState = state;
+      const view = getViewState();
+      headerEl.setStatus(computeHeaderStatus(view.phase, view.connectionHealth));
+    },
     setBridgeConfig(next: BridgeConfig | null): void {
       if (disposed) return;
       void refreshDocumentContextFromHost();
@@ -721,7 +731,7 @@ export function createChatUI(
       turnStatus: controllerSnapshot.turnStatus,
       conversationNotice: deriveConversationNotice(controllerSnapshot),
       creatingConversation: controllerSnapshot.creatingConversation,
-      connectionHealth: deriveConnectionHealth(controllerSnapshot),
+      connectionHealth: deriveConnectionHealth(controllerSnapshot, commandState),
     };
   }
 
@@ -915,7 +925,10 @@ function derivePhase(
 
 function deriveConnectionHealth(
   snapshot: ChatControllerSnapshot,
+  commandState?: TaskpaneState,
 ): ConnectionHealth {
+  if (commandState === 'rebel-closed') return 'degraded';
+  if (commandState && commandState !== 'connected') return 'reconnecting';
   if (snapshot.phase === 'reconnecting') {
     return 'reconnecting';
   }

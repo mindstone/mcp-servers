@@ -17,8 +17,10 @@ import {
   getInitialSnapshot as readOfficeInitialSnapshot,
 } from '../src/addin/chatState.js';
 import { createChatUI } from '../src/addin/chatUI.js';
+import { createChatController } from '../src/shared/chatController/controller.js';
 import { createOfficeDocumentContextProvider } from '../src/addin/documentContextProvider.js';
 import { resolveOfficeDocumentScope } from '../src/addin/documentScope.js';
+import { createSidecarCredential } from '../src/addin/taskpane.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(__dirname, '..');
@@ -113,6 +115,7 @@ function createClientHarness(): ClientHarness {
 
 function mountChatUI(options: {
   harness?: ClientHarness;
+  createController?: typeof createChatController;
   probeReachability?: boolean;
   initialSnapshot?: {
     conversationId: string;
@@ -134,6 +137,7 @@ function mountChatUI(options: {
       documentContext: DEFAULT_DOCUMENT_CONTEXT,
     },
     {
+      ...(options.createController ? { createController: options.createController } : {}),
       createIntentClient: () => harness.client,
       persistence,
       getInitialSnapshot: () => options.initialSnapshot ?? null,
@@ -214,6 +218,48 @@ afterEach(() => {
 });
 
 describe('office chatUI shared rendering migration (Stage 10)', () => {
+  it('keeps a mounted controller, conversation and draft when refresh reports bridgeReady false', async () => {
+    const factory = vi.fn(createChatController);
+    const config = { port: Number(window.location.port), token: 'fictional-A', bridgeReady: true };
+    const previous = window.__REBEL_SIDECAR_CONFIG;
+    window.__REBEL_SIDECAR_CONFIG = config;
+    const { chatUI, container, harness } = mountChatUI({ initialSnapshot: { conversationId: 'conv-1', pageTitle: DEFAULT_DOCUMENT_CONTEXT.title }, createController: factory });
+    try {
+      const setBridgeConfig = vi.spyOn(chatUI, 'setBridgeConfig');
+      const controller = factory.mock.results[0]?.value;
+      expect(controller).toBeDefined();
+      if (!controller) throw new Error('Real controller factory did not record synchronous construction');
+      await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe('idle'));
+      const textarea = getTextarea(container);
+      textarea.value = 'Keep this fictional draft';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.setSelectionRange(5, 9);
+      const context = controller.getSnapshot().conversationContext;
+      expect(context).toEqual({ pageTitle: DEFAULT_DOCUMENT_CONTEXT.title });
+      const refreshed = { ...config, token: 'fictional-B', bridgeReady: false };
+      const response = new Response(`<script>window.__REBEL_SIDECAR_CONFIG=${JSON.stringify(refreshed)};</script>`, {
+        headers: { 'content-type': 'text/html' },
+      });
+      Object.defineProperty(response, 'url', { value: new URL('/taskpane.html', window.location.origin).href });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+      expect(await createSidecarCredential(config).noteRejected('fictional-A')).toBe('changed');
+      expect(window.__REBEL_SIDECAR_CONFIG).toBe(config);
+      expect(config).toEqual(refreshed);
+      expect(setBridgeConfig).not.toHaveBeenCalled();
+      expect(factory).toHaveBeenCalledTimes(1);
+      expect(factory.mock.results[0]?.value).toBe(controller);
+      expect(harness.streamClose).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().conversationId).toBe('conv-1');
+      expect(controller.getSnapshot().conversationContext).toEqual(context);
+      expect(getTextarea(container)).toBe(textarea);
+      expect(textarea.value).toBe('Keep this fictional draft');
+      expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([5, 9]);
+    } finally {
+      chatUI.dispose();
+      window.__REBEL_SIDECAR_CONFIG = previous;
+    }
+  });
+
   it('renders a not-ready header and does not mount the controller when bridgeConfig is null (bridgeReady=false)', () => {
     const harness = createClientHarness();
     const createIntentClient = vi.fn(() => harness.client);
