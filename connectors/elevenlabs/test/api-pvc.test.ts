@@ -193,8 +193,8 @@ it('cleans up an unannounced finished sample read after receipt failure', async 
   expect(result.isError).toBe(true); expect(fs.readdirSync(workspace)).toEqual([]);
 });
 
-it.each(['get_pvc_voice_captcha', 'verify_pvc_voice_captcha'] as const)('keeps %s planned with the unresolved representation reason and zero I/O', async id => {
-  expect(policy.operations[id]).toMatchObject({ status: 'planned', milestone: 9, profile: null, reason: expect.stringContaining('No reviewed response override exists') });
+it.each(['get_pvc_voice_captcha', 'verify_pvc_voice_captcha'] as const)('keeps %s excluded with the undocumented representation reason and zero I/O', async id => {
+  expect(policy.operations[id]).toMatchObject({ status: 'excluded', milestone: null, exclusion_group: 'undocumented_response', profile: null, reason: expect.stringContaining('excluded together') });
   const fetch = vi.spyOn(globalThis, 'fetch'), key = vi.spyOn(auth, 'getApiKey');
   const result = await pair.callTool(id.startsWith('get_') ? 'elevenlabs_read_resource' : 'elevenlabs_change_resource', { operation_id: id, path_params: { voice_id: 'voice_example' } });
   expect(JSON.parse(result.text)).toMatchObject({ ok: false, code: 'UNKNOWN_OPERATION' }); expect(fetch).not.toHaveBeenCalled(); expect(key).not.toHaveBeenCalled();

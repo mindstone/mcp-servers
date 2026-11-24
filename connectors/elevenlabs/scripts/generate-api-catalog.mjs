@@ -157,6 +157,13 @@ const exclusionGroups = {
   reception: { prefixes: ['/v1/reception'], count: 75 },
   productions: { prefixes: ['/v1/productions'], count: 11 },
   engineering: { prefixes: [], count: 4 },
+  undocumented_response: { prefixes: [], count: 4 },
+};
+const undocumentedResponseExclusions = {
+  compose_detailed_stream: ['compose_detailed', 'stream_compose'],
+  stream_project_snapshot_audio_endpoint: ['stream_project_snapshot_archive_endpoint'],
+  get_pvc_voice_captcha: ['request_pvc_manual_verification'],
+  verify_pvc_voice_captcha: ['request_pvc_manual_verification'],
 };
 const engineeringExclusions = {
   redirect_to_mintlify: [],
@@ -172,9 +179,9 @@ export const FAMILY_COUNTS = Object.freeze({
     'sip-trunk': 1, whatsapp: 2, 'whatsapp-accounts': 4, conversation: 3, realtime: 8 },
   9: { 'text-to-speech': 4, 'text-to-dialogue': 4, 'sound-generation': 1, 'audio-effects': 1,
     'voice-changer': 2, 'audio-isolation': 4, 'speech-to-text': 3, 'forced-alignment': 1,
-    music: 13, dubbing: 37, voices: 34, 'voices-v2': 1, 'shared-voices': 1, 'similar-voices': 1,
+    music: 12, dubbing: 37, voices: 32, 'voices-v2': 1, 'shared-voices': 1, 'similar-voices': 1,
     'text-to-voice': 5, history: 5, 'pronunciation-dictionaries': 9, models: 1, usage: 1, user: 2, 'single-use-token': 1 },
-  10: { studio: 23, 'audio-native': 4, 'speech-engine': 6, flows: 14, assets: 4,
+  10: { studio: 22, 'audio-native': 4, 'speech-engine': 6, flows: 14, assets: 4,
     'workspace/analytics': 3, 'workspace/audit-logs': 1, 'workspace/auth-connections': 4,
     'workspace/resources': 3, 'workspace/webhooks': 4 },
 });
@@ -271,6 +278,7 @@ function classify(id, path) {
   if ([stage81Profiles, stage82Profiles, stage83Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id)))) return { status: 'admitted', milestone: 8 };
   if (Object.hasOwn(reviewedProfiles, id)) return { status: 'admitted', milestone: [stage102Profiles, stage103Profiles, stage104Profiles, stage105Profiles, stage106Profiles, stage107Profiles, stage108Profiles, stage109Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 10 : [stage91Profiles, stage92Profiles, stage93Profiles, stage94Profiles, stage95Profiles, stage96Profiles, stage97Profiles, stage98Profiles, stage99Profiles, stage910Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 9 : [stage7Profiles, stage75Profiles, stage76Profiles].some(groups => Object.values(groups).some(ids => ids.split(' ').includes(id))) ? 7 : 1 };
   if (Object.hasOwn(engineeringExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'engineering' };
+  if (Object.hasOwn(undocumentedResponseExclusions, id)) return { status: 'excluded', milestone: null, exclusion_group: 'undocumented_response' };
   for (const [group, { prefixes }] of Object.entries(exclusionGroups)) {
     if (prefixes.some(prefix => matchesPrefix(path, prefix))) return { status: 'excluded', milestone: null, exclusion_group: group };
   }
@@ -355,7 +363,7 @@ export function validatePolicy(raw, rosters, expectedSource = PINNED_SOURCE) {
 
 function validateProductionCensus(policy) {
   const rows = Object.values(policy.operations);
-  for (const [status, count] of Object.entries({ admitted: 402, planned: 4, excluded: 109 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
+  for (const [status, count] of Object.entries({ admitted: 402, planned: 0, excluded: 113 })) requireEqual(rows.filter(row => row.status === status).length, count, `census ${status}`);
   requireEqual(Object.keys(policy.exclusion_groups).sort(), Object.keys(exclusionGroups).sort(), 'exclusion groups');
   for (const [group, expected] of Object.entries(exclusionGroups)) {
     requireEqual(policy.exclusion_groups[group].prefixes, expected.prefixes, `exclusion prefixes ${group}`);
@@ -369,6 +377,7 @@ function validateProductionCensus(policy) {
   for (const [id, row] of Object.entries(policy.operations)) {
     for (const [key, value] of Object.entries(classify(id, row.path))) requireEqual(row[key], value, `classification ${id}.${key}`);
     if (Object.hasOwn(engineeringExclusions, id)) requireEqual(row.replacements, engineeringExclusions[id], `replacement workflow ${id}`);
+    if (Object.hasOwn(undocumentedResponseExclusions, id)) requireEqual(row.replacements, undocumentedResponseExclusions[id], `replacement workflow ${id}`);
   }
   for (const [milestone, families] of Object.entries(FAMILY_COUNTS)) {
     const actual = {};
@@ -873,7 +882,7 @@ export function renderCoverage(rawPolicy, rosters) {
     `Source: ${policy.source.url}`, `Retrieved: ${policy.source.retrieved_at}`, `SHA-256 (original decompressed bytes): \`${policy.source.sha256}\``,
     `Source census: ${policy.source.paths} paths; ${policy.source.operations} HTTP operation IDs; ${policy.source.bytes.toLocaleString('en-US')} bytes.`, '',
     `Partition: **${counts.admitted} admitted + ${counts.planned} planned + ${counts.excluded} excluded = ${rows.length}**.`, '',
-    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (131), 10 (66). The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.', '',
+    'Numeric milestones: 1 (40), 7 (134), 8 (35), 9 (128), 10 (65). Four operations once planned for milestones 9 and 10 are excluded because a response they depend on is undocumented. The first 40 shipped in 0.6.0; the ledger below records all operations admitted by this source tree. Consult the package changelog for release history.', '',
     `Only admitted descriptors and their reachable component graph enter the generated catalogue. Nine registered API tools expose local discovery and eight execution profiles for the ${counts.admitted} admitted operations, alongside the unchanged ordinary 32 definitions (41 total). The separate Agents package is unchanged.`, '',
     'Public consistency tests validate the committed policy, catalogue, ledger and explicitly pinned miniature fixtures. Public CI does **not** possess or validate the whole upstream snapshot. Full-source generation and --check require an explicit local JSON or gzip input matching the pinned original bytes; the whole source is neither committed nor included in npm. No runtime fetch occurs.', '',
     'Regenerate from the connector directory: `npm run api:generate -- --spec <pinned.json-or-gzip>`. Verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. Both commands verify the immutable production source pin.', '',

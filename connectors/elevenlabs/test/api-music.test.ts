@@ -29,7 +29,7 @@ afterEach(async () => {
   fs.rmSync(workspace, { recursive: true, force: true });
 });
 
-it('declares free plan calculation as a POST read and keeps detailed event streaming planned', async () => {
+it('declares free plan calculation as a POST read and keeps undocumented detailed event streaming excluded', async () => {
   const op = await getOperation('compose_plan', 'read');
   expect(op).toMatchObject({ method: 'POST', reviewed_post_read: expect.stringContaining('Free'), effects: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } });
   await expect(getOperation('compose_detailed_stream')).rejects.toMatchObject({ code: 'UNKNOWN_OPERATION' });

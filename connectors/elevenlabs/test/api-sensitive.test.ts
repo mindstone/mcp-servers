@@ -89,7 +89,7 @@ describe('sensitive family contracts', () => {
     expect(() => validateApiCatalog(catalog)).toThrow(expect.objectContaining({ code: 'CATALOG_INVALID' }));
   });
 
-  it.each(['sensitive_request_fields', 'sensitive_response_fields'] as const)('refuses %s on planned and excluded operations', field => {
+  it.each(['sensitive_request_fields', 'sensitive_response_fields'] as const)('refuses %s on excluded operations', field => {
     for (const id of ['compose_detailed_stream', 'redirect_to_mintlify'] as const) {
       const policy = structuredClone(policyInput);
       Object.assign(policy.operations[id], { [field]: [['value']] });

@@ -37,7 +37,7 @@ afterEach(async () => {
 });
 
 describe('conversation and ticket contracts', () => {
-  it('admits 26 reviewed contracts and leaves unsupported mixed-media upload planned', async () => {
+  it('admits 26 reviewed contracts and keeps the undocumented detailed music stream unavailable', async () => {
     expect(conversationCases).toHaveLength(26);
     const catalog = await loadApiCatalog();
     for (const wire of conversationCases) {

@@ -201,7 +201,7 @@ describe('API request validation over the preserved provider graph', () => {
     expect(open.validator.validateRequest(open.op, create({ ['__proto__\n']: 'unrelated' }), createRedactor([])).body).toEqual({ ['__proto__\n']: 'unrelated' });
   });
 
-  it('caches validators and refuses unknown/planned/excluded/wrong-profile operations locally', async () => {
+  it('caches validators and refuses unknown/excluded/wrong-profile operations locally', async () => {
     const validator = await loadApiValidator();
     const op = await getOperation('create_agent_route');
     expect(await loadApiValidator()).toBe(validator);

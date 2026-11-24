@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- The last four API operations once listed as planned are now excluded with their reasons, because ElevenLabs leaves a response they depend on undocumented: the detailed music event stream, the Studio project snapshot audio stream and the two professional voice captcha operations (submitting an answer needs the undocumented challenge). Nothing that worked before changes.
+
 ## [0.9.1] - 2026-11-23
 
 ### Changed

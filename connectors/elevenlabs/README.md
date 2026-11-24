@@ -189,7 +189,7 @@ this connector snapshot; consult the package changelog for release history and f
 ledger below. Existing audio tool definitions remain unchanged. This is the first
 portion of a broader API expansion, not a claim of complete provider
 coverage. [API_COVERAGE.md](./API_COVERAGE.md) records all
-515 operations: 402 admitted, 4 planned and 109 excluded, with reasons and
+515 operations: 402 admitted, 0 planned and 113 excluded, with reasons and
 existing package coverage tracked separately. Source additions include tags, analysis items,
 settings, environments, test folders and summaries, invocation names, conversation users,
 live counts, tool executions, LLM usage estimates and agent knowledge-base size.

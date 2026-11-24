@@ -252,11 +252,11 @@ describe('pinned operation policy and public artifacts', () => {
     });
     const rows = Object.values(policy.operations);
     expect(rows.filter(row => row.milestone === 8).every(row => row.status === 'admitted')).toBe(true);
-    for (const id of ['compose_detailed_stream']) expect(policy.operations[id].status).toBe('planned');
+    for (const id of ['compose_detailed_stream', 'stream_project_snapshot_audio_endpoint', 'get_pvc_voice_captcha', 'verify_pvc_voice_captcha']) expect(policy.operations[id]).toMatchObject({ status: 'excluded', exclusion_group: 'undocumented_response' });
     expect(rows).toHaveLength(515);
-    for (const [status, count] of [['admitted', 402], ['planned', 4], ['excluded', 109]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
-    for (const [milestone, count] of [[1, 40], [7, 134], [8, 35], [9, 131], [10, 66]] as const) expect(rows.filter(row => row.milestone === milestone)).toHaveLength(count);
-    for (const [group, count] of [['account_and_keys', 9], ['identity_and_seats', 10], ['reception', 75], ['productions', 11], ['engineering', 4]] as const) {
+    for (const [status, count] of [['admitted', 402], ['planned', 0], ['excluded', 113]] as const) expect(rows.filter(row => row.status === status)).toHaveLength(count);
+    for (const [milestone, count] of [[1, 40], [7, 134], [8, 35], [9, 128], [10, 65]] as const) expect(rows.filter(row => row.milestone === milestone)).toHaveLength(count);
+    for (const [group, count] of [['account_and_keys', 9], ['identity_and_seats', 10], ['reception', 75], ['productions', 11], ['engineering', 4], ['undocumented_response', 4]] as const) {
       expect(rows.filter(row => row.exclusion_group === group)).toHaveLength(count);
       const prefixes = policy.exclusion_groups[group].prefixes;
       if (prefixes.length) expect(rows.filter(row => prefixes.some(prefix => matchesPrefix(row.path, prefix)))).toHaveLength(count);

@@ -99,6 +99,11 @@
       "prefixes": [],
       "count": 4,
       "reason": "Documentation or deprecated routes with explicitly described replacements."
+    },
+    "undocumented_response": {
+      "prefixes": [],
+      "count": 4,
+      "reason": "A response these operations depend on is undocumented by the provider; no media type or stream parser is guessed."
     }
   },
   "milestones": [
@@ -1082,8 +1087,8 @@
     "compose_detailed_stream": {
       "method": "POST",
       "path": "/v1/music/detailed/stream",
-      "status": "planned",
-      "milestone": 9,
+      "status": "excluded",
+      "milestone": null,
       "family": "music",
       "profile": null,
       "effects": null,
@@ -1094,7 +1099,9 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": ["compose_detailed", "stream_compose"],
+      "exclusion_group": "undocumented_response",
+      "reason": "The pinned spec names audio_chunk events with base64 audio but not the field that carries it, and ElevenLabs documents none, so no event parser is built on a guess (owner scope ruling, 19 November 2026). compose_detailed returns the same composition and metadata in one reply; stream_compose streams the audio."
     },
     "compose_plan": {
       "method": "POST", "path": "/v1/music/plan", "status": "admitted", "milestone": 9, "family": "music",
@@ -5694,8 +5701,8 @@
     "get_pvc_voice_captcha": {
       "method": "GET",
       "path": "/v1/voices/pvc/{voice_id}/captcha",
-      "status": "planned",
-      "milestone": 9,
+      "status": "excluded",
+      "milestone": null,
       "family": "voices",
       "profile": null,
       "effects": null,
@@ -5706,8 +5713,9 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": [],
-      "reason": "Pending a reviewed captcha response contract: the pinned GET 200 declares no content; https://elevenlabs.io/docs/api-reference/voices/pvc/verification/captcha also supplies no representation. The quickstart shows a base64 PNG but does not establish HTTP framing or media type (https://elevenlabs.io/docs/eleven-api/guides/how-to/voices/professional-voice-cloning). No reviewed response override exists; keep challenge retrieval and submission planned together."
+      "replacements": ["request_pvc_manual_verification"],
+      "exclusion_group": "undocumented_response",
+      "reason": "The pinned GET 200 declares no content and https://elevenlabs.io/docs/api-reference/voices/pvc/verification/captcha supplies no representation; the quickstart's base64 PNG does not establish HTTP framing or media type. Challenge retrieval and submission are excluded together; manual verification submission remains."
     },
     "get_rag_index_overview": {
       "method": "GET",
@@ -10345,8 +10353,8 @@
     "stream_project_snapshot_audio_endpoint": {
       "method": "POST",
       "path": "/v1/studio/projects/{project_id}/snapshots/{project_snapshot_id}/stream",
-      "status": "planned",
-      "milestone": 10,
+      "status": "excluded",
+      "milestone": null,
       "family": "studio",
       "profile": null,
       "effects": null,
@@ -10357,7 +10365,9 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": []
+      "replacements": ["stream_project_snapshot_archive_endpoint"],
+      "exclusion_group": "undocumented_response",
+      "reason": "Neither the pinned spec nor the public SDK declares the media type of the streamed audio, and the executor refuses undeclared media. The snapshot archive download returns the project's audio as a ZIP archive."
     },
     "submit_merge_proposal_review_route": {
       "method": "POST",
@@ -11747,8 +11757,8 @@
     "verify_pvc_voice_captcha": {
       "method": "POST",
       "path": "/v1/voices/pvc/{voice_id}/captcha",
-      "status": "planned",
-      "milestone": 9,
+      "status": "excluded",
+      "milestone": null,
       "family": "voices",
       "profile": null,
       "effects": null,
@@ -11759,8 +11769,9 @@
         "reason": "No existing tool maps to this exact HTTP operation.",
         "evidence": []
       },
-      "replacements": [],
-      "reason": "Pending a reviewed captcha response contract: the pinned GET 200 declares no content; https://elevenlabs.io/docs/api-reference/voices/pvc/verification/captcha also supplies no representation. The quickstart shows a base64 PNG but does not establish HTTP framing or media type (https://elevenlabs.io/docs/eleven-api/guides/how-to/voices/professional-voice-cloning). No reviewed response override exists; keep challenge retrieval and submission planned together."
+      "replacements": ["request_pvc_manual_verification"],
+      "exclusion_group": "undocumented_response",
+      "reason": "Submitting a captcha answer needs the challenge, whose response the provider does not document (see get_pvc_voice_captcha). Challenge retrieval and submission are excluded together; manual verification submission remains."
     },
     "video_to_music": {
       "method": "POST", "path": "/v1/music/video-to-music", "status": "admitted", "milestone": 9, "family": "music",
