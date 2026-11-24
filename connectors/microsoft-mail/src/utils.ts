@@ -229,9 +229,15 @@ function formatGenericGraphError(err: unknown): string {
   if (err instanceof Error) {
     const graphErr = err as Error & { statusCode?: number; code?: string; body?: string };
     if (graphErr.statusCode === 403) {
-      const detail = wrapUntrusted(extractUpstreamErrorMessage(err), 'microsoft-mail:graph-error');
+      // Graph writes the error code as well as the message, so both stay
+      // inside the envelope (invariant #6).
+      const upstream = extractUpstreamErrorMessage(err);
+      const detail = wrapUntrusted(
+        graphErr.code ? `${upstream} (${graphErr.code})` : upstream,
+        'microsoft-mail:graph-error',
+      );
       return (
-        `${detail} (HTTP 403${graphErr.code ? `: ${graphErr.code}` : ''}). ` +
+        `${detail} (HTTP 403). ` +
         'The connected account does not have permission for this operation, or a tenant policy blocks it — ' +
         're-authenticating the same account will not change that. ' +
         'An administrator may need to grant the permission or adjust the policy.'

@@ -590,10 +590,17 @@ async function getStreamDrainingErrorBody(
   }
 }
 
+/** Longest saved file name, in UTF-8 bytes: under the common 255-byte limit. */
+const MAX_ATTACHMENT_FILENAME_BYTES = 200;
+
 /**
  * Reject anything that is not a plain filename before it is joined onto the
  * attachment directory (same rule family as the other file-writing
- * connectors: no separators, no `..`, no dotfiles, no NUL).
+ * connectors: no separators, no `..`, no dotfiles, no NUL), then clean what
+ * is left: the name is sender-authored and reaches the model unenveloped in
+ * `savedTo`, so control characters (line breaks included) and angle brackets
+ * become `_`, and the name is shortened to MAX_ATTACHMENT_FILENAME_BYTES,
+ * keeping its extension, so a long name still saves (invariant #6).
  */
 function sanitizeAttachmentFilename(name: string): string {
   if (name.trim().length === 0) {
@@ -615,7 +622,21 @@ function sanitizeAttachmentFilename(name: string): string {
   if (basename !== name || basename === '.' || basename === '..') {
     throw new Error('Invalid attachment filename: must be a plain filename');
   }
-  return basename;
+  const cleaned = basename.replace(/[\p{Cc}\u2028\u2029<>]/gu, '_');
+  if (Buffer.byteLength(cleaned) <= MAX_ATTACHMENT_FILENAME_BYTES) return cleaned;
+  const extension = path.extname(cleaned);
+  const keptExtension = Buffer.byteLength(extension) <= 50 ? extension : '';
+  // One pass over whole code points, stopping at the byte budget.
+  const budget = MAX_ATTACHMENT_FILENAME_BYTES - Buffer.byteLength(keptExtension);
+  let stem = '';
+  let used = 0;
+  for (const char of cleaned.slice(0, cleaned.length - keptExtension.length)) {
+    used += Buffer.byteLength(char);
+    if (used > budget) break;
+    stem += char;
+  }
+  // A cut can leave a trailing dot or space, which Windows drops from names.
+  return stem.replace(/[. ]+$/, '') + keptExtension;
 }
 
 /**
@@ -697,7 +718,13 @@ export async function writeFileExclusive(
     // We created the staging directory, so it is safe — and required — to
     // remove it whole; the write must not leave partial residue behind.
     await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-    throw err;
+    // A filesystem error quotes the path, which holds the sender-authored
+    // file name, so its text reaches the model only enveloped (invariant #6).
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not save the attachment: ${wrapUntrusted(detail, 'microsoft-mail:download_attachment:save-error')}`,
+      { cause: err },
+    );
   } finally {
     await handle?.close();
   }

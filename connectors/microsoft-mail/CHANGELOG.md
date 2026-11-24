@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Security
+
+- An attachment's file name and Microsoft's error codes now reach your assistant marked as someone else's text, never as a message from the connector. Attachments are saved with line breaks and angle brackets in the name replaced by `_`, and a very long name is shortened (keeping its extension) so the file still saves.
+
 ## [0.4.3] - 2026-11-22
 
 ### Changed
