@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-24
+
+### Changed
+
+- Reads the host bridge through the shared hardened reader, warns when a rotated refresh token can't be saved, and lets the host's permission settings decide when to ask before writes.
+
 ### Changed
 
 - Write tools no longer tell the model to confirm with the user before calling. They are marked destructive, so the host app's permission settings decide when to ask. Their descriptions still say what each one changes, such as that sending an invoice emails a real customer immediately.
