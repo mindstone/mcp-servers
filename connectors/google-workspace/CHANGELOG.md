@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-11-24
+
+### Changed
+
+- Gmail examples now show email bodies with real line breaks, so agents stop sending a literal backslash-n; the Docs append tool asks for real line breaks too.
+
 ### Security
 
 - Calendar event ids, calendar ids and Docs tab ids now stay inside the untrusted-content envelope, since an event's creator, a shared calendar's owner or a document's author can choose them. The server strips the envelope from id arguments, so an id copied from a result still works when passed back.
