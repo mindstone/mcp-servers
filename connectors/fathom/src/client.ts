@@ -62,6 +62,8 @@ async function fathomRequest(
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      // After the spread so no caller can override it: a redirect would carry X-Api-Key to its target.
+      redirect: 'error',
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {

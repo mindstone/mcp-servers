@@ -181,9 +181,16 @@ Every reply from Fathom is checked against the shape this connector expects
 before any tool uses it. A reply that is not valid JSON, or does not match,
 fails with a fixed `INVALID_RESPONSE` error that repeats none of the reply.
 Only fields a tool actually uses are checked, so dates, ids and other values
-passed through are kept as Fathom sent them, as are fields the connector does
-not know about. A created webhook must come back with its `id` and `secret`,
-and a download request with its `download_id`.
+passed through are still returned whatever their type. Ids, dates, URLs,
+emails, domains, flags, Fathom's own status values and the webhook `secret` come
+back as sent when they look like one; anything else, and every field the
+connector does not know about (CRM matches included, keys and all), comes back
+with its text inside `<untrusted-content>` envelopes. A created webhook must
+come back with its `id` and `secret`, and a download request with its
+`download_id`.
+
+Requests to the Fathom API never follow a redirect, so the API key is never
+sent to another address; a redirect fails the call with an error.
 
 Host bridge state (`MCP_HOST_BRIDGE_STATE`) is read through the shared hardened reader: the file must be a regular file (not a symlink), at most 64 KiB, with a numeric `port` and a printable `token`, or the bridge is treated as unavailable and the reason is logged to stderr. Bridge requests go only to `127.0.0.1`, and any warning or error text the bridge returns is wrapped in an `<untrusted-content>` envelope.
 

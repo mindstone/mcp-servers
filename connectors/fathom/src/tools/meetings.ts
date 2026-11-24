@@ -3,7 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { wrapUntrusted } from '../untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { metadata, wrapPassThrough, type Policy } from '../pass-through.js';
 import {
   MeetingsListResponseSchema,
   type MeetingItem,
@@ -73,29 +74,110 @@ function getSpeakerName(entry: TranscriptEntry): string {
   return speaker.display_name || speaker.name || speaker.matched_calendar_invitee_email || speaker.email || 'Unknown';
 }
 
-/**
- * Wrap every caller-controllable text field of a meeting (titles, attendee
- * names, AI summary, action items) in an untrusted-content envelope.
- * Meeting content is authored by meeting participants, not by the user, so
- * the host LLM must see it as data, not instructions (invariant #6).
- * Connector-controlled metadata (ids, timestamps, URLs, emails) stays raw.
- */
-function sanitizeMeeting(meeting: MeetingItem): MeetingItem {
+const MEETING_POLICY: Policy = {
+  title: 'caller',
+  meeting_title: 'caller',
+  meeting_type: 'caller',
+  recording_id: 'id',
+  url: 'url',
+  meeting_url: 'url',
+  share_url: 'url',
+  created_at: 'time',
+  scheduled_start_time: 'time',
+  scheduled_end_time: 'time',
+  recording_start_time: 'time',
+  recording_end_time: 'time',
+  calendar_invitees_domains_type: 'enum',
+  shared_with: 'enum',
+  transcript_language: 'enum',
+  calendar_invitees: 'caller',
+  recorded_by: 'caller',
+  default_summary: 'caller',
+  action_items: 'caller',
+  transcript: 'caller',
+};
+const INVITEE_POLICY: Policy = {
+  name: 'caller',
+  matched_speaker_display_name: 'caller',
+  email: 'email',
+  email_domain: 'domain',
+  is_external: 'flag',
+};
+const RECORDER_POLICY: Policy = { name: 'caller', email: 'email', email_domain: 'domain', team: 'caller' };
+const ACTION_ITEM_POLICY: Policy = {
+  description: 'caller',
+  user_generated: 'flag',
+  completed: 'flag',
+  recording_timestamp: 'time',
+  recording_playback_url: 'url',
+  assignee: 'caller',
+};
+const ASSIGNEE_POLICY: Policy = { name: 'caller', email: 'email', team: 'caller' };
+const TRANSCRIPT_ENTRY_POLICY: Policy = {
+  speaker: 'caller',
+  start_time: 'number',
+  end_time: 'time',
+  timestamp: 'time',
+  text: 'caller',
+};
+const SPEAKER_POLICY: Policy = {
+  name: 'caller',
+  display_name: 'caller',
+  email: 'email',
+  matched_calendar_invitee_email: 'email',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A transcript entry for JSON output: text and speaker names enveloped, unknown fields too. */
+function sanitizeTranscriptEntry(entry: unknown): unknown {
+  if (!isRecord(entry)) return wrapUntrustedJsonStrings(entry, 'fathom:transcript:extension');
+  const speaker = entry.speaker;
   return {
-    ...meeting,
+    ...wrapPassThrough(entry, TRANSCRIPT_ENTRY_POLICY, 'fathom:transcript'),
+    text: wrapUntrustedJsonStrings(entry.text, 'fathom:transcript:text'),
+    speaker: isRecord(speaker)
+      ? {
+          ...wrapPassThrough(speaker, SPEAKER_POLICY, 'fathom:transcript:speaker'),
+          name: wrapUntrustedJsonStrings(speaker.name, 'fathom:transcript:speaker'),
+          display_name: wrapUntrustedJsonStrings(speaker.display_name, 'fathom:transcript:speaker'),
+        }
+      : wrapUntrustedJsonStrings(speaker, 'fathom:transcript:speaker'),
+  };
+}
+
+/**
+ * Prepare a meeting for output (invariant #6). Meeting content is authored by
+ * meeting participants, not by the user, so the host LLM must see it as data,
+ * not instructions: every text field is enveloped, and so is every field the
+ * connector does not know. Known metadata (ids, timestamps, URLs, emails)
+ * stays raw when it has the expected shape.
+ */
+function sanitizeMeeting(meeting: MeetingItem): Record<string, unknown> {
+  return {
+    ...wrapPassThrough(meeting, MEETING_POLICY, 'fathom:meeting'),
     title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
     meeting_title:
       meeting.meeting_title == null
         ? meeting.meeting_title
         : (wrapUntrusted(meeting.meeting_title, 'fathom:meeting:title') ?? null),
+    // An organisation-authored meeting-type name, not an enum.
+    meeting_type: wrapUntrustedJsonStrings(meeting.meeting_type, 'fathom:meeting:meeting_type'),
     calendar_invitees: (meeting.calendar_invitees || []).map((invitee) => ({
-      ...invitee,
+      ...wrapPassThrough(invitee, INVITEE_POLICY, 'fathom:meeting:invitee'),
       name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name'),
+      matched_speaker_display_name: wrapUntrustedJsonStrings(
+        invitee.matched_speaker_display_name,
+        'fathom:meeting:invitee_matched_speaker',
+      ),
     })),
     recorded_by: meeting.recorded_by
       ? {
-          ...meeting.recorded_by,
+          ...wrapPassThrough(meeting.recorded_by, RECORDER_POLICY, 'fathom:meeting:recorder'),
           name: wrapUntrusted(meeting.recorded_by.name, 'fathom:meeting:recorder_name'),
+          team: wrapUntrustedJsonStrings(meeting.recorded_by.team, 'fathom:meeting:recorder_team'),
         }
       : meeting.recorded_by,
     default_summary: meeting.default_summary
@@ -106,13 +188,24 @@ function sanitizeMeeting(meeting: MeetingItem): MeetingItem {
       : meeting.default_summary,
     action_items: meeting.action_items
       ? meeting.action_items.map((item) => ({
-          ...item,
+          ...wrapPassThrough(item, ACTION_ITEM_POLICY, 'fathom:meeting:action_item'),
           description: wrapUntrusted(item.description, 'fathom:meeting:action_item') ?? item.description,
           assignee: item.assignee
-            ? { ...item.assignee, name: wrapUntrusted(item.assignee.name, 'fathom:meeting:assignee_name') }
+            ? {
+                ...wrapPassThrough(item.assignee, ASSIGNEE_POLICY, 'fathom:meeting:assignee'),
+                name: wrapUntrusted(item.assignee.name, 'fathom:meeting:assignee_name'),
+                team: wrapUntrustedJsonStrings(item.assignee.team, 'fathom:meeting:assignee_team'),
+              }
             : item.assignee,
         }))
       : meeting.action_items,
+    ...('transcript' in meeting
+      ? {
+          transcript: Array.isArray(meeting.transcript)
+            ? meeting.transcript.map(sanitizeTranscriptEntry)
+            : wrapUntrustedJsonStrings(meeting.transcript, 'fathom:transcript:extension'),
+        }
+      : {}),
   };
 }
 
@@ -274,14 +367,14 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
         meeting: {
           title: sanitized.title,
           meeting_title: sanitized.meeting_title,
-          recording_id: meeting.recording_id,
-          url: meeting.url,
-          share_url: meeting.share_url,
-          created_at: meeting.created_at,
-          scheduled_start_time: meeting.scheduled_start_time,
-          scheduled_end_time: meeting.scheduled_end_time,
-          recording_start_time: meeting.recording_start_time,
-          recording_end_time: meeting.recording_end_time,
+          recording_id: sanitized.recording_id,
+          url: sanitized.url,
+          share_url: sanitized.share_url,
+          created_at: sanitized.created_at,
+          scheduled_start_time: sanitized.scheduled_start_time,
+          scheduled_end_time: sanitized.scheduled_end_time,
+          recording_start_time: sanitized.recording_start_time,
+          recording_end_time: sanitized.recording_end_time,
           calendar_invitees: sanitized.calendar_invitees,
           recorded_by: sanitized.recorded_by,
           action_items: sanitized.action_items ?? null,
@@ -365,17 +458,7 @@ Use list_fathom_meetings first to find the recording_id.`,
         args.start_entry + entries.length < (matchedIndices ? matchedIndices.size : totalCount);
 
       if (args.format === 'json') {
-        const wrappedEntries = entries.map((entry) => ({
-          ...entry,
-          text: wrapUntrusted(entry.text, 'fathom:transcript:text') ?? entry.text,
-          speaker: entry.speaker
-            ? {
-                ...entry.speaker,
-                name: wrapUntrusted(entry.speaker.name, 'fathom:transcript:speaker'),
-                display_name: wrapUntrusted(entry.speaker.display_name, 'fathom:transcript:speaker'),
-              }
-            : entry.speaker,
-        }));
+        const wrappedEntries = entries.map(sanitizeTranscriptEntry);
         return JSON.stringify({
           ok: true,
           transcript: wrappedEntries,
@@ -443,9 +526,9 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
 
       const participants = (meeting.calendar_invitees || []).map((invitee) => ({
         name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name') ?? null,
-        email: invitee.email,
-        email_domain: invitee.email_domain || null,
-        is_external: invitee.is_external ?? false,
+        email: metadata(invitee.email, 'email', 'fathom:meeting:invitee:email'),
+        email_domain: metadata(invitee.email_domain || null, 'domain', 'fathom:meeting:invitee:email_domain'),
+        is_external: metadata(invitee.is_external ?? false, 'flag', 'fathom:meeting:invitee:is_external'),
       }));
 
       return JSON.stringify({
@@ -527,20 +610,24 @@ Rate limit: May use 1-10 API calls depending on filters and result volume.`,
             }
             items.push({
               description: wrapUntrusted(item.description, 'fathom:action_item:description') ?? item.description,
-              completed: item.completed ?? false,
-              user_generated: item.user_generated ?? false,
-              recording_timestamp: item.recording_timestamp ?? null,
-              recording_playback_url: item.recording_playback_url ?? null,
+              completed: metadata(item.completed ?? false, 'flag', 'fathom:action_item:completed'),
+              user_generated: metadata(item.user_generated ?? false, 'flag', 'fathom:action_item:user_generated'),
+              recording_timestamp: metadata(item.recording_timestamp ?? null, 'time', 'fathom:action_item:recording_timestamp'),
+              recording_playback_url: metadata(
+                item.recording_playback_url ?? null,
+                'url',
+                'fathom:action_item:recording_playback_url',
+              ),
               assignee: item.assignee
                 ? {
                     name: wrapUntrusted(item.assignee.name, 'fathom:action_item:assignee_name') ?? null,
-                    email: item.assignee.email ?? null,
+                    email: metadata(item.assignee.email ?? null, 'email', 'fathom:action_item:assignee_email'),
                   }
                 : null,
               meeting: {
-                recording_id: meeting.recording_id,
+                recording_id: metadata(meeting.recording_id, 'id', 'fathom:meeting:recording_id'),
                 title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
-                scheduled_start_time: meeting.scheduled_start_time,
+                scheduled_start_time: metadata(meeting.scheduled_start_time, 'time', 'fathom:meeting:scheduled_start_time'),
               },
             });
           }

@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createFathomHandlers } from './helpers/fathom-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
 
 const API_KEY = 'test-fathom-key';
 const BASE = 'https://api.fathom.ai/external/v1';
@@ -87,7 +88,7 @@ describe('Fathom recording download tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.status).toBe('failed');
-    expect(json.failure_reason).toBe('generation_failed');
+    expect(json.failure_reason).toBe(wrapUntrusted('generation_failed', 'fathom:download:failure_reason'));
   });
 
   it('get_fathom_recording_download_status returns NOT_FOUND for an unknown download', async () => {

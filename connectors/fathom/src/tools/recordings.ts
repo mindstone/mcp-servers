@@ -3,6 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { metadata } from '../pass-through.js';
+import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { type RecordingDownload, RecordingDownloadRequestSchema, RecordingDownloadSchema } from '../types.js';
 
 function noApiKeyError(): string {
@@ -13,21 +15,24 @@ function noApiKeyError(): string {
   });
 }
 
+// Fathom metadata stays raw only when it has the expected shape (invariant #6).
 function formatDownload(download: RecordingDownload) {
   const file = download.video ?? download.audio ?? null;
   return {
-    download_id: download.download_id,
-    recording_id: download.recording_id,
-    status: download.status,
+    download_id: metadata(download.download_id, 'id', 'fathom:download:download_id'),
+    recording_id: metadata(download.recording_id, 'id', 'fathom:download:recording_id'),
+    status: metadata(download.status, 'enum', 'fathom:download:status'),
     ...(file
       ? {
-          url: file.url,
-          content_type: file.content_type ?? null,
-          file_size_bytes: file.file_size_bytes ?? null,
-          expires_at: file.expires_at ?? null,
+          url: metadata(file.url, 'url', 'fathom:download:url'),
+          content_type: metadata(file.content_type ?? null, 'mime', 'fathom:download:content_type'),
+          file_size_bytes: metadata(file.file_size_bytes ?? null, 'number', 'fathom:download:file_size_bytes'),
+          expires_at: metadata(file.expires_at ?? null, 'time', 'fathom:download:expires_at'),
         }
       : {}),
-    ...(download.failure_reason ? { failure_reason: download.failure_reason } : {}),
+    ...(download.failure_reason
+      ? { failure_reason: wrapUntrustedJsonStrings(download.failure_reason, 'fathom:download:failure_reason') }
+      : {}),
   };
 }
 

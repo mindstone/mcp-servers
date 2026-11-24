@@ -4,6 +4,7 @@ import { fathomFetch, fathomFetchNoContent } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { WebhookSchema } from '../types.js';
+import { metadata } from '../pass-through.js';
 
 function noApiKeyError(): string {
   return JSON.stringify({
@@ -94,12 +95,15 @@ is only returned at creation time.`,
       return JSON.stringify({
         ok: true,
         webhook: {
-          id: webhook.id,
-          url: webhook.url,
-          created_at: webhook.created_at ?? null,
-          triggered_for: webhook.triggered_for ?? args.triggered_for,
+          id: metadata(webhook.id, 'id', 'fathom:webhook:id'),
+          url: metadata(webhook.url, 'url', 'fathom:webhook:url'),
+          created_at: metadata(webhook.created_at ?? null, 'time', 'fathom:webhook:created_at'),
+          triggered_for: Array.isArray(webhook.triggered_for)
+            ? webhook.triggered_for.map((value) => metadata(value, 'enum', 'fathom:webhook:triggered_for'))
+            : (metadata(webhook.triggered_for, 'enum', 'fathom:webhook:triggered_for') ?? args.triggered_for),
         },
-        secret: webhook.secret,
+        // A well-shaped secret stays raw: it must be used verbatim.
+        secret: metadata(webhook.secret, 'token', 'fathom:webhook:secret'),
         note: 'Store the secret securely — it verifies the webhook-signature header on deliveries and is only returned once. Keep the id for delete_fathom_webhook.',
       });
     }),

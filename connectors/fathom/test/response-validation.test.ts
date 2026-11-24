@@ -4,6 +4,7 @@ import { mswServer } from './helpers/setup.js';
 import { createFathomHandlers } from './helpers/fathom-mock-server.js';
 import { createTestClient, type McpTestClient, type CallToolResult } from './helpers/mcp-test-client.js';
 import { mockMeetings } from './fixtures/fathom-data.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../src/untrusted-content.js';
 
 const API_KEY = 'test-fathom-key';
 const BASE = 'https://api.fathom.ai/external/v1';
@@ -476,7 +477,7 @@ describe('Fathom response validation', () => {
     });
   });
 
-  describe('unknown fields are kept', () => {
+  describe('unknown fields are kept, enveloped', () => {
     it('keeps unknown top-level and nested meeting fields in list output', async () => {
       await setup();
       const [base] = mockMeetings;
@@ -512,12 +513,16 @@ describe('Fathom response validation', () => {
       };
       expect(json.ok).toBe(true);
       const [meeting] = json.meetings;
-      expect(meeting.crm_matches).toEqual({ companies: [{ name: 'Acme Corp' }] });
+      expect(meeting.crm_matches).toEqual(
+        wrapUntrustedJsonStrings({ companies: [{ name: 'Acme Corp' }] }, 'fathom:meeting:extension'),
+      );
       expect(meeting.calendar_invitees[0].seat).toBe(4);
-      expect(meeting.calendar_invitees[0].matched_speaker_display_name).toBe('Alice A.');
-      expect(meeting.recorded_by.badge).toBe('gold');
-      expect(meeting.action_items[0].priority).toBe('high');
-      expect(meeting.action_items[0].assignee.title).toBe('PM');
+      expect(meeting.calendar_invitees[0].matched_speaker_display_name).toBe(
+        wrapUntrusted('Alice A.', 'fathom:meeting:invitee_matched_speaker'),
+      );
+      expect(meeting.recorded_by.badge).toBe(wrapUntrusted('gold', 'fathom:meeting:recorder:extension'));
+      expect(meeting.action_items[0].priority).toBe(wrapUntrusted('high', 'fathom:meeting:action_item:extension'));
+      expect(meeting.action_items[0].assignee.title).toBe(wrapUntrusted('PM', 'fathom:meeting:assignee:extension'));
     });
 
     it('keeps unknown transcript entry and speaker fields in json output', async () => {
@@ -538,7 +543,8 @@ describe('Fathom response validation', () => {
       };
       expect(json.ok).toBe(true);
       expect(json.transcript[0].confidence).toBe(0.98);
-      expect(json.transcript[0].speaker.voice_id).toBe('v-9');
+      // Unknown fields are enveloped even when they look like an id: the connector cannot tell.
+      expect(json.transcript[0].speaker.voice_id).toBe(wrapUntrusted('v-9', 'fathom:transcript:speaker:extension'));
     });
 
     it('keeps unknown team and member fields in output', async () => {
@@ -560,7 +566,7 @@ describe('Fathom response validation', () => {
 
       const members = await testClient.callTool('list_fathom_team_members', { team: 'Ops' });
       const member = (members.json as { teamMembers: Array<Record<string, unknown>> }).teamMembers[0];
-      expect(member.timezone).toBe('UTC');
+      expect(member.timezone).toBe(wrapUntrusted('UTC', 'fathom:team:member:extension'));
       expect(member.created_at).toBe('2025-03-01T00:00:00Z');
     });
   });

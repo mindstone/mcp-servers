@@ -3,8 +3,19 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { wrapUntrusted } from '../untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { wrapPassThrough, type Policy } from '../pass-through.js';
 import { TeamsResponseSchema, TeamMembersResponseSchema } from '../types.js';
+
+const TEAM_POLICY: Policy = { name: 'caller', created_at: 'time' };
+const MEMBER_POLICY: Policy = {
+  id: 'id',
+  email: 'email',
+  name: 'caller',
+  role: 'caller',
+  joined_at: 'time',
+  created_at: 'time',
+};
 
 function noApiKeyError(): string {
   return JSON.stringify({
@@ -41,12 +52,12 @@ Use this to find team names for filtering meetings with list_fathom_meetings or 
 
         const items = response.items || [];
         for (const item of items) {
-          // Team names are org-authored text — envelope before returning.
+          // Team names are org-authored text; unknown fields are enveloped too.
           if (typeof item === 'string') {
             allTeams.push({ name: wrapUntrusted(item, 'fathom:team:name') ?? item });
           } else {
             allTeams.push({
-              ...item,
+              ...wrapPassThrough(item, TEAM_POLICY, 'fathom:team'),
               name: wrapUntrusted(item.name, 'fathom:team:name') ?? item.name,
             });
           }
@@ -90,8 +101,9 @@ Use list_fathom_teams first to get available team names.`,
 
         for (const item of response.items || []) {
           members.push({
-            ...item,
+            ...wrapPassThrough(item, MEMBER_POLICY, 'fathom:team:member'),
             name: wrapUntrusted(item.name, 'fathom:team:member_name'),
+            role: wrapUntrustedJsonStrings(item.role, 'fathom:team:member_role'),
           });
         }
         cursor = response.next_cursor || undefined;
