@@ -131,7 +131,7 @@ export const docsTools: ToolMetadata[] = [
        { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "text": "\\nAction items reviewed." }
     
     The text is inserted at the end of the document body (or of the tab).
-    Use \\n for line breaks in the appended text.`,
+    Write line breaks in the appended text as real line breaks.`,
     aliases: ['append_doc', 'add_to_document', 'document_append'],
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {

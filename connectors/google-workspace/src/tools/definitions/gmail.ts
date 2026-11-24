@@ -433,7 +433,14 @@ CRITICAL - PLAIN TEXT vs HTML:
 - If is_html: false (default), body is plain text (line breaks work naturally).
 
 PLAIN TEXT (default - use this most of the time):
-{ "to": ["alice@example.com"], "subject": "Quick question", "body": "Hi Alice,\\n\\nCan we meet tomorrow at 3pm?\\n\\nThanks,\\nBob" }
+{ "to": ["alice@example.com"], "subject": "Quick question", "body": "..." }
+where body is the text itself, with real line breaks:
+Hi Alice,
+
+Can we meet tomorrow at 3pm?
+
+Thanks,
+Bob
 
 HTML (only when formatting is needed):
 { "to": ["alice@example.com"], "subject": "Meeting Summary", "body": "<p>Hi Alice,</p><p>Key points from our meeting:</p><ul><li>Budget approved</li><li>Launch date: March 1st</li></ul><p>Thanks,<br>Bob</p>", "is_html": true }
@@ -444,13 +451,29 @@ COMMON MISTAKES TO AVOID:
 - Don't forget <br> or <p> tags for line breaks in HTML mode
 
 REPLY TO EXISTING EMAIL:
-{ "to": ["original-sender@example.com"], "subject": "Re: Meeting Tomorrow", "body": "Sounds good!\\n\\nOn Mon, Jan 6, 2026 at 10:00 AM, Alice <alice@example.com> wrote:\\n> Hey, are we still on for tomorrow's meeting?\\n> Let me know if the time works.", "reply_to_message_id": "18c5a2b3d4e5f6g7" }
+{ "to": ["original-sender@example.com"], "subject": "Re: Meeting Tomorrow", "body": "...", "reply_to_message_id": "18c5a2b3d4e5f6g7" }
+where body is:
+Sounds good!
+
+On Mon, Jan 6, 2026 at 10:00 AM, Alice <alice@example.com> wrote:
+> Hey, are we still on for tomorrow's meeting?
+> Let me know if the time works.
 
 IMPORTANT: For replies, use reply_to_message_id with the Gmail message ID. This auto-sets threading headers.
 The threading headers do not add earlier messages to the body, so quote the message you are answering below your reply: many recipients read outside a threaded view. Use get_workspace_email_thread to fetch it, then quote it conventionally (plain text: "> " prefix with an "On DATE, SENDER wrote:" line; HTML: <blockquote> tags). Quoting is good practice, never a reason to hold back an approved reply: if you can't quote, send the reply anyway, and pass on any threading warning the tool returns.
 
 FORWARD AN EMAIL:
-{ "to": ["bob@example.com"], "subject": "Fwd: Meeting Tomorrow", "body": "FYI see below.\\n\\n---------- Forwarded message ----------\\nFrom: Alice <alice@example.com>\\nDate: Mon, Jan 6, 2026\\nSubject: Meeting Tomorrow\\nTo: You <you@example.com>\\n\\nHey, are we still on for tomorrow's meeting?" }
+{ "to": ["bob@example.com"], "subject": "Fwd: Meeting Tomorrow", "body": "..." }
+where body is:
+FYI see below.
+
+---------- Forwarded message ----------
+From: Alice <alice@example.com>
+Date: Mon, Jan 6, 2026
+Subject: Meeting Tomorrow
+To: You <you@example.com>
+
+Hey, are we still on for tomorrow's meeting?
 
 For forwards, include the full original message with a forwarded message header block.
 
@@ -459,7 +482,7 @@ When the original email has attachments, you MUST download and re-attach them:
 1. Use get_workspace_email_thread to see which attachments exist (filenames listed per message)
 2. Use download_workspace_attachment for each attachment (source: "email", message_id, filename)
 3. Include them in the "attachments" array using the local file path returned by the download
-Example: { "to": ["bob@example.com"], "subject": "Fwd: Report", "body": "See attached.\\n\\n---------- Forwarded message ----------\\n...", "attachments": [{ "path": "/path/to/downloaded/report.pdf" }] }
+Example: { "to": ["bob@example.com"], "subject": "Fwd: Report", "body": "...", "attachments": [{ "path": "/path/to/downloaded/report.pdf" }] }, with the body written like the forward above.
 Attachments are NOT automatically carried over — you must explicitly download and re-attach them.`,
     aliases: ['send_email', 'send_mail', 'create_email'],
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -881,7 +904,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
         },
         body: {
           type: 'string',
-          description: 'Email body content. Plain text by default — use \\n for line breaks. If you need HTML formatting (bold, lists, links), you MUST also set is_html: true or HTML tags will show as raw text in Gmail.'
+          description: 'Email body content. Plain text by default, with real line breaks. If you need HTML formatting (bold, lists, links), you MUST also set is_html: true or HTML tags will show as raw text in Gmail.'
         },
         is_html: {
           type: 'boolean',
@@ -962,7 +985,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
         },
         body: {
           type: 'string',
-          description: 'Email body content. Plain text by default — use \\n for line breaks. If you need HTML formatting (bold, lists, links), you MUST also set is_html: true or HTML tags will show as raw text in Gmail.'
+          description: 'Email body content. Plain text by default, with real line breaks. If you need HTML formatting (bold, lists, links), you MUST also set is_html: true or HTML tags will show as raw text in Gmail.'
         },
         is_html: {
           type: 'boolean',
