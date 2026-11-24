@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Calendar event ids, calendar ids and Docs tab ids now stay inside the untrusted-content envelope, since an event's creator, a shared calendar's owner or a document's author can choose them. The server strips the envelope from id arguments, so an id copied from a result still works when passed back.
+
 ## [0.5.9] - 2026-11-23
 
 ### Changed

@@ -46,7 +46,7 @@ describe('outline contract', () => {
     for (const { plain, wrapped } of contract.tabTrees) {
       expect(wrapUntrustedJsonControls(
         plain, `google-workspace:docs:tabs/${plain.documentId}`,
-        ['documentId', 'tabs.*.tabId', 'tabs.*.parentTabId'],
+        ['documentId'],
       )).toEqual(wrapped);
     }
   });

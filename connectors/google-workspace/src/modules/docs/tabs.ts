@@ -8,6 +8,15 @@
  */
 import { docs_v1 } from 'googleapis';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-controls.js';
+
+/**
+ * A tab id quoted in the connector's own text. A document's author can choose its tab ids, so the
+ * id stays in an untrusted-content envelope; the server strips it again when the id is passed back.
+ */
+export function quoteTabId(tabId: string): string {
+  return wrapUntrustedContent(tabId, 'google-workspace:docs:tab-id');
+}
 
 export const TRUNCATION_MARKER = '\n\n[TRUNCATED - document exceeds character limit]';
 
@@ -104,7 +113,7 @@ export function resolveTab(
     if (match) return match;
   }
   throw new DocsInputError(
-    `Tab "${requested}" not found in this document. Call list_workspace_document_tabs to see tab ids.`
+    `Tab ${quoteTabId(requested)} not found in this document. Call list_workspace_document_tabs to see tab ids.`
   );
 }
 

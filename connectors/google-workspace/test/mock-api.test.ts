@@ -1086,9 +1086,10 @@ function installNestedDocMocks(
   return { gets, batches };
 }
 
-function expectSingleEnvelopeClose(output: string): void {
-  // The breakout title is escaped, so the only close tag left is the envelope's own.
-  expect(output.match(/<\/untrusted-content\s*>/gi)).toHaveLength(1);
+function expectSingleEnvelopeClose(output: string, envelopes = 1): void {
+  // The breakout title is escaped, so the only close tags left are the envelopes' own
+  // (the document's, plus the tab id's when the edit was tab-scoped).
+  expect(output.match(/<\/untrusted-content\s*>/gi)).toHaveLength(envelopes);
 }
 
 describe('Docs tabs', () => {
@@ -1270,7 +1271,7 @@ describe('Docs tabs', () => {
     await expect(handlers.handleReadDocument({ document_id: 'nested-doc', all_tabs: true, return_json: true }))
       .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('all_tabs with return_json') });
     await expect(handlers.handleReadDocument({ document_id: 'nested-doc', tab_id: 't.nope' }))
-      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Tab "t.nope" not found in this document.') });
+      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Tab <untrusted-content source="google-workspace:docs:tab-id">t.nope</untrusted-content> not found in this document.') });
     await expect(handlers.handleAppendDocument({ document_id: 'nested-doc', tab_id: 't.nope', text: 'x' }))
       .rejects.toMatchObject(invalidParams);
     await expect(handlers.handleReplaceDocument({ document_id: 'nested-doc', tab_id: 't.nope', content: 'x' }))
@@ -1347,7 +1348,7 @@ describe('Docs tabs', () => {
     const scoped = String(await handlers.handleAppendDocument({ document_id: 'nested-doc', tab_id: 't.a1', text: 'Carried over' }));
     expect(gets[1]).toEqual({ includeTabsContent: 'true', fields: null });
     expect(batches[1]).toEqual({ requests: [{ insertText: { location: { index: 22, tabId: 't.a1' }, text: 'Carried over' } }] });
-    expect(scoped.startsWith('Text appended successfully! (tab t.a1)\n\nDocument: ')).toBe(true);
+    expect(scoped.startsWith('Text appended successfully! (tab <untrusted-content source="google-workspace:docs:document/nested-doc">t.a1</untrusted-content>)\n\nDocument: ')).toBe(true);
 
     await handlers.handleAppendDocument({ document_id: 'nested-doc', tabId: 'default', text: 'First tab' });
     expect(batches[2].requests[0].insertText.location).toEqual({ index: 25, tabId: 't.0' });
@@ -1373,7 +1374,7 @@ describe('Docs tabs', () => {
         { insertText: { location: { index: 1, tabId: 't.b' }, text: 'Reset' } },
       ],
     });
-    expect(scoped.startsWith('Document content replaced successfully! (tab t.b)\n\n')).toBe(true);
+    expect(scoped.startsWith('Document content replaced successfully! (tab <untrusted-content source="google-workspace:docs:document/nested-doc">t.b</untrusted-content>)\n\n')).toBe(true);
   });
 
   it('I5/I14: find/replace without tab_id covers every tab and says so on multi-tab documents', async () => {
@@ -1408,7 +1409,7 @@ describe('Docs tabs', () => {
     expect(batches[0].requests[0].replaceAllText.tabsCriteria).toEqual({ tabIds: ['t.b'] });
     // One tree read: resolves the tab and supplies the title (no read after the replace).
     expect(gets).toEqual([{ includeTabsContent: 'true', fields: TAB_TREE_FIELDS }]);
-    expect(result.startsWith('Find and replace completed! (tab t.b)\n\nReplaced 1 occurrence of')).toBe(true);
+    expect(result.startsWith('Find and replace completed! (tab <untrusted-content source="google-workspace:docs:document/nested-doc">t.b</untrusted-content>)\n\nReplaced 1 occurrence of')).toBe(true);
     expect(result).not.toContain('Searched all');
 
     await handlers.handleFindAndReplace({ document_id: 'nested-doc', tab_id: 'default', find_text: 'a', replace_text: 'b' });
@@ -1426,10 +1427,10 @@ describe('Docs tabs', () => {
       String(await handlers.handleFindAndReplace({ document_id: 'nested-doc', find_text: 'a', replace_text: 'b' })),
       String(await handlers.handleAppendDocument({ document_id: 'nested-doc', tab_id: 't.b', text: 'x' })),
     ];
-    for (const output of outputs) {
+    outputs.forEach((output, i) => {
       expect(output).toContain(enveloped);
-      expectSingleEnvelopeClose(output);
-    }
+      expectSingleEnvelopeClose(output, i === 3 ? 2 : 1);
+    });
   });
 
   it('I13: escapes a breakout document title in the find/replace miss result', async () => {
@@ -1442,9 +1443,9 @@ describe('Docs tabs', () => {
 
     // A tab-scoped miss names the one tab searched, not the whole document.
     const scopedMiss = String(await handlers.handleFindAndReplace({ document_id: 'nested-doc', tab_id: 't.b', find_text: 'absent', replace_text: 'b' }));
-    expect(scopedMiss.startsWith('No occurrences of "absent" found in tab t.b.\n\nDocument: <untrusted-content')).toBe(true);
+    expect(scopedMiss.startsWith('No occurrences of "absent" found in tab <untrusted-content source="google-workspace:docs:document/nested-doc">t.b</untrusted-content>.\n\nDocument: <untrusted-content')).toBe(true);
     expect(scopedMiss).not.toContain('found in the document');
-    expectSingleEnvelopeClose(scopedMiss);
+    expectSingleEnvelopeClose(scopedMiss, 2);
   });
 
   it('lists the real tab tree (tree-only read), with word counts and as JSON', async () => {
@@ -1480,7 +1481,8 @@ describe('Docs tabs', () => {
     expect(json.tabs[0].parentTabId).toBeNull();
     expect(json.tabs[2].nestingLevel).toBe(2);
     expect(json.tabs[0].childCount).toBe(2);
-    expect(json).toMatchObject({ documentId: 'nested-doc', tabs: expect.arrayContaining([expect.objectContaining({ tabId: 't.a1x' })]) });
+    expect(json).toMatchObject({ documentId: 'nested-doc', tabs: expect.arrayContaining([expect.objectContaining({
+      tabId: '<untrusted-content source="google-workspace:docs:tabs/nested-doc">t.a1x</untrusted-content>' })]) });
     expect(JSON.stringify(json)).toContain('<untrusted-content source=\\"google-workspace:docs:tabs/nested-doc\\">Notes');
   });
 });
@@ -1785,7 +1787,7 @@ describe('Docs tab management', () => {
       await expect(handlers.handleDeleteDocumentTab({ document_id: 'nested-doc', tab_id: 't.0', ...flag }))
         .rejects.toMatchObject({
           code: ErrorCode.InvalidParams,
-          message: expect.stringContaining('Tab "t.0" has 3 sub-tabs, which would be deleted with it. Nothing was deleted.'),
+          message: expect.stringContaining('Tab <untrusted-content source="google-workspace:docs:tab-id">t.0</untrusted-content> has 3 sub-tabs, which would be deleted with it. Nothing was deleted.'),
         });
     }
     await expect(handlers.handleDeleteDocumentTab({ document_id: 'nested-doc', tab_id: 't.a1' }))
@@ -1971,7 +1973,7 @@ describe('Docs anchored insert', () => {
     expect(batches[0].requests[0].insertText.location).toEqual({ index: 31, tabId: 't.live' });
 
     await expect(handlers.handleInsertDocumentText({ document_id: 'anchor-doc', anchor_text: 'BUDGET APPROVED', text: '!' }))
-      .rejects.toMatchObject({ code: ErrorCode.InvalidParams, message: expect.stringContaining('Anchor text not found in tab "t.live"') });
+      .rejects.toMatchObject({ code: ErrorCode.InvalidParams, message: expect.stringContaining('Anchor text not found in tab <untrusted-content source="google-workspace:docs:tab-id">t.live</untrusted-content>') });
   });
 
   it('refuses before any write: not found, found twice, next paragraph is a table, non-empty target, bad input', async () => {
@@ -1981,7 +1983,7 @@ describe('Docs anchored insert', () => {
     const base = { document_id: 'anchor-doc', tab_id: 't.live', text: 'x' };
 
     await expect(handlers.handleInsertDocumentText({ ...base, anchor_text: 'Holiday' }))
-      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Anchor text not found in tab "t.live". It must be plain text inside one paragraph') });
+      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Anchor text not found in tab <untrusted-content source="google-workspace:docs:tab-id">t.live</untrusted-content>. It must be plain text inside one paragraph') });
     await expect(handlers.handleInsertDocumentText({ ...base, anchor_text: 'office' }))
       .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Anchor text found 2 times in this tab; use a longer anchor that appears once.') });
     await expect(handlers.handleInsertDocumentText({ ...base, anchor_text: 'Budget approved.', position: 'next_paragraph_start' }))

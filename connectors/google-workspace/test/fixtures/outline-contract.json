@@ -406,7 +406,7 @@
         "tabCount": 5,
         "tabs": [
           {
-            "tabId": "t.0",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
             "index": 0,
             "parentTabId": null,
@@ -415,7 +415,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.a1b2c3d4",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes</untrusted-content>",
             "index": 1,
             "parentTabId": null,
@@ -424,16 +424,16 @@
             "childCount": 1
           },
           {
-            "tabId": "t.c5d6e7f8",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.c5d6e7f8</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.a1b2c3d4",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "nestingLevel": 1,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes > Findings</untrusted-content>",
             "childCount": 0
           },
           {
-            "tabId": "t.d9e0f1a2",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.d9e0f1a2</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
             "index": 2,
             "parentTabId": null,
@@ -442,7 +442,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.b3c4d5e6",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.b3c4d5e6</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
             "index": 3,
             "parentTabId": null,
@@ -512,7 +512,7 @@
         "tabCount": 5,
         "tabs": [
           {
-            "tabId": "t.0",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
             "index": 0,
             "parentTabId": null,
@@ -521,7 +521,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.a1b2c3d4",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research</untrusted-content>",
             "index": 1,
             "parentTabId": null,
@@ -530,16 +530,16 @@
             "childCount": 1
           },
           {
-            "tabId": "t.c5d6e7f8",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.c5d6e7f8</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.a1b2c3d4",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "nestingLevel": 1,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research > Findings</untrusted-content>",
             "childCount": 0
           },
           {
-            "tabId": "t.d9e0f1a2",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.d9e0f1a2</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
             "index": 2,
             "parentTabId": null,
@@ -548,7 +548,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.b3c4d5e6",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.b3c4d5e6</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
             "index": 3,
             "parentTabId": null,
@@ -618,7 +618,7 @@
         "tabCount": 5,
         "tabs": [
           {
-            "tabId": "t.0",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
             "index": 0,
             "parentTabId": null,
@@ -627,25 +627,25 @@
             "childCount": 1
           },
           {
-            "tabId": "t.a1b2c3d4",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research notes</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.0",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "nestingLevel": 1,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research notes</untrusted-content>",
             "childCount": 1
           },
           {
-            "tabId": "t.c5d6e7f8",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.c5d6e7f8</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.a1b2c3d4",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "nestingLevel": 2,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research notes > Findings</untrusted-content>",
             "childCount": 0
           },
           {
-            "tabId": "t.d9e0f1a2",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.d9e0f1a2</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
             "index": 1,
             "parentTabId": null,
@@ -654,7 +654,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.b3c4d5e6",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.b3c4d5e6</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
             "index": 2,
             "parentTabId": null,
@@ -724,7 +724,7 @@
         "tabCount": 5,
         "tabs": [
           {
-            "tabId": "t.0",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan</untrusted-content>",
             "index": 0,
             "parentTabId": null,
@@ -733,25 +733,25 @@
             "childCount": 1
           },
           {
-            "tabId": "t.a1b2c3d4",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Research</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.0",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.0</untrusted-content>",
             "nestingLevel": 1,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research</untrusted-content>",
             "childCount": 1
           },
           {
-            "tabId": "t.c5d6e7f8",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.c5d6e7f8</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Findings</untrusted-content>",
             "index": 0,
-            "parentTabId": "t.a1b2c3d4",
+            "parentTabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.a1b2c3d4</untrusted-content>",
             "nestingLevel": 2,
             "path": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Project plan > Research > Findings</untrusted-content>",
             "childCount": 0
           },
           {
-            "tabId": "t.d9e0f1a2",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.d9e0f1a2</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Launch</untrusted-content>",
             "index": 1,
             "parentTabId": null,
@@ -760,7 +760,7 @@
             "childCount": 0
           },
           {
-            "tabId": "t.b3c4d5e6",
+            "tabId": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">t.b3c4d5e6</untrusted-content>",
             "title": "<untrusted-content source=\"google-workspace:docs:tabs/1Gk7Qm2Vn8Rp4Tx6Yz0Ab3Cd5Ef9Hi1Jk2Lm4No6Pq8\">Budget</untrusted-content>",
             "index": 2,
             "parentTabId": null,

@@ -254,11 +254,16 @@ function formatEnvelopedDocumentLine(doc: DocumentResponse, documentId: string):
   return `Document: ${wrapUntrustedContent(doc.title ?? '', `google-workspace:docs:document/${documentId}`)}`;
 }
 
+/** A tab id, enveloped: a document's author can choose it. */
+function envelopedTabId(doc: DocumentResponse, tabId: string): string {
+  return wrapUntrustedContent(tabId, `google-workspace:docs:document/${doc.documentId}`);
+}
+
 /**
  * ` (tab <id>)` suffix for the first line of a tab-scoped edit result (id only).
  */
 function tabSuffix(doc: DocumentResponse): string {
-  return doc.requestedTab ? ` (tab ${doc.requestedTab.tabId})` : '';
+  return doc.requestedTab ? ` (tab ${envelopedTabId(doc, doc.requestedTab.tabId)})` : '';
 }
 
 /**
@@ -297,10 +302,7 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonControls(result.data, `google-workspace:docs:document/${documentId}`, [
-        'documentId', 'revisionId', 'tabs.*.tabId', 'tabs.*.parentTabId', 'shownTab.tabId', 'requestedTab.tabId',
-        'tab.tabProperties.tabId', 'tab.tabProperties.parentTabId', 'childTabs.*.tabId',
-      ]);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:docs:document/${documentId}`, ['documentId', 'revisionId']);
     }
     
     // Format as human-readable text
@@ -443,7 +445,8 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
     
     if (occurrences === 0) {
       // A tab-scoped miss names the tab searched, not the whole document.
-      const searched = docResponse.requestedTab ? `tab ${docResponse.requestedTab.tabId}` : 'the document';
+      const searched = docResponse.requestedTab
+        ? `tab ${envelopedTabId(docResponse, docResponse.requestedTab.tabId)}` : 'the document';
       return `No occurrences of "${findText}" found in ${searched}.\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;
     }
     
@@ -504,7 +507,7 @@ export async function handleListDocumentTabs(args: ListTabsArgs): Promise<McpToo
           tabs: tabList.tabs,
         },
         `google-workspace:docs:tabs/${tabList.documentId}`,
-        ['documentId', 'tabs.*.tabId', 'tabs.*.parentTabId']
+        ['documentId']
       );
     }
     return formatTabsAsText(tabList);

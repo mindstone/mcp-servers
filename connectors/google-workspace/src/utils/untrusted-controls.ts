@@ -9,20 +9,13 @@ import { wrapUntrusted } from './untrusted-content.js';
  * Wrap external text, except provider-generated controls at declared response
  * paths. A `*` segment matches array items only; `{}` explicitly matches the
  * values of an object map at that path, without exempting other map content.
- * Calendar event ids use separate declared paths with Google's base32hex and
- * recurring-instance shape check. Other author-chosen ids (e.g. Slides object
- * ids), headers, titles, and metadata must not be declared as controls.
+ * Declare only ids an outsider cannot choose. Ids an author or sender can pick
+ * (Calendar event ids, calendar addresses, Docs tab ids, Slides object ids) stay
+ * wrapped, as do headers, titles and metadata; the server strips the envelope
+ * from id arguments (`unwrapIdArgs`), so a wrapped id still works when passed back.
  */
-export function wrapUntrustedJsonControls<T>(
-  value: T, source: string, controlPaths: readonly string[], eventIdPaths: readonly string[] = [],
-  calendarIdPaths: readonly string[] = [],
-): T {
-  const paths = [
-    ...controlPaths.map(path => ({ segments: path.split('.'), shape: /^[A-Za-z0-9_+/=.~!\-]+$/ })),
-    ...eventIdPaths.map(path => ({ segments: path.split('.'), shape: /^[a-v0-9]{5,1024}(?:_R[0-9]{8}T[0-9]{6})?(?:_[0-9]{8}(?:T[0-9]{6}Z)?)?$/ })),
-    // Calendar-list ids are provider-issued addresses, including public holiday calendars.
-    ...calendarIdPaths.map(path => ({ segments: path.split('.'), shape: /^[A-Za-z0-9_.+%#=\-]+@[A-Za-z0-9.\-]+$/ })),
-  ];
+export function wrapUntrustedJsonControls<T>(value: T, source: string, controlPaths: readonly string[]): T {
+  const paths = controlPaths.map(path => ({ segments: path.split('.'), shape: /^[A-Za-z0-9_+/=.~!\-]+$/ }));
   function visit(item: unknown, remaining: typeof paths): unknown {
     if (typeof item === 'string') {
       // Compare the full match because JavaScript's $ also accepts a trailing newline.

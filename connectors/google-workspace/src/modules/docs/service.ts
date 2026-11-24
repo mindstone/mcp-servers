@@ -35,6 +35,7 @@ import { wrapUntrustedJsonValues } from '../../utils/untrusted-content.js';
 import {
   ALL_TEXT_KEYS,
   DocsInputError,
+  quoteTabId,
   FlatParagraph,
   FlatTab,
   TAB_READ_TEXT_OPTIONS,
@@ -963,7 +964,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       if (descendants.length > 0 && options.deleteSubTabs !== true) {
         const count = descendants.length;
         throw new DocsInputError(
-          `Tab "${target.tabId}" has ${count} sub-tab${count !== 1 ? 's' : ''}, which would be deleted with it. Nothing was deleted. ` +
+          `Tab ${quoteTabId(target.tabId)} has ${count} sub-tab${count !== 1 ? 's' : ''}, which would be deleted with it. Nothing was deleted. ` +
             'Check with list_workspace_document_tabs that this is the tab you mean, then pass delete_sub_tabs: true to delete it and all its sub-tabs.'
         );
       }
@@ -1028,7 +1029,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
 
       if (matches.length === 0) {
         throw new DocsInputError(
-          `Anchor text not found in tab "${tab.tabId}". It must be plain text inside one paragraph (smart chips, people and dates can't be part of it); read the tab with tab_id to copy it exactly, leaving out the "• " and "[H1]"-style markers, which are not document text.`
+          `Anchor text not found in tab ${quoteTabId(tab.tabId)}. It must be plain text inside one paragraph (smart chips, people and dates can't be part of it); read the tab with tab_id to copy it exactly, leaving out the "• " and "[H1]"-style markers, which are not document text.`
         );
       }
       if (matches.length > 1) {
