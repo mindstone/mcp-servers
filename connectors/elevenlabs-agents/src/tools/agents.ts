@@ -39,11 +39,11 @@ const firstClassAuthoringSchema = {
   language: z.string().min(1).optional()
     .describe('Primary language for the agent (for example "en").'),
   llm_model: z.string().min(1).optional()
-    .describe('Optional ElevenLabs LLM model identifier for the prompt config.'),
+    .describe('Optional ElevenLabs LLM model identifier (for example "gemini-2.5-flash"); sent as the agent prompt\'s llm.'),
   temperature: z.number().finite().optional()
     .describe('Optional LLM temperature for the prompt config.'),
   knowledge_base_document_ids: z.array(z.string().min(1)).min(1).optional()
-    .describe('Optional knowledge-base document IDs to attach in the prompt config.'),
+    .describe('Optional knowledge-base document IDs (from list_knowledge_base_docs). Sets the agent\'s full knowledge-base list, replacing any documents already attached; each ID is looked up first and an unknown ID fails the call.'),
   advanced_config: advancedConfigSchema.optional()
     .describe('Optional raw agent config fragments. Deep-merged LAST for full-platform reach. Every "url"-keyed string in the merged body must be a public https:// address (loopback, private, link-local, and cloud-metadata destinations are rejected).'),
 } satisfies Record<string, z.ZodTypeAny>;
@@ -153,7 +153,56 @@ function setNestedField(target: Obj, path: readonly string[], value: unknown): v
   cursor[path[path.length - 1]!] = value;
 }
 
-function buildAuthoringPatch(args: Record<string, unknown>): Obj {
+const KNOWLEDGE_BASE_DOCUMENT_TYPES = new Set(['file', 'url', 'text', 'folder']);
+
+/**
+ * ElevenLabs attaches knowledge to an agent as `prompt.knowledge_base`, a list of
+ * `KnowledgeBaseLocator` objects (`type`, `name`, `id`; OpenAPI), not bare IDs. The
+ * public argument stays a list of IDs, so each one is looked up through the
+ * documented document endpoint to fill in its type and name. A missing document or
+ * an unexpected reply fails the whole call: attaching only some of what was asked,
+ * or sending a guessed type, would report success for an agent configured wrongly.
+ */
+async function resolveKnowledgeBaseLocators(apiKey: string, documentIds: readonly unknown[]): Promise<Obj[]> {
+  const locators: Obj[] = [];
+  for (const id of documentIds) {
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new ElevenLabsError(
+        'Every knowledge_base_document_ids entry must be a non-empty document ID string.',
+        'INVALID_ARGUMENTS',
+        'Pass the exact id values returned by list_knowledge_base_docs, then retry.',
+      );
+    }
+    let doc: unknown;
+    try {
+      doc = await elevenLabsJson(apiKey, ENDPOINTS.knowledgeBaseDoc(id), { method: 'GET' });
+    } catch (error) {
+      if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {
+        throw new ElevenLabsError(
+          `Knowledge-base document not found: ${id}`,
+          'KNOWLEDGE_BASE_DOCUMENT_NOT_FOUND',
+          'Re-list knowledge-base documents and retry with the exact returned id. The agent was not changed.',
+        );
+      }
+      throw error;
+    }
+    if (!isObj(doc)
+      || doc.id !== id
+      || typeof doc.type !== 'string'
+      || !KNOWLEDGE_BASE_DOCUMENT_TYPES.has(doc.type)
+      || typeof doc.name !== 'string') {
+      throw new ElevenLabsError(
+        `ElevenLabs returned knowledge-base document ${id} in an unexpected shape, so it cannot be attached.`,
+        'INVALID_RESPONSE',
+        'Retry shortly. The agent was not changed; if it keeps failing, check the document with get_knowledge_base_doc.',
+      );
+    }
+    locators.push({ type: doc.type, name: doc.name, id });
+  }
+  return locators;
+}
+
+function buildAuthoringPatch(args: Record<string, unknown>, knowledgeBase: Obj[] | undefined): Obj {
   const patch: Obj = {};
 
   if (typeof args.name === 'string') {
@@ -190,7 +239,7 @@ function buildAuthoringPatch(args: Record<string, unknown>): Obj {
   if (typeof args.llm_model === 'string') {
     setNestedField(
       patch,
-      ['conversation_config', 'agent', 'prompt', 'llm_model'],
+      ['conversation_config', 'agent', 'prompt', 'llm'],
       args.llm_model,
     );
   }
@@ -201,23 +250,28 @@ function buildAuthoringPatch(args: Record<string, unknown>): Obj {
       args.temperature,
     );
   }
-  if (Array.isArray(args.knowledge_base_document_ids)) {
+  if (knowledgeBase) {
     setNestedField(
       patch,
-      ['conversation_config', 'agent', 'prompt', 'knowledge_base_document_ids'],
-      args.knowledge_base_document_ids,
+      ['conversation_config', 'agent', 'prompt', 'knowledge_base'],
+      knowledgeBase,
     );
   }
 
   return patch;
 }
 
-function buildAuthoringBody(args: Record<string, unknown>): Obj {
+async function buildAuthoringBody(apiKey: string, args: Record<string, unknown>): Promise<Obj> {
   const authored = unwrapAuthoredArgs(args);
-  const patch = buildAuthoringPatch(authored);
-  const body = isObj(authored.advanced_config)
-    ? deepMerge(patch, authored.advanced_config) as Obj
-    : patch;
+  const advancedConfig = isObj(authored.advanced_config) ? authored.advanced_config : undefined;
+  // advanced_config is the only source of url-keyed fields, so checking it here keeps
+  // the SSRF boundary ahead of every upstream call, the knowledge lookups included.
+  if (advancedConfig) validateNestedPublicHttpsUrls(advancedConfig, 'config');
+  const knowledgeBase = Array.isArray(authored.knowledge_base_document_ids)
+    ? await resolveKnowledgeBaseLocators(apiKey, authored.knowledge_base_document_ids)
+    : undefined;
+  const patch = buildAuthoringPatch(authored, knowledgeBase);
+  const body = advancedConfig ? deepMerge(patch, advancedConfig) as Obj : patch;
   // Same SSRF boundary `add_agent_tool` applies to its passthrough: the merged
   // body is what goes on the wire, so every `url`-keyed string in it
   // (custom_llm.url, platform_settings webhook URLs, …) must pass the
@@ -416,7 +470,7 @@ COMMON MISTAKES:
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const body = buildAuthoringBody(args as Record<string, unknown>);
+      const body = await buildAuthoringBody(apiKey, args as Record<string, unknown>);
       const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.AGENTS_CREATE,
@@ -476,7 +530,7 @@ COMMON MISTAKES:
 
       const apiKey = requireApiKey();
       const { agent_id, ...updateArgs } = args;
-      const body = buildAuthoringBody(updateArgs as Record<string, unknown>);
+      const body = await buildAuthoringBody(apiKey, updateArgs as Record<string, unknown>);
       const result = await elevenLabsJson(
         apiKey,
         ENDPOINTS.agent(agent_id),

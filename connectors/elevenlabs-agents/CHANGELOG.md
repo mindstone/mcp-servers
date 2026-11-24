@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `create_agent` and `update_agent` now send the chosen model and knowledge documents in the fields ElevenLabs reads (`prompt.llm` and `prompt.knowledge_base`), so new and changed agents get the model and knowledge you asked for. Each knowledge document is looked up first; an unknown document fails the call and leaves the agent unchanged.
+
 ### Security
 
 - Saving the API key in Rebel now validates the bridge state and the host app's reply, marks the app's text as outside content, and says when the key is kept only for this session.

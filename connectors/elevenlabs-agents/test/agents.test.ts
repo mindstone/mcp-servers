@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import {
   createCreateAgentCapturingHandler,
@@ -12,6 +13,8 @@ import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.
 import { ATTACK_PAYLOAD, CLOSE_TAG_AGENT_NAME } from './fixtures/elevenlabs-agents-data.js';
 
 type Json = Record<string, any>;
+
+const BASE_V1 = 'https://api.elevenlabs.io/v1';
 
 describe('agents tools', () => {
   let testClient: McpTestClient;
@@ -42,9 +45,15 @@ describe('agents tools', () => {
     const result = await testClient.callTool('get_agent', { agent_id: 'agent_custom_456' });
     expect(result.isError).toBeFalsy();
     expect(result.json.agent.agent_id).toBe('agent_custom_456');
+    // Knowledge locators keep their id and type literal so they can be passed back,
+    // while the workspace-authored document name stays enveloped.
+    const [locator] = result.json.agent.conversation_config.agent.prompt.knowledge_base;
+    expect(locator.id).toBe('doc_test_123');
+    expect(locator.type).toBe('text');
+    expect(String(locator.name)).toContain('<untrusted-content source=');
   });
 
-  it('create_agent maps the first-class fields into nested conversation_config paths', async () => {
+  it('create_agent maps the first-class fields into the documented conversation_config paths', async () => {
     const { handler, captured } = createCreateAgentCapturingHandler();
     mswServer.use(handler, ...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
@@ -57,21 +66,27 @@ describe('agents tools', () => {
       first_message: 'Thanks for calling Support.',
       voice_id: 'voice_abc',
       language: 'en',
-      llm_model: 'gpt-realtime',
+      llm_model: 'gpt-4o-mini',
       temperature: 0.3,
-      knowledge_base_document_ids: ['doc_test_123', 'doc_test_456'],
+      knowledge_base_document_ids: ['doc_test_123', 'doc_url_test_123'],
     });
 
     expect(result.isError).toBeFalsy();
+    // ElevenLabs OpenAPI `PromptAgentAPIModel`: the model is `llm`, and knowledge is
+    // `knowledge_base`, a list of `KnowledgeBaseLocator` {type, name, id} objects
+    // filled from each document's own record (GET /convai/knowledge-base/{id}).
     expect(captured.body).toEqual({
       name: 'Support triage',
       conversation_config: {
         agent: {
           prompt: {
             prompt: 'Resolve the issue calmly.',
-            llm_model: 'gpt-realtime',
+            llm: 'gpt-4o-mini',
             temperature: 0.3,
-            knowledge_base_document_ids: ['doc_test_123', 'doc_test_456'],
+            knowledge_base: [
+              { type: 'text', name: ATTACK_PAYLOAD, id: 'doc_test_123' },
+              { type: 'url', name: ATTACK_PAYLOAD, id: 'doc_url_test_123' },
+            ],
           },
           first_message: 'Thanks for calling Support.',
           language: 'en',
@@ -83,6 +98,87 @@ describe('agents tools', () => {
     });
     expect(result.json.agent_id).toBe('agent_created_123');
     expect(result.json.agent.agent_id).toBe('agent_created_123');
+  });
+
+  it('update_agent sends the model and knowledge under the documented fields and nothing else', async () => {
+    const { handler, captured } = createUpdateAgentCapturingHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('update_agent', {
+      agent_id: 'agent_test_123',
+      llm_model: 'gemini-2.5-flash',
+      knowledge_base_document_ids: ['doc_url_test_123'],
+    });
+
+    expect(result.isError).toBeFalsy();
+    // A PATCH carries only what changed, so the agent's other settings stay as they are.
+    expect(captured.body).toEqual({
+      conversation_config: {
+        agent: {
+          prompt: {
+            llm: 'gemini-2.5-flash',
+            knowledge_base: [{ type: 'url', name: ATTACK_PAYLOAD, id: 'doc_url_test_123' }],
+          },
+        },
+      },
+    });
+  });
+
+  it.each([
+    ['create_agent', {
+      name: 'Support triage',
+      system_prompt: 'Resolve the issue calmly.',
+      first_message: 'Thanks for calling Support.',
+      voice_id: 'voice_abc',
+    }],
+    ['update_agent', { agent_id: 'agent_test_123' }],
+  ] as const)('%s fails without changing the agent when a knowledge document does not exist', async (tool, base) => {
+    const create = createCreateAgentCapturingHandler();
+    const update = createUpdateAgentCapturingHandler();
+    mswServer.use(create.handler, update.handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool(tool, {
+      ...base,
+      knowledge_base_document_ids: ['doc_test_123', 'trigger-404'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'KNOWLEDGE_BASE_DOCUMENT_NOT_FOUND' });
+    expect(result.json.error).toContain('trigger-404');
+    expect(create.captured.body).toBeUndefined();
+    expect(update.captured.body).toBeUndefined();
+  });
+
+  it.each([
+    ['without a type', { id: 'doc_test_123', name: 'Pricing sheet' }],
+    ['without an id', { type: 'text', name: 'Pricing sheet' }],
+    ['for a different id', { id: 'doc_other_999', type: 'text', name: 'Pricing sheet' }],
+  ])('update_agent fails without changing the agent when a knowledge document comes back %s', async (_label, reply) => {
+    const { handler, captured } = createUpdateAgentCapturingHandler();
+    mswServer.use(
+      handler,
+      http.get(`${BASE_V1}/convai/knowledge-base/:documentationId`, () =>
+        HttpResponse.json(reply)),
+      ...createElevenLabsAgentsHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('update_agent', {
+      agent_id: 'agent_test_123',
+      knowledge_base_document_ids: ['doc_test_123'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'INVALID_RESPONSE' });
+    expect(captured.body).toBeUndefined();
   });
 
   it('update_agent deep-merges advanced_config into the first-class PATCH body', async () => {
@@ -337,13 +433,13 @@ describe('agents tools', () => {
       // Precondition: these really do come back wrapped, so the model has no raw copy.
       expect(String(agent.name)).toContain('<untrusted-content source=');
       expect(String(agentConfig.language)).toContain('<untrusted-content source=');
-      expect(String(agentConfig.prompt.llm_model)).toContain('<untrusted-content source=');
+      expect(String(agentConfig.prompt.llm)).toContain('<untrusted-content source=');
 
       const write = await testClient.callTool('update_agent', {
         agent_id: 'agent_test_123',
         name: agent.name,
         language: agentConfig.language,
-        llm_model: agentConfig.prompt.llm_model,
+        llm_model: agentConfig.prompt.llm,
         system_prompt: agentConfig.prompt.prompt,
       });
 
@@ -355,7 +451,7 @@ describe('agents tools', () => {
             language: 'en',
             prompt: {
               prompt: ATTACK_PAYLOAD,
-              llm_model: 'gpt-realtime',
+              llm: 'gpt-4o-mini',
             },
           },
         },
@@ -384,9 +480,11 @@ describe('agents tools', () => {
       expect(write.isError).toBeFalsy();
       const body = captured.body as Json;
       expect(body.conversation_config.agent.language).toBe('en');
-      expect(body.conversation_config.agent.prompt.llm_model).toBe('gpt-realtime');
+      expect(body.conversation_config.agent.prompt.llm).toBe('gpt-4o-mini');
       expect(body.conversation_config.agent.prompt.temperature).toBe(0.4);
-      expect(body.conversation_config.agent.prompt.knowledge_base_document_ids).toEqual(['doc_test_123']);
+      expect(body.conversation_config.agent.prompt.knowledge_base).toEqual([
+        { type: 'text', name: ATTACK_PAYLOAD, id: 'doc_test_123', usage_mode: 'auto' },
+      ]);
       expect(body.conversation_config.tts.voice_id).toBe('voice_test_123');
       expect(JSON.stringify(body)).not.toContain('<untrusted-content source=');
     });

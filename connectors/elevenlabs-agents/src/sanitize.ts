@@ -153,7 +153,8 @@ const AGENT_TRUSTED_PATHS: TrustedPathNode = {
   conversation_config: {
     agent: {
       prompt: {
-        knowledge_base_document_ids: TRUSTED_PATH_LEAF,
+        // `knowledge_base` is a list of locators; the walk applies this node to each element.
+        knowledge_base: { id: TRUSTED_PATH_LEAF, type: TRUSTED_PATH_LEAF },
         tool_ids: TRUSTED_PATH_LEAF,
       },
     },

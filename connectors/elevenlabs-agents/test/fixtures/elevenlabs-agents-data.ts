@@ -102,9 +102,12 @@ export const mockAgent = {
       language: 'en',
       prompt: {
         prompt: ATTACK_PAYLOAD,
-        llm_model: 'gpt-realtime',
+        // Wire shape per the ElevenLabs OpenAPI `PromptAgentAPIModel`: `llm`, and
+        // `knowledge_base` as `KnowledgeBaseLocator` objects. The locator name is
+        // workspace-authored text, so it is hostile here.
+        llm: 'gpt-4o-mini',
         temperature: 0.4,
-        knowledge_base_document_ids: ['doc_test_123'],
+        knowledge_base: [{ type: 'text', name: ATTACK_PAYLOAD, id: 'doc_test_123', usage_mode: 'auto' }],
       },
       first_message: ATTACK_PAYLOAD,
     },
