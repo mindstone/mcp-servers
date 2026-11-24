@@ -15,6 +15,11 @@ are maintained manually as part of the PR review checklist.
 
 - The last four API operations once listed as planned are now excluded with their reasons, because ElevenLabs leaves a response they depend on undocumented: the detailed music event stream, the Studio project snapshot audio stream and the two professional voice captcha operations (submitting an answer needs the undocumented challenge). Nothing that worked before changes.
 
+### Fixed
+
+- A failed read no longer warns that repeating it may spend credits or that it "may have completed": reads get advice that they may be repeated, within the provider's rate and usage limits.
+- When saving a later output file is refused (for example because the file already exists), the error now keeps its own reason instead of claiming the provider's response could not be read; files already saved are still reported.
+
 ## [0.9.1] - 2026-11-23
 
 ### Changed

@@ -347,8 +347,11 @@ describe('argument ownership and serialization', () => {
 
   it.each(['', '.', '..', '\u0000', 'line\nbreak', wrapUntrusted('..', 'example')!])('refuses unsafe path operand %j without HTTP', async operand => {
     const getKey = vi.spyOn(auth, 'getApiKey');
-    const result = await pair.callTool(tools.read, { operation_id: 'get_agent_route', path_params: { agent_id: operand } });
+    const result = await call('read', { operation_id: 'get_agent_route', path_params: { agent_id: operand } });
     expect(result.isError).toBe(true);
+    // A plain unsafe operand fails the tool's input schema; an enveloped one passes it, is unwrapped and is refused by the connector.
+    if (operand.startsWith('<untrusted-content')) expect(result.json, result.text).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' });
+    else expect(result.text).toMatch(/^MCP error -32602: Input validation error: .* at path_params\./);
     expect(getKey).not.toHaveBeenCalled();
     expect(requests).toHaveLength(0);
   });

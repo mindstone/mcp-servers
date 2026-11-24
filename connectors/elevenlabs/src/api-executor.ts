@@ -32,9 +32,15 @@ function normalizedInput(input: unknown): unknown {
     [key, ['path_params', 'query_params', 'body'].includes(key) ? unwrapValues(value) : value]));
 }
 
+function noLookupAdvice(op: ApiOperation): string {
+  return op.effects.readOnlyHint
+    ? 'This operation only reads, so it may be repeated; provider rate and usage limits still apply.'
+    : 'Do not blindly retry; a repeated request may create another result or consume more credits.';
+}
+
 async function checkBeforeRetry(op: ApiOperation): Promise<string> {
   if (op.retry_check !== undefined) {
-    if (typeof op.retry_check !== 'string') return `No verifiable lookup: ${op.retry_check.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
+    if (typeof op.retry_check !== 'string') return `No verifiable lookup: ${op.retry_check.unavailable_reason} ${noLookupAdvice(op)}`;
     return `Check the result with ${operationReference(await getOperation(op.retry_check, 'read'), op)} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
   }
   if (op.profile === 'create' && op.credential_return_fields) return 'No credential was confirmed. Request a new one if it is still needed.';
@@ -50,7 +56,7 @@ async function checkBeforeRetry(op: ApiOperation): Promise<string> {
     reads.length = 0;
     const sameResource = (await loadApiCatalog()).operations.find(candidate => candidate.profile === 'read' && candidate.path === op.path);
     const lookup = sameResource?.operation_id ?? (typeof op.check_before_retry === 'string' ? op.check_before_retry : undefined);
-    if (!lookup && typeof op.check_before_retry !== 'string') return `No verifiable lookup: ${op.check_before_retry.unavailable_reason} Do not blindly retry; a repeated request may create another result or consume more credits.`;
+    if (!lookup && typeof op.check_before_retry !== 'string') return `No verifiable lookup: ${op.check_before_retry.unavailable_reason} ${noLookupAdvice(op)}`;
     reads.push(operationReference(await getOperation(lookup!, 'read'), op));
   }
   return `Check the result with ${reads.join(' or ')} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs.`;
@@ -66,13 +72,13 @@ async function timeoutFailure(op: ApiOperation, cancelled = false): Promise<ApiB
 
 async function responseFailure(op: ApiOperation, message: string): Promise<ApiBoundaryError> {
   return new ApiBoundaryError('INVALID_RESPONSE', message,
-    `A 2xx request may have completed even though its response is invalid. ${await checkBeforeRetry(op)} Report the operation_id, status and media type to the connector maintainer; keep raw response content private.`);
+    `${op.effects.readOnlyHint ? '' : 'A 2xx request may have completed even though its response is invalid. '}${await checkBeforeRetry(op)} Report the operation_id, status and media type to the connector maintainer; keep raw response content private.`);
 }
 
 async function fetchFailure(error: unknown, op: ApiOperation, signal: AbortSignal, redactor: Redactor): Promise<ElevenLabsError> {
   if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError') || (error instanceof ElevenLabsError && error.code === 'TIMEOUT')) return timeoutFailure(op, signal.aborted && signal.reason?.name !== 'TimeoutError');
   if (!(error instanceof ElevenLabsError) || error.code === 'NETWORK_ERROR') return new ApiBoundaryError('NETWORK_ERROR', 'The request to ElevenLabs failed.',
-    `The operation may have completed after dispatch. ${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
+    `${op.effects.readOnlyHint ? '' : 'The operation may have completed after dispatch. '}${await checkBeforeRetry(op)} Check connectivity and provider availability. No automatic retry was made.`);
 
   if (op.credential_return_fields) return new ApiBoundaryError(error.code, redactor.wrap(`The provider rejected the request (${error.code}).`, `elevenlabs:api:${op.operation_id}`),
     `Inspect the operation contract and account permissions. ${await checkBeforeRetry(op)} No automatic retry was made.`);
@@ -208,9 +214,11 @@ async function executeValidated(profile: ApiProfile, rawInput: unknown, redactor
       const failure = signal.aborted || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
         ? await timeoutFailure(op, signal.aborted && signal.reason?.name !== 'TimeoutError')
         : await responseFailure(op, retained_output ? 'The output could not be completed. The partial output file was kept.' : error instanceof ElevenLabsError && error.code === 'PROGRESS_DELIVERY_FAILED' ? error.message : 'The provider response could not be read in its declared format.');
+      // An output-write refusal names its own cause; relabelling it as an unreadable response would mislead.
+      // A partial file the refusal does not carry itself keeps the partial-output report below.
+      if (error instanceof ElevenLabsError && error.code.startsWith('OUTPUT_') && retained_output === error.retained_output) throw saved.length ? Object.assign(error, { retained_outputs: saved }) : error;
       if (saved.length) throw Object.assign(failure, { retained_outputs: saved, message: `${failure.message} Saved output files were kept.` });
       if (retained_output) throw Object.assign(failure, { retained_output, message: `${failure.message}${signal.aborted ? ' The partial output file was kept.' : ''}` });
-      if (error instanceof ElevenLabsError && error.code.startsWith('OUTPUT_')) throw error;
       throw failure;
     }
   }

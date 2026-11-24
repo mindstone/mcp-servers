@@ -142,7 +142,9 @@ it.each(writes)('$id declares independent retry reads and follow-ups, including 
   expect(result.isError).toBe(true); expect(fetch).toHaveBeenCalledOnce();
   expect(result.text).toContain(row.retry_read === 'unavailable' ? 'No verifiable lookup' : row.retry_read!);
   expect(result.text).toContain('No automatic retry');
-  expect(op.effect_note).toMatch(/retry|repeat|Read|Check/);
+  if (row.profile === 'create') expect(op.effect_note).toContain('Do not repeat creation until these reads show it did not happen.');
+  else if (row.id.startsWith('convert_')) expect(op.effect_note).toContain('Do not repeat conversion until these reads show it did not happen.');
+  else expect(op.effect_note).toMatch(/retry|repeat|Read|Check/);
   if (row.profile === 'delete') expect(op.effect_reason).toContain('does not refund');
 });
 

@@ -460,7 +460,9 @@ The API catalogue generator produces the pinned contracts used by the nine API
 tools. Regenerate with `npm run api:generate -- --spec <pinned.json-or-gzip>` and
 verify with `npm run api:check -- --spec <pinned.json-or-gzip>`. The input must match
 the recorded original-byte pin; the whole provider snapshot is not distributed
-with this package and is never fetched at runtime. Ajv and ajv-formats interpret
+with this package and is never fetched at runtime. ElevenLabs serves its OpenAPI
+document openly; this package embeds only the descriptors of the admitted
+operations that are needed to call them. Ajv and ajv-formats interpret
 the retained JSON Schema graph; Zod validates tool envelopes and consumed fields.
 Schema nodes containing `unevaluatedProperties`
 are rejected during generation and loading because the pinned validator cannot

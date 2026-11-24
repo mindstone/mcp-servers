@@ -132,6 +132,25 @@ it.each(['later preview', 'receipt validation', 'artifact schema'])('keeps and r
   expect(result.text).toContain('Saved output files were kept'); expect(fetch).toHaveBeenCalledOnce();
 });
 
+it('keeps a later output refusal code while reporting the files already saved', async () => {
+  const writer = await import('../src/tools/path-safety.js');
+  const { ElevenLabsError } = await import('../src/types.js');
+  const original = writer.writeWorkspaceArtifactStream;
+  let writes = 0;
+  vi.spyOn(writer, 'writeWorkspaceArtifactStream').mockImplementation(async (...params) => {
+    if (++writes === 2) throw new ElevenLabsError('Synthetic output refusal.', 'OUTPUT_FILE_EXISTS', 'Keep the existing file.');
+    return original(...params);
+  });
+  respond({ text: 'Preview.', previews: [preview, { ...preview, generated_voice_id: 'generated_second' }] });
+  const result = await pair.callTool('elevenlabs_run_job', args);
+  expect(result.isError).toBe(true);
+  expect(result.json).toMatchObject({ code: 'OUTPUT_FILE_EXISTS', error: expect.stringContaining('Synthetic output refusal.') });
+  expect(result.text).not.toContain('declared format');
+  const retained = JSON.parse(result.text).retained_outputs;
+  expect(retained).toHaveLength(1); expect(retained[0]).toMatchObject({ state: 'complete', size_bytes: 4 });
+  expect(fs.readdirSync(workspace)).toHaveLength(1);
+});
+
 it.each(cases)('$id wrong profiles do no network or output I/O', async wire => {
   const fetch = vi.spyOn(globalThis, 'fetch'); const open = vi.spyOn(fs.promises, 'open');
   await expect(executeApiOperation(wire.profile === 'read' ? 'run_job' : 'read', { operation_id: wire.id, ...wire.args })).rejects.toMatchObject({ code: 'WRONG_TOOL' });

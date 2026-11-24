@@ -3,6 +3,7 @@ import { createInMemoryTestClient } from '@mindstone/mcp-test-harness';
 import { http, HttpResponse } from 'msw';
 import type { ApiCatalog } from '../src/api-catalog.js';
 import { mswServer } from './helpers/setup.js';
+import workspaceReads from './fixtures/api-workspace-reads-wire-cases.json' with { type: 'json' };
 
 afterEach(() => {
   vi.doUnmock('../src/generated/api-catalog.js');
@@ -139,5 +140,41 @@ describe('family fallback without a same-route read or usable follow-up', () => 
       expect(result.json).toMatchObject({ code: 'HTTP_503', resolution: `The provider reported a server error. Check the result with ${read} through elevenlabs_read_resource before retrying. Use known IDs, or list first to find missing IDs. Check provider availability. No automatic retry was made.` });
       expect(requests).toBe(1);
     } finally { await pair.close(); setApiKey(''); }
+  });
+});
+
+describe('read-only operations', () => {
+  const readSafe = 'This operation only reads, so it may be repeated; provider rate and usage limits still apply.';
+  async function failRead(operation_id: string, outcome: 'network' | 'invalid' | 'server', extra: Record<string, unknown> = {}) {
+    vi.resetModules();
+    const { setApiKey } = await import('../src/auth.js');
+    const { executeApiOperation } = await import('../src/api-executor.js');
+    setApiKey('synthetic-retry-key');
+    let requests = 0;
+    mswServer.use(http.all('https://api.elevenlabs.io/*', () => {
+      requests++;
+      if (outcome === 'network') return HttpResponse.error();
+      if (outcome === 'invalid') return new HttpResponse('not json', { status: 200, headers: { 'Content-Type': 'application/x-unknown' } });
+      return new HttpResponse(null, { status: 503 });
+    }));
+    try {
+      const failure = await executeApiOperation('read', { operation_id, ...extra }).catch((error: unknown) => error) as { message: string; resolution: string };
+      expect(requests).toBe(1);
+      return `${failure.message} ${failure.resolution}`;
+    } finally { setApiKey(''); }
+  }
+
+  it('gets read-safe advice instead of the credit warning when no lookup verifies it', async () => {
+    const row = workspaceReads.find(candidate => candidate.id === 'requests_list')!;
+    const { apiCatalog } = await vi.importActual<{ apiCatalog: ApiCatalog }>('../src/generated/api-catalog.js');
+    expect(apiCatalog.operations.find(op => op.operation_id === row.id)).toMatchObject({ effects: { readOnlyHint: true }, retry_check: { unavailable_reason: expect.any(String) } });
+    const text = await failRead(row.id, 'server', row.args);
+    expect(text).toContain(readSafe);
+    expect(text).not.toMatch(/Do not blindly retry|consume more credits/);
+  });
+
+  it.each(['network', 'invalid'] as const)('does not say a %s failure of a read may have completed', async outcome => {
+    const text = await failRead('get_agents_route', outcome);
+    expect(text).not.toContain('may have completed');
   });
 });

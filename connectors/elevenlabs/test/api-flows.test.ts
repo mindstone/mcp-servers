@@ -291,6 +291,8 @@ it('uses a known run ID with the template ID, but never recommends the run list 
 
 it.each(templates.filter(row => row.profile === 'read'))('$id overrides the unavailable Flows default with an explicit self retry check', async row => {
   const op = await getOperation(row.id);
+  // These policy fields are the guard. Without retry_check the same-route fallback can also name this read,
+  // so the runtime text below shows the advice reaches the caller but does not by itself prove the override.
   expect(op.retry_check).toBe(row.id);
   expect(op.check_before_retry).toHaveProperty('unavailable_reason');
   const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('Synthetic read interruption'));
