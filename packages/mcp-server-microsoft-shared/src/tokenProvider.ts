@@ -109,6 +109,8 @@ function sanitizeEmail(email: string): string {
 export class TokenProvider {
   private configDir: string;
   private cachedToken: TokenData | null = null;
+  // The account `cachedToken` was read for; the cache is used only for that account.
+  private cachedEmail: string | null = null;
   private clientId: string;
   private email: string | null = null;
   private staleTempSweepDone = false;
@@ -127,10 +129,6 @@ export class TokenProvider {
     return path.join(this.getCredentialsDir(), `${sanitizeEmail(email)}.token.json`);
   }
 
-  private getLegacyTokenPath(): string {
-    return path.join(this.configDir, 'tokens.json');
-  }
-
   private getAccountsPath(): string {
     return path.join(this.configDir, 'accounts.json');
   }
@@ -146,12 +144,29 @@ export class TokenProvider {
     return accounts.length > 0 ? accounts[0].email : null;
   }
 
+  /** An explicit email, else the configured one, else the only listed account; never a guess among several. */
   private async resolveEmail(email?: string): Promise<string> {
-    const resolved = email ?? this.email ?? await this.getDefaultAccount();
-    if (!resolved) {
+    const explicit = email ?? this.email;
+    if (explicit) return explicit;
+
+    const accounts = await this.loadAccounts();
+    if (accounts.length > 1) {
+      throw new Error('Several Microsoft accounts are connected; no account was chosen.');
+    }
+    if (accounts.length === 0) {
       throw new Error('No Microsoft account found. Please connect your Microsoft account first.');
     }
-    return resolved;
+    return accounts[0].email;
+  }
+
+  private setCache(email: string, token: TokenData | null): void {
+    this.cachedToken = token;
+    this.cachedEmail = token ? email : null;
+  }
+
+  private cachedTokenFor(email: string): TokenData | null {
+    if (!this.cachedToken || this.cachedEmail === null) return null;
+    return this.cachedEmail.toLowerCase() === email.toLowerCase() ? this.cachedToken : null;
   }
 
   private normalizeToken(raw: RawTokenData | null): TokenData | null {
@@ -199,38 +214,35 @@ export class TokenProvider {
   }
 
   /**
-   * The per-account token, else the legacy `tokens.json`, else `null` when neither exists.
-   * A refused or invalid file throws `MicrosoftCredentialFileError` and is not skipped over.
+   * The account's own token file, or `null` when it does not exist. There is no fallback to
+   * another file: the legacy single-account `tokens.json` has no owner and is never read.
+   * A refused or invalid file throws `MicrosoftCredentialFileError`. The cache then holds only
+   * what was just read for this account; any failure, account resolution included, clears it.
    */
   async loadToken(email?: string): Promise<TokenData | null> {
-    const resolvedEmail = await this.resolveEmail(email);
-
-    const raw = await readCredentialFile(this.getTokenPath(resolvedEmail), 'token', rawTokenSchema);
-    if (raw !== null) {
-      this.cachedToken = this.normalizeToken(raw);
-      return this.cachedToken;
+    let resolvedEmail: string;
+    let raw: RawTokenData | null;
+    try {
+      resolvedEmail = await this.resolveEmail(email);
+      raw = await readCredentialFile(this.getTokenPath(resolvedEmail), 'token', rawTokenSchema);
+    } catch (err) {
+      this.invalidateCachedToken();
+      throw err;
     }
-
-    const legacyRaw = await readCredentialFile(this.getLegacyTokenPath(), 'token', rawTokenSchema);
-    if (legacyRaw === null) {
-      return null;
-    }
-    this.cachedToken = this.normalizeToken(legacyRaw);
-    log.info('Loaded token from legacy tokens.json');
-    return this.cachedToken;
+    const token = raw === null ? null : this.normalizeToken(raw);
+    this.setCache(resolvedEmail, token);
+    return token;
   }
 
   invalidateCachedToken(): void {
     this.cachedToken = null;
+    this.cachedEmail = null;
   }
 
   async getAccessToken(email?: string): Promise<string> {
     const resolvedEmail = await this.resolveEmail(email);
 
-    let token = this.cachedToken;
-    if (!token) {
-      token = await this.loadToken(resolvedEmail);
-    }
+    const token = this.cachedTokenFor(resolvedEmail) ?? await this.loadToken(resolvedEmail);
 
     if (!token) {
       throw new Error('No Microsoft token found. Please connect your Microsoft account first.');
@@ -239,10 +251,19 @@ export class TokenProvider {
     const isExpired = token.expires_at < Date.now() + 5 * 60 * 1000;
 
     if (isExpired && token.refresh_token) {
+      // Refresh only from the account's own file as it is now: a removed file means the
+      // account was signed out, so the cached grant must not bring it back.
       const diskToken = await this.loadToken(resolvedEmail);
-      if (diskToken && diskToken.expires_at > Date.now() + 5 * 60 * 1000) {
+      if (!diskToken) {
+        throw new Error('No Microsoft token found. Please connect your Microsoft account first.');
+      }
+      if (diskToken.expires_at > Date.now() + 5 * 60 * 1000) {
         log.warn('Token refreshed by another process, using disk token', { account: redactEmail(resolvedEmail) });
         return diskToken.access_token;
+      }
+      const diskRefreshToken = diskToken.refresh_token;
+      if (!diskRefreshToken) {
+        throw new Error('Microsoft token expired. Please reconnect your account.');
       }
 
       if (isRefreshDisabled()) {
@@ -256,11 +277,8 @@ export class TokenProvider {
 
       log.warn('Token expired, attempting refresh', { account: redactEmail(resolvedEmail) });
       try {
-        const refreshedToken = await this.refreshToken(
-          diskToken?.refresh_token ?? token.refresh_token,
-          diskToken?.scope ?? token.scope,
-        );
-        this.cachedToken = refreshedToken;
+        const refreshedToken = await this.refreshToken(diskRefreshToken, diskToken.scope);
+        this.setCache(resolvedEmail, refreshedToken);
         await this.saveToken(resolvedEmail, refreshedToken);
         log.info('Token refreshed successfully', { account: redactEmail(resolvedEmail) });
         return refreshedToken.access_token;

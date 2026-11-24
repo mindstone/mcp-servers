@@ -62,7 +62,21 @@ describe('TokenProvider — happy path', () => {
     await expect(provider.getAccessToken()).resolves.toBe('fresh-access-token');
   });
 
-  it('lists accounts from accounts.json and resolves default account when email omitted', async () => {
+  it('lists accounts from accounts.json and resolves the only account when email omitted', async () => {
+    writeAccountsFile(configDir, [{ email: 'first@example.com', displayName: 'First' }]);
+    writeTokenFile(configDir, 'first@example.com', {
+      access_token: 'first-token',
+      expires_at: Date.now() + 60 * 60 * 1000,
+      token_type: 'Bearer',
+    });
+
+    const provider = new TokenProvider(configDir, 'client-id');
+    const accounts = await provider.loadAccounts();
+    expect(accounts.map(a => a.email)).toEqual(['first@example.com']);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+  });
+
+  it('refuses to guess an account when several are connected and none is chosen', async () => {
     writeAccountsFile(configDir, [
       { email: 'first@example.com', displayName: 'First' },
       { email: 'second@example.com', displayName: 'Second' },
@@ -74,12 +88,13 @@ describe('TokenProvider — happy path', () => {
     });
 
     const provider = new TokenProvider(configDir, 'client-id');
-    const accounts = await provider.loadAccounts();
-    expect(accounts.map(a => a.email)).toEqual(['first@example.com', 'second@example.com']);
-    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+    await expect(provider.getAccessToken()).rejects.toThrow(/Several Microsoft accounts are connected/);
+    await expect(provider.loadToken()).rejects.toThrow(/Several Microsoft accounts are connected/);
+    await expect(provider.hasValidToken()).resolves.toBe(false);
+    await expect(provider.getAccessToken('second@example.com')).rejects.toThrow(/No Microsoft token found/);
   });
 
-  it('falls back to legacy tokens.json when per-account file is missing', async () => {
+  it('never reads legacy tokens.json when the per-account file is missing', async () => {
     writeAccountsFile(configDir, [{ email: 'legacy@example.com' }]);
     fs.writeFileSync(
       path.join(configDir, 'tokens.json'),
@@ -92,7 +107,9 @@ describe('TokenProvider — happy path', () => {
     );
 
     const provider = new TokenProvider(configDir, 'client-id', 'legacy@example.com');
-    await expect(provider.getAccessToken()).resolves.toBe('legacy-token');
+    await expect(provider.loadToken()).resolves.toBeNull();
+    await expect(provider.getAccessToken()).rejects.toThrow(/No Microsoft token found/);
+    await expect(provider.hasValidToken()).resolves.toBe(false);
   });
 
   it('fails closed when per-account token file is malformed (no legacy fallback)', async () => {
@@ -444,11 +461,11 @@ describe('TokenProvider — guarded, schema-parsed credential reads', () => {
     await expect(provider.hasValidToken()).resolves.toBe(false);
   });
 
-  it('refuses malformed legacy tokens.json with a fixed message', async () => {
+  it('ignores a malformed legacy tokens.json (never read)', async () => {
     fs.writeFileSync(path.join(configDir, 'tokens.json'), `{ ${SECRET_MARKER}`, { mode: 0o600 });
 
     const provider = new TokenProvider(configDir, 'client-id', email);
-    await expectRefusal(provider.loadToken(), 'malformed_json');
+    await expect(provider.loadToken()).resolves.toBeNull();
   });
 
   it.each([
@@ -580,12 +597,134 @@ describe('TokenProvider — guarded, schema-parsed credential reads', () => {
     expect(accounts[1].tenantId).toBe('tenant-1');
   });
 
-  it('reads a refused legacy file as a refusal, and a missing legacy file as null', async () => {
+  it('ignores a non-regular legacy tokens.json (never read)', async () => {
     fs.mkdirSync(path.join(configDir, 'tokens.json'));
     const provider = new TokenProvider(configDir, 'client-id', email);
-    await expectRefusal(provider.loadToken(), 'not_regular_file');
-
-    fs.rmSync(path.join(configDir, 'tokens.json'), { recursive: true });
     await expect(provider.loadToken()).resolves.toBeNull();
+  });
+});
+
+describe('TokenProvider — the cached token belongs to one account', () => {
+  const first = 'jane@example.com';
+  const second = 'john@example.com';
+  const HOUR = 60 * 60 * 1000;
+  let configDir: string;
+
+  beforeEach(() => {
+    configDir = makeConfigDir('microsoft-shared-cache-');
+    writeAccountsFile(configDir, [{ email: first }, { email: second }]);
+  });
+
+  afterEach(() => {
+    fs.rmSync(configDir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  function fresh(accessToken: string): Record<string, unknown> {
+    return { access_token: accessToken, refresh_token: `${accessToken}-refresh`, expires_at: Date.now() + HOUR, token_type: 'Bearer' };
+  }
+
+  it('does not hand one account the token cached for another', async () => {
+    writeTokenFile(configDir, first, fresh('first-token'));
+    writeTokenFile(configDir, second, fresh('second-token'));
+
+    const provider = new TokenProvider(configDir, 'client-id');
+    await expect(provider.getAccessToken(first)).resolves.toBe('first-token');
+    await expect(provider.getAccessToken(second)).resolves.toBe('second-token');
+    await expect(provider.getAccessToken(first)).resolves.toBe('first-token');
+  });
+
+  it('reuses the cache for the same account in another letter case', async () => {
+    writeTokenFile(configDir, first, fresh('first-token'));
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    const readSpy = vi.spyOn(provider, 'loadToken');
+    await expect(provider.getAccessToken(first.toUpperCase())).resolves.toBe('first-token');
+    expect(readSpy).not.toHaveBeenCalled();
+  });
+
+  it('clears the cache when a load finds no file', async () => {
+    const tokenPath = writeTokenFile(configDir, first, fresh('first-token'));
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    fs.rmSync(tokenPath);
+    await expect(provider.loadToken()).resolves.toBeNull();
+    await expect(provider.getAccessToken()).rejects.toThrow(/No Microsoft token found/);
+  });
+
+  it('clears the cache when a load throws', async () => {
+    const tokenPath = writeTokenFile(configDir, first, fresh('first-token'));
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    fs.writeFileSync(tokenPath, '{ broken', { mode: 0o600 });
+    await expect(provider.loadToken()).rejects.toBeInstanceOf(MicrosoftCredentialFileError);
+    await expect(provider.getAccessToken()).rejects.toBeInstanceOf(MicrosoftCredentialFileError);
+  });
+
+  it('clears the cache when resolving the account throws', async () => {
+    writeAccountsFile(configDir, [{ email: first }]);
+    const tokenPath = writeTokenFile(configDir, first, fresh('first-token'));
+    const provider = new TokenProvider(configDir, 'client-id');
+    await expect(provider.loadToken()).resolves.toMatchObject({ access_token: 'first-token' });
+
+    fs.writeFileSync(path.join(configDir, 'accounts.json'), '{ broken', { mode: 0o600 });
+    await expect(provider.loadToken()).rejects.toBeInstanceOf(MicrosoftCredentialFileError);
+
+    fs.rmSync(tokenPath);
+    await expect(provider.getAccessToken(first)).rejects.toThrow(/No Microsoft token found/);
+  });
+
+  it('invalidateCachedToken makes the next call read the file again', async () => {
+    writeTokenFile(configDir, first, fresh('first-token'));
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    writeTokenFile(configDir, first, fresh('rotated-token'));
+    provider.invalidateCachedToken();
+    await expect(provider.getAccessToken()).resolves.toBe('rotated-token');
+  });
+
+  it('does not refresh from the cached grant once the account file is gone', async () => {
+    const tokenPath = writeTokenFile(configDir, first, fresh('first-token'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'refreshed-token', refresh_token: 'r2', expires_in: 3600, token_type: 'Bearer' }),
+    } as Response);
+
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    fs.rmSync(tokenPath);
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 2 * HOUR);
+
+    await expect(provider.getAccessToken()).rejects.toThrow(/No Microsoft token found/);
+    expect(fetchSpy.mock.calls.filter(call => String(call[0]).includes(TOKEN_ENDPOINT))).toHaveLength(0);
+    expect(fs.existsSync(tokenPath)).toBe(false);
+  });
+
+  it('refreshes with the grant just read from the account file, not the cached one', async () => {
+    const tokenPath = writeTokenFile(configDir, first, fresh('first-token'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'refreshed-token', expires_in: 3600, token_type: 'Bearer' }),
+    } as Response);
+
+    const provider = new TokenProvider(configDir, 'client-id', first);
+    await expect(provider.getAccessToken()).resolves.toBe('first-token');
+
+    const realNow = Date.now();
+    fs.writeFileSync(tokenPath, JSON.stringify({
+      access_token: 'disk-token', refresh_token: 'disk-refresh', expires_at: realNow - 1000, token_type: 'Bearer',
+    }), { mode: 0o600 });
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 2 * HOUR);
+
+    await expect(provider.getAccessToken()).resolves.toBe('refreshed-token');
+    const body = String(fetchSpy.mock.calls[0]?.[1]?.body ?? '');
+    expect(new URLSearchParams(body).get('refresh_token')).toBe('disk-refresh');
   });
 });
