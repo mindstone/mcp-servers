@@ -153,7 +153,7 @@ function planThisAndFollowing(
 }
 
 /** A change the person made to one entry of a repeating series: deleted, moved, or any of its details edited. */
-type SingleChange = { date: string; entry: CalendarEvent; deleted: boolean; moved: boolean; edited: string[] };
+type SingleChange = { date: string; entry: CalendarEvent; deleted: boolean; moved: boolean; edited: string[]; alone: boolean };
 type SingleChangeOutcome = { date: string; change: string; reason?: string };
 
 const hasOffset = (dateTime: string) => /(Z|[+-]\d\d:?\d\d)$/i.test(dateTime);
@@ -214,12 +214,15 @@ async function listEntries(calendar: calendar_v3.Calendar, calendarId: string, s
 async function readSingleChanges(calendar: calendar_v3.Calendar, calendarId: string, series: CalendarEvent): Promise<SingleChange[]> {
   const zone = series.start?.timeZone ?? undefined;
   const changes: SingleChange[] = [];
-  for (const entry of await listEntries(calendar, calendarId, series.id!, true)) {
+  const entries = await listEntries(calendar, calendarId, series.id!, true);
+  const perDate = new Map<string | undefined, number>();
+  for (const entry of entries) perDate.set(dayOf(entry.originalStartTime, zone), (perDate.get(dayOf(entry.originalStartTime, zone)) ?? 0) + 1);
+  for (const entry of entries) {
     const deleted = entry.status === 'cancelled';
     const moved = !deleted && (!sameInstant(entry.start, entry.originalStartTime) || lengthOf(entry) !== lengthOf(series));
     const edited = deleted ? [] : differingFields(entry, series);
     const date = dayOf(entry.originalStartTime, zone);
-    if (date && (deleted || moved || edited.length > 0)) changes.push({ date, entry, deleted, moved, edited });
+    if (date && (deleted || moved || edited.length > 0)) changes.push({ date, entry, deleted, moved, edited, alone: perDate.get(date) === 1 });
   }
   return changes;
 }
@@ -244,18 +247,23 @@ async function restoreSingleChanges(calendar: calendar_v3.Calendar, calendarId: 
   }
   for (const change of changes) {
     const outcome = { date: change.date, change: describeChange(change) };
+    // A date is matched only when it holds one entry of the series before and after, deleted ones counted:
+    // with two on one day, the one left could be one the person never touched.
     const onDate = entries.filter(entry => dayOf(entry.originalStartTime, zone) === change.date);
-    const live = onDate.filter(entry => entry.status !== 'cancelled');
     try {
-      if (change.deleted && live.length === 0 && onDate.length > 0) {
+      if (!change.alone || onDate.length > 1) {
+        notKept.push({ ...outcome, reason: 'the series has more than one entry on that date' });
+        continue;
+      }
+      const target = onDate[0];
+      if (change.deleted && target?.status === 'cancelled') {
         kept.push(outcome);
         continue;
       }
-      if (live.length !== 1) {
+      if (!target || target.status === 'cancelled') {
         notKept.push({ ...outcome, reason: 'the series no longer has one entry on that date' });
         continue;
       }
-      const target = live[0];
       // Only times, deletions and plain text are written back: guests, reminders and other details are
       // nested or carry other people's replies, so they are reported for the person to redo instead.
       const left = change.edited.filter(field => !TEXT_FIELDS.has(field));

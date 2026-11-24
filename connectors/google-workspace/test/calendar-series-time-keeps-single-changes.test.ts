@@ -90,11 +90,12 @@ const compact = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, ''
  * keyed by the entry's original start, as Google keys them: when the series' own start moves, they no
  * longer match any entry and are lost. Times come back in UTC, as Google's do for a calendar set to UTC
  * whatever the series' own zone. A note cleared on one entry is left out, as Google leaves it out.
+ * Extra starts are dates added to the rule (an RDATE): another entry of the series, possibly on a day it already has one.
  */
-function fakeGoogleSeries(options: { start?: string; end?: string; timeZone?: string; description?: string; location?: string; attendees?: Attendee[]; reminders?: Reminders; failReadBack?: boolean } = {}) {
+function fakeGoogleSeries(options: { start?: string; end?: string; timeZone?: string; description?: string; location?: string; attendees?: Attendee[]; reminders?: Reminders; failReadBack?: boolean; extraStarts?: string[] } = {}) {
   const master = {
     id: MASTER,
-    summary: 'Rebel: Tuesday session',
+    summary: 'Tuesday session',
     description: options.description,
     location: options.location,
     attendees: options.attendees,
@@ -111,7 +112,10 @@ function fakeGoogleSeries(options: { start?: string; end?: string; timeZone?: st
   const instances = (showDeleted: boolean) => {
     const length = Date.parse(master.end.dateTime) - Date.parse(master.start.dateTime);
     const out: Array<Record<string, unknown>> = [];
-    for (let at = Date.parse(master.start.dateTime); at <= until; at += WEEK_MS) {
+    const starts: number[] = [];
+    for (let at = Date.parse(master.start.dateTime); at <= until; at += WEEK_MS) starts.push(at);
+    starts.push(...(options.extraStarts ?? []).map(start => Date.parse(start)));
+    for (const at of starts.sort((a, b) => a - b)) {
       const original = new Date(at).toISOString().replace('.000', '');
       const change = overrides.get(original) ?? {};
       if (change.status === 'cancelled' && !showDeleted) continue;
@@ -134,11 +138,11 @@ function fakeGoogleSeries(options: { start?: string; end?: string; timeZone?: st
   const instanceById = (id: string) => instances(true).find(entry => entry.id === id);
   const originalOf = (entry: Record<string, unknown>) => (entry.originalStartTime as Slot).dateTime;
 
-  /** The person's own changes, made in Google Calendar before Rebel's call. */
+  /** The person's own changes, made in Google Calendar before the tool's call. */
   const personChanges = () => {
     overrides.set('2026-12-08T09:30:00Z', { start: { dateTime: '2026-12-08T11:00:00Z' }, end: { dateTime: '2026-12-08T11:30:00Z' } });
     overrides.set('2026-12-15T09:30:00Z', { status: 'cancelled' });
-    overrides.set('2026-12-22T09:30:00Z', { summary: 'Rebel: Tuesday session (with Priya)' });
+    overrides.set('2026-12-22T09:30:00Z', { summary: 'Tuesday session (with Priya)' });
   };
 
   mswServer.use(
@@ -210,7 +214,9 @@ function fakeGoogleSeries(options: { start?: string; end?: string; timeZone?: st
   const change = (originalStart: string, override: Override) => overrides.set(originalStart, override);
   /** The entry shown on a date, with every field. */
   const entryOn = (date: string) => instances(false).find(entry => originalOf(entry).startsWith(date));
-  return { personChanges, shown, change, entryOn, entryWrites: () => entryWrites };
+  /** The times of every entry still on a date. */
+  const timesOn = (date: string) => instances(false).filter(entry => originalOf(entry).startsWith(date)).map(entry => (entry.start as Slot).dateTime.slice(11, 16));
+  return { personChanges, shown, change, entryOn, timesOn, entryWrites: () => entryWrites };
 }
 
 afterEach(() => {
@@ -233,9 +239,9 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     expect(calendar.shown()).toEqual({
-      '2026-12-01': '10:30 Rebel: Tuesday session',
-      '2026-12-08': '11:00 Rebel: Tuesday session',
-      '2026-12-22': '10:30 Rebel: Tuesday session (with Priya)',
+      '2026-12-01': '10:30 Tuesday session',
+      '2026-12-08': '11:00 Tuesday session',
+      '2026-12-22': '10:30 Tuesday session (with Priya)',
     });
   });
 
@@ -283,7 +289,7 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     expect(Object.values(calendar.shown())).toEqual([
-      '10:30 Rebel: Tuesday session', '10:30 Rebel: Tuesday session', '10:30 Rebel: Tuesday session', '10:30 Rebel: Tuesday session',
+      '10:30 Tuesday session', '10:30 Tuesday session', '10:30 Tuesday session', '10:30 Tuesday session',
     ]);
   });
 
@@ -331,16 +337,16 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
     const response = await call('manage_workspace_calendar_event', {
       event_id: MASTER,
       action: 'update_time',
-      summary: 'Rebel: Tuesday focus',
+      summary: 'Tuesday focus',
       new_times: [{ start: { dateTime: '2026-12-01T10:30:00Z', timeZone: 'Europe/London' }, end: { dateTime: '2026-12-01T11:00:00Z', timeZone: 'Europe/London' } }],
     });
 
     expect(response.isError).toBeFalsy();
     expect(calendar.shown()).toEqual({
-      '2026-12-01': '10:30 Rebel: Tuesday focus / Series notes',
-      '2026-12-08': '10:30 Rebel: Tuesday focus',
-      '2026-12-15': '10:30 Rebel: Tuesday focus / Bring the deck',
-      '2026-12-22': '10:30 Rebel: Tuesday focus / Series notes',
+      '2026-12-01': '10:30 Tuesday focus / Series notes',
+      '2026-12-08': '10:30 Tuesday focus',
+      '2026-12-15': '10:30 Tuesday focus / Bring the deck',
+      '2026-12-22': '10:30 Tuesday focus / Series notes',
     });
   });
 
@@ -357,12 +363,34 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     expect(calendar.shown()).toEqual({
-      '2026-12-01': '09:30 Rebel: Tuesday session',
-      '2026-12-08': '11:00 Rebel: Tuesday session',
-      '2026-12-22': '09:30 Rebel: Tuesday session (with Priya)',
+      '2026-12-01': '09:30 Tuesday session',
+      '2026-12-08': '11:00 Tuesday session',
+      '2026-12-22': '09:30 Tuesday session (with Priya)',
     });
     expect(response.content[0].text).not.toContain('singleEntryChangesNotKept');
     expect(calendar.entryWrites()).toBe(0);
+  });
+
+  it('leaves alone an entry it cannot tell apart from the one they deleted, and says so', async () => {
+    // A date added to the rule puts a second entry on 8 December at 17:00. They deleted the 09:30 one by hand.
+    // The same time written without an offset reads as a change, so the restore runs; Google kept the deletion,
+    // and the only entry still on that date is the 17:00 they never deleted, which must stay.
+    const calendar = fakeGoogleSeries({ extraStarts: ['2026-12-08T17:00:00Z'] });
+    calendar.change('2026-12-08T09:30:00Z', { status: 'cancelled' });
+    const call = await loadServer();
+
+    const response = await call('manage_workspace_calendar_event', {
+      event_id: MASTER,
+      action: 'update_time',
+      new_times: [{ start: { dateTime: '2026-12-01T09:30:00', timeZone: 'Europe/London' }, end: { dateTime: '2026-12-01T10:00:00', timeZone: 'Europe/London' } }],
+    });
+
+    expect(response.isError).toBeFalsy();
+    expect(calendar.timesOn('2026-12-08')).toEqual(['17:00']);
+    expect(calendar.entryWrites()).toBe(0);
+    const notKept = response.content[0].text.split('singleEntryChangesNotKept')[1] ?? '';
+    expect(notKept).toContain('2026-12-08');
+    expect(notKept).toContain('more than one entry on that date');
   });
 
   it('treats a time written without an offset as in its own zone when deciding whether the series moved', async () => {
@@ -381,9 +409,9 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     expect(calendar.shown()).toEqual({
-      '2026-12-01': '00:30 Rebel: Tuesday session',
-      '2026-12-08': '11:00 Rebel: Tuesday session',
-      '2026-12-22': '00:30 Rebel: Tuesday session (with Priya)',
+      '2026-12-01': '00:30 Tuesday session',
+      '2026-12-08': '11:00 Tuesday session',
+      '2026-12-22': '00:30 Tuesday session (with Priya)',
     });
   });
 
@@ -401,9 +429,9 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     expect(calendar.shown()).toEqual({
-      '2026-12-01': '09:30 Rebel: Tuesday session',
-      '2026-12-08': '11:00 Rebel: Tuesday session',
-      '2026-12-22': '09:30 Rebel: Tuesday session (with Priya)',
+      '2026-12-01': '09:30 Tuesday session',
+      '2026-12-08': '11:00 Tuesday session',
+      '2026-12-22': '09:30 Tuesday session (with Priya)',
     });
     expect(response.content[0].text).not.toContain('singleEntryChangesNotKept');
   });
@@ -428,7 +456,7 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
   it('keeps a changed place, says which entries\' guest changes it did not carry over, and ignores a guest\'s own reply', async () => {
     const team = [{ email: EMAIL, responseStatus: 'accepted' }, { email: 'guest@example.com', responseStatus: 'needsAction' }];
     const calendar = fakeGoogleSeries({ location: 'Room A', attendees: team });
-    calendar.change('2026-12-08T09:30:00Z', { summary: 'Rebel: Tuesday session (with Priya)', location: 'Room B', attendees: [...team, { email: 'priya@example.com' }] });
+    calendar.change('2026-12-08T09:30:00Z', { summary: 'Tuesday session (with Priya)', location: 'Room B', attendees: [...team, { email: 'priya@example.com' }] });
     calendar.change('2026-12-15T09:30:00Z', { attendees: [...team, { email: 'sam@example.com', optional: true }] });
     calendar.change('2026-12-22T09:30:00Z', { attendees: [team[0], { email: 'guest@example.com', responseStatus: 'declined' }] });
     const call = await loadServer();
@@ -441,7 +469,7 @@ describe('changing a repeating series keeps the person\'s single-entry changes',
 
     expect(response.isError).toBeFalsy();
     const guests = (date: string) => (calendar.entryOn(date)?.attendees as Attendee[]).map(guest => guest.email);
-    expect(calendar.entryOn('2026-12-08')).toMatchObject({ summary: 'Rebel: Tuesday session (with Priya)', location: 'Room B' });
+    expect(calendar.entryOn('2026-12-08')).toMatchObject({ summary: 'Tuesday session (with Priya)', location: 'Room B' });
     // Guests are never written back: that would add someone to a meeting without telling them.
     expect(guests('2026-12-08')).not.toContain('priya@example.com');
     expect(guests('2026-12-15')).not.toContain('sam@example.com');
