@@ -140,6 +140,10 @@ export interface ManageEventResponse {
     start: EventTime;
     end: EventTime;
   }[];
+  /** After a series' time changed: the person's changes to single entries that were put back, by date. */
+  singleEntryChangesKept?: { date: string; change: string }[];
+  /** And those that could not be, with why: the reply must tell the person. */
+  singleEntryChangesNotKept?: { date: string; change: string; reason?: string }[];
 }
 
 export interface DeleteEventParams {

@@ -152,6 +152,135 @@ function planThisAndFollowing(
   return { kind: 'cut', recurrence };
 }
 
+/** A change the person made to one entry of a repeating series: deleted, moved, or any of its details edited. */
+type SingleChange = { date: string; entry: CalendarEvent; deleted: boolean; moved: boolean; edited: string[] };
+type SingleChangeOutcome = { date: string; change: string; reason?: string };
+
+const hasOffset = (dateTime: string) => /(Z|[+-]\d\d:?\d\d)$/i.test(dateTime);
+/** The date an entry falls on in the series' own time zone, whatever zone Google wrote its time in. */
+const dayOf = (slot: calendar_v3.Schema$EventDateTime | undefined, timeZone: string | undefined) => {
+  if (slot?.date) return slot.date;
+  if (!slot?.dateTime) return undefined;
+  if (!hasOffset(slot.dateTime) || !timeZone) return slot.dateTime.slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(slot.dateTime));
+};
+/** True only when both are surely the same moment: a time without an offset is compared as written, zone included. */
+const sameInstant = (a?: calendar_v3.Schema$EventDateTime, b?: calendar_v3.Schema$EventDateTime) => {
+  if (a?.date || b?.date) return a?.date === b?.date;
+  if (!a?.dateTime || !b?.dateTime) return false;
+  if (hasOffset(a.dateTime) && hasOffset(b.dateTime)) return Date.parse(a.dateTime) === Date.parse(b.dateTime);
+  return a.dateTime === b.dateTime && (a.timeZone ?? '') === (b.timeZone ?? '');
+};
+/** Fields Google sets on each entry itself, or that can't be edited on one entry: never compared or written back. */
+const PER_ENTRY = new Set(['kind', 'etag', 'id', 'status', 'htmlLink', 'created', 'updated', 'iCalUID', 'sequence', 'recurringEventId',
+  'originalStartTime', 'start', 'end', 'recurrence', 'creator', 'organizer', 'eventType', 'hangoutLink', 'privateCopy', 'locked', 'attendeesOmitted']);
+/** Plain text details, written back on a single entry; Google leaves a cleared one out, so a clear is written as an empty value. */
+const TEXT_FIELDS = new Set(['summary', 'description', 'location']);
+const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
+  : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${key}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`
+  : JSON.stringify(value ?? null);
+/** A field's value as an edit would change it: guests by who is invited, since each guest's reply to one entry is theirs. */
+const comparable = (field: string, value: unknown) => {
+  if (field === 'attendees') return stable(((value as calendar_v3.Schema$EventAttendee[] | undefined) ?? []).map(a => `${a.email}|${!!a.optional}`).sort());
+  return TEXT_FIELDS.has(field) ? stable(value ?? '') : stable(value);
+};
+/** The fields of one entry that differ from another: what the person edited on it. */
+const differingFields = (entry: CalendarEvent, from: CalendarEvent) => {
+  const a = entry as Record<string, unknown>;
+  const b = from as Record<string, unknown>;
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(field => !PER_ENTRY.has(field) && comparable(field, a[field]) !== comparable(field, b[field]));
+};
+const lengthOf = (event: CalendarEvent) =>
+  Date.parse(event.end?.dateTime ?? event.end?.date ?? '') - Date.parse(event.start?.dateTime ?? event.start?.date ?? '');
+const describeChange = (c: SingleChange) =>
+  c.deleted ? 'deleted' : [c.moved && 'moved', c.edited.length > 0 && 'edited'].filter(Boolean).join(' and ');
+
+async function listEntries(calendar: calendar_v3.Calendar, calendarId: string, seriesId: string, showDeleted: boolean) {
+  const entries: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+  do {
+    const { data } = await calendar.events.instances({ calendarId, eventId: seriesId, showDeleted, maxResults: 2500, pageToken });
+    entries.push(...(data.items ?? []));
+    pageToken = data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return entries;
+}
+
+/**
+ * Google keys a change to one entry of a series to that entry's original start, so a new series time
+ * leaves every such change behind: a moved entry snaps back and a deleted one returns. This reads them
+ * before the series changes, so they can be put back on the entry for the same date afterwards.
+ */
+async function readSingleChanges(calendar: calendar_v3.Calendar, calendarId: string, series: CalendarEvent): Promise<SingleChange[]> {
+  const zone = series.start?.timeZone ?? undefined;
+  const changes: SingleChange[] = [];
+  for (const entry of await listEntries(calendar, calendarId, series.id!, true)) {
+    const deleted = entry.status === 'cancelled';
+    const moved = !deleted && (!sameInstant(entry.start, entry.originalStartTime) || lengthOf(entry) !== lengthOf(series));
+    const edited = deleted ? [] : differingFields(entry, series);
+    const date = dayOf(entry.originalStartTime, zone);
+    if (date && (deleted || moved || edited.length > 0)) changes.push({ date, entry, deleted, moved, edited });
+  }
+  return changes;
+}
+
+/**
+ * Puts each change back on the series' entry for the same date (dates in the series' zone after the change,
+ * which may differ from before it), writing only what differs, so a change
+ * still in place is kept as it is. One that has no entry on that date any more (the series moved to
+ * another day), that cannot be read back, or that Google refuses is returned as not kept, never dropped.
+ */
+async function restoreSingleChanges(calendar: calendar_v3.Calendar, calendarId: string, seriesId: string, zone: string | undefined, changes: SingleChange[]) {
+  const kept: SingleChangeOutcome[] = [];
+  const notKept: SingleChangeOutcome[] = [];
+  if (changes.length === 0) return { kept, notKept };
+  let entries: CalendarEvent[];
+  try {
+    entries = await listEntries(calendar, calendarId, seriesId, true);
+  } catch (error) {
+    // The series has already changed: a thrown error here would be retried from the top and lose these.
+    const reason = `the series' entries could not be read back: ${error instanceof Error ? error.message : String(error)}`;
+    return { kept, notKept: changes.map(change => ({ date: change.date, change: describeChange(change), reason })) };
+  }
+  for (const change of changes) {
+    const outcome = { date: change.date, change: describeChange(change) };
+    const onDate = entries.filter(entry => dayOf(entry.originalStartTime, zone) === change.date);
+    const live = onDate.filter(entry => entry.status !== 'cancelled');
+    try {
+      if (change.deleted && live.length === 0 && onDate.length > 0) {
+        kept.push(outcome);
+        continue;
+      }
+      if (live.length !== 1) {
+        notKept.push({ ...outcome, reason: 'the series no longer has one entry on that date' });
+        continue;
+      }
+      const target = live[0];
+      // Only times, deletions and plain text are written back: guests, reminders and other details are
+      // nested or carry other people's replies, so they are reported for the person to redo instead.
+      const left = change.edited.filter(field => !TEXT_FIELDS.has(field));
+      if (change.deleted) {
+        await calendar.events.delete({ calendarId, eventId: target.id!, sendUpdates: 'none' });
+      } else {
+        const requestBody: calendar_v3.Schema$Event = {
+          ...(change.moved && !(sameInstant(target.start, change.entry.start) && sameInstant(target.end, change.entry.end))
+            ? { start: change.entry.start, end: change.entry.end } : {}),
+          ...Object.fromEntries(differingFields(change.entry, target).filter(field => TEXT_FIELDS.has(field) && change.edited.includes(field))
+            .map(field => [field, (change.entry as Record<string, unknown>)[field] ?? ''])),
+        };
+        if (Object.keys(requestBody).length > 0) {
+          await calendar.events.patch({ calendarId, eventId: target.id!, sendUpdates: 'none', requestBody });
+        }
+      }
+      if (change.deleted || change.moved || left.length < change.edited.length) kept.push(outcome);
+      if (left.length > 0) notKept.push({ ...outcome, reason: `these details changed on that entry are not carried over: ${left.join(', ')}` });
+    } catch (error) {
+      notKept.push({ ...outcome, reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { kept, notKept };
+}
+
 export class CalendarService {
   private oauth2Client!: OAuth2Client;
   private driveService?: DriveService;
@@ -798,6 +927,14 @@ export class CalendarService {
             );
           }
 
+          // A new time for a whole series drops the person's changes to single entries of it; keep them.
+          const series = event.data;
+          // The zone counts too: the series repeats by its zone's clock, so a new zone re-keys its entries.
+          const newZone = hasNewTime ? newTimes[0].start?.timeZone ?? series.start?.timeZone : series.start?.timeZone;
+          const seriesTimeChanges = hasNewTime && !!series.recurrence?.length &&
+            (!sameInstant(newTimes[0].start, series.start) || !sameInstant(newTimes[0].end, series.end) || newZone !== series.start?.timeZone);
+          const singleChanges = seriesTimeChanges ? await readSingleChanges(calendar, targetCalendarId, series) : [];
+
           const { data: updatedEvent } = await calendar.events.patch({
             calendarId: targetCalendarId,
             eventId,
@@ -808,13 +945,16 @@ export class CalendarService {
             },
             sendUpdates: 'all'
           });
+          const { kept, notKept } = await restoreSingleChanges(calendar, targetCalendarId, eventId, updatedEvent.start?.timeZone ?? newZone ?? undefined, singleChanges);
 
           return {
             success: true,
             eventId,
             action,
             status: 'updated',
-            htmlLink: updatedEvent.htmlLink || undefined
+            htmlLink: updatedEvent.htmlLink || undefined,
+            ...(kept.length ? { singleEntryChangesKept: kept } : {}),
+            ...(notKept.length ? { singleEntryChangesNotKept: notKept } : {})
           };
         }
 

@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing the time of a repeating calendar series no longer undoes what the person did to single entries of it. Entries they moved or deleted, and the title, notes and place they changed on one entry, are put back on the same date in the series' own time zone, including when the change moves the series to another time zone, without notifying guests again. Other details changed on one entry (guests, reminders and the like) are not written back, and the result lists them, with any change that could not be kept (for example when the series moves to another day), so the agent can tell the person.
+
 ## [0.5.10] - 2026-11-24
 
 ### Changed
