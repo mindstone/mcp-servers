@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-24
+
+### Changed
+
+- Profit and loss reports apply the standard-layout and payments-only choices as asked; error text is the connector's own; Xero requests time out after 30 seconds.
+
 ### Fixed
 
 - `list-profit-and-loss` now applies the standard-layout and payments-only choices as asked. Before, the payments-only choice was sent as the standard-layout option, and payments-only was never applied.
