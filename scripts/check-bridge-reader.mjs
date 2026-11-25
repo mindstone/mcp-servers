@@ -19,12 +19,12 @@
 //
 // It FAILS when:
 //   - it is not compliant and not listed in scripts/bridge-reader-baseline.json;
-//   - it carries a src/bridge-reader.ts that differs from the canonical file
-//     (a drifted copy fails even when baselined);
-//   - it carries a hardened-json-file.ts (the file primitive bridge-reader.ts
-//     imports, also vendored on its own for a connector's local state files)
-//     that differs from the canonical test-harness/src/hardened-json-file.ts,
-//     whether or not the connector reads the bridge;
+//   - a copy of bridge-reader.ts or hardened-json-file.ts (the file primitive
+//     bridge-reader.ts imports, also used on its own for a connector's local
+//     state files) anywhere under its src/ differs from test-harness/src/,
+//     whether or not it is baselined or reads the bridge. The copies are
+//     written by scripts/sync-shared-sources.mjs; this reruns its check, and
+//     the failure names the command that fixes it;
 //   - it is compliant but still baselined (ratchet: remove it from the baseline).
 // --all also fails a stale baseline entry (no such connector, or it no longer
 // reads the bridge), and with --base an entry the base ref's baseline does not
@@ -33,16 +33,17 @@
 // This is attention-forcing, not proof: it cannot see an env var read through
 // a computed key. The §13 release security review still reads the code.
 
-import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, lstatSync } from 'node:fs';
 import { join, resolve, dirname, basename, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { CANONICAL as SHARED, SYNC_COMMAND, connectorCopies, copiesIn, staleReason, sync } from './sync-shared-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
-const CANONICAL = readFileSync(join(repoRoot, 'test-harness', 'src', 'bridge-reader.ts'), 'utf8');
-const CANONICAL_FILE_READER = readFileSync(join(repoRoot, 'test-harness', 'src', 'hardened-json-file.ts'), 'utf8');
+const CANONICAL = SHARED['bridge-reader.ts'];
+const CANONICAL_FILE_READER = SHARED['hardened-json-file.ts'];
 const ENV_VARS = /\b(?:MCP_HOST_BRIDGE_STATE|MINDSTONE_REBEL_BRIDGE_STATE)\b/;
 const BYPASS = /\b(?:MCP_HOST_BRIDGE_STATE|MINDSTONE_REBEL_BRIDGE_STATE|readBridgeState|bridgeStatePath)\b/;
 const CALL = /\bpostToBridge\s*\(/;
@@ -50,12 +51,15 @@ const CALL = /\bpostToBridge\s*\(/;
 let connectorsRoot = join(repoRoot, 'connectors');
 let baseline = JSON.parse(readFileSync(join(__dirname, 'bridge-reader-baseline.json'), 'utf8'));
 
+// Never follows a link: any link in a connector fails the check through copiesIn
+// (sync-shared-sources.mjs states the rule).
 function walk(dir, files = []) {
-  if (!existsSync(dir)) return files;
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, files);
-    else files.push(full);
+  const stat = lstatSync(dir, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) return files;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, files);
+    else if (entry.isFile()) files.push(full);
   }
   return files;
 }
@@ -148,6 +152,9 @@ function namesBypass(text) {
 function evaluateConnector(connector) {
   const tag = `check-bridge-reader: ${connector}`;
   const dir = join(connectorsRoot, connector);
+  if (lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    return { ok: false, readsBridge: false, message: `${tag} — the connector folder ${staleReason({ link: true })}.` };
+  }
   if (!existsSync(dir)) return { ok: false, readsBridge: false, message: `${tag} — connector directory not found` };
   const files = sourceFiles(join(dir, 'src'));
   const texts = files.map((f) => [f, readFileSync(f, 'utf8')]);
@@ -155,30 +162,23 @@ function evaluateConnector(connector) {
   const baselined = (baseline.gappedConnectors ?? []).includes(connector);
   const result = (ok, message) => ({ ok, readsBridge, message: `${tag} ${message}` });
 
+  // Every copy anywhere under src/, test folders included (wider than sourceFiles on purpose).
+  const stale = copiesIn(join(dir, 'src')).filter((c) => c.stale);
+  if (stale.length > 0) {
+    return result(
+      false,
+      `— ${stale.map((c) => `${relative(dir, c.path)} ${staleReason(c)}`).join('; ')}.\n` +
+        `  These copies are generated, never edited: run ${SYNC_COMMAND}. For a real change, edit the file in test-harness/src/ and run it.`,
+    );
+  }
   const copies = texts.filter(([f]) => basename(f) === 'bridge-reader.ts');
-  const drifted = copies.filter(([, t]) => t !== CANONICAL);
-  if (drifted.length > 0) {
-    return result(
-      false,
-      `— ${drifted.map(([f]) => relative(dir, f)).join(', ')} differs from test-harness/src/bridge-reader.ts.\n` +
-        `  Copy the canonical file over it; change the canonical file (and every copy) for a real change.`,
-    );
-  }
-  const driftedFileReaders = texts.filter(([f, t]) => basename(f) === 'hardened-json-file.ts' && t !== CANONICAL_FILE_READER);
-  if (driftedFileReaders.length > 0) {
-    return result(
-      false,
-      `— ${driftedFileReaders.map(([f]) => relative(dir, f)).join(', ')} differs from test-harness/src/hardened-json-file.ts.\n` +
-        `  Copy the canonical file over it; change the canonical file (and every copy) for a real change.`,
-    );
-  }
   // bridge-reader.ts imports its sibling primitive, so a copy without one cannot build.
   const missingFileReader = copies.filter(([f]) => !existsSync(join(dirname(f), 'hardened-json-file.ts')));
   if (missingFileReader.length > 0) {
     return result(
       false,
       `— ${missingFileReader.map(([f]) => relative(dir, f)).join(', ')} has no hardened-json-file.ts beside it.\n` +
-        `  Copy test-harness/src/hardened-json-file.ts next to it unchanged.`,
+        `  Copy test-harness/src/hardened-json-file.ts next to it once; ${SYNC_COMMAND} keeps it current after that.`,
     );
   }
   if (!readsBridge) {
@@ -205,14 +205,15 @@ function evaluateConnector(connector) {
   return result(
     false,
     `— FAILS: reads the host app bridge but ${why}.\n` +
-      `  Copy test-harness/src/bridge-reader.ts and test-harness/src/hardened-json-file.ts to src/ unchanged and send bridge\n` +
-      `  requests through its postToBridge (connectors/_template/src/bridge.ts shows how).`,
+      `  Copy test-harness/src/bridge-reader.ts and test-harness/src/hardened-json-file.ts to src/ once (${SYNC_COMMAND} keeps\n` +
+      `  them current after that) and send bridge requests through its postToBridge (connectors/_template/src/bridge.ts shows how).`,
   );
 }
 
 function discoverConnectors() {
-  return readdirSync(connectorsRoot)
-    .filter((name) => statSync(join(connectorsRoot, name)).isDirectory())
+  return readdirSync(connectorsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() || entry.isSymbolicLink()) // a linked connector fails, never hides
+    .map((entry) => entry.name)
     .sort();
 }
 
@@ -264,6 +265,7 @@ function sweep() {
 
 function runSelfTest() {
   const tmp = mkdtempSync(join(tmpdir(), 'bridge-reader-selftest-'));
+  const outside = mkdtempSync(join(tmpdir(), 'bridge-reader-selftest-outside-')); // targets of the folder links
   const saved = { connectorsRoot, baseline };
   connectorsRoot = tmp;
   baseline = { gappedConnectors: ['gapped', 'fixed-but-baselined', 'drifted-baselined', 'gone'] };
@@ -323,6 +325,44 @@ function runSelfTest() {
     'bridge.ts': wrapper,
   });
   make('missing-file-reader', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper }, { withSibling: false });
+  make('symlinked-copy', { 'bridge.ts': wrapper, 'hardened-json-file.ts': CANONICAL_FILE_READER, 'real/bridge-reader.ts': CANONICAL });
+  // A drifted copy behind a symlinked folder: src/lib is a link, and src itself is a link.
+  make('linked-folder', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
+  const drifted = CANONICAL + '\n// local tweak\n';
+  for (const sub of ['lib', 'src']) {
+    mkdirSync(join(outside, sub), { recursive: true });
+    writeFileSync(join(outside, sub, 'bridge-reader.ts'), drifted);
+    writeFileSync(join(outside, sub, 'hardened-json-file.ts'), CANONICAL_FILE_READER);
+  }
+  writeFileSync(join(outside, 'src', 'bridge.ts'), wrapper);
+  mkdirSync(join(tmp, 'linked-src'));
+  // A folder link named like a shared file, a dangling link, a linked connector folder, src/ linked
+  // to a file, and a link to itself.
+  make('linked-named-copy', { 'bridge.ts': wrapper, 'hardened-json-file.ts': CANONICAL_FILE_READER });
+  make('dangling-link', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
+  mkdirSync(join(outside, 'named'));
+  writeFileSync(join(outside, 'named', 'bridge-reader.ts'), drifted);
+  mkdirSync(join(outside, 'connector', 'src'), { recursive: true });
+  writeFileSync(join(outside, 'connector', 'src', 'bridge-reader.ts'), drifted);
+  writeFileSync(join(outside, 'file'), 'not a folder\n');
+  mkdirSync(join(tmp, 'file-src'));
+  make('loop-link', { 'bridge-reader.ts': CANONICAL, 'bridge.ts': wrapper });
+  // Windows without Developer Mode cannot make symlinks; those legs are then skipped, said aloud.
+  let canSymlink = true;
+  try {
+    symlinkSync(join(tmp, 'symlinked-copy', 'src', 'real', 'bridge-reader.ts'), join(tmp, 'symlinked-copy', 'src', 'bridge-reader.ts'));
+    symlinkSync(join(outside, 'lib'), join(tmp, 'linked-folder', 'src', 'lib'), 'dir');
+    symlinkSync(join(outside, 'src'), join(tmp, 'linked-src', 'src'), 'dir');
+    symlinkSync(join(outside, 'named'), join(tmp, 'linked-named-copy', 'src', 'bridge-reader.ts'), 'dir');
+    symlinkSync(join(outside, 'missing'), join(tmp, 'dangling-link', 'src', 'lib'), 'dir');
+    symlinkSync(join(outside, 'connector'), join(tmp, 'linked-connector'), 'dir');
+    symlinkSync(join(outside, 'file'), join(tmp, 'file-src', 'src'));
+    symlinkSync(join(tmp, 'loop-link', 'src', 'lib'), join(tmp, 'loop-link', 'src', 'lib'));
+  } catch (err) {
+    if (err.code !== 'EPERM') throw err;
+    canSymlink = false;
+    console.log('check-bridge-reader: cannot create symlinks here (EPERM); skipping the symlink legs');
+  }
   make('test-only-mention', { 'server.ts': 'export const x = 1;\n', 'server.test.ts': unsafe });
 
   const legs = [
@@ -352,8 +392,26 @@ function runSelfTest() {
     ['drifted file-reader copy in a subfolder beside a compliant bridge reader', 'bridge-file-reader-drifted', false],
     ['compliant bridge reader without its hardened-json-file.ts', 'missing-file-reader', false],
     ['env var only in a test file', 'test-only-mention', true],
+    ...(canSymlink
+      ? [
+          ['copy that is a symlink, even to an identical file', 'symlinked-copy', false],
+          ['drifted copy behind a symlinked folder under src/', 'linked-folder', false],
+          ['src/ itself a symlink, to a drifted copy', 'linked-src', false],
+          ['folder link named like a shared file', 'linked-named-copy', false],
+          ['dangling link beside a compliant copy', 'dangling-link', false],
+          ['connector folder that is a symlink', 'linked-connector', false],
+          ['src/ a symlink to a file', 'file-src', false],
+          ['a link to itself beside a compliant copy', 'loop-link', false],
+        ]
+      : []),
   ];
   let failures = 0;
+  let checked = 0;
+  const check = (label, pass) => {
+    checked += 1;
+    if (!pass) failures += 1;
+    console.log(`  ${pass ? 'PASS' : 'FAIL'} — ${label}`);
+  };
   try {
     console.log('check-bridge-reader: self-test (synthetic fixtures)');
     for (const [label, connector, expectOk] of legs) {
@@ -362,14 +420,38 @@ function runSelfTest() {
       if (!pass) failures += 1;
       console.log(`  ${pass ? 'PASS' : 'FAIL'} — ${label} (expected ${expectOk ? 'PASS' : 'FAIL'})\n    ${message.split('\n')[0]}`);
     }
-    const stale = sweep().lines.some((l) => l.startsWith('check-bridge-reader: gone — baselined but no such connector'));
-    if (!stale) failures += 1;
-    console.log(`  ${stale ? 'PASS' : 'FAIL'} — --all reports a baselined connector that does not exist`);
+    // The generator repairs a drifted copy, after which the connector passes and a second run writes nothing.
+    const driftedCopies = () => copiesIn(join(tmp, 'drifted', 'src'));
+    check('sync-shared-sources rewrites a drifted copy', sync(driftedCopies()).length === 1);
+    check('the repaired connector passes', evaluateConnector('drifted').ok);
+    check('a second sync-shared-sources run writes nothing', sync(driftedCopies()).length === 0);
+    // Every link is reported and left alone: nothing behind one is written, and no link is replaced.
+    if (canSymlink) {
+      const links = connectorCopies(tmp).filter((c) => c.link);
+      const expected = [
+        join('dangling-link', 'src', 'lib'),
+        join('file-src', 'src'),
+        'linked-connector',
+        join('linked-folder', 'src', 'lib'),
+        join('linked-named-copy', 'src', 'bridge-reader.ts'),
+        join('linked-src', 'src'),
+        join('loop-link', 'src', 'lib'),
+        join('symlinked-copy', 'src', 'bridge-reader.ts'),
+      ].sort();
+      const found = links.map((c) => relative(tmp, c.path)).sort();
+      check(`sync-shared-sources reports every link (found: ${found.join(', ')})`, JSON.stringify(found) === JSON.stringify(expected));
+      check('sync-shared-sources writes nothing for a link', sync(links).length === 0);
+      check(
+        'nothing behind a link changed',
+        ['lib', 'src', 'named', join('connector', 'src')].every((sub) => readFileSync(join(outside, sub, 'bridge-reader.ts'), 'utf8') === drifted) &&
+          readFileSync(join(tmp, 'symlinked-copy', 'src', 'real', 'bridge-reader.ts'), 'utf8') === CANONICAL,
+      );
+      check('every link is still a link', expected.every((p) => lstatSync(join(tmp, p)).isSymbolicLink()));
+    }
+    check('--all reports a baselined connector that does not exist', sweep().lines.some((l) => l.startsWith('check-bridge-reader: gone — baselined but no such connector')));
     const growth = grownEntries(['a', 'b', 'new'], ['a', 'b', 'c']);
     const shrinkOk = grownEntries(['a'], ['a', 'b']).length === 0;
-    const growthPass = growth.length === 1 && growth[0] === 'new' && shrinkOk;
-    if (!growthPass) failures += 1;
-    console.log(`  ${growthPass ? 'PASS' : 'FAIL'} — --base flags an added baseline entry and allows removals`);
+    check('--base flags an added baseline entry and allows removals', growth.length === 1 && growth[0] === 'new' && shrinkOk);
     // baseBaseline against a fake git: the file absent, readable, or present but unreadable.
     const fakeGit = (show) => (args) => {
       if (args[0] === 'rev-parse') return 'abc\n';
@@ -383,22 +465,22 @@ function runSelfTest() {
       ['present but its blob cannot be fetched: refused', fakeGit(new Error('missing blob')), 'throws'],
       ['present but malformed: refused', fakeGit('{"gapped'), 'throws'],
     ];
-    for (const [label, run, check] of baseLegs) {
+    for (const [label, run, expect] of baseLegs) {
       let pass;
       try {
         const r = baseBaseline('base', run);
-        pass = check !== 'throws' && check(r);
+        pass = expect !== 'throws' && expect(r);
       } catch {
-        pass = check === 'throws';
+        pass = expect === 'throws';
       }
-      if (!pass) failures += 1;
-      console.log(`  ${pass ? 'PASS' : 'FAIL'} — --base baseline ${label}`);
+      check(`--base baseline ${label}`, pass);
     }
   } finally {
     ({ connectorsRoot, baseline } = saved);
     rmSync(tmp, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
-  const total = legs.length + 6;
+  const total = legs.length + checked;
   if (failures > 0) {
     console.error(`\ncheck-bridge-reader: SELF-TEST FAILED (${failures}/${total} legs)`);
     return 1;
