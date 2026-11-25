@@ -13,6 +13,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- The Office panel now says it cannot reach Rebel instead of claiming Rebel is closed, with guidance to make sure Rebel is open on this computer and select Try again.
+
 - After a helper restart, an already-open task pane reacquires the new helper's credential in place and reconnects without reloading, so its conversation and draft stay in place. The registration acknowledgement decides when the pane shows Connected; it does not cause that preservation. A command sent while no Office app is registered now waits for registration within its existing 30-second command timeout (separate from the helper's 30-second startup timer) before returning the existing not-connected error; before this fix, that error was immediate.
 
 - Idle cleanup no longer stops the helper that serves the Office pane after its first served call when the host honours the existing keep-alive capability, so the Office pane stays available between calls; explicit restart, connector removal, and host stop still stop it.

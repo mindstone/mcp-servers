@@ -365,8 +365,8 @@ describe('taskpane rebel-closed handling', () => {
 
     controller.setState('rebel-closed');
 
-    expect(document.getElementById('status-text')?.textContent).toBe('Rebel is closed.');
-    expect(document.getElementById('status-detail')?.textContent).toBe('Open Rebel to reconnect.');
+    expect(document.getElementById('status-text')?.textContent).toBe("Can't reach Rebel.");
+    expect(document.getElementById('status-detail')?.textContent).toBe('Make sure Rebel is open on this computer, then select Try again.');
 
     const button = document.getElementById('retry-connect') as HTMLButtonElement;
     expect(button.hidden).toBe(false);
@@ -463,7 +463,7 @@ describe('taskpane rebel-closed handling', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(client.connect).not.toHaveBeenCalled();
     expect(controller.getState()).toBe('rebel-closed');
-    expect(document.getElementById('status-text')?.textContent).toBe('Rebel is closed.');
+    expect(document.getElementById('status-text')?.textContent).toBe("Can't reach Rebel.");
 
     controller.dispose();
   });

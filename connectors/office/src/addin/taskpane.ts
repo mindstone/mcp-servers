@@ -197,9 +197,9 @@ function renderTaskpaneState(state: TaskpaneState, doc: Document = document): vo
       break;
     case 'rebel-closed':
       statusEl.classList.add('rebel-closed');
-      textEl.textContent = 'Rebel is closed.';
+      textEl.textContent = "Can't reach Rebel.";
       detailEl.hidden = false;
-      detailEl.textContent = 'Open Rebel to reconnect.';
+      detailEl.textContent = 'Make sure Rebel is open on this computer, then select Try again.';
       retryButton.hidden = false;
       break;
   }
