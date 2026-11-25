@@ -922,9 +922,13 @@ const TOOL_NAMES = {
 // Server instance
 // ---------------------------------------------------------------------------
 
+// The helper this server starts serves Office pane pages. Keep this server running
+// until the host stops it and kills its process tree.
 const server = new McpServer({
   name: 'RebelOffice',
   version: PACKAGE_VERSION,
+}, {
+  capabilities: { experimental: { 'super-mcp/keep-alive': {} } },
 });
 
 const EMPTY_OBJECT_SCHEMA = {

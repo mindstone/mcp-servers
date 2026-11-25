@@ -75,10 +75,19 @@ export async function ensureTlsFixture(): Promise<void> {
 
   if (await readPairIfValid()) return;
 
+  await generateTlsPair(TLS_DIR);
+}
+
+/** Generate a pair in a caller-owned directory, without touching the real home. */
+export async function generateTlsPair(directory: string): Promise<{ cert: string; key: string }> {
+  await mkdir(directory, { recursive: true });
+  const certPath = join(directory, 'localhost-cert.pem');
+  const keyPath = join(directory, 'localhost-key.pem');
+
   // Generate into pid-scoped temp files, then atomically rename into place.
   // 100-year validity so the fixture never silently expires on long-lived boxes.
-  const tmpCert = `${TLS_CERT}.${process.pid}.tmp`;
-  const tmpKey = `${TLS_KEY}.${process.pid}.tmp`;
+  const tmpCert = `${certPath}.${process.pid}.tmp`;
+  const tmpKey = `${keyPath}.${process.pid}.tmp`;
   await execFileAsync('openssl', [
     'req',
     '-x509',
@@ -90,12 +99,13 @@ export async function ensureTlsFixture(): Promise<void> {
     '-subj', '/CN=localhost/O=Office Test Fixture',
     '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
   ]);
-  await rename(tmpKey, TLS_KEY);
-  await rename(tmpCert, TLS_CERT);
+  await rename(tmpKey, keyPath);
+  await rename(tmpCert, certPath);
 
-  if (!(await readPairIfValid())) {
+  if (!certKeyPairMatches(await readFile(certPath), await readFile(keyPath))) {
     throw new Error(
       '[office tests] generated TLS fixture failed self-validation — see tests/tls-fixture.ts',
     );
   }
+  return { cert: certPath, key: keyPath };
 }
