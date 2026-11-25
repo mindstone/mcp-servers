@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-25
+
+### Changed
+
+- Keeps the Office helper running after lazy start, reconnects the pane after restarts, waits for setup permission prompts, and reports unreachable Rebel accurately.
+
 ### Fixed
 
 - The Office panel now says it cannot reach Rebel instead of claiming Rebel is closed, with guidance to make sure Rebel is open on this computer and select Try again.
