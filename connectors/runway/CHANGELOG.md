@@ -11,6 +11,22 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- More models Runway resells, from its public API spec and pricing guide; never called against the live API, so a wrong one fails for that model only. Video (`generate_video_from_image` and `generate_video_from_text`): `kling_4_flash`, `seedance2_5_flash`, `gemini_omni_flash_1.2`, `hailuo3`, `h3_max`, `wan3`, `wan3_prime`, `grok_imagine_1_5`, `grok_imagine_1_5_lite` and `happyhorse_1_0`. Images (`generate_image`): `gemini_image3.1_flash`, `gemini_image3.1_flash_lite`, `nano_banana_2.1`, `seedream5.5`, `minimax_h3_image`, `ideogram_4_5`, `grok_imagine_image_2`, `muse_image` and `bria_fibo_1_5`.
+- A `resolution` option on both video tools, for the models priced by resolution (`hailuo3`, `h3_max`, `grok_imagine_1_5`, `happyhorse_1_0`).
+- `scripts/generate-resold-specs.mjs`, which writes each resold model's accepted fields and limits from Runway's published API spec into `src/tools/resold-specs.generated.ts`, or checks it with `--check`.
+
+### Changed
+
+- `ratio` is a plain string on the video and image tools; each model's own list is checked before any upload or request, and a ratio it does not take is refused with the list it does.
+- A last frame is refused, before any request, for a model whose spec takes only a first frame.
+- Two rules Runway states in its spec's prose are checked too: `wan3` and `wan3_prime` take only an `auto_` ratio from an image, and `ideogram_4_5` with reference images uses `1024:576`, `576:1024`, `1408:704` and `704:1408` in place of its usual widescreen sizes.
+
+### Fixed
+
+- `generate_sound_effect` stated its cost as 1 credit per 6 seconds; Runway charges 1 credit per second of audio, or 2 credits when no duration is given.
+
 ## [0.6.0] - 2026-11-26
 
 ### Changed

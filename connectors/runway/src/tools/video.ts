@@ -4,20 +4,35 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput, costEstimate, addContentModeration } from '../client.js';
 import { RunwayError, type TaskResponse } from '../types.js';
 import { withErrorHandling } from '../utils.js';
-import { VIDEO_SPECS, isResoldVideoModel, resoldVideoFields } from './resold-models.js';
+import { RESOLD_VIDEO_MODELS, isResoldVideoModel, resoldVideoFields } from './resold-models.js';
 
-// Runway's own and Veo models keep the ratios they always took; the tool's
-// ratio list also carries the resold models' ratios, so these are checked here.
+// Runway's own and Veo models keep the ratios they always took; each resold
+// model's ratios are checked against its own spec in resold-models.ts.
 const RUNWAY_IMAGE_RATIOS = ['1280:720', '720:1280', '960:960', '1104:832', '832:1104', '1584:672'];
 const RUNWAY_TEXT_RATIOS = ['1280:720', '720:1280'];
-const IMAGE_RATIOS = [...new Set([...RUNWAY_IMAGE_RATIOS, ...VIDEO_SPECS.kling_4.imageRatios, ...VIDEO_SPECS.seedance2_5.imageRatios])] as [string, ...string[]];
-const TEXT_RATIOS = [...new Set([...RUNWAY_TEXT_RATIOS, ...VIDEO_SPECS.kling_4.textRatios, ...VIDEO_SPECS.seedance2_5.textRatios])] as [string, ...string[]];
 
-function checkRunwayRatio(model: string, ratio: string, allowed: readonly string[]): void {
+function checkRunwayModel(model: string, ratio: string, allowed: readonly string[], resolution: string | undefined): void {
   if (!allowed.includes(ratio)) {
     throw new RunwayError(`${model} does not support ratio ${ratio}.`, 'INVALID_INPUT', `Use one of: ${allowed.join(', ')}.`);
   }
+  if (resolution !== undefined) {
+    throw new RunwayError(`${model} does not take a resolution; its ratio sets the size.`, 'INVALID_INPUT', `Leave resolution out when using ${model}.`);
+  }
 }
+
+// Shown to the model choosing; every detail is checked in code before any request.
+const RESOLD_VIDEO_GUIDE =
+  'kling_4 (Kling 4.0, 3-30s, up to 1080p), kling_4_flash (Kling 4.0 Flash, 720p, 3-20s, cheapest Kling), ' +
+  'seedance2_5 (Seedance 2.5, 4-30s, 480p to 4K, audio), seedance2_5_flash (480p/720p, audio), ' +
+  'gemini_omni_flash_1.2 (Google, 3-15s, 360p to 4K, needs a prompt), hailuo3 (MiniMax Hailuo 3, 5-15s, resolution 768p or 2k), ' +
+  'h3_max (MiniMax H3 Max, 5-15s, resolution 480p or 768p, no ratio), wan3 and wan3_prime (Wan 3, 2-30s, 480p to 1080p, audio), ' +
+  'grok_imagine_1_5 (xAI, 1-15s, resolution 480p to 1080p), grok_imagine_1_5_lite (1-15s, cheap), happyhorse_1_0 (3-15s, 720p/1080p). ' +
+  'Models made by others take only their own options; a wrong one is refused with the reason, nothing is charged. ' +
+  'Their prices are estimated from Runway\'s published rates.';
+const RATIO_GUIDE =
+  'Output size or shape. Runway models default to 1280:720. Models made by others each take their own list ' +
+  '(e.g. auto_720p to follow the image, W:H sizes, or shapes like 16:9) and default to a 720p size; an unsupported one is refused with the list.';
+const RESOLUTION_GUIDE = 'Only for hailuo3 (768p, 2k), h3_max (480p, 768p), grok_imagine_1_5 (480p, 720p, 1080p) and happyhorse_1_0 from an image (720p, 1080p). Defaults to 720p or 768p.';
 
 export function registerVideoTools(server: McpServer): void {
   // ── Image-to-Video ────────────────────────────────────────────────────
@@ -27,17 +42,18 @@ export function registerVideoTools(server: McpServer): void {
       description:
         'Animate a still image into a video. Supports first-frame (and optionally last-frame) keyframe control. ' +
         'MODELS: gen4.5 (flagship), gen4_turbo (fast/cheap), veo3.1 (best quality + audio), veo3.1_fast, ' +
-        'kling_4 (Kling 4.0, 3-30s; ratio auto_720p or auto_1080p keeps the image framing), seedance2_5 (Seedance 2.5, 4-30s, 480p to 4K, audio). ' +
+        RESOLD_VIDEO_GUIDE + ' Last frame: gen4/veo, kling_4, seedance2_5(_flash), gemini_omni_flash_1.2, hailuo3, h3_max, wan3(_prime). ' +
         'WORKFLOW: Returns task_id → poll with check_runway_task or use wait_for_runway_task.',
       _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['prompt_image'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }, { selector: ['last_frame_image'], base: 'connectorCwd', expandTilde: false, nonLocalPrefixes: ['https://', 'data:', 'runway://'] }] } },
       inputSchema: z.object({
         prompt_image: z.string().describe('First frame image. HTTPS URL, Runway URI, or local file path.'),
         last_frame_image: z.string().optional().describe('Optional last frame image for transition.'),
-        prompt_text: z.string().optional().describe('Describe the desired motion. kling_4 takes up to 26000 characters, seedance2_5 up to 15000.'),
-        model: z.enum(['gen4.5', 'gen4_turbo', 'veo3.1', 'veo3.1_fast', 'kling_4', 'seedance2_5']).optional().describe('Default: gen4_turbo.'),
-        ratio: z.enum(IMAGE_RATIOS).optional().describe('Output resolution. Default: 1280:720 (kling_4: auto_720p). gen4/veo: 1280:720, 720:1280, 960:960, 1104:832, 832:1104, 1584:672. kling_4: auto_720p or auto_1080p. seedance2_5: its listed 480p to 4K ratios.'),
-        duration: z.number().optional().describe('Seconds. gen4: 2-10 (default 5). veo: 4,6,8 (default 8). kling_4: 3-30, seedance2_5: 4-30 (default 5).'),
-        audio: z.boolean().optional().describe('Generate audio (veo and seedance2_5 only). Default: true.'),
+        prompt_text: z.string().optional().describe('Describe the desired motion. Required for gemini_omni_flash_1.2, hailuo3, h3_max, wan3 and wan3_prime. kling_4 takes up to 26000 characters, wan3 20000, seedance2_5 15000.'),
+        model: z.enum(['gen4.5', 'gen4_turbo', 'veo3.1', 'veo3.1_fast', ...RESOLD_VIDEO_MODELS]).optional().describe('Default: gen4_turbo.'),
+        ratio: z.string().optional().describe(`${RATIO_GUIDE} gen4/veo: 1280:720, 720:1280, 960:960, 1104:832, 832:1104, 1584:672.`),
+        resolution: z.enum(['480p', '720p', '768p', '1080p', '2k']).optional().describe(RESOLUTION_GUIDE),
+        duration: z.number().optional().describe('Seconds. gen4: 2-10 (default 5). veo: 4,6,8 (default 8). Models made by others: their own range (default 5).'),
+        audio: z.boolean().optional().describe('Generate audio (veo, seedance2_5(_flash), wan3(_prime)). Default: true.'),
                 negative_prompt: z.string().max(1000).optional().describe('What should NOT appear in the output (veo models only, max 1000 chars). Omit to use the default negative prompt.'),
         content_moderation: z.enum(['auto', 'low']).optional().describe('Public figure threshold.'),
         seed: z.number().int().optional().describe('Random seed (0-4294967295) for reproducibility.'),
@@ -48,10 +64,12 @@ export function registerVideoTools(server: McpServer): void {
       const reads = fileReadContext(server.server.getClientCapabilities(), extra);
       const model = args.model || 'gen4_turbo';
       // Checked before any upload or request, so a wrong option fails for this model only.
-      const resold = isResoldVideoModel(model) ? resoldVideoFields(model, 'image', { ...args, prompt_text: args.prompt_text || undefined }) : undefined;
+      const resold = isResoldVideoModel(model)
+        ? resoldVideoFields(model, 'image', { ...args, prompt_text: args.prompt_text || undefined, last_frame_image: args.last_frame_image || undefined })
+        : undefined;
       const isRunwayModel = ['gen4.5', 'gen4_turbo'].includes(model);
       const ratio = args.ratio || '1280:720';
-      if (!resold) checkRunwayRatio(model, ratio, RUNWAY_IMAGE_RATIOS);
+      if (!resold) checkRunwayModel(model, ratio, RUNWAY_IMAGE_RATIOS, args.resolution);
       const duration = args.duration || (isRunwayModel ? 5 : 8);
       const audio = args.audio;
       const seed = args.seed;
@@ -69,7 +87,7 @@ export function registerVideoTools(server: McpServer): void {
       }
 
       if (resold) {
-        const body: Record<string, unknown> = { model, promptImage, ratio: resold.ratio, duration: resold.duration, ...resold.extra };
+        const body: Record<string, unknown> = { model, promptImage, ...resold.fields };
         if (args.prompt_text) body.promptText = args.prompt_text;
         const result = await runwayFetch<TaskResponse>('/image_to_video', { method: 'POST', body: JSON.stringify(body) });
         return JSON.stringify({
@@ -104,14 +122,15 @@ export function registerVideoTools(server: McpServer): void {
     {
       description:
         'Create a video entirely from a text description. ' +
-        'MODELS: gen4.5 (flagship), veo3.1 (best + audio), veo3.1_fast, kling_4 (Kling 4.0, 3-30s, up to 1080p), seedance2_5 (Seedance 2.5, 4-30s, 480p to 4K, audio). ' +
+        'MODELS: gen4.5 (flagship), veo3.1 (best + audio), veo3.1_fast, ' + RESOLD_VIDEO_GUIDE + ' ' +
         'WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
-        prompt_text: z.string().max(26000).describe('Detailed video description. Max 1000 chars (26000 for kling_4, 15000 for seedance2_5).'),
-        model: z.enum(['gen4.5', 'veo3.1', 'veo3.1_fast', 'kling_4', 'seedance2_5']).optional().describe('Default: gen4.5.'),
-        ratio: z.enum(TEXT_RATIOS).optional().describe('Output resolution. Default: 1280:720. gen4.5/veo: 1280:720 or 720:1280. kling_4 and seedance2_5 take more, up to 1080p and 4K.'),
-        duration: z.number().optional().describe('Seconds. gen4.5: 2-10 (default 5). veo: 4,6,8 (default 8). kling_4: 3-30, seedance2_5: 4-30 (default 5).'),
-        audio: z.boolean().optional().describe('Generate audio (veo and seedance2_5 only). Default: true.'),
+        prompt_text: z.string().max(26000).describe('Detailed video description. Max 1000 chars for gen4.5/veo; models made by others take more (kling_4 26000, wan3 20000, seedance2_5 15000).'),
+        model: z.enum(['gen4.5', 'veo3.1', 'veo3.1_fast', ...RESOLD_VIDEO_MODELS]).optional().describe('Default: gen4.5.'),
+        ratio: z.string().optional().describe(`${RATIO_GUIDE} gen4.5/veo: 1280:720 or 720:1280.`),
+        resolution: z.enum(['480p', '720p', '768p', '1080p', '2k']).optional().describe(RESOLUTION_GUIDE),
+        duration: z.number().optional().describe('Seconds. gen4.5: 2-10 (default 5). veo: 4,6,8 (default 8). Models made by others: their own range (default 5).'),
+        audio: z.boolean().optional().describe('Generate audio (veo, seedance2_5(_flash), wan3(_prime)). Default: true.'),
                 negative_prompt: z.string().max(1000).optional().describe('What should NOT appear in the output (veo models only, max 1000 chars). Omit to use the default negative prompt.'),
         content_moderation: z.enum(['auto', 'low']).optional().describe('Public figure threshold.'),
         seed: z.number().int().optional().describe('Random seed (0-4294967295).'),
@@ -122,7 +141,7 @@ export function registerVideoTools(server: McpServer): void {
       const model = args.model || 'gen4.5';
       if (isResoldVideoModel(model)) {
         const resold = resoldVideoFields(model, 'text', args);
-        const body: Record<string, unknown> = { model, promptText: args.prompt_text, ratio: resold.ratio, duration: resold.duration, ...resold.extra };
+        const body: Record<string, unknown> = { model, promptText: args.prompt_text, ...resold.fields };
         const result = await runwayFetch<TaskResponse>('/text_to_video', { method: 'POST', body: JSON.stringify(body) });
         return JSON.stringify({
           ok: true, task_id: result.id, status: 'PENDING', model, duration: resold.duration,
@@ -134,12 +153,12 @@ export function registerVideoTools(server: McpServer): void {
         throw new RunwayError(
           `Prompt is ${args.prompt_text.length} characters; ${model} supports at most 1000.`,
           'INVALID_INPUT',
-          'Shorten the prompt to 1000 characters, or use kling_4 (up to 26000) or seedance2_5 (up to 15000).',
+          'Shorten the prompt to 1000 characters, or use a model that takes more, such as kling_4 (up to 26000) or seedance2_5 (up to 15000).',
         );
       }
       const isGen45 = model === 'gen4.5';
       const ratio = args.ratio || '1280:720';
-      checkRunwayRatio(model, ratio, RUNWAY_TEXT_RATIOS);
+      checkRunwayModel(model, ratio, RUNWAY_TEXT_RATIOS, args.resolution);
       const duration = args.duration || (isGen45 ? 5 : 8);
       const audio = args.audio !== false;
       const seed = args.seed;

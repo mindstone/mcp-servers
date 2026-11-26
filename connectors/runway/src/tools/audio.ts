@@ -95,7 +95,7 @@ export function registerAudioTools(server: McpServer): void {
     {
       description:
         'Generate sound effects from a text description. ' +
-        'COST: 1 credit per 6 seconds. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
+        'COST: 1 credit per second of audio, or 2 credits when the duration is left out. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
         prompt_text: z.string().max(3000).describe('Describe the sound effect. Max 3000 chars.'),
         duration: z.number().optional().describe('Duration in seconds (0.5-30). Auto-determined if omitted.'),
@@ -111,7 +111,7 @@ export function registerAudioTools(server: McpServer): void {
       const result = await runwayFetch<TaskResponse>('/sound_effect', { method: 'POST', body: JSON.stringify(body) });
       return JSON.stringify({
         ok: true, task_id: result.id, status: 'PENDING',
-        cost_rate: '1 credit per 6s of audio',
+        cost_rate: args.duration !== undefined ? '1 credit per second of audio' : '2 credits',
         message: `Sound effect generation started. Poll with check_runway_task("${result.id}") every 10s, or use wait_for_runway_task.`,
       });
     }),
