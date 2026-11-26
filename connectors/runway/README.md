@@ -130,7 +130,11 @@ node dist/index.js
 - `character_performance` — Animate a character with facial expressions and body movements (Act-Two)
 - `upscale_video` — Upscale a video up to 4K (Magnific Video Upscaler)
 
-Video models: `generate_video_from_image` takes `gen4_turbo` (default), `gen4.5`, `veo3.1` or `veo3.1_fast`; `generate_video_from_text` takes `gen4.5` (default), `veo3.1` or `veo3.1_fast`. `veo3` is no longer accepted by Runway and is refused before any request; use `veo3.1` or `veo3.1_fast` instead.
+Video models: `generate_video_from_image` takes `gen4_turbo` (default), `gen4.5`, `veo3.1`, `veo3.1_fast`, `kling_4` (Kling 4.0) or `seedance2_5` (Seedance 2.5); `generate_video_from_text` takes `gen4.5` (default), `veo3.1`, `veo3.1_fast`, `kling_4` or `seedance2_5`. `veo3` is no longer accepted by Runway and is refused before any request; use `veo3.1` or `veo3.1_fast` instead.
+
+Image models: `gen4_image` (default), `gen4_image_turbo`, `gemini_2.5_flash`, `gemini_image3_pro` (Nano Banana Pro), `gpt_image_2_6_sunburst` and `gpt_image_2_6_flare` (GPT Image 2.6). Speech models: `eleven_multilingual_v2` (default), `eleven_v3` and `eleven_v4`.
+
+Each model takes its own ratios, durations and options; anything a model does not take is refused before any request. The models Runway resells from other makers (Kling, Seedance, Nano Banana, GPT Image, ElevenLabs v4) were added from Runway's documentation and have not yet been tried against its live API.
 
 ### Image
 - `generate_image` — Generate an image from text, optionally with reference images

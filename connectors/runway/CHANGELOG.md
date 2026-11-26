@@ -11,6 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Newer models Runway resells: `kling_4` (Kling 4.0) and `seedance2_5` (Seedance 2.5) for `generate_video_from_image` and `generate_video_from_text`; `gemini_image3_pro` (Nano Banana Pro), `gpt_image_2_6_sunburst` and `gpt_image_2_6_flare` (GPT Image 2.6) for `generate_image`; and `eleven_v4` for `generate_speech`. Their ratios, durations and prices follow Runway's API reference and pricing guide. These models were added from that documentation and have not yet been called against Runway's live API.
+- Each new model is sent only the fields Runway documents for it. An option it does not take (for example `seed` with `kling_4`), or a prompt length, seed, reference tag or number of reference images outside its documented limits, is refused with a message naming the model, before any upload or request.
+- `gpt_image_2_6_sunburst` and `gpt_image_2_6_flare` take `ratio: "auto"` and up to 16 reference images; `gemini_image3_pro` takes up to 14. The other image models still take at most 3.
+
+### Changed
+
+- The tools' ratio lists now include the new models' ratios. A ratio a model does not take is refused before any request, with the ratios it does take; the existing models take the same ratios as before.
+- `generate_video_from_text` accepts prompts up to 26000 characters for `kling_4` and 15000 for `seedance2_5`; the other models still take at most 1000.
+
 ### Security
 
 - The connector now reads the host app's bridge settings through the shared hardened reader, which refuses a symlinked, oversized or malformed settings file and never follows a redirect off the local machine.

@@ -23,13 +23,14 @@ export function registerAudioTools(server: McpServer): void {
     {
       description:
         'Generate spoken audio from text using ElevenLabs voices via Runway. ' +
-        '49 voice presets available. Can also use custom voice IDs (eleven_multilingual_v2 only). ' +
-        'MODELS: eleven_multilingual_v2 (default), eleven_v3 (expressive; supports audio tags like [laughs] and [whispers] in the text; preset voices only). ' +
-        'COST: 1 credit per 50 characters. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
+        '49 voice presets available. Can also use custom voice IDs (eleven_multilingual_v2 and eleven_v4). ' +
+        'MODELS: eleven_multilingual_v2 (default), eleven_v3 (expressive; supports audio tags like [laughs] and [whispers] in the text; preset voices only), ' +
+        'eleven_v4 (newest and most expressive; audio tags like [laughs], [whispers] and [pause]; up to 2500 characters). ' +
+        'COST: 1 credit per 50 characters (eleven_v4: 5 credits per 1000). WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
-        text: z.string().max(SPEECH_TEXT_MAX_CHARS).describe('Text to speak. Max 1000 characters (5000 for eleven_v3, which also accepts audio tags like [laughs]).'),
-        voice: voiceSchema.optional().describe('Voice preset name or custom voice UUID (custom voices require eleven_multilingual_v2). Default: Maya.'),
-        model: z.enum(['eleven_multilingual_v2', 'eleven_v3']).optional().describe('Speech model. Default: eleven_multilingual_v2.'),
+        text: z.string().max(SPEECH_TEXT_MAX_CHARS).describe('Text to speak. Max 1000 characters (5000 for eleven_v3 and 2500 for eleven_v4, which also accept audio tags like [laughs]).'),
+        voice: voiceSchema.optional().describe('Voice preset name or custom voice UUID (custom voices need eleven_multilingual_v2 or eleven_v4). Default: Maya.'),
+        model: z.enum(['eleven_multilingual_v2', 'eleven_v3', 'eleven_v4']).optional().describe('Speech model. Default: eleven_multilingual_v2.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
@@ -39,15 +40,18 @@ export function registerAudioTools(server: McpServer): void {
       // Model-dependent text ceiling, enforced here rather than via a
       // schema-level refine: a .superRefine on the object schema would make
       // the MCP SDK advertise an empty parameter list for this tool.
-      const maxTextChars = model === 'eleven_v3' ? 5000 : 1000;
+      const maxTextChars = model === 'eleven_v3' ? 5000 : model === 'eleven_v4' ? 2500 : 1000;
       if (args.text.length > maxTextChars) {
         throw new RunwayError(
           `Text is ${args.text.length} characters; ${model} supports at most ${maxTextChars}.`,
           'INVALID_INPUT',
-          model === 'eleven_v3'
-            ? 'Shorten the text to 5000 characters or fewer.'
+          model !== 'eleven_multilingual_v2'
+            ? `Shorten the text to ${maxTextChars} characters or fewer.`
             : 'Shorten the text to 1000 characters or fewer, or switch to eleven_v3 (up to 5000 characters).',
         );
+      }
+      if (model === 'eleven_v4' && args.text.length === 0) {
+        throw new RunwayError('eleven_v4 needs some text to speak.', 'INVALID_INPUT', 'Pass the words to speak in text.');
       }
       const isCustomVoice = customVoiceIdSchema.safeParse(voice).success;
       if (isCustomVoice && model === 'eleven_v3') {
@@ -55,6 +59,14 @@ export function registerAudioTools(server: McpServer): void {
           'eleven_v3 supports Runway preset voices only',
           'INVALID_INPUT',
           'Use a voice preset name (e.g. Maya) with eleven_v3, or switch to eleven_multilingual_v2 to use a custom voice.',
+        );
+      }
+      // Runway's eleven_v4 schema takes only version-4 UUIDs for custom voices.
+      if (isCustomVoice && model === 'eleven_v4' && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(voice)) {
+        throw new RunwayError(
+          `eleven_v4 does not accept the custom voice ID ${voice}.`,
+          'INVALID_INPUT',
+          'Use a custom voice ID from list_custom_voices, or a voice preset name.',
         );
       }
       const voicePayload = isCustomVoice
@@ -68,7 +80,7 @@ export function registerAudioTools(server: McpServer): void {
 
       const result = await runwayFetch<TaskResponse>('/text_to_speech', { method: 'POST', body: JSON.stringify(body) });
       const textLen = args.text.length;
-      const estCredits = Math.ceil(textLen / 50);
+      const estCredits = model === 'eleven_v4' ? Math.max(1, Math.ceil((textLen * 5) / 1000)) : Math.ceil(textLen / 50);
       return JSON.stringify({
         ok: true, task_id: result.id, status: 'PENDING', voice, model,
         estimated_credits: estCredits, estimated_cost: `$${(estCredits * 0.01).toFixed(2)}`,
