@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-26
+
+### Changed
+
+- Adds 10 video and 9 image models Runway resells (Wan, Hailuo, Grok, Ideogram and more), taken from Runway public docs and never called live; fixes sound-effect cost text.
+
 ### Added
 
 - More models Runway resells, from its public API spec and pricing guide; never called against the live API, so a wrong one fails for that model only. Video (`generate_video_from_image` and `generate_video_from_text`): `kling_4_flash`, `seedance2_5_flash`, `gemini_omni_flash_1.2`, `hailuo3`, `h3_max`, `wan3`, `wan3_prime`, `grok_imagine_1_5`, `grok_imagine_1_5_lite` and `happyhorse_1_0`. Images (`generate_image`): `gemini_image3.1_flash`, `gemini_image3.1_flash_lite`, `nano_banana_2.1`, `seedream5.5`, `minimax_h3_image`, `ideogram_4_5`, `grok_imagine_image_2`, `muse_image` and `bria_fibo_1_5`.
