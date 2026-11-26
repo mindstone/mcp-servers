@@ -56,6 +56,23 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(call?.search).toMatch(/\$top=5/);
   });
 
+  it('list_events sends a positive UTC offset intact (the "+" is percent-encoded)', async () => {
+    const startDateTime = '2026-11-26T00:00:00+00:00';
+    const endDateTime = '2026-11-27T00:00:00+05:30';
+    const result = await client.callTool('list_events', { startDateTime, endDateTime });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/calendarView'));
+    expect(call).toBeDefined();
+    // Graph reads a raw "+" in a query string as a space and refuses the date.
+    expect(call?.search).not.toMatch(/\+/);
+    const params = new URLSearchParams(call?.search ?? '');
+    expect(params.get('startDateTime')).toBe(startDateTime);
+    expect(params.get('endDateTime')).toBe(endDateTime);
+    const json = result.json as { startDateTime: string; endDateTime: string };
+    expect(json.startDateTime).toBe(startDateTime);
+    expect(json.endDateTime).toBe(endDateTime);
+  });
+
   it('list_events returnText=true returns agenda-style text (no JSON wrapper)', async () => {
     const result = await client.callTool('list_events', { returnText: true });
     expect(result.isError).not.toBe(true);

@@ -679,9 +679,11 @@ export async function listEvents(
     client
       .api(endpoint)
       .options({ signal })
+      // The Graph SDK joins query values into the URL unencoded, so encode
+      // the window ourselves: a raw "+" in a UTC offset reads as a space.
       .query({
-        startDateTime: start,
-        endDateTime: end,
+        startDateTime: encodeURIComponent(start),
+        endDateTime: encodeURIComponent(end),
         $top: top,
         $select: 'id,subject,start,end,location,organizer,attendees,isAllDay,webLink',
         $orderby: 'start/dateTime',
