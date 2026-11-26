@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-26
+
+### Changed
+
+- Credential files are read through a guarded, schema-checked reader; each Microsoft account uses only its own saved sign-in
+
 ### Security
 
 - Token and accounts files are now read through a guarded reader: a symlink, a directory, FIFO or other non-regular file, a file whose opened identity differs from its path, or a file over 64 KiB is refused, and the JSON is schema-checked with Zod. A refused or corrupt file throws the new exported `MicrosoftCredentialFileError` (a fixed message naming no path or file content, plus a `reason` code) instead of a raw parse error that could quote the file; a corrupt `accounts.json` now raises it too rather than reading as no accounts. Missing files behave as before, every token shape the host writes still parses (including `expires_at: null` and extra keys), and `hasValidToken` still returns `false` rather than throwing. Adds a `zod` dependency.
