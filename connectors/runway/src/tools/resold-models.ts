@@ -1,8 +1,8 @@
 import { RunwayError } from '../types.js';
 import { IMAGE_TO_VIDEO, TEXT_TO_VIDEO, TEXT_TO_IMAGE, type ResoldFieldSpec } from './resold-specs.generated.js';
 
-// Models Runway resells from other makers. Each one rejects request fields it
-// does not list (the API's schemas set additionalProperties: false), so the
+// Models Runway resells from other makers. Most of their API schemas reject
+// request fields they do not list (additionalProperties: false), so the
 // connector sends a resold model only the fields its own spec allows, and
 // refuses any other option with a plain message naming the model, before any
 // upload or request. The fields and limits come from Runway's published API
