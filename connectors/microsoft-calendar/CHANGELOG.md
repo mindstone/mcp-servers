@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-26
+
+### Changed
+
+- Fix event create/read with empty meeting fields, positive-offset time windows, tentative replies and reply wording; clearer notify descriptions; consistent tag escaping.
+
 ### Changed
 
 - The descriptions of `create_event`, `update_event`, `delete_event`, `cancel_event` and `respond_to_event` now say who is notified (invitations, updates, cancellations, responses to the organizer) and whether it can be undone. These send, delete and cancellation actions are marked `destructiveHint: true`. `delete_event`'s `notifyAttendees` argument now says it has no effect: when the organizer deletes a meeting, Microsoft always sends attendees a cancellation.
