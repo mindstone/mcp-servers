@@ -9,7 +9,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 ## Status
 
-- **Version:** [0.4.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
+- **Version:** [0.4.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [62](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin

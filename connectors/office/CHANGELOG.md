@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-26
+
+### Changed
+
+- Certificate setup has one owner: managed hosts own install, so prompts no longer reopen and pile up, and the trust check asks the OS whether the certificate is actually trusted.
+
 ### Fixed
 
 - Linux standalone certificate trust checks now use `openssl verify`.
