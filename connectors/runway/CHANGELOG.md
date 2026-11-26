@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
+### Changed
+
+- Adds Kling 4.0, Seedance 2.5, Nano Banana Pro, GPT Image 2.6 and ElevenLabs v4, from Runway's public docs; never called live, so a wrong one fails for that model only
+
 ### Added
 
 - Newer models Runway resells: `kling_4` (Kling 4.0) and `seedance2_5` (Seedance 2.5) for `generate_video_from_image` and `generate_video_from_text`; `gemini_image3_pro` (Nano Banana Pro), `gpt_image_2_6_sunburst` and `gpt_image_2_6_flare` (GPT Image 2.6) for `generate_image`; and `eleven_v4` for `generate_speech`. Their ratios, durations and prices follow Runway's API reference and pricing guide. These models were added from that documentation and have not yet been called against Runway's live API.
