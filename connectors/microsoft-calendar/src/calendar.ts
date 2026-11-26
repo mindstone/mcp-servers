@@ -33,64 +33,68 @@ export class CalendarBusinessError extends Error {
 // is tracked as planned debt in the CHANGELOG.
 // ---------------------------------------------------------------------------
 
+// Graph uses null for absent optional fields; keep downstream values undefined.
+const graphOptional = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.nullish().transform((value): z.output<T> | undefined => value ?? undefined);
+
 const GraphDateTimeSchema = z.object({
   dateTime: z.string(),
-  timeZone: z.string().optional().default('UTC'),
+  timeZone: graphOptional(z.string()).transform((value) => value ?? 'UTC'),
 });
 
 const GraphEmailAddressSchema = z.object({
-  address: z.string().optional(),
-  name: z.string().optional(),
+  address: graphOptional(z.string()),
+  name: graphOptional(z.string()),
 });
 
 const GraphAttendeeSchema = z
   .object({
-    type: z.string().optional(),
-    emailAddress: GraphEmailAddressSchema.optional(),
-    status: z.object({ response: z.string().optional() }).passthrough().optional(),
+    type: graphOptional(z.string()),
+    emailAddress: graphOptional(GraphEmailAddressSchema),
+    status: graphOptional(z.object({ response: graphOptional(z.string()) }).passthrough()),
   })
   .passthrough();
 
 const GraphEventSchema = z
   .object({
     id: z.string(),
-    subject: z.string().optional(),
+    subject: graphOptional(z.string()),
     start: GraphDateTimeSchema,
     end: GraphDateTimeSchema,
-    location: z.object({ displayName: z.string().optional() }).passthrough().optional(),
-    body: z
-      .object({ content: z.string().optional(), contentType: z.string().optional() })
-      .passthrough()
-      .optional(),
-    organizer: z.object({ emailAddress: GraphEmailAddressSchema }).passthrough().optional(),
-    attendees: z.array(GraphAttendeeSchema).optional(),
-    isAllDay: z.boolean().optional(),
-    webLink: z.string().optional(),
-    onlineMeeting: z.object({ joinUrl: z.string().optional() }).passthrough().optional(),
+    location: graphOptional(z.object({ displayName: graphOptional(z.string()) }).passthrough()),
+    body: graphOptional(
+      z.object({ content: graphOptional(z.string()), contentType: graphOptional(z.string()) })
+        .passthrough(),
+    ),
+    organizer: graphOptional(z.object({ emailAddress: GraphEmailAddressSchema }).passthrough()),
+    attendees: graphOptional(z.array(GraphAttendeeSchema)),
+    isAllDay: graphOptional(z.boolean()),
+    webLink: graphOptional(z.string()),
+    onlineMeeting: graphOptional(z.object({ joinUrl: graphOptional(z.string()) }).passthrough()),
   })
   .passthrough();
 
 const GraphCreatedEventSchema = z
   .object({
     id: z.string(),
-    webLink: z.string().optional(),
-    onlineMeeting: z.object({ joinUrl: z.string().optional() }).passthrough().optional(),
+    webLink: graphOptional(z.string()),
+    onlineMeeting: graphOptional(z.object({ joinUrl: graphOptional(z.string()) }).passthrough()),
   })
   .passthrough();
 
 const GraphAttachmentSchema = z
   .object({
     id: z.string(),
-    name: z.string().optional(),
-    contentType: z.string().optional(),
-    size: z.number().optional(),
+    name: graphOptional(z.string()),
+    contentType: graphOptional(z.string()),
+    size: graphOptional(z.number()),
   })
   .passthrough();
 
 const GraphScheduleSchema = z
   .object({
-    scheduleId: z.string().optional(),
-    availabilityView: z.string().optional(),
+    scheduleId: graphOptional(z.string()),
+    availabilityView: graphOptional(z.string()),
   })
   .passthrough();
 
@@ -100,13 +104,13 @@ const GraphScheduleSchema = z
 const GraphCalendarSchema = z
   .object({
     id: z.string(),
-    name: z.string().optional(),
-    color: z.string().optional(),
-    isDefaultCalendar: z.boolean().optional(),
-    canEdit: z.boolean().optional(),
-    owner: z
-      .object({ name: z.string().optional(), address: z.string().optional() })
-      .optional(),
+    name: graphOptional(z.string()),
+    color: graphOptional(z.string()),
+    isDefaultCalendar: graphOptional(z.boolean()),
+    canEdit: graphOptional(z.boolean()),
+    owner: graphOptional(
+      z.object({ name: graphOptional(z.string()), address: graphOptional(z.string()) }),
+    ),
   })
   .passthrough();
 
@@ -1003,7 +1007,7 @@ export async function updateEvent(
       .select('attendees')
       .get();
     const currentEvent = parseGraphResponse(
-      z.object({ attendees: z.array(GraphAttendeeSchema).optional() }).passthrough(),
+      z.object({ attendees: graphOptional(z.array(GraphAttendeeSchema)) }).passthrough(),
       current,
       'update_event current attendees',
     );

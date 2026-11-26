@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- Adding an event without an online meeting, or reading one, no longer reports a failure: the connector now accepts Microsoft's empty (null) fields.
 - Listing events now works for a time window written with a positive UTC offset (such as `+00:00` or `+05:30`); the `+` reached Microsoft unencoded, was read as a space, and the request was refused.
 - Tentatively accepting an invitation now works; it called a Microsoft address that does not exist.
 - Replying to an invitation now says plainly what was done ('declined', 'tentatively accepted'), instead of a garbled word.

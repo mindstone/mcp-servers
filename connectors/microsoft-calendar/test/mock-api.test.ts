@@ -134,6 +134,38 @@ describe('microsoft-calendar mock-API integration', () => {
     );
   });
 
+  it('get_event treats null optional Graph fields as absent', async () => {
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/me/events/:id', () =>
+        HttpResponse.json({
+          id: 'plain-event-1',
+          subject: null,
+          start: { dateTime: '2026-05-20T09:00:00', timeZone: null },
+          end: { dateTime: '2026-05-20T09:30:00' },
+          location: null,
+          body: null,
+          organizer: null,
+          attendees: [
+            { emailAddress: { address: 'x@example.com', name: null }, type: null, status: null },
+          ],
+          isAllDay: null,
+          webLink: null,
+          onlineMeeting: null,
+        }),
+      ),
+    );
+    const result = await client.callTool('get_event', { id: 'plain-event-1' });
+    expect(result.isError, result.text).not.toBe(true);
+    expect(result.json).toMatchObject({
+      id: 'plain-event-1',
+      start: { timeZone: 'UTC' },
+      end: { timeZone: 'UTC' },
+      attendees: [{ email: expect.stringContaining('x@example.com') }],
+    });
+    expect(result.json).not.toHaveProperty('onlineMeetingUrl');
+    expect(result.text).not.toContain('null');
+  });
+
   it('get_event returns an error envelope when id is missing', async () => {
     const result = await client.callTool('get_event', {});
     expect(result.isError).toBe(true);
@@ -199,6 +231,44 @@ describe('microsoft-calendar mock-API integration', () => {
       isOnlineMeeting: true,
       onlineMeetingProvider: 'teamsForBusiness',
     });
+  });
+
+  it('create_event succeeds when Graph returns a null onlineMeeting', async () => {
+    mswServer.use(
+      http.post('https://graph.microsoft.com/v1.0/me/events', () =>
+        HttpResponse.json({
+          id: 'plain-event-1',
+          webLink: 'https://outlook.com/plain-event-1',
+          onlineMeeting: null,
+        }),
+      ),
+    );
+    const result = await client.callTool('create_event', {
+      subject: 'Plain event',
+      start: '2026-05-20T09:00:00',
+      end: '2026-05-20T09:30:00',
+    });
+    expect(result.isError, result.text).not.toBe(true);
+    expect(result.json).toMatchObject({ success: true, eventId: 'plain-event-1' });
+    expect(result.json).not.toHaveProperty('onlineMeetingUrl');
+  });
+
+  it('create_event fails closed when Graph returns a null required id', async () => {
+    mswServer.use(
+      http.post('https://graph.microsoft.com/v1.0/me/events', () =>
+        HttpResponse.json({ id: null }),
+      ),
+    );
+    const result = await client.callTool('create_event', {
+      subject: 'Plain event',
+      start: '2026-05-20T09:00:00',
+      end: '2026-05-20T09:30:00',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false });
+    expect((result.json as { error: string }).error).toContain(
+      'create_event (id: Expected string, received null)',
+    );
   });
 
   it('create_event rejects "title" alias with explicit guidance', async () => {
