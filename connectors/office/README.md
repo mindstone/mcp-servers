@@ -128,6 +128,8 @@ restart any open Office apps.
 To keep the add-in removed, turn off the Office connector; otherwise it is added
 again the next time the connector starts.
 
+A standalone host may time out the first tool call while the approval prompt is open; after approval, the next call finds the helper ready.
+
 ## Before you install: the state file path
 
 The install below needs one value, `MCP_OFFICE_SIDECAR_STATE`, and leaves it empty. Set it to
@@ -229,6 +231,30 @@ sidecar lifecycle directly:**
   `assets/`). The MCP server sets this to the package's `dist/addin/`
   directory; hosts serving a custom add-in bundle can override it.
 
+## Certificate ownership
+
+`MCP_OFFICE_CERT_OWNER=rebel` declares that Rebel's manager owns certificate
+creation and trust approval. Set it on both the managed MCP server and helper.
+In this mode the helper only reads the existing certificate/key pair; the MCP
+server discovers or waits for the manager's helper and never starts another one.
+After a failed certificate step, choose **Try again** on the **Microsoft Office**
+card in Rebel Settings and approve the prompt before asking the AI to retry.
+
+Leave this variable absent for standalone clients, even when configuring
+`MCP_OFFICE_SIDECAR_STATE`. Standalone startup checks effective system trust,
+installs automatically when needed, waits up to five minutes for approval, and
+checks trust again before starting HTTPS. If approval is declined or times out,
+run the connector again and approve the prompt. Installer output is not a ready
+signal; timed-out installation processes are cleaned up before returning.
+
+Both modes use the connector's importable `dist/certificates/effectiveTrust.js`
+verifier (with `verify.ps1` alongside it). The caller supplies an owned, bounded
+async command runner. A negative result permits installation at the owner;
+unreadable files fail setup without replacement. An inconclusive trust verdict
+allows one install attempt; a negative or unknown verdict after installation fails setup. macOS checks system SSL trust for `localhost`, without supplying a
+custom trust anchor. Windows requires successful chain validation and matching
+CA store/issuer identities.
+
 ## Host configuration examples
 
 ### Claude Desktop / Cursor
@@ -259,8 +285,9 @@ Claude Desktop is possible but the host must provide a writable
   "name": "RebelOffice",
   "type": "stdio",
   "command": "npx",
-  "args": ["-y", "@mindstone/mcp-server-office@0.1.4"],
+  "args": ["-y", "@mindstone/mcp-server-office"],
   "env": {
+    "MCP_OFFICE_CERT_OWNER": "rebel",
     "MCP_OFFICE_SIDECAR_STATE": "~/Library/Application Support/mindstone-rebel/office-sidecar/sidecar-state.json"
   },
   "description": "Microsoft Office integration — Word, Excel, PowerPoint.",

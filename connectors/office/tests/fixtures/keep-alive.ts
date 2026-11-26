@@ -1,6 +1,7 @@
 // Office copy; Rebel keeps a root copy at src/core/services/__tests__/fixtures/officeKeepAlive.ts for its Test A; keep the two in step.
 // The root copy differs only in imports, the Office path, its inlined TLS pair helper and the loader URL.
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import https from 'node:https';
 import { tmpdir } from 'node:os';
@@ -68,6 +69,7 @@ export async function createKeepAliveFixture() {
   const loader = new URL('./dev-certs-loader.mjs', import.meta.url).href;
   const env = {
     MCP_OFFICE_SIDECAR_STATE: stateFile,
+    MCP_OFFICE_CERT_OWNER: 'rebel',
     OFFICE_TEST_TLS_CERT: resolve(tls.cert),
     OFFICE_TEST_TLS_KEY: resolve(tls.key),
     NODE_OPTIONS: `--import ${loader}`,
@@ -131,6 +133,52 @@ export async function createKeepAliveFixture() {
     const html = await request(state.port, '/taskpane.html');
     check('taskpane-html-200', html.status === 200);
     proof('owned-helper', { pid: state.pid, port: state.port, health: 200, identify: 204, html: 200 });
+  }
+
+  async function startManagedHelper(): Promise<void> {
+    check('fixture-cannot-install-certificates', env.MCP_OFFICE_CERT_OWNER === 'rebel');
+    if (owned) { await healthy(); return; }
+    const child = spawn(process.execPath, [OFFICE_HELPER], {
+      env: { ...process.env, ...env, MCP_OFFICE_SIDECAR_STATE_DIR: stateDirectory, MCP_OFFICE_ADDIN_DIR: join(OFFICE_DIRECTORY, 'dist', 'addin') },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stderr.resume();
+    try {
+      await new Promise<void>((resolveReady, reject) => {
+        let output = '';
+        let settled = false;
+        const timer = setTimeout(() => finish(new Error('Managed test helper did not become ready')), 10_000);
+        function finish(error?: Error): void {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (error) reject(error); else resolveReady();
+        }
+        child.once('error', finish);
+        child.once('exit', () => finish(new Error('Managed test helper exited before ready')));
+        child.stdout.on('data', chunk => {
+          output += String(chunk);
+          while (!settled && output.includes('\n')) {
+            const end = output.indexOf('\n');
+            const line = output.slice(0, end);
+            output = output.slice(end + 1);
+            try {
+              if (line.startsWith('{') && JSON.parse(line).type === 'ready') finish();
+            } catch { finish(new Error('Managed test helper emitted invalid JSON')); }
+          }
+          if (output.length > 64 * 1024) finish(new Error('Managed test helper output exceeded its limit'));
+        });
+      });
+      await identify(child.pid);
+    } catch (error) {
+      if (child.pid && child.exitCode === null && child.signalCode === null) {
+        await new Promise<void>(resolveExit => {
+          child.once('exit', () => resolveExit());
+          child.kill('SIGKILL');
+        });
+      }
+      throw error;
+    }
   }
 
   async function healthy(): Promise<void> {
@@ -202,7 +250,7 @@ export async function createKeepAliveFixture() {
   }
 
   return {
-    env, stateDirectory, stateFile, identify, healthy, linuxSetupResult, gone, cleanup, check,
+    env, stateDirectory, stateFile, identify, startManagedHelper, healthy, linuxSetupResult, gone, cleanup, check,
     get pid() { return owned?.pid; },
     get assertion() { return assertion; },
   };

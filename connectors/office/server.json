@@ -21,6 +21,13 @@
       },
       "environmentVariables": [
         {
+          "name": "MCP_OFFICE_CERT_OWNER",
+          "isSecret": false,
+          "description": "Set to rebel when Rebel's manager owns certificate installation; leave absent for standalone setup.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
           "name": "MCP_OFFICE_SIDECAR_STATE",
           "description": "Absolute path to sidecar state file (host-managed; sidecar writes port + token here)",
           "isRequired": true,

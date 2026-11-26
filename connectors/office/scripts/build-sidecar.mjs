@@ -21,6 +21,7 @@
  */
 
 import esbuild from 'esbuild';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,3 +43,8 @@ await esbuild.build({
 });
 
 console.error('[build-sidecar] Built dist/sidecar/cli.js');
+
+await mkdir(join(packageRoot, 'dist', 'certificates'), { recursive: true });
+for (const dir of [outDir, join(packageRoot, 'dist', 'certificates')]) {
+  await copyFile(join(packageRoot, 'src', 'certificates', 'verify.ps1'), join(dir, 'verify.ps1'));
+}

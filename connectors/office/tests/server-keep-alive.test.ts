@@ -12,6 +12,7 @@ async function withServer(name: string, serveCall: boolean): Promise<void> {
     transport.stderr?.on('data', () => {});
     const client = new Client({ name: 'office-keep-alive-test', version: '0.0.0' });
     try {
+      if (serveCall) await fixture.startManagedHelper();
       await client.connect(transport);
       if (serveCall) {
         const result = await client.callTool({ name: 'rebel_office_setup', arguments: { action: 'install' } });

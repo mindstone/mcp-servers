@@ -3,8 +3,13 @@ import syncFs from 'node:fs';
 import { setTimeout as realDelay } from 'node:timers/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import https from 'node:https';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
+import { ReadySignalSchema } from '../src/shared/sidecar/readySignal.js';
+import { TLS_CERT, TLS_KEY } from './tls-fixture.js';
 import { getHttpsServerOptions } from 'office-addin-dev-certs';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +32,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 });
 
 type EnsureSidecarTestHooks = {
+  sidecarStartFailure: (error: { code: string }) => { setupStillStarting?: boolean };
   ensureSidecar: () => Promise<{
     port: number;
     token: string;
@@ -35,6 +41,7 @@ type EnsureSidecarTestHooks = {
   } | null | undefined>;
   setSpawnSidecarAndWaitForTests: (fn: () => Promise<void>) => void;
   setBeforeLockedStateCheckForTests: (fn: () => Promise<void> | void) => void;
+  registeredTools: Map<string, { handler: (input: { action: string }) => Promise<{ content: Array<{ text: string }>; isError?: boolean }> }>;
   resetForTests: () => void;
 };
 
@@ -225,6 +232,71 @@ afterAll(async () => {
 });
 
 describe('server.cjs ensureSidecar', () => {
+  it.each([undefined, 'cert-failed', 'port-in-use'])('managed discovery never spawns with last failure %s', async (code) => {
+    vi.stubEnv('MCP_OFFICE_CERT_OWNER', 'rebel');
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    if (code) await writeLastFailureFile({ code });
+    try {
+      await expect(hooks.ensureSidecar()).rejects.toMatchObject({
+        code: code === 'cert-failed' ? 'CERT_NOT_TRUSTED' : 'SIDECAR_NOT_RUNNING',
+      });
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('managed live lock with no state waits the old budget and returns setupStillStarting without spawning', async () => {
+    vi.stubEnv('MCP_OFFICE_CERT_OWNER', 'rebel');
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    await fs.writeFile(path.join(stateDir, 'sidecar.lock'), String(process.pid));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const outcome = hooks.registeredTools.get('rebel_office_setup')!.handler({ action: 'install' });
+      let settled = false;
+      void outcome.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_001);
+      const result = await outcome;
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0]!.text)).toMatchObject({ error: { code: 'SIDECAR_NOT_RUNNING' } });
+      expect(result.content[0]!.text).toContain('answer it before retrying');
+      const failure = hooks.ensureSidecar().catch(error => hooks.sidecarStartFailure(error));
+      await vi.advanceTimersByTimeAsync(30_001);
+      await expect(failure).resolves.toMatchObject({ setupStillStarting: true });
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+
+  it('managed certificate failure stays authoritative when a prior state file remains', async () => {
+    vi.stubEnv('MCP_OFFICE_CERT_OWNER', 'rebel');
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    await writeStateFile({ port: 52100, token: 'prior-helper', pid: process.pid });
+    await writeLastFailureFile({ code: 'cert-failed' });
+    try {
+      await expect(hooks.ensureSidecar()).rejects.toMatchObject({ code: 'CERT_NOT_TRUSTED' });
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('managed setup returns non-retryable certificate guidance without spawning', async () => {
+    vi.stubEnv('MCP_OFFICE_CERT_OWNER', 'rebel');
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    await writeLastFailureFile({ code: 'cert-failed' });
+    try {
+      const result = await hooks.registeredTools.get('rebel_office_setup')!.handler({ action: 'install' });
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0]!.text)).toMatchObject({
+        ok: false, app: 'all', action: 'setup', error: { code: 'CERT_NOT_TRUSTED', retryable: false },
+      });
+      expect(result.content[0]!.text).toContain('Try again on the Microsoft Office card in Settings');
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('returns the existing state without spawning when /health returns 200', async () => {
     const livePid = await startLivePid();
     const healthServer = await startHealthServer((req, res) => {
@@ -453,9 +525,9 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
         ? realSpawn(path.join(stateDir, 'missing-node'), [], { stdio: 'pipe' })
         : realSpawn(process.execPath, ['-e', mode === 'exit'
           ? 'process.exit(3);'
-          : `${mode === 'ready' ? 'process.stdout.write("{\\"ready\\":true}\\n");' : ''}setInterval(() => {}, 1_000);`], {
+          : `${mode === 'ready' ? 'process.stdout.write(JSON.stringify({type:"ready",pid:process.pid,port:52100,token:"a".repeat(64),stateFilePath:"fixture"})+"\\n");' : ''}setInterval(() => {}, 1_000);`], {
           stdio: 'pipe',
-          detached: false,
+          detached: process.platform !== 'win32',
         });
       cleanupChildren.add(child);
       killSpy = vi.spyOn(child, 'kill');
@@ -482,6 +554,50 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     ));
   });
 
+  it.skipIf(process.platform !== 'linux')('standalone server spawns its helper with stubbed trusted verification, parses ReadySignalSchema and cleans it up on failed health', async () => {
+    const preload = path.join(stateDir, 'trusted-verifier.mjs');
+    const loader = new URL('./fixtures/dev-certs-loader.mjs', import.meta.url).href;
+    await fs.writeFile(preload, `
+      import cp from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      const spawn = cp.spawn;
+      cp.spawn = (file, args, options) => {
+        if (file !== 'openssl' || args[0] !== 'verify') throw new Error('Certificate installer forbidden in standalone test');
+        process.stderr.write('[office-test] trusted verifier stub\\n');
+        return spawn(process.execPath, ['-e', 'process.exit(0)'], options);
+      };
+      syncBuiltinESMExports();
+    `);
+    vi.stubEnv('MCP_OFFICE_CERT_OWNER', '');
+    const parse = vi.spyOn(ReadySignalSchema, 'safeParse');
+    const failedHealth = await startHealthServer((_req, res) => { res.writeHead(500); res.end(); });
+    sidecarSpawn.override = realSpawn => {
+      child = realSpawn(process.execPath, [fileURLToPath(new URL('../dist/sidecar/cli.js', import.meta.url))], {
+        detached: process.platform !== 'win32', stdio: 'pipe',
+        env: { ...process.env, MCP_OFFICE_CERT_OWNER: '', MCP_OFFICE_SIDECAR_STATE_DIR: stateDir,
+          MCP_OFFICE_ADDIN_DIR: fileURLToPath(new URL('../dist/addin', import.meta.url)), OFFICE_TEST_TLS_CERT: TLS_CERT, OFFICE_TEST_TLS_KEY: TLS_KEY,
+          NODE_OPTIONS: `--import ${loader} --import ${preload}` },
+      });
+      cleanupChildren.add(child);
+      child.stdout!.on('data', chunk => {
+        if (String(chunk).includes('"type":"ready"')) {
+          const state = JSON.parse(syncFs.readFileSync(stateFilePath, 'utf8'));
+          syncFs.writeFileSync(stateFilePath, JSON.stringify({ ...state, port: failedHealth.port }));
+        }
+      });
+      return child;
+    };
+    try {
+      const diagnostics = await captureStderr(async () => {
+        await expect(hooks.ensureSidecar()).rejects.toThrow('but /health is not responding');
+      });
+      expect(diagnostics).toContain('[office-test] trusted verifier stub');
+      expect(parse).toHaveBeenCalledWith(expect.objectContaining({ type: 'ready', pid: child!.pid }));
+      expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
+      expect(() => process.kill(child!.pid!, 0)).toThrow();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('keeps a successfully verified child alive beyond the 30 s startup deadline', async () => {
     const health = await startHealthServer((_req, res) => { res.writeHead(200); res.end(); });
     fixture('ready', health.port);
@@ -492,7 +608,7 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     expect(() => process.kill(child!.pid!, 0)).not.toThrow();
     await expect(fs.stat(lastFailureFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
 
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(331_000);
     await observeExit();
 
     expect(child!.signalCode).toBeNull();
@@ -505,21 +621,55 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     const bystander = await startLivePid();
     fixture('silent');
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const rejection = expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar startup timed out after 30s');
+    const rejection = expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar startup timed out while waiting for certificate approval or readiness.');
     const deadline = Date.now() + 2_000;
     while ((!child || vi.getTimerCount() === 0) && Date.now() < deadline) await realDelay(10);
     expect(child?.pid).toBeGreaterThan(0);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(331_000);
     await rejection;
     await observeExit();
     expect(child!.signalCode).toBe('SIGTERM');
-    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
-    await vi.advanceTimersByTimeAsync(31_000);
-    expect(killSpy).toHaveBeenCalledTimes(1);
+    // Cleanup targets this helper's process group (Windows: taskkill /T).
+    await vi.advanceTimersByTimeAsync(331_000);
+    expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
     expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
     await expectDiagnosticsKept();
+  });
+
+  it('installer stdout cannot end standalone approval waiting or masquerade as readiness', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const stdout = new PassThrough();
+    const ownedPid = 900_001;
+    const emitter = new EventEmitter();
+    const finish = (): void => {
+      Object.assign(emitter, { exitCode: 0, signalCode: 'SIGTERM' });
+      queueMicrotask(() => emitter.emit('exit', 0, 'SIGTERM'));
+    };
+    const fake = Object.assign(emitter, {
+      pid: ownedPid, stdout, stderr: new PassThrough(), exitCode: null, signalCode: null,
+      kill: vi.fn(() => { finish(); return true; }),
+    }) as unknown as ChildProcess;
+    const realKill = process.kill.bind(process);
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === -ownedPid) { finish(); return true; }
+      return realKill(pid, signal);
+    });
+    sidecarSpawn.override = () => { child = fake; return fake; };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    let settled = false;
+    const pending: Promise<unknown> = hooks.ensureSidecar().then(() => null, (error: unknown) => error).finally(() => { settled = true; });
+    while (!child) await realDelay(10);
+    stdout.write('Installing CA certificate...\n');
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(300_000);
+    const error = await pending;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Sidecar startup timed out');
+    expect(fake.signalCode).toBe('SIGTERM');
+    child = undefined; // The fake is already gone; real-child cleanup must not signal its synthetic PID.
   });
 
   it('preserves the original missing-executable error without a late kill attempt', async () => {
@@ -529,7 +679,7 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     expect(error).toBe(spawnError);
     expect(error).toMatchObject({ code: 'ENOENT' });
     const callsAtRejection = killSpy.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(331_000);
     expect(killSpy).toHaveBeenCalledTimes(callsAtRejection);
     await expectDiagnosticsKept();
   });
@@ -547,7 +697,7 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     await expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar exited during startup (code=3)');
     expect(child!.exitCode).toBe(3);
     const callsAtRejection = killSpy.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(331_000);
     expect(killSpy).toHaveBeenCalledTimes(callsAtRejection);
     await expectDiagnosticsKept();
   });
@@ -558,7 +708,7 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     await expect(hooks.ensureSidecar()).rejects.toThrow('Sidecar started but state file did not become readable in time.');
     await observeExit();
     expect(child!.signalCode).toBe('SIGTERM');
-    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+    // Cleanup targets this helper's process group (Windows: taskkill /T).
     expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
     await expectDiagnosticsKept();
   }, 12_000);
@@ -574,7 +724,7 @@ describe('defaultSpawnSidecarAndWait (real default)', () => {
     await expect(hooks.ensureSidecar()).rejects.toThrow(`Sidecar state file points to port ${health.port} but /health is not responding.`);
     await observeExit();
     expect(child!.signalCode).toBe('SIGTERM');
-    expect(killSpy).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+    // Cleanup targets this helper's process group (Windows: taskkill /T).
     expect(() => process.kill(bystander.pid!, 0)).not.toThrow();
     await expectDiagnosticsKept();
   }, 12_000);

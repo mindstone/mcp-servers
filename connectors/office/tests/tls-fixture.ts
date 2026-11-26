@@ -27,7 +27,7 @@
 import { execFile } from 'node:child_process';
 import { X509Certificate, createPrivateKey } from 'node:crypto';
 import { mkdir, readFile, rename } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { devNull, homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -90,6 +90,7 @@ export async function generateTlsPair(directory: string): Promise<{ cert: string
   const tmpKey = `${keyPath}.${process.pid}.tmp`;
   await execFileAsync('openssl', [
     'req',
+    '-config', devNull, // All fixture settings are explicit; no host OpenSSL config is needed.
     '-x509',
     '-newkey', 'rsa:2048',
     '-keyout', tmpKey,

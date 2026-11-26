@@ -28,11 +28,25 @@ if (!stateDir) {
 
 const addinDir = process.env['MCP_OFFICE_ADDIN_DIR'];
 
+const startupAbort = new AbortController();
+const abortStartup = (): void => startupAbort.abort();
+process.once('SIGTERM', abortStartup);
+process.once('SIGINT', abortStartup);
+
 try {
   const sidecar = await startOfficeSidecar({
     stateDirectory: stateDir,
+    signal: startupAbort.signal,
     ...(addinDir ? { addinDir } : {}),
   });
+
+  if (startupAbort.signal.aborted) {
+    await sidecar.stop();
+    process.exit(1);
+  }
+
+  process.off('SIGTERM', abortStartup);
+  process.off('SIGINT', abortStartup);
 
   // Output connection details as JSON on stdout for the parent process to read.
   // The parent (officeSidecarManager) parses this to know the sidecar is ready.

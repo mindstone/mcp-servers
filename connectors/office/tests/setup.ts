@@ -77,3 +77,12 @@ vi.mock('office-addin-dev-certs', async () => {
     outputMarker: '',
   };
 });
+
+// Most helper suites exercise HTTP/Office behavior, with certificate setup isolated.
+// Ownership regressions explicitly unmock this module and use real file fixtures.
+vi.mock('../src/certificates/setup.js', async () => {
+  const fs = await import('node:fs/promises');
+  return {
+    getSidecarHttpsOptions: async () => ({ ca: await fs.readFile(TLS_CERT), cert: await fs.readFile(TLS_CERT), key: await fs.readFile(TLS_KEY) }),
+  };
+});

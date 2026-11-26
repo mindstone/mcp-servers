@@ -30,7 +30,9 @@ import { z } from 'zod';
 import { readHardenedJsonFile } from './hardened-json-file.js';
 import { wrapUntrustedJsonValues } from './untrusted-content.js';
 import { installManifestsToWefFolders, MAC_WEF_PATHS, unregisterWindowsAddin } from './sidecar/manifest.js';
-import { isTargetAccessBlocked } from './shared/sidecar/readySignal.js';
+import { ReadySignalSchema, isTargetAccessBlocked } from './shared/sidecar/readySignal.js';
+import { terminateOwnedTree } from './certificates/ownedCommand.js';
+import { CERT_APPROVAL_TIMEOUT_MS, isRebelCertificateOwner } from './certificates/ownership.js';
 import { isOfficeInstallFailureCode } from './shared/sidecar/errorMessages.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -329,11 +331,12 @@ const evaluateExistingSidecar = async (state, pidDeadReason) => {
   };
 };
 
-const readLastEagerStartErrorCode = (fallbackState = null) => {
+const readLastEagerStartErrorCode = (fallbackState = null, failureFirst = false) => {
   const fallbackCode = fallbackState && typeof fallbackState.lastEagerStartErrorCode === 'string'
     ? fallbackState.lastEagerStartErrorCode
     : null;
   const state = loadSidecarState();
+  if (failureFirst) return loadLastFailureState()?.code ?? state?.lastEagerStartErrorCode ?? fallbackCode;
   return state
     ? (state.lastEagerStartErrorCode ?? fallbackCode)
     : (loadLastFailureState()?.code ?? fallbackCode);
@@ -404,9 +407,11 @@ const defaultSpawnSidecarAndWait = async () => {
 
   let child;
   // Always clean up this activation's child, including failed state/health verification.
-  const killChildIfAlive = () => {
-    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
+  const killChildIfAlive = async () => {
+    // The helper and installer share this process group, including during approval.
+    if (child) await terminateOwnedTree(child, 2_500);
   };
+  const startupTimeoutMs = CERT_APPROVAL_TIMEOUT_MS + 30_000;
 
   try {
     await new Promise((resolve, reject) => {
@@ -420,13 +425,14 @@ const defaultSpawnSidecarAndWait = async () => {
       child = spawn(process.execPath, [script], {
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
-        detached: false,
+        detached: process.platform !== 'win32',
       });
 
       sidecarChild = child;
       let stdoutBuf = '';
       let settled = false;
       let startupTimer;
+      let certificateFailure = false;
       const settle = (fn, arg) => {
         if (settled) return;
         settled = true;
@@ -436,14 +442,21 @@ const defaultSpawnSidecarAndWait = async () => {
 
       child.stdout.on('data', (chunk) => {
         stdoutBuf += chunk.toString();
-        if (stdoutBuf.includes('\n')) {
-          settle(resolve);
+        while (stdoutBuf.includes('\n')) {
+          const end = stdoutBuf.indexOf('\n');
+          const line = stdoutBuf.slice(0, end);
+          stdoutBuf = stdoutBuf.slice(end + 1);
+          try {
+            if (ReadySignalSchema.safeParse(JSON.parse(line)).success) settle(resolve);
+          } catch { /* Installer output is never a ready signal. */ }
         }
+        if (stdoutBuf.length > 64 * 1024) settle(reject, new Error('Invalid Office helper output.'));
       });
 
       child.stderr.on('data', (chunk) => {
         // Suppress cert-trust noise from office-addin-dev-certs
         const msg = chunk.toString();
+        if (msg.includes('CERT_NOT_TRUSTED')) certificateFailure = true;
         if (!msg.includes('trusted access') && !msg.includes('Certificate:') && !msg.includes('Key:')) {
           process.stderr.write(chunk);
         }
@@ -456,16 +469,16 @@ const defaultSpawnSidecarAndWait = async () => {
 
       child.on('exit', (code) => {
         if (sidecarChild === child) sidecarChild = null;
-        settle(reject, new Error(`Sidecar exited during startup (code=${code})`));
+        settle(reject, Object.assign(new Error(certificateFailure ? 'The local security certificate is not ready.' : `Sidecar exited during startup (code=${code})`), certificateFailure ? { code: 'CERT_NOT_TRUSTED' } : {}));
       });
 
-      // Timeout after 30s
+      // Include the person's approval budget; only a validated ready message ends it.
       startupTimer = setTimeout(() => {
-        settle(reject, new Error('Sidecar startup timed out after 30s'));
-      }, 30_000);
+        settle(reject, new Error('Sidecar startup timed out while waiting for certificate approval or readiness.'));
+      }, startupTimeoutMs);
     });
 
-    // Stdout '\n' means the CLI printed its ready JSON — state file IS written by now,
+    // A validated ready message means the state file has been written;
     // but add a short bounded wait + HTTP ping to defend against any residual races.
     const state = await waitForState(5_000);
     if (!state) {
@@ -479,7 +492,7 @@ const defaultSpawnSidecarAndWait = async () => {
 
     cleanupLastFailureFile();
   } catch (err) {
-    killChildIfAlive();
+    await killChildIfAlive();
     throw err;
   }
 };
@@ -505,12 +518,34 @@ const ensureSidecar = async () => {
 
   // Fast path: state file exists, PID alive, and /health responds.
   const existing = loadSidecarState();
+  if (isRebelCertificateOwner() && readLastEagerStartErrorCode(existing, isRebelCertificateOwner()) === 'cert-failed') {
+    throw Object.assign(new Error('The local security certificate is not ready.'), { code: 'CERT_NOT_TRUSTED' });
+  }
   let fallbackReason = 'no-state-file';
   const existingState = await evaluateExistingSidecar(existing, 'pid-dead');
   if (existingState.state) {
     return existingState.state;
   }
   fallbackReason = existingState.fallbackReason ?? fallbackReason;
+
+  if (isRebelCertificateOwner()) {
+    // Ownership is a launch contract, even before either state or failure files exist.
+    const fail = () => Object.assign(new Error('The manager has not started the Office connection.'), {
+      code: readLastEagerStartErrorCode(existing, isRebelCertificateOwner()) === 'cert-failed' ? 'CERT_NOT_TRUSTED' : 'SIDECAR_NOT_RUNNING',
+    });
+    if (readLastEagerStartErrorCode(existing, isRebelCertificateOwner()) === 'cert-failed') throw fail();
+    const holder = readLockPid();
+    if (holder && isPidAlive(holder)) {
+      const state = await waitForState(30_000);
+      if (state && (await evaluateExistingSidecar(state, 'pid-dead')).state) return state;
+      if (readLastEagerStartErrorCode(existing, true) === 'cert-failed') throw fail();
+      const currentHolder = readLockPid();
+      if (currentHolder && isPidAlive(currentHolder)) {
+        throw Object.assign(new Error(officeStillStartingFix), { code: 'office-still-starting' });
+      }
+    }
+    throw fail();
+  }
 
   // Stale state file — clean up before proceeding.
   if (existing) {
@@ -532,7 +567,7 @@ const ensureSidecar = async () => {
   // `sidecarStarting` is cleared inside a `finally` so a failed boot doesn't
   // leave the guard permanently set.
   sidecarStarting = (async () => {
-    let lastEagerStartErrorCode = readLastEagerStartErrorCode(existing);
+    let lastEagerStartErrorCode = readLastEagerStartErrorCode(existing, isRebelCertificateOwner());
 
     // Acquire the filesystem lock atomically. `wx` fails if the file exists.
     // We loop in case a previous holder died without cleaning up.
@@ -730,12 +765,13 @@ const lookFirst = (app) => `Read the current state with ${readTools[app] || read
 const officeStillStartingFix = "If the user's computer is showing a question about Mindstone Rebel, ask them to answer it before retrying.";
 const sidecarStartFailure = (err) => ({
   success: false,
-  code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING',
+  code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : err.code === 'CERT_NOT_TRUSTED' ? 'CERT_NOT_TRUSTED' : 'SIDECAR_NOT_RUNNING',
   error: err.code === 'office-still-starting' ? "Rebel's Office connection is still starting." : `Failed to start Office sidecar: ${err.message}`,
   ...(err.code === 'office-still-starting' ? { setupStillStarting: true } : {}),
 });
 
 const ERROR_CATALOG = {
+  CERT_NOT_TRUSTED: { retryable: false, fix: () => isRebelCertificateOwner() ? 'Ask the person to choose Try again on the Microsoft Office card in Settings and approve the certificate prompt. Do not call rebel_office_setup again until they say they have.' : 'Ask the person to run the Microsoft Office connector again and approve the certificate prompt.' },
   PARTIAL: { retryable: false, fix: 'Inspect the created slide: find its id in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex for rebel_office_powerpoint_get_slide_content or rebel_office_powerpoint_delete_slide. Complete the missing work or delete the slide before retrying.' },
   INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
   ITEM_NOT_FOUND: { retryable: false, fix: lookFirst },
@@ -749,7 +785,7 @@ const ERROR_CATALOG = {
   ADDIN_DISCONNECTED: { retryable: true, fix: 'Ask the user to reopen the file and the Rebel panel; read the current state before repeating an edit.' },
   COMMAND_TIMEOUT: { retryable: true, fix: 'Read the current state before repeating an edit; it may already have completed. Then try a smaller range or fewer items.' },
   CONNECTION_DISABLED: { retryable: false, fix: 'Ask whoever manages this Rebel installation to re-enable the Office connection before trying again.' },
-  SIDECAR_NOT_RUNNING: { retryable: true, fix: 'Enable Microsoft Office in Settings → Connectors, then run rebel_office_setup and try again.' },
+  SIDECAR_NOT_RUNNING: { retryable: true, fix: () => isRebelCertificateOwner() ? 'Ask the person to turn on Microsoft Office in Settings or choose Try again on its card, then wait for the connection status to update.' : 'Restart the Microsoft Office connector, approve any certificate prompt, then try again.' },
   OFFICE_ACCESS_BLOCKED: { retryable: false, fix: "The user's computer blocked Rebel's setup in Word, Excel and PowerPoint. This setup lets Rebel work with their documents. Ask whether it asked about Mindstone Rebel accessing data from other apps. If they chose Don't Allow, ask them to quit and reopen Rebel and choose Allow if asked. Don't retry until they say they have. If it didn't ask again, tell them plainly Rebel can't fix this by itself yet." },
   OFFICE_SETUP_TIMEOUT: { retryable: false, fix: "Rebel could not finish adding the connection that lets it work with the user's Office documents. If their computer is still asking whether Mindstone Rebel can access data from other apps, ask them to answer it, then choose Try again in the Microsoft Office connection settings in Rebel. If that action is unavailable, ask them to turn on or connect Microsoft Office there and wait for its connection status to update." },
   SIDECAR_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
@@ -4528,6 +4564,7 @@ if (isMainModule) {
 
 export const __test = {
   ensureSidecar,
+  sidecarStartFailure,
   loadSidecarState,
   loopbackHttpsAgent,
   loopbackHttpsRequest,

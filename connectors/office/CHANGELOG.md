@@ -11,6 +11,11 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Linux standalone certificate trust checks now use `openssl verify`.
+- Managed Office setup leaves certificate installation to its host, preventing duplicate approval prompts. Standalone setup checks effective trust before and after installation, waits for approval, and cleans up timed-out processes.
+
 ## [0.4.2] - 2026-11-25
 
 ### Changed

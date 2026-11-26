@@ -17,7 +17,9 @@ export async function getHttpsServerOptions() {
 
 export async function ensureCertificatesAreInstalled() {}
 export async function installCaCertificate() {}
-export async function generateCertificates() {}
+export async function generateCertificates() {
+  throw new Error('Office test certificate generation/install must not run');
+}
 export function deleteCertificateFiles() {}
 export function isCaCertificateInstalled() { return true; }
 export function verifyCertificates() { return true; }

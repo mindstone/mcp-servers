@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { z } from 'zod';
-import { getHttpsServerOptions } from 'office-addin-dev-certs';
+import { getSidecarHttpsOptions } from '../certificates/setup.js';
 import { ConnectionManager } from '../shared/appBridge/server/connectionManager.js';
 import { CommandRouter, type CommandResult } from '../shared/appBridge/server/commandRouter.js';
 import { atomicWriteFile, writeStateFile, generateToken } from './auth.js';
@@ -126,6 +126,7 @@ type SocketAuthState = {
 };
 
 export interface StartSidecarOptions {
+  signal?: AbortSignal;
   host?: string;
   /**
    * Explicit port to bind to (primarily for tests).
@@ -652,9 +653,8 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
   let boundPort = 0;
 
   // Office requires HTTPS for SourceLocation URLs, even for localhost.
-  // Use Microsoft's office-addin-dev-certs package which generates a trusted
-  // localhost certificate and installs the CA into the login keychain.
-  const httpsOptions = await getHttpsServerOptions();
+  // Managed helpers only read the pair; standalone startup owns its certificate step.
+  const httpsOptions = await getSidecarHttpsOptions({ signal: options.signal });
   const server = https.createServer(httpsOptions);
 
   server.on('request', async (req: http.IncomingMessage, res: http.ServerResponse) => {
