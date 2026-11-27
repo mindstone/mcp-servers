@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-27
+
+### Changed
+
+- Native agent-browser 0.43.0, config isolated from the host folder, stricter tab ids, and untrusted-content envelopes on every echoed value
+
 ### Security
 
 - Run `agent-browser` in the connector's own folder, so a project `agent-browser.json` in the folder the host started the connector from is no longer loaded. That file can choose which program the CLI launches. Your own `~/.agent-browser/config.json` still applies, and `AGENT_BROWSER_CONFIG` still picks a config file. Relative paths in agent-browser settings now resolve from the connector's own folder (where its package is installed) instead of the host's folder, so give full paths.
