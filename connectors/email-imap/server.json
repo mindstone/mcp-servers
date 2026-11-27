@@ -67,27 +67,6 @@
           "format": "number"
         },
         {
-          "name": "EMAIL_IMAP_MAX_RECIPIENTS",
-          "description": "Safety cap: maximum combined To+CC+BCC recipients per email_send call. Defaults to 25; raising bypasses spam-prevention guardrails against prompt-injection-driven mass sends.",
-          "isRequired": false,
-          "default": "25",
-          "format": "number"
-        },
-        {
-          "name": "EMAIL_IMAP_RATE_LIMIT_PER_HOUR",
-          "description": "Safety cap: maximum email_send calls per rolling window. Defaults to 50; protects against runaway sends when injection content escapes the LLM's intent.",
-          "isRequired": false,
-          "default": "50",
-          "format": "number"
-        },
-        {
-          "name": "EMAIL_IMAP_RATE_LIMIT_WINDOW_MS",
-          "description": "Sliding-window length for the rate limit (ms)",
-          "isRequired": false,
-          "default": "3600000",
-          "format": "number"
-        },
-        {
           "name": "MCP_WORKSPACE_PATH",
           "description": "Workspace directory that email_get_attachment downloads into (fresh email-imap-attachment-* staging directories). Defaults to the system temp directory.",
           "isRequired": false,

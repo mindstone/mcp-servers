@@ -25,6 +25,10 @@ to end the label early.
 
 - `configure_email_imap` without a host app now says the account is configured for this session only, since nothing saved the password.
 
+### Removed
+
+- Removed the connector's own recipient and hourly-send caps; Rebel's permission bands decide.
+
 ## [0.3.4] - 2026-11-13
 
 ### Changed

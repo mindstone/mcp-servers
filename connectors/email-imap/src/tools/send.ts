@@ -2,25 +2,14 @@ import { fileReadContext, type FileReadContext } from '../file-read-context.js';
 /**
  * Send/draft tools — sending emails and saving drafts.
  *
- * Security notes (M2.5):
- * - `email_send` is annotated `destructiveHint: true, openWorldHint: true`.
- *   Hosts MUST require explicit user confirmation before invoking it.
- * - A combined To+CC+BCC recipient cap (`EMAIL_IMAP_MAX_RECIPIENTS`,
- *   default 25) and a rolling rate limit
- *   (`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`,
- *   default 50/hour) act as blast-radius circuit breakers against
- *   prompt-injection-driven mass sends.
- * - When either cap is exceeded, the tool returns a structured JSON
- *   error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or
- *   `RATE_LIMIT_EXCEEDED`); rate-cap errors include both `resetAt`
- *   (ISO-8601) and `retryAfterMs`.
+ * `email_send` is annotated `destructiveHint: true, openWorldHint: true`; the
+ * host decides whether to ask before each send.
  */
 
 import { z } from 'zod';
 import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import nodemailer from 'nodemailer';
-import MailComposer from 'nodemailer/lib/mail-composer';
 import { withErrorHandling } from '../utils.js';
 import { getConnection } from '../imap-client.js';
 import { getTransport } from '../smtp-client.js';
@@ -31,11 +20,6 @@ import {
   resolveDraftsMailbox,
   wrapEmailField,
 } from './shared.js';
-import {
-  checkRateLimit,
-  getMaxRecipients,
-  recordSend,
-} from './limits.js';
 
 /**
  * Blast-radius caps for outbound attachments: at most 10 files and 25 MB
@@ -117,21 +101,6 @@ function resolveOutboundAttachments(
     });
   }
   return resolved;
-}
-
-/**
- * Count the recipients the way the sender will deliver them: the envelope
- * Nodemailer builds from these exact To/CC/BCC values. That parser splits on
- * commas and semicolons, keeps quoted display names whole, expands groups,
- * skips entries without an address and drops repeats across all three fields.
- * The original values still go to Nodemailer unchanged.
- */
-function countRecipients(
-  to: string | string[],
-  cc: string | string[] | undefined,
-  bcc: string | string[] | undefined,
-): number {
-  return new MailComposer({ to, cc, bcc }).compile().getEnvelope().to.length;
 }
 
 /**
@@ -219,15 +188,9 @@ export function registerSendTools(server: McpServer): void {
     {
       description:
         'Send an email. For replies, provide reply_to_message_id from the original message. ' +
-        'This is a destructive action: hosts MUST require explicit user confirmation before each ' +
-        'invocation. Combined To+CC+BCC recipient count is capped (default 25, env ' +
-        '`EMAIL_IMAP_MAX_RECIPIENTS`) and outbound sends are rate-limited (default 50/hour, env ' +
-        '`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`). When a cap is hit, ' +
-        'the tool returns a structured error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or ' +
-        '`RATE_LIMIT_EXCEEDED`). Attachments (max 10, 25 MB total) use the path permission ' +
-        'decision of a connected host that authorizes file reads. Standalone clients require ' +
-        'attachment files inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system ' +
-        'temp directory when unset).',
+        'Attachments (max 10, 25 MB total) use the path permission decision of a connected host ' +
+        'that authorizes file reads. Standalone clients require attachment files inside the ' +
+        'workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
       _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }] } },
       inputSchema: z.object({
         to: z
@@ -258,50 +221,8 @@ export function registerSendTools(server: McpServer): void {
 
       const { to, subject, text, html, cc, bcc, reply_to_message_id } = args;
 
-      // ── Recipient cap (combined To + CC + BCC) ────────────────────
-      const recipientCount = countRecipients(to, cc, bcc);
-      const maxRecipients = getMaxRecipients();
-      if (recipientCount > maxRecipients) {
-        return JSON.stringify({
-          ok: false,
-          code: 'RECIPIENT_LIMIT_EXCEEDED',
-          error:
-            `Recipient cap exceeded: ${recipientCount} addresses requested, ` +
-            `limit is ${maxRecipients} (combined To+CC+BCC).`,
-          limit: maxRecipients,
-          observed: recipientCount,
-          resolution:
-            'Reduce the number of recipients per message or raise EMAIL_IMAP_MAX_RECIPIENTS ' +
-            'after explicit user confirmation.',
-        });
-      }
-
-      // ── Rolling-window rate limit ─────────────────────────────────
-      const decision = checkRateLimit();
-      if (!decision.allowed) {
-        return JSON.stringify({
-          ok: false,
-          code: 'RATE_LIMIT_EXCEEDED',
-          error:
-            `Send rate limit exceeded: ${decision.observed} sends in the active window, ` +
-            `limit is ${decision.limit}.`,
-          limit: decision.limit,
-          observed: decision.observed,
-          resetAt: decision.resetAt,
-          retryAfterMs: decision.retryAfterMs,
-          resolution:
-            'Retry after the window resets, or raise EMAIL_IMAP_RATE_LIMIT_PER_HOUR / ' +
-            'EMAIL_IMAP_RATE_LIMIT_WINDOW_MS after explicit user confirmation.',
-        });
-      }
-
-      // Resolve and validate attachment paths BEFORE recording the send
-      // attempt: a sandbox violation is a caller error, not a failed send.
+      // Resolve and validate attachment paths before any network I/O.
       const resolvedAttachments = resolveOutboundAttachments(args.attachments, reads);
-
-      // Record the attempt BEFORE calling the transport so that a looped
-      // SMTP failure cannot bypass the cap by retrying.
-      recordSend();
 
       const messageId = generateMessageId(config.email);
 
@@ -334,9 +255,9 @@ export function registerSendTools(server: McpServer): void {
     'email_save_draft',
     {
       description:
-        'Save a draft email to the Drafts folder. This mutates the remote account: hosts MUST ' +
-        'require explicit user confirmation before each invocation. When connected to a host ' +
-        'that authorizes file reads, its path permission decision applies to attachments. ' +
+        'Save a draft email to the Drafts folder. This mutates the remote account. When ' +
+        'connected to a host that authorizes file reads, its path permission decision applies ' +
+        'to attachments. ' +
         'Standalone clients require attachment files inside the workspace sandbox ' +
         '(MCP_WORKSPACE_PATH, or the system temp directory when unset).',
       _meta: { 'files/readInputs': { version: 1, inputs: [{ selector: ['attachments', '*', 'path'], base: 'connectorCwd', expandTilde: true }] } },
