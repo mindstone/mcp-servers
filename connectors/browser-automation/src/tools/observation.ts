@@ -149,7 +149,7 @@ The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the s
       try {
         await execAgentBrowser(['pdf', target.stagingPath]);
         installStagedFile(target, args.overwrite);
-        return JSON.stringify({ ok: true, file_path: target.destPath });
+        return JSON.stringify({ ok: true, file_path: wrapUntrusted(target.destPath, 'browser-automation:path') });
       } finally {
         discardStagingDir(target.stagingDir);
       }

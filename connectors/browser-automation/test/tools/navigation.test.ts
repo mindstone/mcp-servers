@@ -77,7 +77,7 @@ describe('Navigation tools — Browser Automation', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.message).toContain('https://example.com');
+    expect(parsed.message).toBe('Navigated');
   });
 
   it('browser_back returns success', async () => {

@@ -42,7 +42,7 @@ When connected to a host that authorizes file reads, its path permission decisio
           staged.push(stageUploadSource(filePath, stagingDir, index, undefined, reads));
         }
         await execAgentBrowser(['upload', args.ref, ...staged]);
-        return JSON.stringify({ ok: true, message: `Uploaded ${staged.length} file(s) to ${args.ref}` });
+        return JSON.stringify({ ok: true, message: `Uploaded ${staged.length} file(s)` });
       } finally {
         discardStagingDir(stagingDir);
       }

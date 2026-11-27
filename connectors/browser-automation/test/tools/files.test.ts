@@ -84,7 +84,7 @@ describe('browser_upload', () => {
     const parsed = parseResult(result);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.message).toContain('@e3');
+    expect(parsed.message).toBe('Uploaded 1 file(s)');
     const cliArgs = capturedArgs[0];
     expect(cliArgs[0]).toBe('upload');
     expect(cliArgs[1]).toBe('@e3');

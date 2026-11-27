@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTestClient, type McpTestClient } from '../helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../../src/untrusted-content.js';
 
 // Mock the execFile function used by browser-client
 vi.mock('node:child_process', () => {
@@ -308,7 +309,7 @@ describe('browser_pdf', () => {
 
     const dest = path.join(workspace, 'reports', 'page.pdf');
     expect(parsed.ok).toBe(true);
-    expect(parsed.file_path).toBe(dest);
+    expect(parsed.file_path).toBe(wrapUntrusted(dest, 'browser-automation:path'));
     expect(fs.readFileSync(dest, 'utf8')).toBe('pdf-bytes');
     // The CLI wrote into a private staging dir — never the destination —
     // carrying over only the requested basename.
@@ -413,7 +414,7 @@ describe('browser_pdf', () => {
     const parsed = parseResult(result);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.file_path).toBe(dest);
+    expect(parsed.file_path).toBe(wrapUntrusted(dest, 'browser-automation:path'));
     expect(fs.readFileSync(dest, 'utf8')).toBe('pdf-bytes');
   });
 

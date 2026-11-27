@@ -19,6 +19,8 @@ are maintained manually as part of the PR review checklist.
 
 - An unexpected error's message, and a rejected URL or file path repeated in an error, now reach the assistant inside an untrusted-content envelope, like the CLI's own error output, since they can carry text from a page.
 
+- Arguments the assistant may have copied from a page (a selector, an option value, a key, a URL) are no longer repeated in plain text: a successful click, fill, type, key press, select, hover, wait, upload or navigation now returns a fixed message, and `browser_authenticate`'s URL and `browser_pdf`'s saved path come back inside an untrusted-content envelope. Errors the MCP SDK raises before a tool runs, such as an argument that fails the tool's schema or an unknown tool name, now use the same envelope too.
+
 ### Changed
 
 - Upgrade `agent-browser` from 0.33.2 to 0.43.0. A stuck tab no longer breaks the whole browser session, restoring a saved session no longer exposes its sign-ins to the page's scripts, and sessions are reused and relaunched more reliably. The native binary now comes from agent-browser's per-platform package, and switching tabs with `browser_tabs` sends the tab ids the tab list shows (`t1`, `t2`, ...), the only form the new CLI accepts.

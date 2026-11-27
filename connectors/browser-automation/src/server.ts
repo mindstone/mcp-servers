@@ -1,6 +1,8 @@
 import { FILE_READ_CAPABILITIES } from './file-read-context.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { KEEP_ALIVE_CAPABILITY, SERVER_NAME, SERVER_VERSION } from './types.js';
+import { errorResult } from './utils.js';
 import {
   registerNavigationTools,
   registerInteractionTools,
@@ -23,6 +25,16 @@ export function createServer(): McpServer {
       capabilities: { experimental: { ...FILE_READ_CAPABILITIES.experimental, [KEEP_ALIVE_CAPABILITY]: {} } },
     },
   );
+
+  // The SDK turns an error raised outside a tool's handler, such as arguments
+  // that fail the input schema, into a plain-text result, and its message
+  // repeats the arguments, which can carry page text. Every tool's own errors
+  // already go through errorResult; this sends the SDK's through it too, so
+  // that text reaches the model inside an untrusted-content envelope.
+  // createToolError is private in the SDK's types; test/sdk-errors.test.ts
+  // fails if the SDK stops using it.
+  (server as unknown as { createToolError: (message: string) => CallToolResult }).createToolError =
+    (message) => errorResult(new Error(message));
 
   registerNavigationTools(server);
   registerInteractionTools(server);

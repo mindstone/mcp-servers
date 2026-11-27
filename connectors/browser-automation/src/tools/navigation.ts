@@ -34,7 +34,7 @@ IMPORTANT: After navigating, call browser_snapshot to see the page content befor
       const titleResult = await execAgentBrowser(['get', 'title']).catch(() => ({ stdout: '', stderr: '' }));
       return JSON.stringify({
         ok: true,
-        message: `Navigated to ${args.url}`,
+        message: 'Navigated',
         title: wrapUntrusted(titleResult.stdout.trim(), 'browser-automation:page-title'),
         hint: 'Call browser_snapshot to see page elements before interacting.',
       });
@@ -95,7 +95,7 @@ IMPORTANT: After navigating, call browser_snapshot to see the page content befor
     withErrorHandling(async (args) => {
       const timeoutMs = args.timeout ?? 10_000;
       await execAgentBrowser(['wait', args.selector], { timeoutMs: timeoutMs + 2000 });
-      return JSON.stringify({ ok: true, message: `Wait completed for: ${args.selector}` });
+      return JSON.stringify({ ok: true, message: 'Wait completed' });
     }),
   );
 }

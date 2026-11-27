@@ -25,7 +25,7 @@ A click can submit a form, send a message, delete something or confirm a payment
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['click', args.ref]);
-      return JSON.stringify({ ok: true, message: `Clicked: ${args.ref}` });
+      return JSON.stringify({ ok: true, message: 'Clicked' });
     }),
   );
 
@@ -48,7 +48,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['fill', args.ref, args.value]);
-      return JSON.stringify({ ok: true, message: `Filled ${args.ref} with ${args.value.length} characters` });
+      return JSON.stringify({ ok: true, message: `Filled ${args.value.length} characters` });
     }),
   );
 
@@ -69,7 +69,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['type', args.ref, args.text]);
-      return JSON.stringify({ ok: true, message: `Typed ${args.text.length} characters into ${args.ref}` });
+      return JSON.stringify({ ok: true, message: `Typed ${args.text.length} characters` });
     }),
   );
 
@@ -89,7 +89,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['press', args.key]);
-      return JSON.stringify({ ok: true, message: `Pressed key: ${args.key}` });
+      return JSON.stringify({ ok: true, message: 'Key pressed' });
     }),
   );
 
@@ -132,7 +132,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['select', args.ref, args.value]);
-      return JSON.stringify({ ok: true, message: `Selected "${args.value}" in ${args.ref}` });
+      return JSON.stringify({ ok: true, message: 'Option selected' });
     }),
   );
 
@@ -152,7 +152,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     },
     withErrorHandling(async (args) => {
       await execAgentBrowser(['hover', args.ref]);
-      return JSON.stringify({ ok: true, message: `Hovering over ${args.ref}` });
+      return JSON.stringify({ ok: true, message: 'Hovering' });
     }),
   );
 

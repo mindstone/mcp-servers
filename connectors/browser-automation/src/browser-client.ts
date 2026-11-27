@@ -22,8 +22,9 @@ export interface ExecOptions {
 
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 
-// The CLI scans every argument for options and has no `--` terminator, so a value
-// that is exactly an option is read as one, whatever position it is in. Tool
+// The CLI scans every argument for options, so a value that is exactly an option
+// is read as one, whatever position it is in. (Newer CLIs accept a `--`
+// terminator; this check does not rely on any particular CLI version.) Tool
 // values come from the model and from pages, and options can change what the CLI
 // launches, so such a value is refused. Longer text ("--foo bar") and numbers
 // ("-5") are not options to the CLI and pass.

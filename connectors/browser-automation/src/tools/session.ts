@@ -78,8 +78,8 @@ Tell the user to close the browser when done logging in, or call browser_close.`
       await execAgentBrowser(['open', args.url], { headed: true });
       return JSON.stringify({
         ok: true,
-        url: args.url,
-        message: `Browser opened to ${args.url} in visible mode. The user should log in manually. Their session will be saved automatically when the browser is closed.`,
+        url: wrapUntrusted(args.url, 'browser-automation:url'),
+        message: `Browser opened in visible mode. The user should log in manually. Their session will be saved automatically when the browser is closed.`,
         next_step: 'Tell the user to log in and close the browser when done, or call browser_close.',
       });
     }),

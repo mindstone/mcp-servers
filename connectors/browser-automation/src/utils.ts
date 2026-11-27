@@ -62,12 +62,14 @@ export function validateUrlScheme(url: string): void {
   }
 
   // Default-deny: explicit deny-list match OR unknown scheme — both rejected.
-  // The deny-list is enumerated for documentation; the protocol check above
-  // is what actually enforces the policy.
-  void BLOCKED_URL_SCHEMES; // referenced so the import survives tree-shaking
+  // The protocol check above is what enforces the policy. The deny-list names
+  // the schemes this connector knows, which are fixed text and shown as is;
+  // any other scheme came from the URL (a page can offer a link whose scheme
+  // is a sentence), so it is shown inside an envelope.
+  const shownScheme = BLOCKED_URL_SCHEMES.has(proto) ? proto : wrapUntrusted(proto, 'browser-automation:url');
 
   throw new ConnectorError(
-    `URL scheme not allowed: ${proto}. Only http: and https: schemes are permitted (about:blank also allowed).`,
+    `URL scheme not allowed: ${shownScheme}. Only http: and https: schemes are permitted (about:blank also allowed).`,
     'URL_SCHEME_REJECTED',
     'Pass an http://, https://, or about:blank URL. Schemes like file:, chrome:, chrome-extension:, javascript:, data:, view-source:, and about: (other than about:blank) are refused.',
   );
@@ -83,7 +85,7 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  * text from outside the connector (a path, a page, the CLI), so it reaches the
  * model only inside an untrusted-content envelope.
  */
-function errorResult(error: unknown): CallToolResult {
+export function errorResult(error: unknown): CallToolResult {
   const body = error instanceof ConnectorError
     ? { ok: false, error: error.message, code: error.code, resolution: error.resolution }
     : { ok: false, error: wrapUntrusted(error instanceof Error ? error.message : String(error), 'browser-automation:error') };

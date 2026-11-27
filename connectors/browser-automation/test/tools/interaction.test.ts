@@ -68,7 +68,7 @@ describe('Interaction tools — Browser Automation', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.message).toContain('@e1');
+    expect(parsed.message).toBe('Clicked');
   });
 
   it('browser_fill returns success with character count', async () => {
@@ -127,7 +127,7 @@ describe('Interaction tools — Browser Automation', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.message).toContain('Enter');
+    expect(parsed.message).toBe('Key pressed');
   });
 
   it('browser_scroll returns success', async () => {
