@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-27
+
+### Changed
+
+- Fathom text is now wrapped as untrusted content, replies are shape-checked, and API requests refuse redirects so the API key never leaves Fathom.
+
 ### Security
 
 - Text from the service that contains an untrusted-content tag is now escaped the same way as in every other connector, open and close tags alike, keeping the original spelling, so the assistant still reads that text as outside content.
