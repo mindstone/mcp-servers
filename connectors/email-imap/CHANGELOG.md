@@ -16,6 +16,12 @@ to end the label early.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-27
+
+### Changed
+
+- Removes the connector's own recipient and hourly-send caps so Rebel's permission bands decide, plus the hardened bridge reader and body cap already on dev.
+
 ### Security
 
 - The host bridge state file is now read with the shared hardened bridge reader: a symlinked, non-regular, oversized or malformed file is refused, and the bridge's reply is schema-checked with its text enveloped.
