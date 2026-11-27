@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- `salesforce_get_opportunities` returns the org's own stage order (`stageOrder`: each active stage's API value with closed and won flags), and, when the org has opportunity record types, each record's `RecordTypeId` and that record type's stages in order (`stageOrderByRecordType`). If the order cannot be read, the deals still come back with `stageOrder: null` and `stageOrderUnavailable` saying so; an expired sign-in still fails the call, as for any other read.
+- `salesforce_describe_object` returns `picklistValues` (active values, API value and label, in the org's order) for picklist and multipicklist fields.
+
+### Changed
+
+- The `salesforce_update_opportunity` description tells the assistant to take "next" or "previous" stage from that order, never from stage names, and to ask when the order is missing or the next stage would close the deal without a clear won or lost.
+
 ## [0.3.0] - 2026-11-22
 
 ### Changed

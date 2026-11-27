@@ -39,7 +39,13 @@ const captured = {
 function captureHandlers() {
   return [
     http.get('*/services/data/*/query*', ({ request }) => {
-      captured.soql = new URL(request.url).searchParams.get('q') || '';
+      const soql = new URL(request.url).searchParams.get('q') || '';
+      // salesforce_get_opportunities also reads stage metadata; capture only
+      // the query an alias shapes, and answer the metadata with an empty org.
+      if (/FROM (OpportunityStage|RecordType)\b/.test(soql)) {
+        return HttpResponse.json({ totalSize: 0, done: true, records: [] });
+      }
+      captured.soql = soql;
       return HttpResponse.json({
         totalSize: 1,
         done: true,

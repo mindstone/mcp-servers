@@ -16,6 +16,18 @@ function requireAuth(authHeader: string | null): HttpResponse | null {
   return null;
 }
 
+// The org's active opportunity stages in its own SortOrder: deliberately not
+// alphabetical, and with API values that differ from their labels, so a test
+// can tell the org's order from any order a model or the connector might guess.
+export const MOCK_OPPORTUNITY_STAGES = [
+  { ApiName: 'Prospecting', IsClosed: false, IsWon: false },
+  { ApiName: 'Qualification', IsClosed: false, IsWon: false },
+  { ApiName: 'Needs_Analysis', IsClosed: false, IsWon: false },
+  { ApiName: 'Value_Proposition', IsClosed: false, IsWon: false },
+  { ApiName: 'Closed_Won', IsClosed: true, IsWon: true },
+  { ApiName: 'Closed_Lost', IsClosed: true, IsWon: false },
+];
+
 export function createSalesforceHandlers() {
   return [
     // OAuth token endpoint
@@ -53,6 +65,23 @@ export function createSalesforceHandlers() {
         fields: [
           { name: 'Id', label: 'Record ID', type: 'id', nillable: false, defaultedOnCreate: true, updateable: false, createable: false },
           { name: 'Name', label: 'Name', type: 'string', nillable: false, defaultedOnCreate: false, updateable: true, createable: true },
+          {
+            name: 'StageName', label: 'Stage', type: 'picklist', nillable: false, defaultedOnCreate: false, updateable: true, createable: true,
+            picklistValues: [
+              { value: 'Prospecting', label: 'Prospecting', active: true, defaultValue: false },
+              { value: 'Qualification', label: 'Qualification', active: true, defaultValue: false },
+              { value: 'Retired_Stage', label: 'Retired Stage', active: false, defaultValue: false },
+              { value: 'Needs_Analysis', label: 'Needs Analysis', active: true, defaultValue: false },
+              { value: 'Closed_Won', label: 'Closed Won', active: true, defaultValue: false },
+            ],
+          },
+          {
+            name: 'Regions__c', label: 'Regions', type: 'multipicklist', nillable: true, defaultedOnCreate: false, updateable: true, createable: true,
+            picklistValues: [
+              { value: 'EMEA', label: 'Europe', active: true, defaultValue: false },
+              { value: 'AMER', label: 'Americas', active: true, defaultValue: false },
+            ],
+          },
         ],
         recordTypeInfos: [],
       });
@@ -74,6 +103,15 @@ export function createSalesforceHandlers() {
         return HttpResponse.json({
           totalSize: 1, done: true, records: [{ ContentDocumentId: '069000000000001' }],
         });
+      }
+      // Stage metadata: matched before the broad `FROM Opportunity` branch,
+      // which `FROM OpportunityStage` would otherwise also match.
+      if (/FROM OpportunityStage\b/.test(soql)) {
+        return HttpResponse.json({ totalSize: MOCK_OPPORTUNITY_STAGES.length, done: true, records: MOCK_OPPORTUNITY_STAGES });
+      }
+      if (/FROM RecordType\b/.test(soql)) {
+        // Default org: no opportunity record types, so one sales process.
+        return HttpResponse.json({ totalSize: 0, done: true, records: [] });
       }
       // Return mock data based on FROM clause
       if (soql.includes('FROM Contact')) {

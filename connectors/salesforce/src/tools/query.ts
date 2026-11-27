@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, SOQL_DATE_LITERAL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, SOQL_DATE_LITERAL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, sanitizeExternalData, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
@@ -202,7 +202,7 @@ export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_describe_object',
     {
-      description: `Get object metadata and field definitions. Returns field names, types, and required flags. Requires object_name (or its alias object). Common objects: Account, Contact, Opportunity, Lead, Case, Task.`,
+      description: `Get object metadata and field definitions. Returns field names, types, and required flags, and for picklist and multipicklist fields picklistValues: the active values ({ value, label }; value is the API value to write) in the org's own order. That order is how the org lists them; it is a progression only where the field is one, such as a status or stage. Requires object_name (or its alias object). Common objects: Account, Contact, Opportunity, Lead, Case, Task.`,
       inputSchema: z.object({
         object_name: z.string().min(1).optional().describe('Object API name (Account, Contact, Opportunity, Lead, CustomObject__c)'),
         object: z.string().min(1).optional().describe('Alias of object_name.'),
@@ -228,6 +228,14 @@ export function registerQueryTools(server: McpServer): void {
             required: !f.nillable && !f.defaultedOnCreate,
             updateable: f.updateable,
             createable: f.createable,
+            ...(f.type === 'picklist' || f.type === 'multipicklist'
+              ? {
+                  picklistValues: sanitizeExternalData(
+                    (f.picklistValues ?? []).filter((v) => v.active).map((v) => ({ value: v.value, label: v.label ?? v.value })),
+                    'salesforce:describe_object:picklist_values',
+                  ),
+                }
+              : {}),
           })),
           recordTypeInfos: sanitizeRecords(metadata.recordTypeInfos, 'salesforce:describe_object:recordTypeInfos'),
         });

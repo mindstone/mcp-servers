@@ -153,7 +153,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `salesforce_update_contact` — Update a contact
 
 ### Opportunities
-- `salesforce_get_opportunities` — Get opportunities with filters
+- `salesforce_get_opportunities` — Get opportunities with filters, with the org's own stage order (per record type when the org has record types), so a "next stage" move follows the org rather than a guess
 - `salesforce_create_opportunity` — Create an opportunity
 - `salesforce_update_opportunity` — Update an opportunity
 
@@ -196,7 +196,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 
 ### Query & Schema
 - `salesforce_query` — Execute raw SOQL queries
-- `salesforce_describe_object` — Get object metadata and fields
+- `salesforce_describe_object` — Get object metadata and fields, with each picklist field's active values in the org's order
 - `salesforce_list_objects` — List available Salesforce objects
 
 ### Generic CRUD
